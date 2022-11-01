@@ -1,0 +1,9 @@
+[submodule "buildroot"]
+	path = buildroot
+	url = git://git.buildroot.net/buildroot
+[submodule "riscv-pk"]
+	path = riscv-pk
+	url = git@gitlab.com:Nils-TUD/riscv-pk.git
+[submodule "linux"]
+	path = linux
+	url = git@github.com:Nils-TUD/linux-bench.git
