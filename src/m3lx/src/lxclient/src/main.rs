@@ -1,67 +1,40 @@
-#[macro_use]
-mod int_enum;
-mod sidecall_interface;
-mod tcu;
+mod mmap;
 
-use libc;
-use sidecall_interface::*;
-use std::fs::File;
-use std::os::unix::io::AsRawFd;
-use std::path::Path;
-use tcu::*;
+use base::{cfg, kif, tcu};
+use mmap::Mmap;
 
-fn write(addr: *mut Reg, reg_index: usize, data: Reg) {
-    unsafe {
-        let addr = addr.offset(reg_index as isize);
-        *addr = data;
-    }
+#[allow(dead_code)]
+fn wait() {
+    let mut s = String::new();
+    std::io::stdin().read_line(&mut s).unwrap();
+    std::io::stdin().read_line(&mut s).unwrap();
 }
 
-fn main() {
-    println!("Hello, World!");
-    let path = Path::new("/dev/mem");
-    let file = match File::open(&path) {
-        Err(e) => panic!("couldn't open {}: {}", path.display(), e),
-        Ok(file) => file,
-    };
+fn main() -> Result<(), std::io::Error> {
+    let tcu_mmap = Mmap::new(
+        "/dev/tcu",
+        tcu::MMIO_ADDR,
+        tcu::MMIO_ADDR,
+        2 * tcu::MMIO_SIZE,
+    )?;
 
-    let tcu_base = unsafe {
-        libc::mmap(
-            0 as *mut libc::c_void,
-            MMIO_SIZE,
-            libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_PRIVATE,
-            file.as_raw_fd(),
-            MMIO_ADDR as libc::off_t,
-        ) as *mut Reg
-    };
+    // physical address needs to be the same as virtual address and it needs to be within physical memory range
+    let mut msg_mmap = Mmap::new("/dev/tcumsg", 0x9000_0000, 0x9000_0000, cfg::PAGE_SIZE)?;
+    println!("{:x?}", tcu_mmap);
+    println!("{:x?}", msg_mmap);
 
-    let msg = Exit {
+    let msg = kif::tilemux::Exit {
         op: 0,
-        act_sel: 12297829382473034410,
-        code: 12297829382473034410,
+        act_sel: 1,
+        code: 2,
     };
-    let len = std::mem::size_of::<Exit>();
-    let msg: &[u8] = unsafe { std::slice::from_raw_parts(&msg as *const Exit as *const u8, len) };
-    let mut msg_buf: [u8; 512] = [0; 512];
-    msg_buf[..len].copy_from_slice(msg);
 
-    let addr = &msg_buf as *const u8 as u64;
-    println!("address of message: {:#x}", addr);
-    assert!(addr < (1 << 32));
-    let data = ((len as u64) << 32) | addr;
-
-    write(
-        tcu_base,
-        UNPRIV_REGS_START + UnprivReg::DATA.val as usize,
-        data,
-    );
-    let reply_ep = KPEX_REP as Reg;
-    let ep = KPEX_SEP as Reg;
-    let cmd: Reg = (reply_ep << 25) | (ep << 4) | (CmdOpCode::SEND.val as Reg);
-    write(
-        tcu_base,
-        UNPRIV_REGS_START + UnprivReg::COMMAND.val as usize,
-        cmd,
-    );
+    // TODO: assert alignment
+    let len = std::mem::size_of_val(&msg);
+    assert!(msg_mmap.len() >= len);
+    let msg_base = msg_mmap.as_mut_ptr();
+    unsafe { (msg_base as *mut kif::tilemux::Exit).write(msg) };
+    tcu::TCU::send_aligned(tcu::KPEX_SEP, msg_base, len, 0, tcu::KPEX_REP)
+        .expect("TCU::send failed");
+    Ok(())
 }
