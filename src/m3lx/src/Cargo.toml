@@ -1,0 +1,9 @@
+
+[workspace]
+members = [
+    "lxclient",
+    "base"
+]
+
+[build]
+target = "riscv64gc-unknown-linux-gnu"

@@ -1,6 +1,6 @@
 
 dirs = [
-    'lxclient'
+    'lxclient',
 ]
 
 def build(gen, env):

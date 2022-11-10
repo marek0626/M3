@@ -25,17 +25,26 @@ bbl_dir="$build/bbl"
 mkdir -p "$buildroot_dir" "$disks_dir" "$linux_dir" "$bbl_dir"
 
 main() {
+	# we need the cross compiler from buildroot to build the userspace programs
+	if [ ! -f "$buildroot_dir/host/bin/riscv64-linux-gcc" ]; then
+		mk_buildroot
+	fi
+
 	# TODO: this is awkward – actually, $m3_root/b should call this script and not the other way around
-	PATH="$m3_root/build/gem5-riscv-release/linux-deps/buildroot/host/bin:$PATH"  "$m3_root/b" || exit 1
+	"$m3_root/b" || exit 1
 
 	# copy the lxclient executable to the buildroot file system (rootfs)
 	# TODO: don't hardcode this (the next 6 lines)
-	lxclient="$m3_root/build/rust/riscv64gc-unknown-linux-gnu/release/lxclient"
-	if [ ! -f "$lxclient" ]; then
-		echo "lxclient does not exist" >&2
-		exit 1
-	fi
-	cp "$lxclient" "$buildroot_dir/target/"
+	rustbin="$m3_root/build/rust/riscv64gc-unknown-linux-gnu/release"
+	apps="lxclient mmiotest"
+	for app in $apps; do
+		full_app="$rustbin/$app"
+		if [ ! -f "$full_app" ]; then
+			echo "linux program $full_app does not exist" >&2
+			exit 1
+		fi
+		cp "$full_app" "$buildroot_dir/target/"
+	done
 
 	mk_buildroot
 	mk_linux
