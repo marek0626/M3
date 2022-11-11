@@ -519,8 +519,9 @@ impl TCU {
         // report translation fault to TileMux or whoever handles the call; ignore errors, we won't
         // get back here if TileMux cannot resolve the fault.
         //// arch::tmabi::call2(tmif::Operation::TRANSL_FAULT, addr, perm.bits() as usize).ok();
-        Self::insert_tlb(0xffff, addr, addr as u64, perm.into())
-            .expect("could not insert mapping into tcu tlb");
+        //// Self::insert_tlb(0xffff, addr, addr as u64, perm.into())
+        ////     .expect("could not insert mapping into tcu tlb");
+        panic!("got xlate fault at addr {:#x} with perm {:?}", addr, perm);
     }
 
     /// Tries to fetch a new message from the given endpoint.

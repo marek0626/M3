@@ -1,6 +1,6 @@
 use std::io::{Error, ErrorKind};
-use std::os::unix::io::AsRawFd;
 use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::{fs::OpenOptions, path::PathBuf};
 
@@ -15,7 +15,12 @@ pub struct Mmap {
 }
 
 impl Mmap {
-    pub fn new<P: AsRef<Path>>(path: P, phys: usize, virt: usize, len: usize) -> Result<Mmap, Error> {
+    pub fn new<P: AsRef<Path>>(
+        path: P,
+        phys: usize,
+        virt: usize,
+        len: usize,
+    ) -> Result<Mmap, Error> {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
