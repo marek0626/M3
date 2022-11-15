@@ -98,7 +98,7 @@ mk_bbl() {
             && RISCV="$buildroot_dir/host" "$lx_deps_root/riscv-pk/configure" \
                 --host=riscv64-linux \
                 "--with-payload=$linux_dir/vmlinux" \
-                --with-mem-start=0x80000000 \
+                --with-mem-start=0x30000000 \
             && CFLAGS=" -D__riscv_compressed=1" make -j$(nproc)
     )
     if [ $? -ne 0 ]; then
