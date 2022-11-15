@@ -1,12 +1,12 @@
 mod mmap;
 
-use std::os::unix::prelude::AsRawFd;
-
 use base::{cfg, kif, tcu};
 use mmap::Mmap;
+use std::os::unix::prelude::AsRawFd;
 
 // this is defined in linux/drivers/tcu.cc (and the right value will be printed on driver initialization during boot time)
 const IOCTL_XLATE_FAULT: u64 = 0x40087101;
+const SIDE_RBUF_MMAP: usize = cfg::TILEMUX_RBUF_SPACE;
 
 #[repr(C)]
 struct IoctlXlateFaultArg {
@@ -41,16 +41,18 @@ fn main() -> Result<(), std::io::Error> {
     let tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, tcu::MMIO_ADDR, tcu::MMIO_SIZE)?;
 
     // physical address needs to be the same as virtual address and it needs to be within physical memory range
-    let msg_addr = 0x9000_0000usize;
+    let msg_addr = 0x4000_0000usize;
     let mut msg_mmap = Mmap::new("/dev/mem", msg_addr, msg_addr, cfg::PAGE_SIZE)?;
+    let mut rcv_mmap = Mmap::new("/dev/mem", SIDE_RBUF_MMAP, SIDE_RBUF_MMAP, cfg::PAGE_SIZE)?;
     println!("{:x?}", tcu_mmap);
     println!("{:x?}", msg_mmap);
+    println!("{:x?}", rcv_mmap);
 
     // TODO: What is the asid?
     tlb_insert_addr(msg_addr, kif::Perm::R, 0xffff);
 
     let msg = kif::tilemux::Exit {
-        op: 0,
+        op: 0xffff_1234_5678_ffff,
         act_sel: 1,
         code: 2,
     };
@@ -62,5 +64,18 @@ fn main() -> Result<(), std::io::Error> {
     unsafe { (msg_base as *mut kif::tilemux::Exit).write(msg) };
     tcu::TCU::send_aligned(tcu::KPEX_SEP, msg_base, len, 0, tcu::KPEX_REP)
         .expect("TCU::send failed");
+    loop {
+        if let Some(offset) = tcu::TCU::fetch_msg(tcu::TMSIDE_REP) {
+            println!("received message, offset: {:#x}", offset);
+            break;
+        }
+    }
+    let rcv_base = rcv_mmap.as_mut_ptr() as *mut u64;
+    for i in 0..256 {
+        unsafe {
+            let addr = rcv_base.offset(i);
+            println!("{:p}: {:#x}", addr, *addr);
+        }
+    }
     Ok(())
 }
