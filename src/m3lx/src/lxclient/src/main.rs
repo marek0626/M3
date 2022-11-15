@@ -1,12 +1,14 @@
 mod mmap;
 
-use base::{cfg, kif, tcu};
+use base::{cfg, errors::Error, kif, tcu, time::{Profiler, CycleInstant, TimeInstant}};
 use mmap::Mmap;
 use std::os::unix::prelude::AsRawFd;
 
 // this is defined in linux/drivers/tcu.cc (and the right value will be printed on driver initialization during boot time)
 const IOCTL_XLATE_FAULT: u64 = 0x40087101;
-const SIDE_RBUF_MMAP: usize = cfg::TILEMUX_RBUF_SPACE;
+
+const MSG_BUF_ADDR: usize = 0x4000_0000;
+const RCV_BUF_ADDR: usize = cfg::TILEMUX_RBUF_SPACE;
 
 #[repr(C)]
 struct IoctlXlateFaultArg {
@@ -37,36 +39,68 @@ fn tlb_insert_addr(addr: usize, perm: kif::Perm, asid: u16) {
     }
 }
 
+fn send_msg<T>(msg_obj: T) -> Result<(), Error> {
+    let size = std::mem::size_of_val(&msg_obj);
+    let algn = std::mem::align_of_val(&msg_obj);
+    assert!(size <= cfg::PAGE_SIZE);
+    assert!(algn <= cfg::PAGE_SIZE);
+    unsafe { (MSG_BUF_ADDR as *mut T).write(msg_obj) };
+    tcu::TCU::send_aligned(
+        tcu::KPEX_SEP,
+        MSG_BUF_ADDR as *const u8,
+        size,
+        0,
+        tcu::KPEX_REP,
+    )
+}
+
+fn wait_for_rpl() -> Result<(), Error> {
+    loop {
+        if let Some(off) = tcu::TCU::fetch_msg(tcu::KPEX_REP) {
+            let msg = tcu::TCU::offset_to_msg(RCV_BUF_ADDR, off);
+            let rpl = msg.get_data::<kif::DefaultReply>();
+            tcu::TCU::ack_msg(tcu::KPEX_REP, off)?;
+            return match rpl.error {
+                0 => Ok(()),
+                e => Err((e as u32).into()),
+            };
+        }
+    }
+}
+
 fn main() -> Result<(), std::io::Error> {
+    // these need to stay in scope so that the mmaped areas stay alive
+    #[allow(unused_variables)]
     let tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, tcu::MMIO_ADDR, tcu::MMIO_SIZE)?;
+    #[allow(unused_variables)]
+    let msg_mmap = Mmap::new("/dev/mem", MSG_BUF_ADDR, MSG_BUF_ADDR, cfg::PAGE_SIZE)?;
+    #[allow(unused_variables)]
+    let rcv_mmap = Mmap::new("/dev/mem", RCV_BUF_ADDR, RCV_BUF_ADDR, cfg::PAGE_SIZE)?;
 
-    // physical address needs to be the same as virtual address and it needs to be within physical memory range
-    let msg_addr = 0x4000_0000usize;
-    let mut msg_mmap = Mmap::new("/dev/mem", msg_addr, msg_addr, cfg::PAGE_SIZE)?;
-    let mut rcv_mmap = Mmap::new("/dev/mem", SIDE_RBUF_MMAP, SIDE_RBUF_MMAP, cfg::PAGE_SIZE)?;
-    println!("{:x?}", tcu_mmap);
-    println!("{:x?}", msg_mmap);
-    println!("{:x?}", rcv_mmap);
-
-    // TODO: What is the asid?
-    tlb_insert_addr(msg_addr, kif::Perm::R, 0xffff);
+    tlb_insert_addr(MSG_BUF_ADDR, kif::Perm::R, 0xffff);
 
     let msg = kif::tilemux::Exit {
-        op: 0xffff_1234_5678_ffff,
+        op: kif::tilemux::Calls::EXIT.val,
         act_sel: 1,
-        code: 2,
+        code: 1,
     };
 
-    // TODO: assert alignment
-    let len = std::mem::size_of_val(&msg);
-    assert!(msg_mmap.len() >= len);
-    let msg_base = msg_mmap.as_mut_ptr();
-    unsafe { (msg_base as *mut kif::tilemux::Exit).write(msg) };
-    tcu::TCU::send_aligned(tcu::KPEX_SEP, msg_base, len, 0, tcu::KPEX_REP)
-        .expect("TCU::send failed");
+    let mut profiler = Profiler::default().repeats(1000);
+    println!("{}", profiler.run::<CycleInstant, _>(|| {
+        send_msg(msg).unwrap();
+        wait_for_rpl().unwrap();
+    }));
+    println!("{}", profiler.run::<TimeInstant, _>(|| {
+        send_msg(msg).unwrap();
+        wait_for_rpl().unwrap();
+    }));
+    
+
+    /*
     loop {
         if let Some(offset) = tcu::TCU::fetch_msg(tcu::TMSIDE_REP) {
             println!("received message, offset: {:#x}", offset);
+            let m = tcu::offset_to_msg()
             break;
         }
     }
@@ -76,6 +110,6 @@ fn main() -> Result<(), std::io::Error> {
             let addr = rcv_base.offset(i);
             println!("{:p}: {:#x}", addr, *addr);
         }
-    }
+    } */
     Ok(())
 }

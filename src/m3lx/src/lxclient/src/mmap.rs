@@ -50,14 +50,6 @@ impl Mmap {
             )),
         }
     }
-
-    pub fn as_mut_ptr(&mut self) -> *mut u8 {
-        self.virt as *mut u8
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
-    }
 }
 
 impl Drop for Mmap {
