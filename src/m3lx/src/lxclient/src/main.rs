@@ -1,6 +1,11 @@
 mod mmap;
 
-use base::{cfg, errors::Error, kif, tcu, time::{Profiler, CycleInstant, TimeInstant}};
+use base::{
+    cfg,
+    errors::Error,
+    kif, tcu,
+    time::{CycleInstant, Profiler},
+};
 use mmap::Mmap;
 use std::os::unix::prelude::AsRawFd;
 
@@ -9,6 +14,8 @@ const IOCTL_XLATE_FAULT: u64 = 0x40087101;
 
 const MSG_BUF_ADDR: usize = 0x4000_0000;
 const RCV_BUF_ADDR: usize = cfg::TILEMUX_RBUF_SPACE;
+
+pub const MAX_MSG_SIZE: usize = 512;
 
 #[repr(C)]
 struct IoctlXlateFaultArg {
@@ -41,9 +48,9 @@ fn tlb_insert_addr(addr: usize, perm: kif::Perm, asid: u16) {
 
 fn send_msg<T>(msg_obj: T) -> Result<(), Error> {
     let size = std::mem::size_of_val(&msg_obj);
-    let algn = std::mem::align_of_val(&msg_obj);
-    assert!(size <= cfg::PAGE_SIZE);
-    assert!(algn <= cfg::PAGE_SIZE);
+    // let algn = std::mem::align_of_val(&msg_obj);
+    // assert!(size <= MAX_MSG_SIZE);
+    // assert!(algn <= cfg::PAGE_SIZE);
     unsafe { (MSG_BUF_ADDR as *mut T).write(msg_obj) };
     tcu::TCU::send_aligned(
         tcu::KPEX_SEP,
@@ -70,46 +77,24 @@ fn wait_for_rpl() -> Result<(), Error> {
 
 fn main() -> Result<(), std::io::Error> {
     // these need to stay in scope so that the mmaped areas stay alive
-    #[allow(unused_variables)]
-    let tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, tcu::MMIO_ADDR, tcu::MMIO_SIZE)?;
-    #[allow(unused_variables)]
-    let msg_mmap = Mmap::new("/dev/mem", MSG_BUF_ADDR, MSG_BUF_ADDR, cfg::PAGE_SIZE)?;
-    #[allow(unused_variables)]
-    let rcv_mmap = Mmap::new("/dev/mem", RCV_BUF_ADDR, RCV_BUF_ADDR, cfg::PAGE_SIZE)?;
+    let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, tcu::MMIO_ADDR, tcu::MMIO_SIZE)?;
+    let _msg_mmap = Mmap::new("/dev/mem", MSG_BUF_ADDR, MSG_BUF_ADDR, cfg::PAGE_SIZE)?;
+    let _rcv_mmap = Mmap::new("/dev/mem", RCV_BUF_ADDR, RCV_BUF_ADDR, cfg::PAGE_SIZE)?;
 
     tlb_insert_addr(MSG_BUF_ADDR, kif::Perm::R, 0xffff);
 
-    let msg = kif::tilemux::Exit {
-        op: kif::tilemux::Calls::EXIT.val,
-        act_sel: 1,
-        code: 1,
+    let msg = kif::tilemux::Noop {
+        op: kif::tilemux::Calls::NOOP.val,
     };
 
-    let mut profiler = Profiler::default().repeats(1000);
-    println!("{}", profiler.run::<CycleInstant, _>(|| {
+    let mut profiler = Profiler::default().warmup(50).repeats(1000);
+    let mut res = profiler.run::<CycleInstant, _>(|| {
         send_msg(msg).unwrap();
         wait_for_rpl().unwrap();
-    }));
-    println!("{}", profiler.run::<TimeInstant, _>(|| {
-        send_msg(msg).unwrap();
-        wait_for_rpl().unwrap();
-    }));
-    
+    });
+    println!("{}", res);
+    res.filter_outliers();
+    println!("filtered outliers: {}", res);
 
-    /*
-    loop {
-        if let Some(offset) = tcu::TCU::fetch_msg(tcu::TMSIDE_REP) {
-            println!("received message, offset: {:#x}", offset);
-            let m = tcu::offset_to_msg()
-            break;
-        }
-    }
-    let rcv_base = rcv_mmap.as_mut_ptr() as *mut u64;
-    for i in 0..256 {
-        unsafe {
-            let addr = rcv_base.offset(i);
-            println!("{:p}: {:#x}", addr, *addr);
-        }
-    } */
     Ok(())
 }
