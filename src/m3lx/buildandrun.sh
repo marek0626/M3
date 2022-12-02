@@ -115,7 +115,7 @@ run_gem5() {
         "$m3_root/config/linux.py" \
         --disk-image "$disks_dir/root.img" \
         --kernel "$bbl_dir/bbl" \
-        --cpu-type TimingSimpleCPU
+        --cpu-type DerivO3CPU
 }
 
 main
