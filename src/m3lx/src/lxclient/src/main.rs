@@ -5,15 +5,9 @@ use base::{
     tcu::{self, ActId, EpId},
     time::Runner,
 };
-use std::os::unix::prelude::AsRawFd;
 use util::mmap::Mmap;
+use util::ioctl;
 
-// this is defined in linux/drivers/tcu.cc (and the right value will be printed on driver initialization during boot time)
-const IOCTL_RGSTR_ACT: u64 = 0x40087101;
-const IOCTL_TO_TMX_MD: u64 = 0x00007102;
-const IOCTL_TO_USR_MD: u64 = 0x00007103;
-const IOCTL_TLB_INSRT: u64 = 0x40087104;
-const IOCTL_UNREG_ACT: u64 = 0x00007105;
 
 const MSG_BUF_ADDR: usize = 0x4000_0000;
 const TM_RCV_BUF_ADDR: usize = cfg::TILEMUX_RBUF_SPACE;
@@ -21,73 +15,6 @@ const US_RCV_BUF_ADDR: usize = TM_RCV_BUF_ADDR + cfg::PAGE_SIZE;
 
 pub const MAX_MSG_SIZE: usize = 512;
 
-#[repr(C)]
-struct TlbInsert {
-    phys: u64,
-    virt: u32,
-}
-
-// wrapper around ioctl call
-fn tlb_insert_addr(virt: usize, phys: usize) {
-    assert!(virt >> 32 == 0);
-    let arg = TlbInsert {
-        phys: phys as u64,
-        virt: virt as u32,
-    };
-    let tcu_dev = std::fs::File::open("/dev/tcu").unwrap();
-    unsafe {
-        let res = libc::ioctl(tcu_dev.as_raw_fd(), IOCTL_TLB_INSRT, &arg as *const _);
-        if res != 0 {
-            libc::perror(0 as *const u8);
-            panic!("ioctl call for inserting tlb entry failed");
-        }
-    }
-}
-
-// wrapper around ioctl call
-fn register_act(actid: ActId) {
-    let tcu_dev = std::fs::File::open("/dev/tcu").unwrap();
-    unsafe {
-        let res = libc::ioctl(tcu_dev.as_raw_fd(), IOCTL_RGSTR_ACT, &actid as *const _);
-        if res != 0 {
-            libc::perror(0 as *const u8);
-            panic!("ioctl call to register activity failed");
-        }
-    }
-}
-
-fn switch_to_user_mode() {
-    let tcu_dev = std::fs::File::open("/dev/tcu").unwrap();
-    unsafe {
-        let res = libc::ioctl(tcu_dev.as_raw_fd(), IOCTL_TO_USR_MD);
-        if res != 0 {
-            libc::perror(0 as *const u8);
-            panic!("ioctl for switching to user mode failed");
-        }
-    }
-}
-
-fn switch_to_tm_mode() {
-    let tcu_dev = std::fs::File::open("/dev/tcu").unwrap();
-    unsafe {
-        let res = libc::ioctl(tcu_dev.as_raw_fd(), IOCTL_TO_TMX_MD);
-        if res != 0 {
-            libc::perror(0 as *const u8);
-            panic!("ioctl for switching to tm mode failed");
-        }
-    }
-}
-
-fn exit() {
-    let tcu_dev = std::fs::File::open("/dev/tcu").unwrap();
-    unsafe {
-        let res = libc::ioctl(tcu_dev.as_raw_fd(), IOCTL_UNREG_ACT);
-        if res != 0 {
-            libc::perror(0 as *const u8);
-            panic!("ioctl for unregistering activity failed");
-        }
-    }
-}
 
 #[inline(always)]
 fn send_msg<T>(msg_obj: T, sep: EpId, rep: EpId) -> Result<(), Error> {
@@ -178,12 +105,12 @@ fn main() -> Result<(), std::io::Error> {
     let _tm_rcv_mmap = Mmap::new("/dev/mem", TM_RCV_BUF_ADDR, TM_RCV_BUF_ADDR, cfg::PAGE_SIZE)?;
     let _us_rcv_mmap = Mmap::new("/dev/mem", US_RCV_BUF_ADDR, US_RCV_BUF_ADDR, cfg::PAGE_SIZE)?;
 
-    tlb_insert_addr(MSG_BUF_ADDR, MSG_BUF_ADDR);
+    ioctl::tlb_insert_addr(MSG_BUF_ADDR, MSG_BUF_ADDR);
     let actid = send_receive_lx_act();
     println!("actid: {}", actid);
-    register_act(actid);
-    switch_to_user_mode();
-    tlb_insert_addr(MSG_BUF_ADDR, MSG_BUF_ADDR);
+    ioctl::register_act(actid);
+    ioctl::switch_to_user_mode();
+    ioctl::tlb_insert_addr(MSG_BUF_ADDR, MSG_BUF_ADDR);
 
     println!("setup done.");
 
@@ -200,9 +127,9 @@ fn main() -> Result<(), std::io::Error> {
     noop_syscall();
 
     // cleanup
-    switch_to_tm_mode();
+    ioctl::switch_to_tm_mode();
     send_receive_exit(actid);
-    exit();
+    ioctl::unregister_act();
 
     Ok(())
 }
