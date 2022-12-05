@@ -36,7 +36,7 @@ main() {
 	# copy the lxclient executable to the buildroot file system (rootfs)
 	# TODO: don't hardcode this (the next 6 lines)
 	rustbin="$m3_root/build/rust/riscv64gc-unknown-linux-gnu/release"
-	apps="lxclient mmiotest"
+	apps="lxclient simplebench"
 	for app in $apps; do
 		full_app="$rustbin/$app"
 		if [ ! -f "$full_app" ]; then

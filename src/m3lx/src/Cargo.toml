@@ -1,8 +1,10 @@
 
 [workspace]
 members = [
+    "base",
     "lxclient",
-    "base"
+	"simplebench",
+	"util",
 ]
 
 [build]

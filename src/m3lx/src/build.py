@@ -1,6 +1,7 @@
 
 dirs = [
     'lxclient',
+    'simplebench',
 ]
 
 def build(gen, env):
