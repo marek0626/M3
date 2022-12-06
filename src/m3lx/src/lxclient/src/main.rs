@@ -41,14 +41,13 @@ fn wait_for_rpl<T>(rep: EpId, rcv_buf: usize) -> Result<&'static T, Error> {
     }
 }
 
-// send and receiver LxAct sidecall
-fn send_receive_lx_act() -> ActId {
+// send and receive LxAct sidecall
+fn send_receive_lx_act() {
     let msg = kif::tilemux::LxAct {
         op: kif::tilemux::Calls::LX_ACT.val,
     };
     send_msg(msg, tcu::KPEX_SEP, tcu::KPEX_REP).unwrap();
-    let rpl = wait_for_rpl::<kif::tilemux::LxActReply>(tcu::KPEX_REP, TM_RCV_BUF_ADDR).unwrap();
-    rpl.actid as ActId
+    wait_for_rpl::<()>(tcu::KPEX_REP, TM_RCV_BUF_ADDR).unwrap();
 }
 
 // send and receive Exit sidecall
@@ -106,20 +105,20 @@ fn main() -> Result<(), std::io::Error> {
     let _us_rcv_mmap = Mmap::new("/dev/mem", US_RCV_BUF_ADDR, US_RCV_BUF_ADDR, cfg::PAGE_SIZE)?;
 
     ioctl::tlb_insert_addr(MSG_BUF_ADDR, MSG_BUF_ADDR);
-    let actid = send_receive_lx_act();
-    println!("actid: {}", actid);
+    send_receive_lx_act();
 
     // we can only map full pages and ENV_START is not at the beginning of a page
     let env_page_off = cfg::ENV_START & !cfg::PAGE_MASK;
     let _env_mmap = Mmap::new("/dev/mem", env_page_off, env_page_off, cfg::ENV_SIZE)?;
+    let env = base::envdata::get();
+    let actid = env.act_id as u16;
 
     ioctl::register_act(actid);
     ioctl::switch_to_user_mode();
     ioctl::tlb_insert_addr(MSG_BUF_ADDR, MSG_BUF_ADDR);
 
     println!("setup done.");
-    let env = base::envdata::get();
-    println!("{:?}", env);
+    println!("{:#?}", env);
 
     use base::time::{CycleInstant, Profiler};
 
