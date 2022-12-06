@@ -108,11 +108,18 @@ fn main() -> Result<(), std::io::Error> {
     ioctl::tlb_insert_addr(MSG_BUF_ADDR, MSG_BUF_ADDR);
     let actid = send_receive_lx_act();
     println!("actid: {}", actid);
+
+    // we can only map full pages and ENV_START is not at the beginning of a page
+    let env_page_off = cfg::ENV_START & !cfg::PAGE_MASK;
+    let _env_mmap = Mmap::new("/dev/mem", env_page_off, env_page_off, cfg::ENV_SIZE)?;
+
     ioctl::register_act(actid);
     ioctl::switch_to_user_mode();
     ioctl::tlb_insert_addr(MSG_BUF_ADDR, MSG_BUF_ADDR);
 
     println!("setup done.");
+    let env = base::envdata::get();
+    println!("{:?}", env);
 
     use base::time::{CycleInstant, Profiler};
 

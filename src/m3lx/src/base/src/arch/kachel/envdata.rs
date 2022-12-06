@@ -18,7 +18,7 @@
 
 use crate::cfg;
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, Debug)]
 #[repr(C)]
 pub struct EnvData {
     // boot env
@@ -60,8 +60,6 @@ pub struct EnvData {
 }
 
 pub fn get() -> &'static EnvData {
-    panic!("called envdata::get(), not implemented yet");
     // safety: the cast is okay because we trust our loader to put the environment at that place
-    #[allow(unreachable_code)]
     unsafe { &*(cfg::ENV_START as *const _) }
 }

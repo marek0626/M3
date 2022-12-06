@@ -37,7 +37,12 @@ impl Mmap {
             )
         };
         match base {
-            libc::MAP_FAILED => Err(Error::new(ErrorKind::Other, "mmap failed")),
+            libc::MAP_FAILED => {
+                unsafe {
+                    libc::perror(0 as *const u8);
+                }
+                Err(Error::new(ErrorKind::Other, "mmap failed"))
+            },
             x if x as usize == virt => Ok(Mmap {
                 len,
                 phys,
