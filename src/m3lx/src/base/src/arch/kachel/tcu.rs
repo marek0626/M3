@@ -521,7 +521,9 @@ impl TCU {
         //// arch::tmabi::call2(tmif::Operation::TRANSL_FAULT, addr, perm.bits() as usize).ok();
         //// Self::insert_tlb(0xffff, addr, addr as u64, perm.into())
         ////     .expect("could not insert mapping into tcu tlb");
-        panic!("got xlate fault at addr {:#x} with perm {:?}", addr, perm);
+        use crate::arch::linux::ioctl;
+        assert!(addr >> 32 == 0);
+        ioctl::tlb_insert_addr(addr, addr);
     }
 
     /// Tries to fetch a new message from the given endpoint.

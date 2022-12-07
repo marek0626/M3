@@ -1,8 +1,7 @@
-
 use libc;
 use std::os::unix::prelude::AsRawFd;
 
-// this is defined in linux/drivers/tcu.cc (and the right value will be printed on driver initialization during boot time)
+// this is defined in linux/drivers/tcu/tcu.cc (and the right value will be printed on driver initialization during boot time)
 const IOCTL_RGSTR_ACT: u64 = 0x40087101;
 const IOCTL_TO_TMX_MD: u64 = 0x00007102;
 const IOCTL_TO_USR_MD: u64 = 0x00007103;
@@ -44,7 +43,6 @@ pub fn switch_to_tm_mode() {
 pub fn switch_to_user_mode() {
     ioctl(IOCTL_TO_USR_MD);
 }
-
 
 #[repr(C)]
 struct TlbInsert {

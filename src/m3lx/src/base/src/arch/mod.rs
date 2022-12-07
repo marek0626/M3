@@ -36,5 +36,7 @@ mod isa;
 #[path = "riscv/mod.rs"]
 mod isa;
 
+pub mod linux;
+
 pub use self::inner::*;
 pub use self::isa::*;

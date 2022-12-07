@@ -108,6 +108,10 @@ pub mod tcu {
     pub use crate::arch::tcu::*;
 }
 
+pub mod linux {
+    pub use crate::arch::linux::*;
+}
+
 /// The environment data
 pub mod envdata {
     int_enum! {

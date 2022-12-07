@@ -4,10 +4,9 @@ use base::{
     kif,
     tcu::{self, ActId, EpId},
     time::Runner,
+    linux::ioctl,
 };
 use util::mmap::Mmap;
-use util::ioctl;
-
 
 const MSG_BUF_ADDR: usize = 0x4000_0000;
 const TM_RCV_BUF_ADDR: usize = cfg::TILEMUX_RBUF_SPACE;
@@ -104,7 +103,6 @@ fn main() -> Result<(), std::io::Error> {
     let _tm_rcv_mmap = Mmap::new("/dev/mem", TM_RCV_BUF_ADDR, TM_RCV_BUF_ADDR, cfg::PAGE_SIZE)?;
     let _us_rcv_mmap = Mmap::new("/dev/mem", US_RCV_BUF_ADDR, US_RCV_BUF_ADDR, cfg::PAGE_SIZE)?;
 
-    ioctl::tlb_insert_addr(MSG_BUF_ADDR, MSG_BUF_ADDR);
     send_receive_lx_act();
 
     // we can only map full pages and ENV_START is not at the beginning of a page
@@ -115,7 +113,6 @@ fn main() -> Result<(), std::io::Error> {
 
     ioctl::register_act(actid);
     ioctl::switch_to_user_mode();
-    ioctl::tlb_insert_addr(MSG_BUF_ADDR, MSG_BUF_ADDR);
 
     println!("setup done.");
     println!("{:#?}", env);
