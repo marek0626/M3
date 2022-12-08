@@ -4,13 +4,13 @@ use base::{
     kif,
     linux::ioctl,
     mem::MsgBuf,
-    tcu::{self, ActId, EpId},
+    tcu::{self, EpId},
     time::Runner,
 };
 use util::mmap::Mmap;
 
-const TM_RCV_BUF_ADDR: usize = cfg::TILEMUX_RBUF_SPACE;
-const US_RCV_BUF_ADDR: usize = TM_RCV_BUF_ADDR + cfg::PAGE_SIZE;
+// TODO: use the right value here
+const US_RCV_BUF_ADDR: usize = cfg::TILEMUX_RBUF_SPACE + cfg::PAGE_SIZE;
 
 pub const MAX_MSG_SIZE: usize = 512;
 
@@ -37,28 +37,6 @@ fn wait_for_rpl<T>(rep: EpId, rcv_buf: usize) -> Result<&'static T, Error> {
             };
         }
     }
-}
-
-// send and receive LxAct sidecall
-fn send_receive_lx_act() {
-    let mut msg = MsgBuf::new();
-    msg.set(kif::tilemux::LxAct {
-        op: kif::tilemux::Calls::LX_ACT.val,
-    });
-    tcu::TCU::send(tcu::KPEX_SEP, &msg, 0, tcu::KPEX_REP).unwrap();
-    wait_for_rpl::<()>(tcu::KPEX_REP, TM_RCV_BUF_ADDR).unwrap();
-}
-
-// send and receive Exit sidecall
-fn send_receive_exit(id: ActId) {
-    let mut msg = MsgBuf::new();
-    msg.set(kif::tilemux::Exit {
-        op: kif::tilemux::Calls::EXIT.val,
-        act_sel: id as u64,
-        code: 0,
-    });
-    tcu::TCU::send(tcu::KPEX_SEP, &msg, 0, tcu::KPEX_REP).unwrap();
-    wait_for_rpl::<()>(tcu::KPEX_REP, TM_RCV_BUF_ADDR).unwrap();
 }
 
 struct Tester;
@@ -102,22 +80,20 @@ fn noop_syscall() {
 fn main() -> Result<(), std::io::Error> {
     // these need to stay in scope so that the mmaped areas stay alive
     let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, tcu::MMIO_ADDR, tcu::MMIO_SIZE)?;
-    let _tm_rcv_mmap = Mmap::new("/dev/mem", TM_RCV_BUF_ADDR, TM_RCV_BUF_ADDR, cfg::PAGE_SIZE)?;
     let _us_rcv_mmap = Mmap::new("/dev/mem", US_RCV_BUF_ADDR, US_RCV_BUF_ADDR, cfg::PAGE_SIZE)?;
 
-    send_receive_lx_act();
-
     // we can only map full pages and ENV_START is not at the beginning of a page
-    let env_page_off = cfg::ENV_START & !cfg::PAGE_MASK;
-    let _env_mmap = Mmap::new("/dev/mem", env_page_off, env_page_off, cfg::ENV_SIZE)?;
-    let env = base::envdata::get();
-    let actid = env.act_id as u16;
+    // let env_page_off = cfg::ENV_START & !cfg::PAGE_MASK;
+    // let _env_mmap = Mmap::new("/dev/mem", env_page_off, env_page_off, cfg::ENV_SIZE)?;
+    // let env = base::envdata::get();
+    // let actid = env.act_id as u16;
+    let actid = 0;
 
     ioctl::register_act(actid);
     ioctl::switch_to_user_mode();
 
     println!("setup done.");
-    println!("{:#?}", env);
+    // println!("{:#?}", env);
 
     use base::time::{CycleInstant, Profiler};
 
@@ -133,7 +109,6 @@ fn main() -> Result<(), std::io::Error> {
 
     // cleanup
     ioctl::switch_to_tm_mode();
-    send_receive_exit(actid);
     ioctl::unregister_act();
 
     Ok(())
