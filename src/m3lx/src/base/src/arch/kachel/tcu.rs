@@ -424,7 +424,6 @@ impl TCU {
     fn perform_send_reply(msg_addr: usize, cmd: Reg) -> Result<(), Error> {
         loop {
             Self::write_unpriv_reg(UnprivReg::COMMAND, cmd);
-
             match Self::get_error() {
                 Ok(_) => break Ok(()),
                 Err(e) if e.code() == Code::TranslationFault => {
@@ -519,7 +518,7 @@ impl TCU {
     fn handle_xlate_fault(addr: usize, perm: Perm) {
         // report translation fault to linux tcu device driver
         use crate::arch::linux::ioctl;
-        ioctl::tlb_insert_addr(addr, addr);
+        ioctl::tlb_insert_addr(addr as u64, perm.bits() as u8);
     }
 
     /// Tries to fetch a new message from the given endpoint.
@@ -799,7 +798,10 @@ impl TCU {
 
     /// Inserts the given entry into the TCU's TLB
     pub fn insert_tlb(asid: u16, virt: usize, phys: u64, flags: PageFlags) -> Result<(), Error> {
-        Self::write_priv_reg(PrivReg::PRIV_CMD_ARG, (virt as Reg) & !(cfg::PAGE_MASK as Reg));
+        Self::write_priv_reg(
+            PrivReg::PRIV_CMD_ARG,
+            (virt as Reg) & !(cfg::PAGE_MASK as Reg),
+        );
         atomic::fence(atomic::Ordering::SeqCst);
         let cmd = ((asid as Reg) << 41)
             | (((phys as Reg) & !(cfg::PAGE_MASK as Reg)) << 9)

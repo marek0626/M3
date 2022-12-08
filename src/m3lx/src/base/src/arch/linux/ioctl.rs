@@ -46,15 +46,14 @@ pub fn switch_to_user_mode() {
 
 #[repr(C)]
 struct TlbInsert {
-    phys: u64,
-    virt: u32,
+    virt: u64,
+    perm: u8,
 }
 
-pub fn tlb_insert_addr(virt: usize, phys: usize) {
-    assert!(virt >> 32 == 0);
+pub fn tlb_insert_addr(virt: u64, perm: u8) {
     let arg = TlbInsert {
-        phys: phys as u64,
-        virt: virt as u32,
+        virt,
+        perm,
     };
     ioctl_write(IOCTL_TLB_INSRT, arg);
 }

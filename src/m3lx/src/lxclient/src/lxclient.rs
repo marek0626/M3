@@ -2,28 +2,27 @@ use base::{
     cfg,
     errors::Error,
     kif,
+    linux::ioctl,
+    mem::MsgBuf,
     tcu::{self, ActId, EpId},
     time::Runner,
-    linux::ioctl,
 };
 use util::mmap::Mmap;
 
-const MSG_BUF_ADDR: usize = 0x4000_0000;
 const TM_RCV_BUF_ADDR: usize = cfg::TILEMUX_RBUF_SPACE;
 const US_RCV_BUF_ADDR: usize = TM_RCV_BUF_ADDR + cfg::PAGE_SIZE;
 
 pub const MAX_MSG_SIZE: usize = 512;
 
-
-#[inline(always)]
-fn send_msg<T>(msg_obj: T, sep: EpId, rep: EpId) -> Result<(), Error> {
-    let size = std::mem::size_of_val(&msg_obj);
-    // let algn = std::mem::align_of_val(&msg_obj);
-    // assert!(size <= MAX_MSG_SIZE);
-    // assert!(algn <= cfg::PAGE_SIZE);
-    unsafe { (MSG_BUF_ADDR as *mut T).write(msg_obj) };
-    tcu::TCU::send_aligned(sep, MSG_BUF_ADDR as *const u8, size, 0, rep)
-}
+// #[inline(always)]
+// fn send_msg<T>(msg_obj: T, sep: EpId, rep: EpId) -> Result<(), Error> {
+//     let size = std::mem::size_of_val(&msg_obj);
+//     // let algn = std::mem::align_of_val(&msg_obj);
+//     // assert!(size <= MAX_MSG_SIZE);
+//     // assert!(algn <= cfg::PAGE_SIZE);
+//     unsafe { (MSG_BUF_ADDR as *mut T).write(msg_obj) };
+//     tcu::TCU::send_aligned(sep, MSG_BUF_ADDR as *const u8, size, 0, rep)
+// }
 
 #[inline(always)]
 fn wait_for_rpl<T>(rep: EpId, rcv_buf: usize) -> Result<&'static T, Error> {
@@ -42,64 +41,67 @@ fn wait_for_rpl<T>(rep: EpId, rcv_buf: usize) -> Result<&'static T, Error> {
 
 // send and receive LxAct sidecall
 fn send_receive_lx_act() {
-    let msg = kif::tilemux::LxAct {
+    let mut msg = MsgBuf::new();
+    msg.set(kif::tilemux::LxAct {
         op: kif::tilemux::Calls::LX_ACT.val,
-    };
-    send_msg(msg, tcu::KPEX_SEP, tcu::KPEX_REP).unwrap();
+    });
+    tcu::TCU::send(tcu::KPEX_SEP, &msg, 0, tcu::KPEX_REP).unwrap();
     wait_for_rpl::<()>(tcu::KPEX_REP, TM_RCV_BUF_ADDR).unwrap();
 }
 
 // send and receive Exit sidecall
 fn send_receive_exit(id: ActId) {
-    let msg = kif::tilemux::Exit {
+    let mut msg = MsgBuf::new();
+    msg.set(kif::tilemux::Exit {
         op: kif::tilemux::Calls::EXIT.val,
         act_sel: id as u64,
         code: 0,
-    };
-    send_msg(msg, tcu::KPEX_SEP, tcu::KPEX_REP).unwrap();
-    wait_for_rpl::<kif::DefaultReply>(tcu::KPEX_REP, TM_RCV_BUF_ADDR).unwrap();
+    });
+    tcu::TCU::send(tcu::KPEX_SEP, &msg, 0, tcu::KPEX_REP).unwrap();
+    wait_for_rpl::<()>(tcu::KPEX_REP, TM_RCV_BUF_ADDR).unwrap();
 }
 
 struct Tester;
 
 impl Runner for Tester {
     fn pre(&mut self) {
-        let noop = kif::syscalls::Noop {
+        let mut msg = MsgBuf::new();
+        msg.set(kif::syscalls::Noop {
             opcode: kif::syscalls::Operation::NOOP.val,
-        };
-        send_msg(
-            noop,
+        });
+        tcu::TCU::send(
             tcu::FIRST_USER_EP + tcu::SYSC_SEP_OFF,
+            &msg,
+            0,
             tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF,
         )
         .unwrap();
     }
 
     fn run(&mut self) {
-        wait_for_rpl::<kif::DefaultReply>(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF, US_RCV_BUF_ADDR)
-            .unwrap();
+        wait_for_rpl::<()>(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF, US_RCV_BUF_ADDR).unwrap();
     }
 }
 
 #[inline(never)]
 fn noop_syscall() {
-    let noop = kif::syscalls::Noop {
+    let mut msg = MsgBuf::new();
+    msg.set(kif::syscalls::Noop {
         opcode: kif::syscalls::Operation::NOOP.val,
-    };
-    send_msg(
-        noop,
+    });
+    tcu::TCU::send(
         tcu::FIRST_USER_EP + tcu::SYSC_SEP_OFF,
+        &msg,
+        0,
         tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF,
     )
     .unwrap();
-    wait_for_rpl::<kif::DefaultReply>(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF, US_RCV_BUF_ADDR)
-        .unwrap();
+    wait_for_rpl::<()>(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF, US_RCV_BUF_ADDR).unwrap();
 }
 
 fn main() -> Result<(), std::io::Error> {
     // these need to stay in scope so that the mmaped areas stay alive
     let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, tcu::MMIO_ADDR, tcu::MMIO_SIZE)?;
-    let _msg_mmap = Mmap::new("/dev/mem", MSG_BUF_ADDR, MSG_BUF_ADDR, cfg::PAGE_SIZE)?;
     let _tm_rcv_mmap = Mmap::new("/dev/mem", TM_RCV_BUF_ADDR, TM_RCV_BUF_ADDR, cfg::PAGE_SIZE)?;
     let _us_rcv_mmap = Mmap::new("/dev/mem", US_RCV_BUF_ADDR, US_RCV_BUF_ADDR, cfg::PAGE_SIZE)?;
 
