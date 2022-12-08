@@ -2,9 +2,9 @@ use libc;
 use std::os::unix::prelude::AsRawFd;
 
 // this is defined in linux/drivers/tcu/tcu.cc (and the right value will be printed on driver initialization during boot time)
-const IOCTL_RGSTR_ACT: u64 = 0x40087101;
-const IOCTL_TLB_INSRT: u64 = 0x40087104;
-const IOCTL_UNREG_ACT: u64 = 0x00007105;
+const IOCTL_RGSTR_ACT: u64 = 0x00007101;
+const IOCTL_TLB_INSRT: u64 = 0x40087102;
+const IOCTL_UNREG_ACT: u64 = 0x00007103;
 
 const TCU_DEV: &str = "/dev/tcu";
 
@@ -30,8 +30,8 @@ fn ioctl_write<T>(magic_number: u64, arg: T) {
     }
 }
 
-pub fn register_act(actid: u16) {
-    ioctl_write(IOCTL_RGSTR_ACT, actid);
+pub fn register_act() {
+    ioctl(IOCTL_RGSTR_ACT);
 }
 
 #[repr(C)]

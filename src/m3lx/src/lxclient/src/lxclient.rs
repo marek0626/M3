@@ -87,11 +87,10 @@ fn main() -> Result<(), std::io::Error> {
     // let _env_mmap = Mmap::new("/dev/mem", env_page_off, env_page_off, cfg::ENV_SIZE)?;
     // let env = base::envdata::get();
     // let actid = env.act_id as u16;
-    let actid = 0;
 
-    ioctl::register_act(actid);
+    ioctl::register_act();
 
-    println!("setup done.");
+    println!("setup done");
     // println!("{:#?}", env);
 
     use base::time::{CycleInstant, Profiler};
