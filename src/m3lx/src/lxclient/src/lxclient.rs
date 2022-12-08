@@ -90,7 +90,6 @@ fn main() -> Result<(), std::io::Error> {
     let actid = 0;
 
     ioctl::register_act(actid);
-    ioctl::switch_to_user_mode();
 
     println!("setup done.");
     // println!("{:#?}", env);
@@ -108,7 +107,6 @@ fn main() -> Result<(), std::io::Error> {
     noop_syscall();
 
     // cleanup
-    ioctl::switch_to_tm_mode();
     ioctl::unregister_act();
 
     Ok(())

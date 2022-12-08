@@ -3,8 +3,6 @@ use std::os::unix::prelude::AsRawFd;
 
 // this is defined in linux/drivers/tcu/tcu.cc (and the right value will be printed on driver initialization during boot time)
 const IOCTL_RGSTR_ACT: u64 = 0x40087101;
-const IOCTL_TO_TMX_MD: u64 = 0x00007102;
-const IOCTL_TO_USR_MD: u64 = 0x00007103;
 const IOCTL_TLB_INSRT: u64 = 0x40087104;
 const IOCTL_UNREG_ACT: u64 = 0x00007105;
 
@@ -34,14 +32,6 @@ fn ioctl_write<T>(magic_number: u64, arg: T) {
 
 pub fn register_act(actid: u16) {
     ioctl_write(IOCTL_RGSTR_ACT, actid);
-}
-
-pub fn switch_to_tm_mode() {
-    ioctl(IOCTL_TO_TMX_MD);
-}
-
-pub fn switch_to_user_mode() {
-    ioctl(IOCTL_TO_USR_MD);
 }
 
 #[repr(C)]
