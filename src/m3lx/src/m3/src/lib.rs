@@ -19,16 +19,15 @@
 #![feature(core_intrinsics)]
 #![feature(duration_constants)]
 #![feature(trace_macros)]
-#![no_std]
-
-#[allow(unused_extern_crates)]
-extern crate heap;
+// #![no_std]
 
 // init stuff
 #[cfg(not(target_vendor = "host"))]
 pub use arch::init::{env_run, exit};
 #[cfg(target_vendor = "host")]
 pub use arch::init::{exit, rust_deinit, rust_init};
+
+pub use arch::env as envdata;
 
 #[macro_use]
 pub mod io;
@@ -41,7 +40,7 @@ pub mod net;
 pub use base::{
     backtrace, borrow, boxed, cell, cfg, col, cpu, elf, env, errors, format, function, goff,
     impl_boxitem, int_enum, kif, libc, llog, log, math, mem, parse, quota, random, rc, serialize,
-    sync, tcu, time, tmif, util, vec,
+    sync, tcu, time, util, vec,
 };
 
 pub mod cap;

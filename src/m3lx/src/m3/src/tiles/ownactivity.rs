@@ -34,8 +34,12 @@ use crate::session::{Pager, ResMng};
 use crate::tcu::{EpId, TileId, INVALID_EP, TCU};
 use crate::tiles::{Activity, KMem, StateDeserializer, Tile};
 use crate::time::TimeDuration;
-use crate::tmif;
 use crate::vfs::{FileTable, MountTable};
+
+// TODO: remove this
+mod tmif {
+    pub type IRQId = u32;
+}
 
 /// Represents the own activity.
 pub struct OwnActivity {
@@ -84,11 +88,12 @@ impl OwnActivity {
         if envdata::get().platform != envdata::Platform::HOST.val
             && (arch::env::get().shared() || timeout != TimeDuration::MAX)
         {
-            let timeout = match timeout {
+            let _timeout = match timeout {
                 TimeDuration::MAX => None,
                 t => Some(t),
             };
-            return tmif::wait(None, None, timeout);
+            unimplemented!();
+            // return tmif::wait(None, None, timeout);
         }
         if envdata::get().platform != envdata::Platform::HW.val {
             let timeout = match timeout {
@@ -104,11 +109,12 @@ impl OwnActivity {
     pub fn wait_for(
         &self,
         ep: Option<EpId>,
-        irq: Option<tmif::IRQId>,
+        _irq: Option<tmif::IRQId>,
         timeout: Option<TimeDuration>,
     ) -> Result<(), Error> {
         if arch::env::get().shared() {
-            return tmif::wait(ep, irq, timeout);
+            unimplemented!();
+            // return tmif::wait(ep, irq, timeout);
         }
         if envdata::get().platform != envdata::Platform::HW.val {
             if let Some(ep) = ep {

@@ -10,4 +10,3 @@ crate-type = ["rlib"]
 [dependencies]
 bitflags = "*"
 base = { path = "../base" }
-heap = { path = "../heap" }

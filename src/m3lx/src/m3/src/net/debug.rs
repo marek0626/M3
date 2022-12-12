@@ -28,13 +28,14 @@ pub enum NetLogEvent {
     StoppedWaiting,
 }
 
-#[cfg(target_vendor = "gem5")]
+// TODO: due to missing gem5 target_vendor
+// #[cfg(target_vendor = "gem5")]
 #[inline(always)]
 pub fn log_net(ev: NetLogEvent, sd: Sd, arg: usize) {
     let msg = ev as u64 | (sd as u64) << 8 | (arg as u64) << 16;
     base::cpu::gem5_debug(msg);
 }
 
-#[cfg(not(target_vendor = "gem5"))]
-pub fn log_net(_ev: NetLogEvent, _sd: Sd, _arg: usize) {
-}
+// #[cfg(not(target_vendor = "gem5"))]
+// pub fn log_net(_ev: NetLogEvent, _sd: Sd, _arg: usize) {
+// }
