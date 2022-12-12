@@ -14,16 +14,6 @@ const US_RCV_BUF_ADDR: usize = cfg::TILEMUX_RBUF_SPACE + cfg::PAGE_SIZE;
 
 pub const MAX_MSG_SIZE: usize = 512;
 
-// #[inline(always)]
-// fn send_msg<T>(msg_obj: T, sep: EpId, rep: EpId) -> Result<(), Error> {
-//     let size = std::mem::size_of_val(&msg_obj);
-//     // let algn = std::mem::align_of_val(&msg_obj);
-//     // assert!(size <= MAX_MSG_SIZE);
-//     // assert!(algn <= cfg::PAGE_SIZE);
-//     unsafe { (MSG_BUF_ADDR as *mut T).write(msg_obj) };
-//     tcu::TCU::send_aligned(sep, MSG_BUF_ADDR as *const u8, size, 0, rep)
-// }
-
 #[inline(always)]
 fn wait_for_rpl<T>(rep: EpId, rcv_buf: usize) -> Result<&'static T, Error> {
     loop {
@@ -77,22 +67,8 @@ fn noop_syscall() {
     wait_for_rpl::<()>(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF, US_RCV_BUF_ADDR).unwrap();
 }
 
-fn main() -> Result<(), std::io::Error> {
-    // these need to stay in scope so that the mmaped areas stay alive
-    let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, tcu::MMIO_ADDR, tcu::MMIO_SIZE)?;
-    let _us_rcv_mmap = Mmap::new("/dev/mem", US_RCV_BUF_ADDR, US_RCV_BUF_ADDR, cfg::PAGE_SIZE)?;
-
-    // we can only map full pages and ENV_START is not at the beginning of a page
-    // let env_page_off = cfg::ENV_START & !cfg::PAGE_MASK;
-    // let _env_mmap = Mmap::new("/dev/mem", env_page_off, env_page_off, cfg::ENV_SIZE)?;
-    // let env = base::envdata::get();
-    // let actid = env.act_id as u16;
-
-    ioctl::register_act();
-
-    println!("setup done");
-    // println!("{:#?}", env);
-
+#[allow(unused)]
+fn bench_noop_syscall() {
     use base::time::{CycleInstant, Profiler};
 
     let profiler = Profiler::default().warmup(50).repeats(1000);
@@ -103,7 +79,24 @@ fn main() -> Result<(), std::io::Error> {
     println!("{}", res);
     res.filter_outliers();
     println!("{}", res);
-    noop_syscall();
+}
+
+fn main() -> Result<(), std::io::Error> {
+    // these need to stay in scope so that the mmaped areas stay alive
+    let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, tcu::MMIO_ADDR, tcu::MMIO_SIZE)?;
+    let _us_rcv_mmap = Mmap::new("/dev/mem", US_RCV_BUF_ADDR, US_RCV_BUF_ADDR, cfg::PAGE_SIZE)?;
+
+    ioctl::register_act();
+    // we can only map full pages and ENV_START is not at the beginning of a page
+    let env_page_off = cfg::ENV_START & !cfg::PAGE_MASK;
+    let _env_mmap = Mmap::new("/dev/mem", env_page_off, env_page_off, cfg::ENV_SIZE)?;
+
+    // m3 setup
+    m3::syscalls::init();
+
+    println!("setup done");
+
+
 
     // cleanup
     ioctl::unregister_act();

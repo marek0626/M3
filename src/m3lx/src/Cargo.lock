@@ -43,7 +43,16 @@ version = "0.1.0"
 dependencies = [
  "base",
  "libc",
+ "m3",
  "util",
+]
+
+[[package]]
+name = "m3"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "bitflags",
 ]
 
 [[package]]

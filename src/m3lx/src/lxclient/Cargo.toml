@@ -13,3 +13,4 @@ path = "src/lxclient.rs"
 libc = "0.2"
 base = { path = "../base" }
 util = { path = "../util" }
+m3 = { path = "../m3" }

@@ -3,6 +3,7 @@
 members = [
     "base",
     "lxclient",
+	"m3",
 	"simplebench",
 	"util",
 ]
