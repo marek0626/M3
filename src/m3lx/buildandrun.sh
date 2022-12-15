@@ -108,6 +108,10 @@ mk_bbl() {
 }
 
 run_gem5() {
+    # TODO check validity, extract config/dom/app etc.
+    # TODO support different boot scripts
+    cp boot/linux.xml run/boot.xml
+
     "$m3_root/platform/gem5/build/RISCV/gem5.opt" \
         "--outdir=$m3_root/run" \
         `if [ -n "$debug_flags" ]; then echo "--debug-flags=$debug_flags"; fi` \
@@ -115,6 +119,7 @@ run_gem5() {
         "$m3_root/config/linux.py" \
         --disk-image "$disks_dir/root.img" \
         --kernel "$bbl_dir/bbl" \
+        --mods $m3_root/run/boot.xml,$m3_root/build/gem5-riscv-release/bin/root \
         --cpu-type DerivO3CPU
 }
 
