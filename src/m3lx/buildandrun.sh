@@ -12,7 +12,7 @@ fi
 
 M3_BUILD="${M3_BUILD:-release}"
 
-lx_deps_root="$(dirname "$0")"
+lx_deps_root="$(dirname $(readlink -f "$0"))"
 build="$lx_deps_root/../build/$M3_TARGET-$M3_ISA-$M3_BUILD/linux-deps"
 m3_root="$lx_deps_root/.."
 
