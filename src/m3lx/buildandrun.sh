@@ -22,9 +22,24 @@ disks_dir="$build/disks"
 linux_dir="$build/linux"
 bbl_dir="$build/bbl"
 
+skip_linux_build=false
+
 mkdir -p "$buildroot_dir" "$disks_dir" "$linux_dir" "$bbl_dir"
 
 main() {
+	for arg in "$@"; do
+		case $arg in
+			--skip-lx-build)
+				skip_linux_build=true
+				;;
+			*)
+				echo "unknown option: $arg" >&2
+				exit 1
+				;;
+		esac
+	done
+
+
 	# we need the cross compiler from buildroot to build the userspace programs
 	if [ ! -f "$buildroot_dir/host/bin/riscv64-linux-gcc" ]; then
 		mk_buildroot
@@ -47,8 +62,11 @@ main() {
 	done
 
 	mk_buildroot
-	mk_linux
-	mk_bbl
+
+	if [ "$skip_linux_build" = false ]; then
+		mk_linux
+		mk_bbl
+	fi
 
 	run_gem5
 }
@@ -116,6 +134,7 @@ run_gem5() {
         "--outdir=$m3_root/run" \
         `if [ -n "$debug_flags" ]; then echo "--debug-flags=$debug_flags"; fi` \
         --debug-file=gem5.log \
+        --debug-start=804925347000 \
         "$m3_root/config/linux.py" \
         --disk-image "$disks_dir/root.img" \
         --kernel "$bbl_dir/bbl" \
@@ -123,4 +142,4 @@ run_gem5() {
         --cpu-type DerivO3CPU
 }
 
-main
+main "$@"
