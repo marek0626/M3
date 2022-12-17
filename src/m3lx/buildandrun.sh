@@ -134,12 +134,11 @@ run_gem5() {
         "--outdir=$m3_root/run" \
         `if [ -n "$debug_flags" ]; then echo "--debug-flags=$debug_flags"; fi` \
         --debug-file=gem5.log \
-        --debug-start=804925347000 \
         "$m3_root/config/linux.py" \
         --disk-image "$disks_dir/root.img" \
         --kernel "$bbl_dir/bbl" \
         --mods $m3_root/run/boot.xml,$m3_root/build/gem5-riscv-release/bin/root \
-        --cpu-type DerivO3CPU
+        --cpu-type TimingSimpleCPU
 }
 
 main "$@"
