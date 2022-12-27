@@ -10,3 +10,6 @@ members = [
 
 [build]
 target = "riscv64gc-unknown-linux-gnu"
+
+[profile.release]
+lto = true
