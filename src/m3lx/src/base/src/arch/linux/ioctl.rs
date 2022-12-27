@@ -14,7 +14,7 @@ fn ioctl(magic_number: u64) {
         let res = libc::ioctl(tcu_dev.as_raw_fd(), magic_number);
         if res != 0 {
             libc::perror(0 as *const u8);
-            panic!("ioctl call {} failed", magic_number);
+            panic!("ioctl call {} failed with error {}", magic_number, res);
         }
     }
 }
@@ -25,7 +25,7 @@ fn ioctl_write<T>(magic_number: u64, arg: T) {
         let res = libc::ioctl(tcu_dev.as_raw_fd(), magic_number, &arg as *const _);
         if res != 0 {
             libc::perror(0 as *const u8);
-            panic!("ioctl call {} failed", magic_number);
+            panic!("ioctl call {} failed with error {}", magic_number, res);
         }
     }
 }
