@@ -30,7 +30,7 @@ use crate::tcu;
 use crate::util;
 use crate::vfs::{FileTable, MountTable};
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, Debug)]
 #[repr(C)]
 pub struct EnvData {
     base: base::envdata::EnvData,

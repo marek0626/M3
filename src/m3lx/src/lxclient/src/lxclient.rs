@@ -94,19 +94,21 @@ fn main() -> Result<(), std::io::Error> {
     let env_page_off = cfg::ENV_START & !cfg::PAGE_MASK;
     let _env_mmap = Mmap::new("/dev/mem", env_page_off, env_page_off, cfg::ENV_SIZE)?;
     let env = m3::envdata::get();
-    let (addr, size) = env.tile_desc().rbuf_std_space();
-    println!("user std rcv buf addr: {:#x}, size: {:#x}", addr, size);
-    let _rcv_mmap = Mmap::new("/dev/mem", addr, addr, size)?;
+    println!("{:#?}", env);
+
+    let rbuf_phys_addr = cfg::MEM_OFFSET + 2 * cfg::PAGE_SIZE;
+    let (rbuf_virt_addr, rbuf_size) = env.tile_desc().rbuf_std_space();
+    let _rcv_mmap = Mmap::new("/dev/mem", rbuf_phys_addr, rbuf_virt_addr, rbuf_size)?;
 
     // m3 setup
     m3::env_run();
 
-    println!("setup done.");
+    println!("setup done");
 
     let profiler = Profiler::default().warmup(50).repeats(1000);
     let mut res = profiler.run::<CycleInstant, _>(|| {
-        // m3::syscalls::noop().unwrap();
-        noop_syscall(addr);
+        m3::syscalls::noop().unwrap();
+        // noop_syscall(addr);
     });
     println!("{}", res);
     res.filter_outliers();
