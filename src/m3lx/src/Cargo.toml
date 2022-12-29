@@ -3,13 +3,10 @@
 members = [
     "base",
     "lxclient",
-	"m3",
-	"simplebench",
-	"util",
+    "m3",
+    "simplebench",
+    "util",
 ]
-
-[build]
-target = "riscv64gc-unknown-linux-gnu"
 
 [profile.release]
 lto = true
