@@ -23,6 +23,8 @@ linux_dir="$build/linux"
 bbl_dir="$build/bbl"
 
 skip_linux_build=false
+cpu_type="TimingSimpleCPU"
+debug_start_on_boot=false
 
 mkdir -p "$buildroot_dir" "$disks_dir" "$linux_dir" "$bbl_dir"
 
@@ -31,6 +33,12 @@ main() {
 		case $arg in
 			--skip-lx-build)
 				skip_linux_build=true
+				;;
+			--o3cpu)
+				cpu_type="DerivO3CPU"
+				;;
+			--debug-start-on-boot)
+				debug_start_on_boot=true
 				;;
 			*)
 				echo "unknown option: $arg" >&2
@@ -134,11 +142,12 @@ run_gem5() {
         "--outdir=$m3_root/run" \
         `if [ -n "$debug_flags" ]; then echo "--debug-flags=$debug_flags"; fi` \
         --debug-file=gem5.log \
+        `if [ "$debug_start_on_boot" = true ]; then echo "--debug-start=506053425500"; fi` \
         "$m3_root/config/linux.py" \
         --disk-image "$disks_dir/root.img" \
         --kernel "$bbl_dir/bbl" \
         --mods $m3_root/run/boot.xml,$m3_root/build/gem5-riscv-release/bin/root \
-        --cpu-type TimingSimpleCPU
+        --cpu-type "$cpu_type"
 }
 
 main "$@"
