@@ -55,7 +55,7 @@ pub fn env_run() {
     com::pre_init();
     tiles::init();
     io::init();
-    // com::init();
+    com::init();
 
     // let res = if let Some(cl) = arch::env::get().load_closure() {
     //     cl()

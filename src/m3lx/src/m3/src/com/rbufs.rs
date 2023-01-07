@@ -23,7 +23,6 @@ use crate::errors::Error;
 use crate::kif::Perm;
 use crate::math;
 use crate::mem::MemMap;
-use crate::syscalls;
 use crate::tiles::Activity;
 
 static BUFS: LazyStaticRefCell<MemMap> = LazyStaticRefCell::default();
@@ -98,21 +97,17 @@ pub fn alloc_rbuf(size: usize) -> Result<RecvBuf, Error> {
 }
 
 fn map_rbuf(addr: usize, size: usize) -> Result<MemGate, Error> {
+    use base::linux::mmap::mmap;
     let size = math::round_up(size, cfg::PAGE_SIZE);
     let mgate = MemGate::new(size, Perm::R)?;
-    syscalls::create_map(
-        (addr / cfg::PAGE_SIZE) as Selector,
-        Activity::own().sel(),
-        mgate.sel(),
-        0,
-        size / cfg::PAGE_SIZE,
-        Perm::R,
-    )?;
+    mmap(addr, size)?;
     Ok(mgate)
 }
 
 /// Frees the given receive buffer
 pub fn free_rbuf(rbuf: RecvBuf) {
+    use base::linux::mmap::munmap;
+    munmap(rbuf.addr(), rbuf.size());
     BUFS.borrow_mut().free(rbuf.addr as u64, rbuf.size as u64);
 }
 
