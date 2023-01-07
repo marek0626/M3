@@ -1,11 +1,17 @@
+use base::io::Write;
 use base::{
     cfg,
     errors::Error,
+    io::Read,
     kif::{self, Perm},
     linux::ioctl,
     mem::MsgBuf,
     tcu::{self, EpId},
     time::{CycleInstant, Profiler},
+};
+use m3::{
+    tiles::Activity,
+    vfs::{OpenFlags, VFS},
 };
 use util::mmap::Mmap;
 
@@ -57,9 +63,8 @@ fn bench_m3_noop_syscall(profiler: &Profiler) {
 
 fn bench_tlb_insert(profiler: &Profiler) {
     let sample_addr = profiler as *const Profiler as usize;
-    let mut res = profiler.run::<CycleInstant, _>(|| {
-        tcu::TCU::handle_xlate_fault(sample_addr, Perm::R)
-    });
+    let mut res =
+        profiler.run::<CycleInstant, _>(|| tcu::TCU::handle_xlate_fault(sample_addr, Perm::R));
     res.filter_outliers();
     println!("tlb insert filtered: {}", res);
 }
@@ -73,6 +78,7 @@ fn main() -> Result<(), std::io::Error> {
     let env_page_off = cfg::ENV_START & !cfg::PAGE_MASK;
     let _env_mmap = Mmap::new("/dev/mem", env_page_off, env_page_off, cfg::ENV_SIZE)?;
     let env = m3::envdata::get();
+    println!("{:#?}", env);
 
     let rbuf_phys_addr = cfg::MEM_OFFSET + 2 * cfg::PAGE_SIZE;
     let (rbuf_virt_addr, rbuf_size) = env.tile_desc().rbuf_std_space();
@@ -82,6 +88,26 @@ fn main() -> Result<(), std::io::Error> {
     m3::env_run();
 
     println!("setup done");
+    println!("mounts: {:?}", Activity::own().mounts());
+    VFS::mount("/", "m3fs", "m3fs").unwrap();
+    println!("mounts after mounting fs: {:?}", Activity::own().mounts());
+
+    {
+        let mut file = VFS::open("/test.txt", OpenFlags::R).unwrap();
+        let contents = file.read_to_string().unwrap();
+        println!("{}", contents);
+    }
+    let new_file_contents = "test\ntest";
+    {
+        let mut file = VFS::open("/new-file.txt", OpenFlags::W | OpenFlags::CREATE).unwrap();
+        write!(file, "{}", new_file_contents).unwrap();
+    }
+    {
+        let mut file = VFS::open("/new-file.txt", OpenFlags::R).unwrap();
+        let contents = file.read_to_string().unwrap();
+        println!("{}", contents);
+        assert!(contents == new_file_contents);
+    }
 
     let profiler = Profiler::default().warmup(50).repeats(1000);
     bench_custom_noop_syscall(&profiler);

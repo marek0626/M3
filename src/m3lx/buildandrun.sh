@@ -136,7 +136,8 @@ mk_bbl() {
 run_gem5() {
     # TODO check validity, extract config/dom/app etc.
     # TODO support different boot scripts
-    cp boot/linux.xml run/boot.xml
+    cp boot/linux/m3fs.xml run/boot.xml
+    export M3_GEM5_FS="$lx_deps_root/../build/$M3_TARGET-$M3_ISA-$M3_BUILD/default.img"
 
     "$m3_root/platform/gem5/build/RISCV/gem5.opt" \
         "--outdir=$m3_root/run" \
@@ -146,7 +147,7 @@ run_gem5() {
         "$m3_root/config/linux.py" \
         --disk-image "$disks_dir/root.img" \
         --kernel "$bbl_dir/bbl" \
-        --mods $m3_root/run/boot.xml,$m3_root/build/gem5-riscv-release/bin/root \
+        --mods $m3_root/run/boot.xml,$m3_root/build/gem5-riscv-release/bin/root,$m3_root/build/gem5-riscv-release/bin/pager,$m3_root/build/gem5-riscv-release/bin/m3fs \
         --cpu-type "$cpu_type"
 }
 
