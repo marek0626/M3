@@ -84,19 +84,19 @@ mk_buildroot() {
         cp "$lx_deps_root/configs/config-buildroot-riscv64" "$buildroot_dir/.config"
     fi
 
-    ( cd "$lx_deps_root/buildroot" && make "O=$buildroot_dir" -j$(nproc) )
+    ( cd "$lx_deps_root/buildroot" && make "O=$buildroot_dir" -j$(nproc) > /dev/null )
     if [ $? -ne 0 ]; then
         echo "buildroot compilation failed" >&2
         exit 1
     fi
 
     rm -f "$disks_dir/root.img"
-    "$m3_root/platform/gem5/util/gem5img.py" init "$disks_dir/root.img" 128
+    "$m3_root/platform/gem5/util/gem5img.py" init "$disks_dir/root.img" 128 > /dev/null
     tmp=`mktemp -d`
-    "$m3_root/platform/gem5/util/gem5img.py" mount "$disks_dir/root.img" $tmp
+    "$m3_root/platform/gem5/util/gem5img.py" mount "$disks_dir/root.img" $tmp > /dev/null
     cpioimg=`readlink -f $buildroot_dir/images/rootfs.cpio`
-    ( cd $tmp && sudo cpio -id < $cpioimg )
-    "$m3_root/platform/gem5/util/gem5img.py" umount $tmp
+    ( cd $tmp && sudo cpio -id < $cpioimg > /dev/null)
+    "$m3_root/platform/gem5/util/gem5img.py" umount $tmp > /dev/null
     rmdir $tmp
 }
 
@@ -147,7 +147,7 @@ run_gem5() {
         "$m3_root/config/linux.py" \
         --disk-image "$disks_dir/root.img" \
         --kernel "$bbl_dir/bbl" \
-        --mods $m3_root/run/boot.xml,$m3_root/build/gem5-riscv-release/bin/root,$m3_root/build/gem5-riscv-release/bin/pager,$m3_root/build/gem5-riscv-release/bin/m3fs \
+        --mods $m3_root/run/boot.xml,$m3_root/build/gem5-riscv-release/bin/root,$m3_root/build/gem5-riscv-release/bin/m3fs \
         --cpu-type "$cpu_type"
 }
 
