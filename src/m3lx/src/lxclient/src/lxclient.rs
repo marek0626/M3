@@ -9,10 +9,7 @@ use base::{
     tcu::{self, EpId},
     time::{CycleInstant, Profiler},
 };
-use m3::{
-    tiles::Activity,
-    vfs::{OpenFlags, VFS},
-};
+use m3::vfs::{OpenFlags, VFS};
 use util::mmap::Mmap;
 
 fn wait_for_rpl<T>(rep: EpId, rcv_buf: usize) -> Result<&'static T, Error> {
@@ -44,34 +41,37 @@ fn noop_syscall(rbuf: usize) {
     wait_for_rpl::<()>(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF, rbuf).unwrap();
 }
 
+fn bench<F: FnMut()>(profiler: &Profiler, name: &str, f: F) {
+    let mut res = profiler.run::<CycleInstant, _>(f);
+    println!("\n\n{}: {:?}", name, res);
+    println!("{}: {}", name, res);
+    res.filter_outliers();
+    println!("{} filtered: {}", name, res);
+}
+
 fn bench_custom_noop_syscall(profiler: &Profiler) {
     let (rbuf, _) = m3::envdata::get().tile_desc().rbuf_std_space();
-    let mut res = profiler.run::<CycleInstant, _>(|| {
+    bench(profiler, "custom noop", || {
         noop_syscall(rbuf);
-    });
-    res.filter_outliers();
-    println!("custom noop filtered: {}", res);
+    })
 }
 
 fn bench_m3_noop_syscall(profiler: &Profiler) {
-    let mut res = profiler.run::<CycleInstant, _>(|| {
+    bench(profiler, "m3 noop", || {
         m3::syscalls::noop().unwrap();
-    });
-    res.filter_outliers();
-    println!("m3 noop filtered: {}", res);
+    })
 }
 
 fn bench_tlb_insert(profiler: &Profiler) {
     let sample_addr = profiler as *const Profiler as usize;
-    let mut res =
-        profiler.run::<CycleInstant, _>(|| tcu::TCU::handle_xlate_fault(sample_addr, Perm::R));
-    res.filter_outliers();
-    println!("tlb insert filtered: {}", res);
+    bench(profiler, "tlb insert", || {
+        tcu::TCU::handle_xlate_fault(sample_addr, Perm::R);
+    })
 }
 
 fn bench_m3fs(profiler: &Profiler) {
     let new_file_contents = "test\ntest";
-    let mut res = profiler.run::<CycleInstant, _>(|| {
+    bench(profiler, "m3fs meta", || {
         {
             let mut file = VFS::open("/new-file.txt", OpenFlags::W | OpenFlags::CREATE).unwrap();
             write!(file, "{}", new_file_contents).unwrap();
@@ -84,9 +84,7 @@ fn bench_m3fs(profiler: &Profiler) {
         {
             VFS::unlink("/new-file.txt").unwrap();
         }
-    });
-    res.filter_outliers();
-    println!("m3fs filtered: {}", res);
+    })
 }
 
 fn main() -> Result<(), std::io::Error> {
@@ -108,15 +106,7 @@ fn main() -> Result<(), std::io::Error> {
     m3::env_run();
 
     println!("setup done");
-    println!("mounts: {:?}", Activity::own().mounts());
     VFS::mount("/", "m3fs", "m3fs").unwrap();
-    println!("mounts after mounting fs: {:?}", Activity::own().mounts());
-
-    {
-        let mut file = VFS::open("/test.txt", OpenFlags::R).unwrap();
-        let contents = file.read_to_string().unwrap();
-        println!("{}", contents);
-    }
 
     let profiler = Profiler::default().warmup(50).repeats(1000);
     bench_custom_noop_syscall(&profiler);
