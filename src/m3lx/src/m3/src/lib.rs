@@ -39,8 +39,8 @@ pub mod net;
 
 pub use base::{
     backtrace, borrow, boxed, cell, cfg, col, cpu, elf, env, errors, format, function, goff,
-    impl_boxitem, int_enum, kif, libc, llog, log, math, mem, parse, quota, random, rc, serialize,
-    sync, tcu, time, util, vec,
+    impl_boxitem, int_enum, kif, libc, linux, llog, log, math, mem, parse, quota, random, rc,
+    serialize, sync, tcu, time, util, vec,
 };
 
 pub mod cap;
