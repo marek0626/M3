@@ -5,6 +5,8 @@ use std::os::unix::prelude::AsRawFd;
 const IOCTL_RGSTR_ACT: u64 = 0x00007101;
 const IOCTL_TLB_INSRT: u64 = 0x40087102;
 const IOCTL_UNREG_ACT: u64 = 0x00007103;
+const IOCTL_NOOP: u64      = 0x00007104;
+const IOCTL_NOOP_ARG: u64  = 0x40087105;
 
 const TCU_DEV: &str = "/dev/tcu";
 
@@ -51,3 +53,22 @@ pub fn tlb_insert_addr(virt: u64, perm: u8) {
 pub fn unregister_act() {
     ioctl(IOCTL_UNREG_ACT);
 }
+
+pub fn noop() {
+    ioctl(IOCTL_NOOP);
+}
+
+#[repr(C)]
+struct NoopArg {
+    arg1: u64,
+    arg2: u64,
+}
+
+pub fn noop_arg(arg1: u64, arg2: u64) {
+    let arg = NoopArg {
+        arg1,
+        arg2,
+    };
+    ioctl_write(IOCTL_NOOP_ARG, arg);
+}
+
