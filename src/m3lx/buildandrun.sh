@@ -148,7 +148,9 @@ run_gem5() {
         --disk-image "$disks_dir/root.img" \
         --kernel "$bbl_dir/bbl" \
         --mods $m3_root/run/boot.xml,$m3_root/build/gem5-riscv-release/bin/root,$m3_root/build/gem5-riscv-release/bin/m3fs \
-        --cpu-type "$cpu_type"
+        --cpu-type "$cpu_type" \
+        --cpu-clock=1GHz \
+        --sys-clock=333MHz
 }
 
 main "$@"
