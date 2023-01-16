@@ -5,13 +5,11 @@ use m3::{
     errors::Error,
     io::{Read, Write},
     kif::{self, Perm},
-    linux::ioctl,
+    linux::{ioctl, mmap},
     mem::MsgBuf,
     tcu::{self, EpId},
     tiles::Activity,
-    time::{
-        CycleDuration, CycleInstant, Duration, Profiler, Results, Runner, TimeDuration, TimeInstant,
-    },
+    time::{CycleDuration, CycleInstant, Duration, Profiler, Results, Runner},
     vfs::{FileMode, FileRef, GenericFile, OpenFlags, VFS},
 };
 
@@ -81,15 +79,15 @@ fn bench_os_call_arg(profiler: &Profiler) -> Results<CycleDuration> {
     })
 }
 
-const STR_LEN: usize = 512 * 1024;
+const STR_LEN: usize = 256 * 1024;
 
 #[inline(never)]
-fn bench_m3fs_read(profiler: &Profiler) -> Results<TimeDuration> {
+fn bench_m3fs_read(profiler: &Profiler) -> Results<CycleDuration> {
     let mut file = VFS::open("/new-file.txt", OpenFlags::CREATE | OpenFlags::RW).unwrap();
     let content: String = (0..STR_LEN).map(|_| "a").collect();
     write!(file, "{}", content).unwrap();
 
-    let res = profiler.run::<TimeInstant, _>(|| {
+    let res = profiler.run::<CycleInstant, _>(|| {
         let _content = file.read_to_string().unwrap();
     });
 
@@ -116,8 +114,9 @@ impl Runner for WriteBenchmark {
         self.file = VFS::open("/new-file.txt", OpenFlags::CREATE | OpenFlags::W).unwrap();
     }
 
+    #[inline(never)]
     fn run(&mut self) {
-        write!(self.file, "{}", self.content).unwrap();
+        self.file.write_all(self.content.as_bytes()).unwrap();
     }
 
     fn post(&mut self) {
@@ -126,13 +125,13 @@ impl Runner for WriteBenchmark {
 }
 
 #[inline(never)]
-fn bench_m3fs_write(profiler: &Profiler) -> Results<TimeDuration> {
-    profiler.runner::<TimeInstant, _>(&mut WriteBenchmark::new())
+fn bench_m3fs_write(profiler: &Profiler) -> Results<CycleDuration> {
+    profiler.runner::<CycleInstant, _>(&mut WriteBenchmark::new())
 }
 
 #[inline(never)]
-fn bench_m3fs_meta(profiler: &Profiler) -> Results<TimeDuration> {
-    profiler.run::<TimeInstant, _>(|| {
+fn bench_m3fs_meta(profiler: &Profiler) -> Results<CycleDuration> {
+    profiler.run::<CycleInstant, _>(|| {
         VFS::mkdir("/new-dir", FileMode::from_bits(0o755).unwrap()).unwrap();
         let _ = VFS::open("/new-dir/new-file", OpenFlags::CREATE).unwrap();
         VFS::link("/new-dir/new-file", "/new-link").unwrap();
@@ -165,11 +164,12 @@ fn print_csv(data: Vec<(String, Vec<u64>)>) {
     }
 }
 
-fn print_summary<T: Duration>(name: &str, res: &mut Results<T>) {
+fn print_summary<T: Duration + Clone>(name: &str, res: &Results<T>) {
     println!("\n\n{}:", name);
     println!("{}", res);
-    res.filter_outliers();
-    println!("filtered: {}", res);
+    let mut filtered: Results<T> = (*res).clone();
+    filtered.filter_outliers();
+    println!("filtered: {}", filtered);
 }
 
 fn _column<T: Duration>(name: &str, res: &Results<T>) -> (String, Vec<u64>) {
@@ -177,6 +177,9 @@ fn _column<T: Duration>(name: &str, res: &Results<T>) -> (String, Vec<u64>) {
 }
 
 fn main() -> Result<(), std::io::Error> {
+    ioctl::init();
+    mmap::init();
+
     // these need to stay in scope so that the mmaped areas stay alive
     let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, tcu::MMIO_ADDR, tcu::MMIO_SIZE)?;
 
@@ -198,14 +201,22 @@ fn main() -> Result<(), std::io::Error> {
     VFS::mount("/", "m3fs", "m3fs").unwrap();
     let profiler = Profiler::default().warmup(10).repeats(100);
 
-    let mut oscall = bench_os_call(&profiler);
-    let mut oscall_arg = bench_os_call_arg(&profiler);
-    let mut cnoop = bench_custom_noop_syscall(&profiler);
-    let mut m3noop = bench_m3_noop_syscall(&profiler);
-    let mut tlb = bench_tlb_insert(&profiler);
-    let mut read = bench_m3fs_read(&profiler);
-    let mut write = bench_m3fs_write(&profiler);
-    let mut meta = bench_m3fs_meta(&profiler);
+    let cnoop = bench_custom_noop_syscall(&profiler);
+    print_summary("custom noop", &cnoop);
+    let m3noop = bench_m3_noop_syscall(&profiler);
+    print_summary("m3 noop", &m3noop);
+    let oscall = bench_os_call(&profiler);
+    print_summary("oscall", &oscall);
+    let oscall_arg = bench_os_call_arg(&profiler);
+    print_summary("oscall arg", &oscall_arg);
+    let tlb = bench_tlb_insert(&profiler);
+    print_summary("tlb insert", &tlb);
+    let read = bench_m3fs_read(&profiler);
+    print_summary("m3fs read", &read);
+    let write = bench_m3fs_write(&profiler);
+    print_summary("m3fs write", &write);
+    let meta = bench_m3fs_meta(&profiler);
+    print_summary("m3fs meta", &meta);
 
     print_csv(vec![
         _column("custom noop", &cnoop),
@@ -217,14 +228,6 @@ fn main() -> Result<(), std::io::Error> {
         _column("m3fs meta", &meta),
     ]);
 
-    print_summary("custom noop", &mut cnoop);
-    print_summary("m3 noop", &mut m3noop);
-    print_summary("oscall", &mut oscall);
-    print_summary("oscall arg", &mut oscall_arg);
-    print_summary("tlb insert", &mut tlb);
-    print_summary("m3fs read", &mut read);
-    print_summary("m3fs write", &mut write);
-    print_summary("m3fs meta", &mut meta);
     // cleanup
     ioctl::unregister_act();
 

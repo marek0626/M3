@@ -1,19 +1,20 @@
+use crate::cell::LazyStaticRefCell;
 use libc;
+use std::fs::File;
 use std::os::unix::prelude::AsRawFd;
 
 // this is defined in linux/drivers/tcu/tcu.cc (and the right value will be printed on driver initialization during boot time)
 const IOCTL_RGSTR_ACT: u64 = 0x00007101;
 const IOCTL_TLB_INSRT: u64 = 0x40087102;
 const IOCTL_UNREG_ACT: u64 = 0x00007103;
-const IOCTL_NOOP: u64      = 0x00007104;
-const IOCTL_NOOP_ARG: u64  = 0x40087105;
+const IOCTL_NOOP: u64 = 0x00007104;
+const IOCTL_NOOP_ARG: u64 = 0x40087105;
 
-const TCU_DEV: &str = "/dev/tcu";
+static TCU_DEV: LazyStaticRefCell<File> = LazyStaticRefCell::default();
 
 fn ioctl(magic_number: u64) {
-    let tcu_dev = std::fs::File::open(TCU_DEV).expect("could not open ioctl device");
     unsafe {
-        let res = libc::ioctl(tcu_dev.as_raw_fd(), magic_number);
+        let res = libc::ioctl(TCU_DEV.borrow().as_raw_fd(), magic_number);
         if res != 0 {
             libc::perror(0 as *const u8);
             panic!("ioctl call {} failed with error {}", magic_number, res);
@@ -22,9 +23,8 @@ fn ioctl(magic_number: u64) {
 }
 
 fn ioctl_write<T>(magic_number: u64, arg: T) {
-    let tcu_dev = std::fs::File::open(TCU_DEV).expect("could not open ioctl device");
     unsafe {
-        let res = libc::ioctl(tcu_dev.as_raw_fd(), magic_number, &arg as *const _);
+        let res = libc::ioctl(TCU_DEV.borrow().as_raw_fd(), magic_number, &arg as *const _);
         if res != 0 {
             libc::perror(0 as *const u8);
             panic!("ioctl call {} failed with error {}", magic_number, res);
@@ -43,10 +43,7 @@ struct TlbInsert {
 }
 
 pub fn tlb_insert_addr(virt: u64, perm: u8) {
-    let arg = TlbInsert {
-        virt,
-        perm,
-    };
+    let arg = TlbInsert { virt, perm };
     ioctl_write(IOCTL_TLB_INSRT, arg);
 }
 
@@ -65,10 +62,10 @@ struct NoopArg {
 }
 
 pub fn noop_arg(arg1: u64, arg2: u64) {
-    let arg = NoopArg {
-        arg1,
-        arg2,
-    };
+    let arg = NoopArg { arg1, arg2 };
     ioctl_write(IOCTL_NOOP_ARG, arg);
 }
 
+pub fn init() {
+    TCU_DEV.set(File::open("/dev/tcu").unwrap());
+}
