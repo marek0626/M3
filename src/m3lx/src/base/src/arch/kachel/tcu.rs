@@ -518,7 +518,7 @@ impl TCU {
     pub fn handle_xlate_fault(addr: usize, perm: Perm) {
         // report translation fault to linux tcu device driver
         use crate::arch::linux::ioctl;
-        ioctl::tlb_insert_addr(addr as u64, perm.bits() as u8);
+        ioctl::tlb_insert_addr(addr, perm.bits() as u8);
     }
 
     /// Tries to fetch a new message from the given endpoint.

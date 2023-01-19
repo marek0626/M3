@@ -1,4 +1,5 @@
 use crate::cell::LazyStaticRefCell;
+use crate::cfg;
 use libc;
 use std::fs::File;
 use std::os::unix::prelude::AsRawFd;
@@ -32,19 +33,23 @@ fn ioctl_write<T>(magic_number: u64, arg: T) {
     }
 }
 
+fn ioctl_plain(magic_number: u64, arg: usize) {
+    unsafe {
+        let res = libc::ioctl(TCU_DEV.borrow().as_raw_fd(), magic_number, arg);
+        if res != 0 {
+            libc::perror(0 as *const u8);
+            panic!("ioctl call {} failed with error {}", magic_number, res);
+        }
+    }
+}
+
 pub fn register_act() {
     ioctl(IOCTL_RGSTR_ACT);
 }
 
-#[repr(C)]
-struct TlbInsert {
-    virt: u64,
-    perm: u8,
-}
-
-pub fn tlb_insert_addr(virt: u64, perm: u8) {
-    let arg = TlbInsert { virt, perm };
-    ioctl_write(IOCTL_TLB_INSRT, arg);
+pub fn tlb_insert_addr(virt: usize, perm: u8) {
+    let arg = virt & !cfg::PAGE_MASK | perm as usize;
+    ioctl_plain(IOCTL_TLB_INSRT, arg);
 }
 
 pub fn unregister_act() {
