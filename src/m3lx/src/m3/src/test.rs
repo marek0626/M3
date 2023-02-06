@@ -18,7 +18,7 @@
 
 //! Contains unittest utilities inspired by WvTest <https://github.com/apenwarr/wvtest>
 
-use crate::println;
+// use crate::println;
 
 /// Runs the tests
 pub trait WvTester {
@@ -101,7 +101,7 @@ macro_rules! wv_perf {
         // ensure that we evaluate the expression before println in case it contains a println
         let name = $name;
         let bench_result = $bench;
-        ::m3::println!(
+        println!(
             "! {}:{}  PERF \"{}\": {}",
             file!(),
             line!(),
@@ -123,7 +123,7 @@ macro_rules! wv_assert {
         match (&$a) {
             (a_val) => {
                 if !*a_val {
-                    ::m3::println!("! {}:{}  {:?} FAILED", file!(), line!(), &*a_val);
+                    println!("! {}:{}  {:?} FAILED", file!(), line!(), &*a_val);
                     $t.test_failed();
                 }
                 else {
@@ -141,7 +141,7 @@ macro_rules! wv_assert_eq {
         match (&$a, &$b) {
             (a_val, b_val) => {
                 if *a_val != *b_val {
-                    ::m3::println!("! {}:{}  {:?} == {:?} FAILED", file!(), line!(), &*a_val, &*b_val);
+                    println!("! {}:{}  {:?} == {:?} FAILED", file!(), line!(), &*a_val, &*b_val);
                     $t.test_failed();
                 }
                 else {
@@ -155,7 +155,7 @@ macro_rules! wv_assert_eq {
         match (&$a, &$b) {
             (a_val, b_val) => {
                 if *a_val != *b_val {
-                    ::m3::println!("! {}:{}  {} FAILED", file!(), line!(), format_args!($($arg)+));
+                    println!("! {}:{}  {} FAILED", file!(), line!(), format_args!($($arg)+));
                     $t.test_failed();
                 }
                 else {
@@ -175,7 +175,7 @@ macro_rules! wv_assert_ok {
         match res {
             Ok(r) => r,
             Err(e) => {
-                ::m3::println!(
+                println!(
                     "! {}:{}  expected Ok for {}, got {:?} FAILED",
                     file!(),
                     line!(),
@@ -197,7 +197,7 @@ macro_rules! wv_assert_some {
         match res {
             Some(r) => r,
             None => {
-                ::m3::println!(
+                println!(
                     "! {}:{}  expected Some for {}, received None FAILED",
                     file!(),
                     line!(),
@@ -216,11 +216,11 @@ macro_rules! wv_assert_err {
         let res = $res;
         match res {
             Ok(r) => {
-                ::m3::println!("! {}:{}  received okay: {:?} FAILED", file!(), line!(), r);
+                println!("! {}:{}  received okay: {:?} FAILED", file!(), line!(), r);
                 $t.test_failed();
             },
             Err(ref e) if e.code() != $err => {
-                ::m3::println!(
+                println!(
                     "! {}:{}  received error {:?}, expected {:?} FAILED",
                     file!(),
                     line!(),
@@ -238,11 +238,11 @@ macro_rules! wv_assert_err {
         let res = $res;
         match res {
             Ok(r) => {
-                ::m3::println!("! {}:{}  received okay: {:?} FAILED", file!(), line!(), r);
+                println!("! {}:{}  received okay: {:?} FAILED", file!(), line!(), r);
                 $t.test_failed();
             },
             Err(ref e) if e.code() != $err1 && e.code() != $err2 => {
-                ::m3::println!(
+                println!(
                     "! {}:{}  received error {:?}, expected {:?} or {:?} FAILED",
                     file!(),
                     line!(),

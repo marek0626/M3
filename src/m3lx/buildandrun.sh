@@ -139,6 +139,9 @@ run_gem5() {
     cp boot/linux/m3fs.xml run/boot.xml
     export M3_GEM5_FS="$lx_deps_root/../build/$M3_TARGET-$M3_ISA-$M3_BUILD/default.img"
 
+    M3_GEM5_CPUFREQ=${M3_GEM5_CPUFREQ:-1GHz}
+    M3_GEM5_MEMFREQ=${M3_GEM5_MEMFREQ:-333MHz}
+
     "$m3_root/platform/gem5/build/RISCV/gem5.opt" \
         "--outdir=$m3_root/run" \
         `if [ -n "$debug_flags" ]; then echo "--debug-flags=$debug_flags"; fi` \
@@ -149,8 +152,8 @@ run_gem5() {
         --kernel "$bbl_dir/bbl" \
         --mods $m3_root/run/boot.xml,$m3_root/build/gem5-riscv-release/bin/root,$m3_root/build/gem5-riscv-release/bin/m3fs \
         --cpu-type "$cpu_type" \
-        --cpu-clock=1GHz \
-        --sys-clock=333MHz
+        --cpu-clock=$M3_GEM5_CPUFREQ \
+        --sys-clock=$M3_GEM5_MEMFREQ
 }
 
 main "$@"
