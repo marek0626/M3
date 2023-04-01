@@ -1,12 +1,15 @@
+extern crate m3impl as m3;
+
 use util::mmap::Mmap;
 
 use m3::{
-    cfg,
-    errors::Error,
+    build_vmsg, cfg,
+    errors::{Code, Error},
     io::{Read, Write},
     kif::{self, Perm},
     linux::{ioctl, mmap},
     mem::MsgBuf,
+    serialize::M3Deserializer,
     tcu::{self, EpId},
     tiles::Activity,
     time::{CycleDuration, CycleInstant, Duration, Profiler, Results, Runner},
@@ -15,15 +18,16 @@ use m3::{
 
 mod bregfile;
 
-fn wait_for_rpl<T>(rep: EpId, rcv_buf: usize) -> Result<&'static T, Error> {
+fn wait_for_rpl(rep: EpId, rcv_buf: usize) -> Result<(), Error> {
     loop {
         if let Some(off) = tcu::TCU::fetch_msg(rep) {
             let msg = tcu::TCU::offset_to_msg(rcv_buf, off);
-            let rpl = msg.get_data::<kif::DefaultReply>();
+            let mut de = M3Deserializer::new(msg.as_words());
+            let res: Code = de.pop()?;
             tcu::TCU::ack_msg(rep, off)?;
-            return match rpl.error {
-                0 => Ok(msg.get_data::<T>()),
-                e => Err((e as u32).into()),
+            return match res {
+                Code::Success => Ok(()),
+                c => Err(Error::new(c)),
             };
         }
     }
@@ -31,9 +35,7 @@ fn wait_for_rpl<T>(rep: EpId, rcv_buf: usize) -> Result<&'static T, Error> {
 
 fn noop_syscall(rbuf: usize) {
     let mut msg = MsgBuf::borrow_def();
-    msg.set(kif::syscalls::Noop {
-        opcode: kif::syscalls::Operation::NOOP.val,
-    });
+    build_vmsg!(msg, kif::syscalls::Operation::Noop, kif::syscalls::Noop {});
     tcu::TCU::send(
         tcu::FIRST_USER_EP + tcu::SYSC_SEP_OFF,
         &msg,
@@ -41,7 +43,7 @@ fn noop_syscall(rbuf: usize) {
         tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF,
     )
     .unwrap();
-    wait_for_rpl::<()>(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF, rbuf).unwrap();
+    wait_for_rpl(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF, rbuf).unwrap();
 }
 
 #[inline(never)]
@@ -179,7 +181,10 @@ fn print_summary<T: Duration + Clone>(name: &str, res: &Results<T>) {
 }
 
 fn _column<T: Duration>(name: &str, res: &Results<T>) -> (String, Vec<u64>) {
-    (name.into(), res.times.iter().map(|t| t.as_raw()).collect())
+    (
+        name.into(),
+        res.times().iter().map(|t| t.as_raw()).collect(),
+    )
 }
 
 fn main() -> Result<(), std::io::Error> {
@@ -193,14 +198,14 @@ fn main() -> Result<(), std::io::Error> {
     // we can only map full pages and ENV_START is not at the beginning of a page
     let env_page_off = cfg::ENV_START & !cfg::PAGE_MASK;
     let _env_mmap = Mmap::new("/dev/mem", env_page_off, env_page_off, cfg::ENV_SIZE)?;
-    let env = m3::envdata::get();
+    let env = m3::env::get();
 
     let rbuf_phys_addr = cfg::MEM_OFFSET + 2 * cfg::PAGE_SIZE;
     let (rbuf_virt_addr, rbuf_size) = env.tile_desc().rbuf_std_space();
     let _rcv_mmap = Mmap::new("/dev/mem", rbuf_phys_addr, rbuf_virt_addr, rbuf_size)?;
 
     // m3 setup
-    m3::env_run();
+    m3::env::init();
 
     println!("setup done.\n");
 

@@ -1,4 +1,4 @@
-use base::cpu;
+use base::cpu::{CPUOps, CPU};
 use base::tcu;
 use base::time::{CycleInstant, Profiler};
 use util::mmap::Mmap;
@@ -30,23 +30,23 @@ fn bench_writes() {
 
     let p = Profiler::default().warmup(50).repeats(1000);
 
-    bench(&p, "mmio cpu::write8b", || unsafe {
-        cpu::write8b(tcu::MMIO_ADDR, 5u64);
+    bench(&p, "mmio CPU::write8b", || unsafe {
+        CPU::write8b(tcu::MMIO_ADDR, 5u64);
     });
-    bench(&p ,"mmio volatile_write", || unsafe {
+    bench(&p, "mmio volatile_write", || unsafe {
         (tcu::MMIO_ADDR as *mut u64).write_volatile(5u64);
     });
-    bench(&p,"mmio write", || unsafe {
+    bench(&p, "mmio write", || unsafe {
         (tcu::MMIO_ADDR as *mut u64).write(5u64);
     });
-    bench(&p,"mmio dereference", || unsafe {
+    bench(&p, "mmio dereference", || unsafe {
         *(tcu::MMIO_ADDR as *mut u64) = 5u64;
     });
 
     let mut a: u64 = 3;
 
-    bench(&p, "stack cpu::write8b", || unsafe {
-        cpu::write8b(&mut a as *mut u64 as usize, 5u64);
+    bench(&p, "stack CPU::write8b", || unsafe {
+        CPU::write8b(&mut a as *mut u64 as usize, 5u64);
     });
     bench(&p, "stack volatile_write", || unsafe {
         (&mut a as *mut u64).write_volatile(5u64);

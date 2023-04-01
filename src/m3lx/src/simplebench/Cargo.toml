@@ -10,5 +10,5 @@ path = "src/simplebench.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-base = { path = "../base" }
+base = { path = "../../../src/libs/rust/base", features = ["linux"] }
 util = { path = "../util" }
