@@ -1,11 +1,7 @@
-
 [workspace]
 members = [
-    "base",
     "lxclient",
-    "m3",
     "simplebench",
-    "util",
 ]
 
 [profile.release]
