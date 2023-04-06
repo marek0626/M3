@@ -1,6 +1,6 @@
 [submodule "riscv-pk"]
 	path = riscv-pk
-	url = git@gitlab.com:Nils-TUD/riscv-pk.git
+	url = git@github.com:Barkhausen-Institut/riscv-pk.git
 [submodule "linux"]
 	path = linux
-	url = git@github.com:Nils-TUD/linux-bench.git
+	url = git@github.com:Barkhausen-Institut/linux-bench.git
