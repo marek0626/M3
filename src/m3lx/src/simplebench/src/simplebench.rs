@@ -1,7 +1,7 @@
 use base::cpu::{CPUOps, CPU};
 use base::tcu;
 use base::time::{CycleInstant, Profiler};
-use util::mmap::Mmap;
+use util::mmap::{MemType, Mmap};
 
 #[allow(unused)]
 fn bench<F: FnMut()>(p: &Profiler, name: &str, f: F) {
@@ -26,7 +26,7 @@ fn write_to_stack() {
 
 #[allow(unused)]
 fn bench_writes() {
-    let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, tcu::MMIO_ADDR, tcu::MMIO_SIZE).unwrap();
+    let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, MemType::TCU, tcu::MMIO_SIZE).unwrap();
 
     let p = Profiler::default().warmup(50).repeats(1000);
 

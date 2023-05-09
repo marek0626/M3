@@ -1,24 +1,30 @@
+use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
-use std::{fs::OpenOptions, path::PathBuf};
+
+use num_enum::IntoPrimitive;
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
+#[repr(usize)]
+pub enum MemType {
+    TCU,
+    Environment,
+    StdRecvBuf,
+}
 
 #[derive(Debug)]
 pub struct Mmap {
     len: usize,
-    #[allow(dead_code)]
-    phys: usize,
     virt: usize,
-    #[allow(dead_code)]
-    path: PathBuf,
 }
 
 impl Mmap {
     pub fn new<P: AsRef<Path>>(
         path: P,
-        phys: usize,
         virt: usize,
+        ty: MemType,
         len: usize,
     ) -> Result<Mmap, Error> {
         let file = OpenOptions::new()
@@ -33,7 +39,7 @@ impl Mmap {
                 libc::PROT_READ | libc::PROT_WRITE,
                 libc::MAP_SHARED | libc::MAP_FIXED | libc::MAP_SYNC,
                 file.as_raw_fd(),
-                phys as libc::off_t,
+                (ty as libc::off_t) << 12,
             )
         };
         match base {
@@ -43,12 +49,7 @@ impl Mmap {
                 }
                 Err(Error::new(ErrorKind::Other, "mmap failed"))
             },
-            x if x as usize == virt => Ok(Mmap {
-                len,
-                phys,
-                virt,
-                path: path.as_ref().into(),
-            }),
+            x if x as usize == virt => Ok(Mmap { len, virt }),
             _ => Err(Error::new(
                 ErrorKind::Other,
                 "mmap: didn't return the right virtual address",

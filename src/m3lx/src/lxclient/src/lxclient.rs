@@ -1,6 +1,6 @@
 extern crate m3impl as m3;
 
-use util::mmap::Mmap;
+use util::mmap::{MemType, Mmap};
 
 use m3::{
     build_vmsg, cfg,
@@ -192,17 +192,21 @@ fn main() -> Result<(), std::io::Error> {
     mmap::init();
 
     // these need to stay in scope so that the mmaped areas stay alive
-    let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, tcu::MMIO_ADDR, tcu::MMIO_SIZE)?;
+    let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, MemType::TCU, tcu::MMIO_SIZE)?;
 
     ioctl::register_act();
     // we can only map full pages and ENV_START is not at the beginning of a page
     let env_page_off = cfg::ENV_START & !cfg::PAGE_MASK;
-    let _env_mmap = Mmap::new("/dev/mem", env_page_off, env_page_off, cfg::ENV_SIZE)?;
+    let _env_mmap = Mmap::new(
+        "/dev/tcu",
+        env_page_off,
+        MemType::Environment,
+        cfg::ENV_SIZE,
+    )?;
     let env = m3::env::get();
 
-    let rbuf_phys_addr = cfg::MEM_OFFSET + 2 * cfg::PAGE_SIZE;
     let (rbuf_virt_addr, rbuf_size) = env.tile_desc().rbuf_std_space();
-    let _rcv_mmap = Mmap::new("/dev/mem", rbuf_phys_addr, rbuf_virt_addr, rbuf_size)?;
+    let _rcv_mmap = Mmap::new("/dev/tcu", rbuf_virt_addr, MemType::StdRecvBuf, rbuf_size)?;
 
     // m3 setup
     m3::env::init();
