@@ -63,6 +63,12 @@
             interrupt-controller;
             interrupts-extended = <&cpu0_intc 0xffffffff &cpu0_intc 9>;
         };
+        tcu: tcu@f0000000 {
+            reg = <0x00000000 0xf0000000 0x00000000 0x4000>;
+            interrupts = <1>;
+            interrupt-parent = <&plic0>;
+            compatible = "tcu";
+        };
         uart0: serial@4000000 {
             reg = <0x00000000 0x04000000 0x00000000 0x1000>;
             interrupts = <9>;
