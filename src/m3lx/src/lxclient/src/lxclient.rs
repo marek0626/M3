@@ -155,36 +155,8 @@ fn bench_m3fs_meta(profiler: &Profiler) -> Results<CycleDuration> {
     })
 }
 
-fn print_csv(data: Vec<(String, Vec<u64>)>) {
-    if data.is_empty() {
-        return;
-    }
-    let header = data
-        .iter()
-        .map(|column| format!("\"{}\"", column.0))
-        .collect::<Vec<String>>()
-        .join(",");
-    println!("{}", header);
-    let n_row = data[0].1.len();
-    for r in 0..n_row {
-        let row = data
-            .iter()
-            .map(|(_, d)| d[r].to_string())
-            .collect::<Vec<String>>()
-            .join(",");
-        println!("{}", row);
-    }
-}
-
 fn print_summary<T: Duration + Clone>(name: &str, res: &Results<T>) {
     println!("{}: {}", name, res);
-}
-
-fn _column<T: Duration>(name: &str, res: &Results<T>) -> (String, Vec<u64>) {
-    (
-        name.into(),
-        res.times().iter().map(|t| t.as_raw()).collect(),
-    )
 }
 
 fn main() -> Result<(), std::io::Error> {
@@ -234,16 +206,6 @@ fn main() -> Result<(), std::io::Error> {
     print_summary("m3fs read", &read);
     let write = bench_m3fs_write(&profiler);
     print_summary("m3fs write", &write);
-
-    print_csv(vec![
-        _column("custom noop", &cnoop),
-        _column("m3 noop", &m3noop),
-        _column("oscall", &oscall),
-        _column("tlb insert", &tlb),
-        _column("m3fs read", &read),
-        _column("m3fs write", &write),
-        _column("m3fs meta", &meta),
-    ]);
 
     // cleanup
     ioctl::unregister_act();
