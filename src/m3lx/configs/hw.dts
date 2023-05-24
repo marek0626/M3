@@ -14,8 +14,8 @@
 
     chosen {
         bootargs = "earlycon=sbi console=ttySIF0 root=/dev/initrd";
-        linux,initrd-start = <0x14000000>;
-        linux,initrd-end = <0x14400000>;
+        linux,initrd-start = <0x2fc00000>;
+        linux,initrd-end = <0x30000000>;
         stdout-path = "/dev/ttySIF0";
     };
 

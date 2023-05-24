@@ -19,23 +19,19 @@ lxbuild="build/linux"
 
 build_bbl() {
     bblbuild="build/riscv-pk/$M3_TARGET"
-    initrd="build/cross-riscv/images/rootfs.cpio"
+    initrd="$build/rootfs.cpio"
     mkdir -p "$bblbuild"
 
-    if [ "$M3_TARGET" = "gem5" ]; then
-        args=("--with-mem-start=0x10200000")
-    else
-        # determine initrd size
-        initrd_start=0x14000000
-        initrd_size=$(stat --printf="%s" "$initrd")
-        # replace the end in the hw.dts
-        initrd_end=$(printf "%#x" $((initrd_start + initrd_size)))
-        sed -e \
-            "s/linux,initrd-end = <0x14400000>;/linux,initrd-end = <$initrd_end>;/g" \
-            "$root/m3lx/configs/hw.dts" > "$bblbuild/hw.dts"
+    # determine initrd size
+    initrd_size=$(stat --printf="%s" "$initrd")
+    # we always place the initrd at the end of the memory region (512M currently)
+    initrd_end=$(printf "%#x" $((0x10000000 + 512 * 1024 * 1024)))
+    initrd_start=$(printf "%#x" $((initrd_end - initrd_size)))
+    sed -e "s/linux,initrd-start = <.*>;/linux,initrd-start = <$initrd_start>;/g" \
+        -e "s/linux,initrd-end = <.*>;/linux,initrd-end = <$initrd_end>;/g" \
+        "$root/m3lx/configs/$M3_TARGET.dts" > "$bblbuild/$M3_TARGET.dts" || exit 1
 
-        args=("--with-mem-start=0x10001000" "--with-dts=hw.dts")
-    fi
+    args=("--with-mem-start=0x10003000" "--with-dts=$M3_TARGET.dts")
 
     (
         cd "$bblbuild" \
@@ -44,6 +40,7 @@ build_bbl() {
                 "--with-payload=$root/$lxbuild/vmlinux" "${args[@]}" \
             && CFLAGS=" -D__riscv_compressed=1" make "-j$(nproc)" "$@"
     )
+    cp "$bblbuild/bbl" "$build/bbl"
 }
 
 case "$command" in
@@ -79,13 +76,15 @@ case "$command" in
     mkrootfs)
         # copy binaries to overlay directory for buildroot and strip them
         mkdir -p "build/lxrootfs"
-        for f in "$build"/lxbins/*; do
+        for f in "$build"/lxbin/*; do
             "${crossprefix}strip" -o "build/lxrootfs/$(basename "$f")" "$f"
         done
         cp -a m3lx/rootfs/* build/lxrootfs
 
         # rebuild rootfs image
         ( cd cross && ./build.sh "$M3_ISA" "$@" )
+
+        cp "$crossdir/../../images/rootfs.cpio" "$build/rootfs.cpio"
 
         # now rebuild the dts to include the correct initrd size
         build_bbl
