@@ -195,11 +195,9 @@ fn main() -> Result<(), std::io::Error> {
     let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, MemType::TCU, tcu::MMIO_SIZE)?;
 
     ioctl::register_act();
-    // we can only map full pages and ENV_START is not at the beginning of a page
-    let env_page_off = cfg::ENV_START & !cfg::PAGE_MASK;
     let _env_mmap = Mmap::new(
         "/dev/tcu",
-        env_page_off,
+        cfg::ENV_START,
         MemType::Environment,
         cfg::ENV_SIZE,
     )?;
