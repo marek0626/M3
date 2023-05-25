@@ -1,11 +1,11 @@
 [package]
-name = "lxclient"
+name = "lxbench"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "lxclient"
-path = "src/lxclient.rs"
+name = "lxbench"
+path = "src/lxbench.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

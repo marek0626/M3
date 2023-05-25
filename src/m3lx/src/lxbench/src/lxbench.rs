@@ -166,7 +166,6 @@ fn main() -> Result<(), std::io::Error> {
     // these need to stay in scope so that the mmaped areas stay alive
     let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, MemType::TCU, tcu::MMIO_SIZE)?;
 
-    ioctl::register_act();
     let _env_mmap = Mmap::new(
         "/dev/tcu",
         cfg::ENV_START,
@@ -206,9 +205,6 @@ fn main() -> Result<(), std::io::Error> {
     print_summary("m3fs read", &read);
     let write = bench_m3fs_write(&profiler);
     print_summary("m3fs write", &write);
-
-    // cleanup
-    ioctl::unregister_act();
 
     Ok(())
 }
