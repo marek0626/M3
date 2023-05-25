@@ -24,6 +24,8 @@ build_bbl() {
 
     # determine initrd size
     initrd_size=$(stat --printf="%s" "$initrd")
+    # round up to page size
+    initrd_size=$(python -c "print('{}'.format(($initrd_size + 0xFFF) & 0xFFFFF000))")
     # we always place the initrd at the end of the memory region (512M currently)
     initrd_end=$(printf "%#x" $((0x10000000 + 512 * 1024 * 1024)))
     initrd_start=$(printf "%#x" $((initrd_end - initrd_size)))
