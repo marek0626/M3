@@ -51,7 +51,7 @@
         compatible = "simple-bus";
         clint@2000000 {
             reg = <0x00000000 0x02000000 0x00000000 0x0000c000>;
-            interrupts-extended = <0x00000001 0x00000003 0x00000001 0x00000007>;
+            interrupts-extended = <&cpu0_intc 0x00000003 &cpu0_intc 0x00000007>;
             compatible = "riscv,clint0";
         };
         plic0: interrupt-controller@c000000 {

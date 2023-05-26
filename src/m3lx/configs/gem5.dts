@@ -29,7 +29,7 @@
             compatible = "riscv";
             clock-frequency = <0x3b9ac9ff>;
             phandle = <0x00000002>;
-            interrupt-controller {
+            cpu0_intc: interrupt-controller {
                 #interrupt-cells = <0x00000001>;
                 interrupt-controller;
                 compatible = "riscv,cpu-intc";
@@ -44,7 +44,7 @@
         compatible = "simple-bus";
         clint@2000000 {
             reg = <0x00000000 0x02000000 0x00000000 0x0000c000>;
-            interrupts-extended = <0x00000001 0x00000003 0x00000001 0x00000007>;
+            interrupts-extended = <&cpu0_intc 0x00000003 &cpu0_intc 0x00000007>;
             compatible = "riscv,clint0";
         };
         plic0: plic@c000000 {
@@ -53,7 +53,7 @@
             #interrupt-cells = <0x00000001>;
             phandle = <0x00000003>;
             riscv,ndev = <0x0000000a>;
-            interrupts-extended = <0x00000001 0x0000000b 0x00000001 0x00000009>;
+            interrupts-extended = <&cpu0_intc 0x0000000b &cpu0_intc 0x00000009>;
             interrupt-controller;
             compatible = "riscv,plic0";
         };
