@@ -52,17 +52,13 @@ case "$command" in
         makeargs=("O=../../$lxbuild" "-j$(nproc)")
         mkdir -p "$lxbuild"
 
-        if [ ! -f "$lxbuild/.config" ]; then
-            cp "$lxdeps/configs/config-linux-riscv64" "$lxbuild/.config"
-        fi
-
         export ARCH=riscv
         export CROSS_COMPILE="$crossname"
 
         # use our config, if not already present
         if [ ! -f "$lxbuild/.config" ]; then
             ( cd "$lxdeps/linux" && \
-                make "${makeargs[@]}" defconfig "KBUILD_DEFCONFIG=$lxdeps/config-linux-$ARCH" )
+                make "${makeargs[@]}" defconfig "KBUILD_DEFCONFIG=sifive_defconfig" )
         fi
 
         ( cd "$lxdeps/linux" && make "${makeargs[@]}" "$@" ) || exit 1
