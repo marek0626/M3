@@ -18,22 +18,10 @@ build="build/$M3_TARGET-$M3_ISA-$M3_BUILD"
 lxbuild="build/linux"
 
 build_bbl() {
-    bblbuild="build/riscv-pk/$M3_TARGET"
-    initrd="$build/rootfs.cpio"
+    bblbuild="build/riscv-pk"
     mkdir -p "$bblbuild"
 
-    # determine initrd size
-    initrd_size=$(stat --printf="%s" "$initrd")
-    # round up to page size
-    initrd_size=$(python -c "print('{}'.format(($initrd_size + 0xFFF) & 0xFFFFF000))")
-    # we always place the initrd at the end of the memory region (512M currently)
-    initrd_end=$(printf "%#x" $((0x10000000 + 512 * 1024 * 1024)))
-    initrd_start=$(printf "%#x" $((initrd_end - initrd_size)))
-    sed -e "s/linux,initrd-start = <.*>;/linux,initrd-start = <$initrd_start>;/g" \
-        -e "s/linux,initrd-end = <.*>;/linux,initrd-end = <$initrd_end>;/g" \
-        "$root/m3lx/configs/$M3_TARGET.dts" > "$bblbuild/$M3_TARGET.dts" || exit 1
-
-    args=("--with-mem-start=0x10003000" "--with-dts=$M3_TARGET.dts")
+    args=("--with-mem-start=0x10003000")
 
     (
         cd "$bblbuild" \
@@ -42,7 +30,6 @@ build_bbl() {
                 "--with-payload=$root/$lxbuild/vmlinux" "${args[@]}" \
             && CFLAGS=" -D__riscv_compressed=1" make "-j$(nproc)" "$@"
     )
-    cp "$bblbuild/bbl" "$build/bbl"
 }
 
 case "$command" in
@@ -89,8 +76,6 @@ case "$command" in
         else
             ( cd cross && ./build.sh "$M3_ISA" )
         fi
-
-        cp "$crossdir/../../images/rootfs.cpio" "$build/rootfs.cpio"
 
         # now rebuild the dts to include the correct initrd size
         build_bbl
