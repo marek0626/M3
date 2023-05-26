@@ -61,7 +61,11 @@ case "$command" in
                 make "${makeargs[@]}" defconfig "KBUILD_DEFCONFIG=sifive_defconfig" )
         fi
 
-        ( cd "$lxdeps/linux" && make "${makeargs[@]}" "$@" ) || exit 1
+        if [ "$@" != "" ]; then
+            ( cd "$lxdeps/linux" && make "${makeargs[@]}" "$@" ) || exit 1
+        else
+            ( cd "$lxdeps/linux" && make "${makeargs[@]}" ) || exit 1
+        fi
 
         # bbl includes Linux
         build_bbl
@@ -80,7 +84,11 @@ case "$command" in
         cp -a m3lx/rootfs/* build/lxrootfs
 
         # rebuild rootfs image
-        ( cd cross && ./build.sh "$M3_ISA" "$@" )
+        if [ "$@" != "" ]; then
+            ( cd cross && ./build.sh "$M3_ISA" "$@" )
+        else
+            ( cd cross && ./build.sh "$M3_ISA" )
+        fi
 
         cp "$crossdir/../../images/rootfs.cpio" "$build/rootfs.cpio"
 
