@@ -27,12 +27,6 @@ use m3::{wv_assert_ok, wv_perf, wv_run_test};
 static BUF: StaticRefCell<AlignedBuf<8192>> = StaticRefCell::new(AlignedBuf::new_zeroed());
 
 pub fn run(t: &mut dyn WvTester) {
-    {
-        let buf = &mut BUF.borrow_mut()[..];
-        buf[0] = 1u8;
-        buf[4096] = 1u8;
-    }
-
     wv_run_test!(t, open_close);
     wv_run_test!(t, stat);
     wv_run_test!(t, mkdir_rmdir);
