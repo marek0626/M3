@@ -12,9 +12,7 @@ crossdir="$2"
 command="$3"
 shift 3
 
-crossprefix="$crossdir/$crossname"
 root=$(readlink -f "$(dirname "$(dirname "$0")")")
-build="build/$M3_TARGET-$M3_ISA-$M3_BUILD"
 lxbuild="build/linux"
 
 build_bbl() {
@@ -63,21 +61,11 @@ case "$command" in
         ;;
 
     mkrootfs)
-        # copy binaries to overlay directory for buildroot and strip them
-        mkdir -p "build/lxrootfs"
-        for f in "$build"/lxbin/*; do
-            "${crossprefix}strip" -o "build/lxrootfs/$(basename "$f")" "$f"
-        done
-        cp -a m3lx/rootfs/* build/lxrootfs
-
         # rebuild rootfs image
         if [ "$@" != "" ]; then
             ( cd cross && ./build.sh "$M3_ISA" "$@" )
         else
             ( cd cross && ./build.sh "$M3_ISA" )
         fi
-
-        # now rebuild the dts to include the correct initrd size
-        build_bbl
         ;;
 esac
