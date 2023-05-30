@@ -16,12 +16,7 @@
 
 extern crate m3impl as m3;
 
-use util::mmap::{MemType, Mmap};
-
 use m3::{
-    cfg,
-    linux::ioctl,
-    tcu,
     test::{DefaultWvTester, WvTester},
     vfs::VFS,
 };
@@ -30,23 +25,6 @@ mod bmisc;
 mod bregfile;
 
 fn main() -> Result<(), std::io::Error> {
-    ioctl::init();
-
-    // these need to stay in scope so that the mmaped areas stay alive
-    let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, MemType::TCU, tcu::MMIO_SIZE)?;
-
-    let _env_mmap = Mmap::new(
-        "/dev/tcu",
-        cfg::ENV_START,
-        MemType::Environment,
-        cfg::ENV_SIZE,
-    )?;
-    let env = m3::env::get();
-
-    let (rbuf_virt_addr, rbuf_size) = env.tile_desc().rbuf_std_space();
-    let _rcv_mmap = Mmap::new("/dev/tcu", rbuf_virt_addr, MemType::StdRecvBuf, rbuf_size)?;
-
-    // m3 setup
     m3::env::init();
 
     VFS::mount("/", "m3fs", "m3fs").unwrap();

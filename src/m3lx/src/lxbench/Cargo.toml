@@ -11,5 +11,4 @@ path = "src/lxbench.rs"
 
 [dependencies]
 libc = "0.2"
-util = { path = "../util" }
 m3impl = { path = "../../../src/libs/rust/m3impl", features = ["linux"] }

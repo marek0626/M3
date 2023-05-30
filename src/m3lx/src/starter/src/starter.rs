@@ -13,24 +13,11 @@
  * General Public License version 2 for more details.
  */
 
-use util::mmap::{MemType, Mmap};
-
-use base::cfg;
 use base::env;
-use base::linux::ioctl;
-use base::tcu;
+use base::linux::{self, ioctl};
 
 fn main() -> Result<(), std::io::Error> {
-    ioctl::init();
-
-    // these need to stay in scope so that the mmaped areas stay alive
-    let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, MemType::TCU, tcu::MMIO_SIZE)?;
-    let _env_mmap = Mmap::new(
-        "/dev/tcu",
-        cfg::ENV_START,
-        MemType::Environment,
-        cfg::ENV_SIZE,
-    )?;
+    linux::init();
 
     ioctl::register_act();
 
