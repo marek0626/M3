@@ -16,10 +16,7 @@
 
 extern crate m3impl as m3;
 
-use m3::{
-    test::{DefaultWvTester, WvTester},
-    vfs::VFS,
-};
+use m3::test::{DefaultWvTester, WvTester};
 
 mod bmisc;
 mod bregfile;
@@ -27,11 +24,10 @@ mod bregfile;
 fn main() -> Result<(), std::io::Error> {
     m3::env::init();
 
-    VFS::mount("/", "m3fs", "m3fs").unwrap();
-
     let mut tester = DefaultWvTester::default();
     m3::wv_run_suite!(tester, bregfile::run);
     m3::wv_run_suite!(tester, bmisc::run);
     println!("{}", tester);
+
     Ok(())
 }
