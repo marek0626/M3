@@ -17,12 +17,11 @@ use util::mmap::{MemType, Mmap};
 
 use base::cfg;
 use base::env;
-use base::linux::{ioctl, mmap};
-use base::tcu::{self};
+use base::linux::ioctl;
+use base::tcu;
 
 fn main() -> Result<(), std::io::Error> {
     ioctl::init();
-    mmap::init();
 
     // these need to stay in scope so that the mmaped areas stay alive
     let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, MemType::TCU, tcu::MMIO_SIZE)?;

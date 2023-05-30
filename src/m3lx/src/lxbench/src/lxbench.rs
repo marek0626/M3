@@ -20,8 +20,8 @@ use util::mmap::{MemType, Mmap};
 
 use m3::{
     cfg,
-    linux::{ioctl, mmap},
-    tcu::{self},
+    linux::ioctl,
+    tcu,
     test::{DefaultWvTester, WvTester},
     vfs::VFS,
 };
@@ -31,7 +31,6 @@ mod bregfile;
 
 fn main() -> Result<(), std::io::Error> {
     ioctl::init();
-    mmap::init();
 
     // these need to stay in scope so that the mmaped areas stay alive
     let _tcu_mmap = Mmap::new("/dev/tcu", tcu::MMIO_ADDR, MemType::TCU, tcu::MMIO_SIZE)?;
