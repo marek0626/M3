@@ -1,4 +1,4 @@
-dirs = ['src']
+dirs = ['apps']
 
 
 def build(gen, env):
