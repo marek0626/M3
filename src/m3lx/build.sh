@@ -59,13 +59,4 @@ case "$command" in
     mkbbl)
         build_bbl "$@"
         ;;
-
-    mkrootfs)
-        # rebuild rootfs image
-        if [ "$@" != "" ]; then
-            ( cd cross && ./build.sh "$M3_ISA" "$@" )
-        else
-            ( cd cross && ./build.sh "$M3_ISA" )
-        fi
-        ;;
 esac
