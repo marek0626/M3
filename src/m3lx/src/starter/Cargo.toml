@@ -9,4 +9,4 @@ path = "src/starter.rs"
 
 [dependencies]
 libc = "0.2"
-base = { path = "../../../src/libs/rust/base", features = ["linux"] }
+base = { path = "../../../libs/rust/base", features = ["linux"] }

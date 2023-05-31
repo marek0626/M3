@@ -8,4 +8,4 @@ name = "lxbench"
 path = "src/lxbench.rs"
 
 [dependencies]
-m3impl = { path = "../../../src/libs/rust/m3impl", features = ["linux"] }
+m3impl = { path = "../../../libs/rust/m3impl", features = ["linux"] }

@@ -12,7 +12,7 @@ crossdir="$2"
 command="$3"
 shift 3
 
-root=$(readlink -f "$(dirname "$(dirname "$0")")")
+root=$(readlink -f "$(dirname "$(dirname "$(dirname "$0")")")")
 lxbuild="build/linux"
 
 build_bbl() {
@@ -23,7 +23,7 @@ build_bbl() {
 
     (
         cd "$bblbuild" \
-            && RISCV="$crossdir/.." "$root/m3lx/riscv-pk/configure" \
+            && RISCV="$crossdir/.." "$root/src/m3lx/riscv-pk/configure" \
                 --host=riscv64-linux \
                 "--with-payload=$root/$lxbuild/vmlinux" "${args[@]}" \
             && CFLAGS=" -D__riscv_compressed=1" make "-j$(nproc)" "$@"
@@ -32,9 +32,9 @@ build_bbl() {
 
 case "$command" in
     mklx)
-        lxdeps="$root/m3lx"
+        lxdeps="$root/src/m3lx"
         # for some weird reason, the path for O needs to be relative
-        makeargs=("O=../../$lxbuild" "-j$(nproc)")
+        makeargs=("O=../../../$lxbuild" "-j$(nproc)")
         mkdir -p "$lxbuild"
 
         export ARCH=riscv
