@@ -7,8 +7,6 @@ edition = "2021"
 name = "lxbench"
 path = "src/lxbench.rs"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 libc = "0.2"
 m3impl = { path = "../../../src/libs/rust/m3impl", features = ["linux"] }
