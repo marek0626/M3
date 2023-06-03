@@ -23,7 +23,7 @@ build_bbl() {
 
     (
         cd "$bblbuild" \
-            && RISCV="$crossdir/.." "$root/src/m3lx/riscv-pk/configure" \
+            && RISCV="$crossdir" "$root/src/m3lx/riscv-pk/configure" \
                 --host=riscv64-linux \
                 "--with-payload=$root/$lxbuild/vmlinux" "${args[@]}" \
             && CFLAGS=" -D__riscv_compressed=1" make "-j$(nproc)" "$@"
