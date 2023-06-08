@@ -20,7 +20,7 @@ use m3::{
     io::{Read, Write},
     kif::{self, Perm},
     linux::ioctl,
-    mem::MsgBuf,
+    mem::{MsgBuf, VirtAddr},
     serialize::M3Deserializer,
     tcu::{self, EpId},
     test::WvTester,
@@ -40,7 +40,7 @@ pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, bench_m3fs_write);
 }
 
-fn wait_for_rpl(rep: EpId, rcv_buf: usize) -> Result<(), Error> {
+fn wait_for_rpl(rep: EpId, rcv_buf: VirtAddr) -> Result<(), Error> {
     loop {
         if let Some(off) = tcu::TCU::fetch_msg(rep) {
             let msg = tcu::TCU::offset_to_msg(rcv_buf, off);
@@ -55,7 +55,7 @@ fn wait_for_rpl(rep: EpId, rcv_buf: usize) -> Result<(), Error> {
     }
 }
 
-fn noop_syscall(rbuf: usize) -> Result<(), Error> {
+fn noop_syscall(rbuf: VirtAddr) -> Result<(), Error> {
     let mut msg = MsgBuf::borrow_def();
     build_vmsg!(msg, kif::syscalls::Operation::Noop, kif::syscalls::Noop {});
     tcu::TCU::send(
