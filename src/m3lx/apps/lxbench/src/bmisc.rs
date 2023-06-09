@@ -95,7 +95,7 @@ fn bench_m3_noop_syscall(_t: &mut dyn WvTester) {
 #[inline(never)]
 fn bench_tlb_insert(_t: &mut dyn WvTester) {
     let profiler = Profiler::default().warmup(10).repeats(100);
-    let sample_addr = &profiler as *const Profiler as usize;
+    let sample_addr = VirtAddr::from(&profiler as *const _);
 
     wv_perf!(
         "tlb-insert",
