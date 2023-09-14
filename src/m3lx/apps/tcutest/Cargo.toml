@@ -1,0 +1,12 @@
+[package]
+name = "tcutest"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "tcutest"
+path = "src/tcutest.rs"
+
+[dependencies]
+base = { path = "../../../libs/rust/base", features = ["linux"] }
+m3impl = { path = "../../../libs/rust/m3impl", features = ["linux"] }

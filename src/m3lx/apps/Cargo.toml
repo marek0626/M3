@@ -2,6 +2,7 @@
 members = [
     "lxbench",
     "starter",
+    "tcutest",
 ]
 
 [profile.release]
