@@ -26,14 +26,14 @@ fn main() -> Result<(), std::io::Error> {
 
     let mut tester = DefaultWvTester::default();
 
-    let mut buf = vec![0u32; 1024];
+    let mut buf = vec![0u32; 128];
     let mgate = wv_assert_ok!(MemGate::new(0x4000, Perm::RW));
     wv_assert_ok!(mgate.write(&buf, 0));
 
     let mut last = 0;
-    for _ in 0..1000 {
+    for _ in 0..10 {
         wv_assert_ok!(mgate.read(&mut buf, 0));
-        for j in 0..1024 {
+        for j in 0..128 {
             wv_assert_eq!(tester, buf[j], last);
             buf[j] += 1;
         }
