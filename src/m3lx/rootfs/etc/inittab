@@ -37,6 +37,8 @@ null::sysinit:/bin/ln -sf /proc/self/fd/2 /dev/stderr
 
 # Put a getty on the serial port
 # console::respawn:/sbin/getty -L  console 0 vt100 # GENERIC_SERIAL
+# disable ASLR to allow ChildActivity::run (a testing-only feature)
+::sysinit:sysctl -w kernel.randomize_va_space=0
 ::sysinit:-/starter
 
 # Stuff to do for the 3-finger salute

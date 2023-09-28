@@ -18,6 +18,7 @@ extern crate m3impl as m3;
 
 use m3::test::{DefaultWvTester, WvTester};
 
+mod bact;
 mod bmisc;
 mod bregfile;
 
@@ -27,6 +28,7 @@ fn main() -> Result<(), std::io::Error> {
     let mut tester = DefaultWvTester::default();
     m3::wv_run_suite!(tester, bregfile::run);
     m3::wv_run_suite!(tester, bmisc::run);
+    m3::wv_run_suite!(tester, bact::run);
     println!("{}", tester);
 
     Ok(())
