@@ -14,6 +14,7 @@
  */
 
 use base::env;
+use base::errors::Code;
 use base::linux::{self, ioctl};
 
 use std::thread;
@@ -56,13 +57,21 @@ fn main() -> Result<(), std::io::Error> {
             if res != 0 {
                 println!("execvp failed: {}", res);
             }
+            unsafe { libc::exit(1) };
         }
         else {
             thread::spawn(move || {
                 let mut status = 0;
                 unsafe { libc::waitpid(pid, &mut status as *mut _, 0) };
-                println!("Process {} exited with status {}", pid, status);
-                ioctl::unregister_act(id);
+                let code = libc::WEXITSTATUS(status);
+                println!(
+                    "Process {} exited with status {} and exit code {}",
+                    pid, status, code
+                );
+                ioctl::unregister_act(id, match code {
+                    0 => Code::Success as i32,
+                    _ => Code::Unspecified as i32,
+                });
             });
         }
     }
