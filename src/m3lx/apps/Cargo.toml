@@ -4,6 +4,7 @@ members = [
     "starter",
     "tcutest",
 ]
+resolver = "2"
 
 [profile.release]
 lto = true

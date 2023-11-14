@@ -30,15 +30,13 @@ fn main() -> Result<(), std::io::Error> {
     let mgate = wv_assert_ok!(MemGate::new(0x4000, Perm::RW));
     wv_assert_ok!(mgate.write(&buf, 0));
 
-    let mut last = 0;
-    for _ in 0..10 {
+    for i in 0..10 {
         wv_assert_ok!(mgate.read(&mut buf, 0));
-        for j in 0..128 {
-            wv_assert_eq!(tester, buf[j], last);
-            buf[j] += 1;
+        for b in buf.iter_mut().take(128) {
+            wv_assert_eq!(tester, *b, i);
+            *b += 1;
         }
         wv_assert_ok!(mgate.write(&buf, 0));
-        last += 1;
     }
 
     if m3::env::args().nth(1).unwrap() == "sender" {
