@@ -64,6 +64,7 @@ class M3Env(Env):
         env['RANLIB'] = crossdir + '/bin/' + cross + 'gcc-ranlib'
         env['STRIP'] = crossdir + '/bin/' + cross + 'strip'
         env['SHLINK'] = crossdir + '/bin/' + cross + 'gcc'
+        env['OBJCOPY'] = crossdir + '/bin/' + cross + 'objcopy'
 
         # ensure that the cross compiler is installed and up to date
         crossgcc = crossdir + '/bin/' + cross + 'g++'
@@ -165,6 +166,19 @@ class M3Env(Env):
             outs=[out],
             ins=[SourcePath.new(self, input)],
             deps=[BuildPath(self['TOOLDIR'] + '/elf2hex')],
+        ))
+        return out
+
+    def objcopy(self, gen, out, input, type):
+        out = BuildPath.new(self, out)
+        gen.add_build(BuildEdge(
+            'objcopy',
+            outs=[out],
+            ins=[SourcePath.new(self, input)],
+            vars={
+                'objcopy': self['OBJCOPY'],
+                'type': type,
+            },
         ))
         return out
 
@@ -442,6 +456,10 @@ gen.add_rule('mkm3fs', Rule(
 gen.add_rule('elf2hex', Rule(
     cmd=env['TOOLDIR'] + '/elf2hex $in > $out',
     desc='ELF2HEX $out',
+))
+gen.add_rule('objcopy', Rule(
+    cmd='$objcopy -O $type $in $out',
+    desc='OBJCOPY $out'
 ))
 
 # generate build edges
