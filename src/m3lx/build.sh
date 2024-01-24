@@ -57,6 +57,10 @@ case "$command" in
         ;;
 
     mkbbl)
-        build_bbl "$@"
+        if [ "$@" != "" ]; then
+            build_bbl "$@"
+        else
+            build_bbl
+        fi
         ;;
 esac
