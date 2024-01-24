@@ -64,7 +64,7 @@
             interrupts-extended = <&cpu0_intc 0xffffffff &cpu0_intc 9>;
         };
         tcu: tcu@f0000000 {
-            reg = <0x00000000 0xf0000000 0x00000000 0x202000>;
+            reg = <0x00000000 0xf0000000 0x00000000 0x4000>;
             interrupts = <1>;
             interrupt-parent = <&plic0>;
             compatible = "tcu";
