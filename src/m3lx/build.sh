@@ -14,6 +14,7 @@ shift 3
 
 root=$(readlink -f "$(dirname "$(dirname "$(dirname "$0")")")")
 lxbuild="build/linux"
+lxdeps="$root/src/m3lx"
 
 build_bbl() {
     bblbuild="build/riscv-pk"
@@ -32,7 +33,6 @@ build_bbl() {
 
 case "$command" in
     mklx)
-        lxdeps="$root/src/m3lx"
         # for some weird reason, the path for O needs to be relative
         makeargs=("O=../../../$lxbuild" "-j$(nproc)")
         mkdir -p "$lxbuild"
@@ -54,6 +54,24 @@ case "$command" in
 
         # bbl includes Linux
         build_bbl
+        ;;
+
+    genlxcc)
+        export ARCH=riscv
+        export CROSS_COMPILE="$crossname"
+        out=../../../build/lxcc
+
+        (
+            # note that we don't set KBUILD_DEFCONFIG=sifive_defconfig as above, because it doesn't
+            # compile with clang. The differences should be minor though, so that clangd is still
+            # helpful.
+            cd "$lxdeps/linux" && \
+                make O=$out CC=clang defconfig && \
+                make O=$out CC=clang "-j$(nproc)" && \
+                cd $out && \
+                "$lxdeps/linux/scripts/clang-tools/gen_compile_commands.py" && \
+                mv compile_commands.json "$lxdeps/linux"
+        )
         ;;
 
     mkbbl)
