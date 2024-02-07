@@ -14,7 +14,7 @@
 
 use base::{
     cpu::{CPUOps, CPU},
-    crypto::{HashAlgorithm, HashType},
+    crypto::HashType,
 };
 
 const STATE_SIZE: usize = 256;
@@ -88,7 +88,7 @@ impl KecAcc {
         KecAcc { addr }
     }
 
-    pub fn supports_algo(&self, _algo: &HashAlgorithm) -> bool {
+    pub fn supports_algo(&self, _hash_type: HashType) -> bool {
         true
     }
 
