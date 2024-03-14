@@ -63,8 +63,8 @@
             interrupt-parent = <&plic0>;
             compatible = "tcu";
         };
-        uart@10000000 {
-            reg = <0x00000000 0x10000000 0x00000000 0x00000008>;
+        uart@4000000 {
+            reg = <0x00000000 0x04000000 0x00000000 0x00000008>;
             interrupts = <0x0000000a>;
             clock-frequency = <0x00384000>;
             interrupt-parent = <0x00000003>;
