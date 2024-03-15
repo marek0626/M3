@@ -3,8 +3,8 @@
 if [ $# -lt 4 ]; then
     echo "This script is not intended to be called directly. Use the commands in ./b." >&2 && exit 1
 fi
-if [ "$M3_ISA" != "riscv" ]; then
-    echo "Only supported on M3_ISA=riscv." >&2 && exit 1
+if [ "$M3_ISA" != "riscv64" ]; then
+    echo "Only supported on M3_ISA=riscv64." >&2 && exit 1
 fi
 
 crossname="$1"
