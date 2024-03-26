@@ -16,6 +16,8 @@ root=$(readlink -f "$(dirname "$(dirname "$(dirname "$0")")")")
 lxbuild="build/linux"
 lxdeps="$root/src/m3lx"
 
+export PATH=$root/$crossdir/bin:$PATH
+
 build_bbl() {
     bblbuild="build/riscv-pk"
     mkdir -p "$bblbuild"
