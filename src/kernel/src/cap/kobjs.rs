@@ -43,7 +43,7 @@ pub enum KObject {
     Serv(SRc<ServObject>),
     Sess(SRc<SessObject>),
     Sem(SRc<SemObject>),
-    // Only ActManager owns a activity (Rc<Activity>). Break cycle here by using Weak
+    // Only ActivityMng owns a activity (Rc<Activity>). Break cycle here by using Weak
     Activity(Weak<Activity>),
     KMem(SRc<KMemObject>),
     Tile(SRc<TileObject>),
