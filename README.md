@@ -109,9 +109,9 @@ Note that this command ensures that everything is up to date as well. For more i
 
 ### 8. M³Linux
 
-M³Linux allows to run Linux on an isolated tile within M³. Before it can be used, the submodule has to be pulled in:
+M³Linux allows to run Linux on an isolated tile within M³. Before it can be used, submodules have to be pulled in:
 
-    $ git submodule update --init --recursive src/m3lx
+    $ git submodule update --init --recursive src/m3lx/linux src/m3lx/riscv-pk
 
 Additionally, the Rust target needs to be installed:
 
