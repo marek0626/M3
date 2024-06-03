@@ -32,7 +32,8 @@ use m3::test::WvTester;
 use m3::tiles::{Activity, ActivityArgs, ChildActivity, Tile};
 use m3::time::TimeDuration;
 use m3::util::math;
-use m3::{wv_assert, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_run_test};
+use m3::vec::Vec;
+use m3::{println, wv_assert, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, create_srv);
@@ -62,6 +63,7 @@ pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, obtain);
     wv_run_test!(t, exchange);
     wv_run_test!(t, revoke);
+    wv_run_test!(t, revoke_deep);
 }
 
 fn create_srv(t: &mut dyn WvTester) {
@@ -1086,4 +1088,31 @@ fn revoke(t: &mut dyn WvTester) {
         syscalls::revoke(Activity::own().sel(), crd_mem, true),
         Code::InvArgs
     );
+}
+
+/// Test revocation of a deep derivation tree.
+///
+/// This test might unveil limitations like naive, unbound recursion.
+fn revoke_deep(_: &mut dyn WvTester) {
+    const SIZE: u64 = 0x4000;
+    const PERM: Perm = Perm::RW;
+    const DEPTH: usize = 1024;
+
+    let act = Activity::own().sel();
+    let root_mem = wv_assert_ok!(MemCap::new(SIZE, PERM));
+    let mut caps = Vec::with_capacity(DEPTH);
+    caps.push(MemCap::new_bind(root_mem.sel()));
+
+    // Create a deep branch in the derivation tree.
+    for _ in 0..DEPTH {
+        let mem = wv_assert_ok!(caps.last().unwrap().derive(0, SIZE, PERM));
+        // Keep capability around to avoid revocation.
+        caps.push(mem);
+    }
+
+    // Revoke the deep tree from the root.
+    let crd_root_mem = CapRngDesc::new(CapType::Object, root_mem.sel(), 1);
+    wv_assert_ok!(syscalls::revoke(act, crd_root_mem, false));
+
+    // Errors when dropping the revoked capabilities are ignored.
 }
