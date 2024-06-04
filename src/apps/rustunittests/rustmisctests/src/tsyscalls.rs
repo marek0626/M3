@@ -64,6 +64,7 @@ pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, exchange);
     wv_run_test!(t, revoke);
     wv_run_test!(t, revoke_deep);
+    wv_run_test!(t, revoke_wide);
 }
 
 fn create_srv(t: &mut dyn WvTester) {
@@ -1111,6 +1112,30 @@ fn revoke_deep(_: &mut dyn WvTester) {
     }
 
     // Revoke the deep tree from the root.
+    let crd_root_mem = CapRngDesc::new(CapType::Object, root_mem.sel(), 1);
+    wv_assert_ok!(syscalls::revoke(act, crd_root_mem, false));
+
+    // Errors when dropping the revoked capabilities are ignored.
+}
+
+/// Test revocation of a wide derivation tree.
+fn revoke_wide(_: &mut dyn WvTester) {
+    const SIZE: u64 = 0x4000;
+    const PERM: Perm = Perm::RW;
+    const WIDTH: usize = 1024;
+
+    let act = Activity::own().sel();
+    let root_mem = wv_assert_ok!(MemCap::new(SIZE, PERM));
+    let mut caps = Vec::with_capacity(WIDTH);
+
+    // Create a wide sibling structure in the derivation tree.
+    for i in 0..WIDTH {
+        let mem = wv_assert_ok!(root_mem.derive(0, SIZE, PERM));
+        // Keep capability around to avoid revocation.
+        caps.push(mem);
+    }
+
+    // Revoke the wide tree from the root.
     let crd_root_mem = CapRngDesc::new(CapType::Object, root_mem.sel(), 1);
     wv_assert_ok!(syscalls::revoke(act, crd_root_mem, false));
 
