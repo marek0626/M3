@@ -207,8 +207,6 @@ static m3::inodeno_t copy(const char *path, m3::inodeno_t parent, int level) {
     m3::INode ino;
     ino.devno = 0;
     ino.inode = next_ino++;
-    // TODO don't copy the number of links
-    ino.links = st.st_nlink;
     ino.mode = st.st_mode;
     ino.lastaccess = static_cast<m3::time_t>(st.st_atime);
     ino.lastmod = static_cast<m3::time_t>(st.st_mtime);
@@ -231,6 +229,7 @@ static m3::inodeno_t copy(const char *path, m3::inodeno_t parent, int level) {
             write_to_block(buffer, static_cast<size_t>(len), bno);
         }
         ino.size = static_cast<uint64_t>(st.st_size);
+        ino.links = 1;
     }
     else if(S_ISDIR(ino.mode)) {
         DIR *d = opendir(path);
@@ -242,6 +241,7 @@ static m3::inodeno_t copy(const char *path, m3::inodeno_t parent, int level) {
         m3::DirEntry *prev = nullptr, *newent = nullptr;
         m3::blockno_t block = alloc_block(false);
         ino.size = sb.blocksize;
+        ino.links = 0;
 
         ino.extents = 1;
         ino.direct[0].start = block;
@@ -254,14 +254,26 @@ static m3::inodeno_t copy(const char *path, m3::inodeno_t parent, int level) {
             }
 
             m3::inodeno_t inode;
-            if(strcmp(e->d_name, ".") == 0)
+            if(strcmp(e->d_name, ".") == 0) {
                 inode = ino.inode;
-            else if(strcmp(e->d_name, "..") == 0)
+                ino.links++;
+            }
+            else if(strcmp(e->d_name, "..") == 0) {
                 inode = parent;
+                // root node?
+                if(inode == parent)
+                    ino.links++;
+            }
             else {
                 char *epath = new char[strlen(path) + strlen(e->d_name) + 2];
                 sprintf(epath, "%s/%s", path, e->d_name);
                 inode = copy(epath, ino.inode, level + 1);
+                // increase links for every sub directory
+                struct stat tmp;
+                if(stat(epath, &tmp) == -1)
+                    err(1, "stat of '%s' failed", epath);
+                if(S_ISDIR(tmp.st_mode))
+                    ino.links++;
                 delete[] epath;
             }
 
