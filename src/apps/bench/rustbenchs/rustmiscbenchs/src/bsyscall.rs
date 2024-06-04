@@ -28,6 +28,7 @@ use m3::test::WvTester;
 use m3::tiles::{Activity, ActivityArgs, ChildActivity, Tile};
 use m3::time::{CycleInstant, Profiler, Runner};
 use m3::util::math;
+use m3::vec::Vec;
 use m3::{println, wv_assert_ok, wv_perf, wv_run_test};
 
 static SEL: StaticCell<kif::CapSel> = StaticCell::new(0);
@@ -47,6 +48,8 @@ pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, revoke_mem_gate);
     wv_run_test!(t, revoke_recv_gate);
     wv_run_test!(t, revoke_send_gate);
+    wv_run_test!(t, revoke_deep);
+    wv_run_test!(t, revoke_wide);
 }
 
 fn noop(_t: &mut dyn WvTester) {
@@ -440,4 +443,87 @@ fn revoke_send_gate(_t: &mut dyn WvTester) {
         "revoke_send_gate",
         prof.runner::<CycleInstant, _>(&mut Tester::default())
     );
+}
+
+/// Test performance of revoke on a deep derivation tree.
+fn revoke_deep(_t: &mut dyn WvTester) {
+    const SIZE: u64 = 0x1000;
+    const PERM: Perm = Perm::RW;
+    const DEPTH: usize = 128;
+
+    let prof = Profiler::default().repeats(20).warmup(2);
+
+    let mcap = wv_assert_ok!(MemCap::new(SIZE, PERM));
+
+    struct Tester {
+        mcap: MemCap,
+        _derived: Vec<MemCap>,
+    }
+
+    impl Runner for Tester {
+        fn pre(&mut self) {
+            // Drop capabilities outside run().
+            self._derived.clear();
+
+            // Create a deep branch in the derivation tree.
+            self._derived.push(MemCap::new_bind(self.mcap.sel()));
+            for _ in 0..DEPTH {
+                let mem = wv_assert_ok!(self._derived.last().unwrap().derive(0, SIZE, PERM));
+                // Keep capability around to avoid revocation.
+                self._derived.push(mem);
+            }
+        }
+
+        fn run(&mut self) {
+            let crd = kif::CapRngDesc::new(kif::CapType::Object, self.mcap.sel(), 1);
+            wv_assert_ok!(syscalls::revoke(Activity::own().sel(), crd, false));
+        }
+    }
+
+    let mut tester = Tester {
+        mcap,
+        _derived: Vec::with_capacity(DEPTH),
+    };
+    wv_perf!("revoke_deep", prof.runner::<CycleInstant, _>(&mut tester));
+}
+
+/// Test performance of revoke on a wide derivation tree.
+fn revoke_wide(_t: &mut dyn WvTester) {
+    const SIZE: u64 = 0x1000;
+    const PERM: Perm = Perm::RW;
+    const WIDTH: usize = 128;
+
+    let prof = Profiler::default().repeats(20).warmup(2);
+
+    let mcap = wv_assert_ok!(MemCap::new(SIZE, PERM));
+
+    struct Tester {
+        mcap: MemCap,
+        _derived: Vec<MemCap>,
+    }
+
+    impl Runner for Tester {
+        fn pre(&mut self) {
+            // Drop capabilities outside run().
+            self._derived.clear();
+
+            // Create a wide sibling structure in the derivation tree.
+            for _ in 0..WIDTH {
+                let mem = wv_assert_ok!(self.mcap.derive(0, SIZE, PERM));
+                // Keep capability around to avoid revocation.
+                self._derived.push(mem);
+            }
+        }
+
+        fn run(&mut self) {
+            let crd = kif::CapRngDesc::new(kif::CapType::Object, self.mcap.sel(), 1);
+            wv_assert_ok!(syscalls::revoke(Activity::own().sel(), crd, false));
+        }
+    }
+
+    let mut tester = Tester {
+        mcap,
+        _derived: Vec::with_capacity(WIDTH),
+    };
+    wv_perf!("revoke_wide", prof.runner::<CycleInstant, _>(&mut tester));
 }
