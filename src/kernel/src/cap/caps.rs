@@ -376,7 +376,13 @@ impl Capability {
             if let Some(p) = cap.parent {
                 if cap.prev.is_none() {
                     let child = &mut (*p.as_ptr()).child;
-                    *child = cap.next;
+                    *child = if rev_next {
+                        // Do not set child when we delete the siblings anyway.
+                        None
+                    }
+                    else {
+                        cap.next
+                    };
                 }
             }
         }
