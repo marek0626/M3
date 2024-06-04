@@ -14,3 +14,7 @@
 /.rustup
 /build
 /run
+/ci/builds
+/ci/cache
+/ci/logs
+/ci/results
