@@ -9,7 +9,7 @@ create_image() {
     cache="$2"
     podman build \
         --build-arg "CACHE=$2" \
-        --build-arg "KUBECFG=kubecfg" \
+        --build-arg "KUBECFG=out/kubecfg" \
         -t "$name" .
     podman image tag "$name:latest" "registry.hpc.barkhauseninstitut.org/$ns/$name:latest"
     podman image push "registry.hpc.barkhauseninstitut.org/$ns/$name:latest"
@@ -31,7 +31,7 @@ create_cache() {
 
 create_build_con() {
     remove_pods
-    create_image m3-build empty
+    create_image m3-build out/empty
 
     buildpod=$(sh ./config/build-pod.sh m3-build m3-build)
     echo "$buildpod" | kubectl apply -f -
@@ -40,20 +40,20 @@ create_build_con() {
 
 create_test_con() {
     remove_pods
-    create_image m3-test builds
+    create_image m3-test out/builds
 }
 
 exec_build_con() {
     kubectl exec -n "$ns" -t m3-build -- ./build.sh
-    rm -rf builds
-    kubectl cp "$ns"/m3-build:/cache/result builds
-    chmod +x builds/build/m3-gem5-*/*/toolsbin/*
-    chmod +x builds/build/gem5/*/*/gem5.opt
+    rm -rf out/builds
+    kubectl cp "$ns"/m3-build:/cache/result out/builds
+    chmod +x out/builds/build/m3-gem5-*/*/toolsbin/*
+    chmod +x out/builds/build/gem5/*/*/gem5.opt
     kubectl delete -n "$ns" pod m3-build --now
 }
 
 exec_test_con() {
-    mkdir -p logs
+    mkdir -p out/logs
     for isa in riscv32 riscv64 x86_64; do
         nameisa="$(echo $isa | tr _ -)"
         testpod=$(sh ./config/build-pod.sh "m3-test-$nameisa" m3-test)
@@ -61,14 +61,14 @@ exec_test_con() {
         kubectl wait -n "$ns" --for=condition=ready --timeout=5m pod "m3-test-$nameisa"
         echo "Starting m3-test-$isa..."
         kubectl exec -n "$ns" -t "m3-test-$nameisa" -- \
-            ./build.sh -n --isa $isa /results &> logs/m3-test-$isa.log &
+            ./build.sh -n --isa $isa /results &> out/logs/m3-test-$isa.log &
     done
     wait
 
     for isa in riscv32 riscv64 x86_64; do
         nameisa="$(echo $isa | tr _ -)"
         echo "Retrieving results from m3-test-$isa..."
-        kubectl cp "$ns/m3-test-$nameisa:/results" results
+        kubectl cp "$ns/m3-test-$nameisa:/results" out/results
         kubectl delete -n "$ns" pod "m3-test-$nameisa" --now
     done
 }

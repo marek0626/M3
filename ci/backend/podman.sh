@@ -5,13 +5,13 @@ set -ex
 create_image() {
     name="$1"
     podman build \
-        --build-arg "CACHE=empty" \
-        --build-arg "KUBECFG=kubecfg" \
+        --build-arg "CACHE=out/empty" \
+        --build-arg "KUBECFG=out/kubecfg" \
         -t "$name" .
 }
 
 create_cache() {
-    mkdir -p cache
+    mkdir -p out/cache
 }
 
 create_build_con() {
@@ -23,16 +23,16 @@ create_test_con() {
 }
 
 exec_build_con() {
-    podman run -t -v "$(readlink -f cache):/cache" m3-build ./build.sh
+    podman run -t -v "$(readlink -f out/cache):/cache" m3-build ./build.sh
     podman image rm -f m3-build:latest
 }
 
 exec_test_con() {
-    podman run -t -v "$(readlink -f cache):/cache" m3-test \
+    podman run -t -v "$(readlink -f out/cache):/cache" m3-test \
         ./build.sh -n --isa riscv64 --type a /results
     podman image rm -f m3-test:latest
 }
 
 exec_shell() {
-    podman run -ti -v "$(readlink -f cache):/cache" "$1" bash
+    podman run -ti -v "$(readlink -f out/cache):/cache" "$1" bash
 }

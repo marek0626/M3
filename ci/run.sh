@@ -11,10 +11,10 @@ source "backend/${backend}.sh"
 
 set -e
 
-mkdir empty
-trap 'rmdir empty 2>/dev/null' EXIT ERR INT TERM
-cp -f "$HOME/.kube/config" kubecfg
-trap 'rm -f kubecfg 2>/dev/null' EXIT ERR INT TERM
+mkdir -p out/empty
+trap 'rmdir out/empty 2>/dev/null' EXIT ERR INT TERM
+cp -f "$HOME/.kube/config" out/kubecfg
+trap 'rm -f out/kubecfg 2>/dev/null' EXIT ERR INT TERM
 
 case "$1" in
     buildsh)
