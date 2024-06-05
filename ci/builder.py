@@ -181,6 +181,7 @@ elif args.command == 'build':
     build_all(tasks, args.incremental)
 
     # now build M³ for gem5 and all supported ISAs
+    tasks = []
     for build in ['debug', 'bench']:
         for isa in ['riscv32', 'riscv64', 'x86_64']:
             t = BuildTask(name='build/m3-gem5-{}-{}'.format(isa, build),
@@ -188,7 +189,7 @@ elif args.command == 'build':
                           out_path='build/gem5-{}-{}'.format(isa, build),
                           cmd='M3_TARGET=gem5 M3_ISA={} M3_BUILD={} ./b'.format(isa, build),
                           shell=True)
-            t.get(args.incremental)
+            tasks.append(t)
 
     # build M³Linux for riscv64
     t = BuildTask(name='build/m3lx',
@@ -196,6 +197,15 @@ elif args.command == 'build':
                   out_path='build/linux',
                   cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mklx -n',
                   shell=True)
-    t.get(args.incremental)
+    tasks.append(t)
+
+    # actually we cannot use ninja in parallel, because it writes to the same .ninja_log etc..
+    # However, this seems to only be a problem when we rebuild later. Thus, we only build in
+    # parallel when not doing incremental builds (which is *much* faster).
+    if args.incremental:
+        for t in tasks:
+            t.get(args.incremental)
+    else:
+        build_all(tasks, args.incremental)
 else:
     print("Unknown command '{}'".format(args.command))
