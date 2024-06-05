@@ -1,6 +1,8 @@
 #!/bin/bash
 name="$1"
 image="$2"
+mount="$3"
+volume="$4"
 cat <<EOF
 {
   "apiVersion": "v1",
@@ -22,31 +24,23 @@ cat <<EOF
             "cpu": "16000m"
           },
           "limits": {
-            "memory": "$((128 * 1024))Mi",
+            "memory": "$((256 * 1024))Mi",
             "cpu": "96000m"
           }
-        }
-EOF
-
-if [ "$name" = "m3-build" ]; then
-    cat <<EOF
-        ,"volumeMounts": [
+        },
+        "volumeMounts": [
           {
-            "mountPath": "/cache",
-            "name": "cache"
+            "mountPath": "$mount",
+            "name": "volume"
           }
         ]
-EOF
-fi
-
-cat <<EOF
       }
     ],
     "volumes": [
       {
-        "name": "cache",
+        "name": "volume",
         "persistentVolumeClaim": {
-          "claimName": "m3-build-cache"
+          "claimName": "$volume"
         }
       }
     ]

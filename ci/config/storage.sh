@@ -1,17 +1,19 @@
 #!/bin/bash
+name="$1"
+size="$2"
 cat <<EOF
 {
     "apiVersion": "v1",
     "kind": "PersistentVolumeClaim",
     "metadata": {
-        "name": "m3-build-cache",
+        "name": "$name",
         "namespace": "os"
     },
     "spec": {
         "accessModes": ["ReadWriteOnce"],
         "resources": {
             "requests": {
-                "storage": "200Gi"
+                "storage": "$size"
             }
         },
         "storageClassName": "ceph-block",

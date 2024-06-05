@@ -36,8 +36,5 @@ RUN mkdir -p $HOME/.config/nix && \
     echo "experimental-features = nix-command flakes" \
         > $HOME/.config/nix/nix.conf
 
-ARG CACHE
-COPY $CACHE /cache
-
 COPY build.sh /
 
