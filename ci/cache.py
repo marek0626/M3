@@ -201,33 +201,5 @@ elif args.command == 'build':
     tasks.append(t)
 
     build_all(tasks, args.no_build)
-
-    if not args.no_build:
-        # start with a clean result directory
-        shutil.rmtree('{}/result'.format(CACHE_DIR), ignore_errors=True)
-
-        # collect files and directories to copy
-        files = [('platform/gem5', 'submodules/gem5', '.')]
-        for isa in ['RISCV', 'X86']:
-            files.append(('platform/gem5', 'build/gem5', isa + '/gem5.opt'))
-        for build in ['debug', 'bench']:
-            for isa in ['riscv32', 'riscv64', 'x86_64']:
-                dir = 'm3-gem5-{}-{}'.format(isa, build)
-                files.append(('.', 'build/' + dir, 'bin/stripped'))
-                files.append(('.', 'build/' + dir, 'src/fs'))
-                files.append(('.', 'build/' + dir, 'toolsbin'))
-
-        # now copy results into /cache/result
-        for (in_path, name, path) in files:
-            hash = get_hash(in_path)
-            src = '{}/{}/{}/{}'.format(CACHE_DIR, name, hash, path)
-            dst = '{}/result/{}/{}/{}'.format(CACHE_DIR, name, hash, path)
-            print("Copying '{}'...".format(src))
-            sys.stdout.flush()
-            if os.path.isfile(src):
-                mkdir(os.path.dirname(dst))
-                shutil.copy2(src, dst)
-            else:
-                shutil.copytree(src, dst, symlinks=True)
 else:
     print("Unknown command '{}'".format(args.command))
