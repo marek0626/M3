@@ -13,6 +13,8 @@ set -e
 
 mkdir empty
 trap 'rmdir empty 2>/dev/null' EXIT ERR INT TERM
+cp -f "$HOME/.kube/config" kubecfg
+trap 'rm -f kubecfg 2>/dev/null' EXIT ERR INT TERM
 
 case "$1" in
     buildsh)

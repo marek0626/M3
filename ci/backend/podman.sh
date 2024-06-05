@@ -2,16 +2,24 @@
 
 set -ex
 
+create_image() {
+    name="$1"
+    podman build \
+        --build-arg "CACHE=empty" \
+        --build-arg "KUBECFG=kubecfg" \
+        -t "$name" .
+}
+
 create_cache() {
     mkdir -p cache
 }
 
 create_build_con() {
-    podman build --build-arg "CACHE=empty" -t m3-build .
+    create_image m3-build
 }
 
 create_test_con() {
-    podman build --build-arg "CACHE=empty" -t m3-test .
+    create_image m3-test
 }
 
 exec_build_con() {

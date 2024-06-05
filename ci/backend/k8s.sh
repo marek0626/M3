@@ -7,7 +7,10 @@ set -ex
 create_image() {
     name="$1"
     cache="$2"
-    podman build --build-arg "CACHE=$2" -t "$name" .
+    podman build \
+        --build-arg "CACHE=$2" \
+        --build-arg "KUBECFG=kubecfg" \
+        -t "$name" .
     podman image tag "$name:latest" "registry.hpc.barkhauseninstitut.org/$ns/$name:latest"
     podman image push "registry.hpc.barkhauseninstitut.org/$ns/$name:latest"
 }
