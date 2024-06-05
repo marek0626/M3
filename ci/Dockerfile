@@ -39,8 +39,5 @@ RUN mkdir -p $HOME/.config/nix && \
 ARG CACHE
 COPY $CACHE /cache
 
-COPY benchs/ /benchs/
-COPY input/ /input/
 COPY build.sh /
-COPY build.py /
 

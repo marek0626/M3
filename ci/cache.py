@@ -9,7 +9,6 @@ from functools import cmp_to_key
 
 CACHE_DIR = '/cache'
 CACHE_CAP = 3
-REPO = 'https://ci:gldt-Y6KXy-AKNDZ8uUb8PnY3@gitlab.barkhauseninstitut.org/os/code/M3/M3.git'
 
 
 def get_hash(path: str):
@@ -52,15 +51,22 @@ class BuildTask:
             proc.wait()
             log.close()
             if proc.returncode != 0:
-                print('{}: exited with status {}'.format(self.name, proc.returncode))
+                print('{}: exited with status {}'
+                      .format(self.name, proc.returncode))
                 sys.exit(1)
         self.finish(rebuild)
 
     def start(self):
         self.gc()
-        mkdir(os.path.dirname('{}/logs/{}'.format(CACHE_DIR, self.name)))
-        logfile = '{}/logs/{}.log'.format(CACHE_DIR, self.name)
+
+        # create log file
+        date = datetime.today().strftime('%Y-%m-%d')
+        logfile = '{}/logs/{}/{}-{}.log'.format(
+                CACHE_DIR, self.name, date, self.hash())
+        mkdir(os.path.dirname(logfile))
         log = open(logfile, 'w+')
+
+        # start rebuilding the item
         print("{}: rebuilding... (log in {})".format(self.out_path, logfile))
         sys.stdout.flush()
         proc = subprocess.Popen(self.cmd, shell=self.shell,
@@ -97,7 +103,8 @@ class BuildTask:
                     fpath = os.path.join(dir, sorted_files[i][1])
                     mdate = datetime.utcfromtimestamp(sorted_files[i][0])
                     hdate = mdate.strftime('%Y-%m-%d %H:%M:%S')
-                    print('{}: evicting {} (modified on {})...'.format(dir, fpath, hdate))
+                    print('{}: evicting {} (modified on {})...'
+                          .format(self.out_path, sorted_files[i][1], hdate))
                     shutil.rmtree(fpath)
 
 
@@ -113,22 +120,18 @@ def build_all(tasks: [BuildTask], no_build: bool):
         proc.wait()
         log.close()
         if proc.returncode != 0:
-            print('{}: exited with status {}'.format(task.name, proc.returncode))
+            print('{}: exited with status {}'
+                  .format(task.name, proc.returncode))
             sys.exit(1)
         task.finish(True)
 
 
 parser = argparse.ArgumentParser(description='This is the M³ builder.')
 parser.add_argument('command')
-parser.add_argument('-c', '--commit', default='origin/virteps')
 parser.add_argument('-n', '--no-build', action='store_true')
 args = parser.parse_args()
 
 if args.command == 'prepare':
-    subprocess.run(['git', 'clone', REPO])
-    os.chdir('M3')
-    subprocess.run(['git', 'checkout', args.commit])
-
     for m in ['src/m3lx/linux', 'src/m3lx/riscv-pk',
               'tools/ninjapie', 'cross/buildroot',
               'platform/gem5', 'platform/hw',

@@ -3,14 +3,14 @@
 set -e
 
 root=$(dirname "$0")
-inputdir=/input
+inputdir="$root/../input"
 
 source "$root/jobs.sh"
 
-args=$(getopt -o t:i: --long tests:,isa:,types:,bpe: -n "$0" -- "$@")
+args=$(getopt -o t:i: --long tests:,isas:,types:,bpe: -n "$0" -- "$@")
 eval set -- "$args"
 
-isa="riscv64"
+isas="riscv32 riscv64 x86_64"
 types="a b sh"
 tests=""
 bpes="32 64"
@@ -20,8 +20,8 @@ while true; do
             tests="$2"
             shift 2
             ;;
-        -i | --isa)
-            isa="$2"
+        -i | --isas)
+            isas="$2"
             shift 2
             ;;
         --types)
@@ -156,7 +156,6 @@ run_bench() {
     gzip -f "$M3_OUT/gem5.log"
 }
 
-export M3_ISA=$isa
 if [ "$M3_LOG" != "" ]; then
     M3_BUILD=release
 else
@@ -164,15 +163,17 @@ else
 fi
 
 # create FS images
-build=build/$M3_TARGET-$M3_ISA-$M3_BUILD
-for bpe in $bpes; do
-    bmoddir=build/$M3_TARGET-$M3_ISA-$M3_BUILD/fsimgs-$bpe
-    mkdir -p "$bmoddir"
+for isa in $isas; do
+    build=build/$M3_TARGET-$isa-$M3_BUILD
+    for bpe in $bpes; do
+        bmoddir=build/$M3_TARGET-$isa-$M3_BUILD/fsimgs-$bpe
+        mkdir -p "$bmoddir"
 
-    benchblks=$((64 * 1024))
-    defblks=$((16 * 1024))
-    "$build/toolsbin/mkm3fs" "$bmoddir/bench.img" "$build/src/fs/bench" $benchblks 4096 "$bpe"
-    "$build/toolsbin/mkm3fs" "$bmoddir/default.img" "$build/src/fs/default" $defblks 512 "$bpe"
+        benchblks=$((64 * 1024))
+        defblks=$((16 * 1024))
+        "$build/toolsbin/mkm3fs" "$bmoddir/bench.img" "$build/src/fs/bench" $benchblks 4096 "$bpe"
+        "$build/toolsbin/mkm3fs" "$bmoddir/default.img" "$build/src/fs/default" $defblks 512 "$bpe"
+    done
 done
 
 jobs_init "$(nproc)"
@@ -201,27 +202,29 @@ fi
 
 export M3_BUILD=bench
 for test in $tests; do
-    for bpe in $bpes; do
-        for type in $types; do
-            # riscv32 does not support VM
-            if [ "$isa" == "riscv32" ] && [ "$type" != "a" ]; then
-                continue;
-            fi
+    for isa in $isas; do
+        for bpe in $bpes; do
+            for type in $types; do
+                # riscv32 does not support VM
+                if [ "$isa" == "riscv32" ] && [ "$type" != "a" ]; then
+                    continue;
+                fi
 
-            # standalone works only with SPM
-            if [ "$test" = "standalone" ] && [ "$type" != "a" ]; then
-                continue;
-            fi
-            # rust-sndrcv and vmtest don't run with SPM
-            if { [ "$test" = "rust-sndrcv" ] || [ "$test" = "vmtest" ]; } && [ "$type" = "a" ]; then
-                continue;
-            fi
-            # m3lx runs only on riscv64 and has no shared version
-            if [[ "$test" == lx* ]] && { [ "$isa" != "riscv64" ] || [ "$type" != "b" ]; }; then
-                continue;
-            fi
+                # standalone works only with SPM
+                if [ "$test" = "standalone" ] && [ "$type" != "a" ]; then
+                    continue;
+                fi
+                # rust-sndrcv and vmtest don't run with SPM
+                if { [ "$test" = "rust-sndrcv" ] || [ "$test" = "vmtest" ]; } && [ "$type" = "a" ]; then
+                    continue;
+                fi
+                # m3lx runs only on riscv64 and has no shared version
+                if [[ "$test" == lx* ]] && { [ "$isa" != "riscv64" ] || [ "$type" != "b" ]; }; then
+                    continue;
+                fi
 
-            jobs_submit run_bench "$result" "$test" "$type" "$isa" "$bpe"
+                jobs_submit run_bench "$result" "$test" "$type" "$isa" "$bpe"
+            done
         done
     done
 done

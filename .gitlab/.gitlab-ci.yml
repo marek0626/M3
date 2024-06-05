@@ -1,0 +1,40 @@
+image: "registry.hpc.barkhauseninstitut.org/os/m3-ci:latest"
+
+stages:
+  - prepare
+  - build
+  - test
+  - cleanup
+
+prepare:
+  stage: prepare
+  script:
+    # ensure that no m3-build pod is still around
+    - kubectl delete -n os pod/m3-build --now || true
+    - kubectl wait -n os --for=delete --timeout=5m pod/m3-build
+    # now (re-)create the pod
+    - sh ci/config/build-pod.sh m3-build m3-build | kubectl apply -f -
+    - kubectl wait -n os --for=condition=ready --timeout=5m pod/m3-build
+
+build:
+  stage: build
+  script:
+    - kubectl exec -n os -t m3-build --
+        ./build.sh --commit $CI_COMMIT_SHA
+
+test:
+  stage: test
+  script:
+    - kubectl exec -n os -t m3-build -- sh -c "
+        ./build.sh -n --commit $CI_COMMIT_SHA
+          && cd M3
+          && nix develop path:. -c
+            ./ci/benchs/gem5.sh /cache/results/$(date -I)-$CI_COMMIT_SHA
+        "
+
+cleanup:
+  stage: cleanup
+  script:
+    - kubectl delete -n os pod/m3-build --now || true
+    - kubectl wait -n os --for=delete --timeout=5m pod/m3-build
+  when: always
