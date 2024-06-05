@@ -42,11 +42,9 @@ class BuildTask:
     def needs_rebuild(self):
         return not os.path.exists(self.cache_path())
 
-    def get(self, no_build=False):
+    def get(self):
         rebuild = self.needs_rebuild()
         if rebuild:
-            if no_build:
-                return
             log, proc = self.start()
             proc.wait()
             log.close()
@@ -108,12 +106,11 @@ class BuildTask:
                     shutil.rmtree(fpath)
 
 
-def build_all(tasks: [BuildTask], no_build: bool):
+def build_all(tasks: [BuildTask]):
     running = []
     for t in tasks:
         if t.needs_rebuild():
-            if not no_build:
-                running.append((t, t.start()))
+            running.append((t, t.start()))
         else:
             t.finish(False)
     for (task, (log, proc)) in running:
@@ -128,7 +125,6 @@ def build_all(tasks: [BuildTask], no_build: bool):
 
 parser = argparse.ArgumentParser(description='This is the M³ builder.')
 parser.add_argument('command')
-parser.add_argument('-n', '--no-build', action='store_true')
 args = parser.parse_args()
 
 if args.command == 'prepare':
@@ -143,7 +139,7 @@ if args.command == 'prepare':
             out_path=m,
             cmd=['git', 'submodule', 'update', '--init', '--recursive', m],
         )
-        t.get(args.no_build)
+        t.get()
 
     # disable git hooks for gem5 to avoid user interaction
     subprocess.run(
@@ -179,7 +175,7 @@ elif args.command == 'build':
                   cmd=['rustup', 'target', 'add', 'riscv64gc-unknown-linux-gnu'])
     tasks.append(t)
 
-    build_all(tasks, args.no_build)
+    build_all(tasks)
 
     # now build M³ for gem5 and all supported ISAs
     tasks = []
@@ -200,6 +196,6 @@ elif args.command == 'build':
                   shell=True)
     tasks.append(t)
 
-    build_all(tasks, args.no_build)
+    build_all(tasks)
 else:
     print("Unknown command '{}'".format(args.command))
