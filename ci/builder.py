@@ -7,7 +7,6 @@ import sys
 from datetime import datetime
 from functools import cmp_to_key
 
-CACHE_DIR = '/cache'
 CACHE_CAP = 3
 
 
@@ -37,13 +36,13 @@ class BuildTask:
         return get_hash(self.in_path)
 
     def cache_path(self):
-        return '{}/{}/{}'.format(CACHE_DIR, self.name, self.hash())
+        return '{}/{}/{}'.format(args.cache_dir, self.name, self.hash())
 
     def needs_rebuild(self):
         return not os.path.exists(self.cache_path())
 
-    def get(self):
-        rebuild = self.needs_rebuild()
+    def get(self, incremental=False):
+        rebuild = incremental or self.needs_rebuild()
         if rebuild:
             log, proc = self.start()
             proc.wait()
@@ -52,15 +51,16 @@ class BuildTask:
                 print('{}: exited with status {}'
                       .format(self.name, proc.returncode))
                 sys.exit(1)
-        self.finish(rebuild)
+        self.finish(rebuild, incremental)
 
-    def start(self):
-        self.gc()
+    def start(self, incremental=False):
+        if not incremental:
+            self.gc()
 
         # create log file
         date = datetime.today().strftime('%Y-%m-%d')
         logfile = '{}/logs/{}/{}-{}.log'.format(
-                CACHE_DIR, self.name, date, self.hash())
+                args.cache_dir, self.name, date, self.hash())
         mkdir(os.path.dirname(logfile))
         log = open(logfile, 'w+')
 
@@ -71,24 +71,25 @@ class BuildTask:
                                 stdout=log, stderr=log)
         return (log, proc)
 
-    def finish(self, rebuild: bool):
+    def finish(self, rebuild: bool, incremental: bool):
         print("{}: ready".format(self.out_path))
         sys.stdout.flush()
-        if rebuild:
-            if len(self.cleanup) > 0:
-                subprocess.run(self.cleanup, shell=True)
-            mkdir(os.path.dirname(self.cache_path()))
-            subprocess.run(['mv', self.out_path, self.cache_path()])
-        if os.path.islink(self.out_path):
-            os.unlink(self.out_path)
-        elif os.path.isdir(self.out_path):
-            shutil.rmtree(self.out_path)
-        if os.path.split(self.out_path)[0] != '':
-            mkdir(os.path.dirname(self.out_path))
-        os.symlink(self.cache_path(), self.out_path)
+        if not incremental:
+            if rebuild:
+                if len(self.cleanup) > 0:
+                    subprocess.run(self.cleanup, shell=True)
+                mkdir(os.path.dirname(self.cache_path()))
+                subprocess.run(['mv', self.out_path, self.cache_path()])
+            if os.path.islink(self.out_path):
+                os.unlink(self.out_path)
+            elif os.path.isdir(self.out_path):
+                shutil.rmtree(self.out_path)
+            if os.path.split(self.out_path)[0] != '':
+                mkdir(os.path.dirname(self.out_path))
+            os.symlink(self.cache_path(), self.out_path)
 
     def gc(self):
-        dir = '{}/{}'.format(CACHE_DIR, self.name)
+        dir = '{}/{}'.format(args.cache_dir, self.name)
         files = []
         if os.path.isdir(dir):
             for f in os.listdir(dir):
@@ -106,13 +107,13 @@ class BuildTask:
                     shutil.rmtree(fpath)
 
 
-def build_all(tasks: [BuildTask]):
+def build_all(tasks: [BuildTask], incremental: bool):
     running = []
     for t in tasks:
-        if t.needs_rebuild():
+        if incremental or t.needs_rebuild():
             running.append((t, t.start()))
         else:
-            t.finish(False)
+            t.finish(False, incremental)
     for (task, (log, proc)) in running:
         proc.wait()
         log.close()
@@ -120,10 +121,12 @@ def build_all(tasks: [BuildTask]):
             print('{}: exited with status {}'
                   .format(task.name, proc.returncode))
             sys.exit(1)
-        task.finish(True)
+        task.finish(True, incremental)
 
 
 parser = argparse.ArgumentParser(description='This is the M³ builder.')
+parser.add_argument('-i', '--incremental', action='store_true')
+parser.add_argument('-c', '--cache-dir', default='ci/out')
 parser.add_argument('command')
 args = parser.parse_args()
 
@@ -139,7 +142,7 @@ if args.command == 'prepare':
             out_path=m,
             cmd=['git', 'submodule', 'update', '--init', '--recursive', m],
         )
-        t.get()
+        t.get(args.incremental)
 
     # disable git hooks for gem5 to avoid user interaction
     subprocess.run(
@@ -175,10 +178,9 @@ elif args.command == 'build':
                   cmd=['rustup', 'target', 'add', 'riscv64gc-unknown-linux-gnu'])
     tasks.append(t)
 
-    build_all(tasks)
+    build_all(tasks, args.incremental)
 
     # now build M³ for gem5 and all supported ISAs
-    tasks = []
     for build in ['debug', 'bench']:
         for isa in ['riscv32', 'riscv64', 'x86_64']:
             t = BuildTask(name='build/m3-gem5-{}-{}'.format(isa, build),
@@ -186,7 +188,7 @@ elif args.command == 'build':
                           out_path='build/gem5-{}-{}'.format(isa, build),
                           cmd='M3_TARGET=gem5 M3_ISA={} M3_BUILD={} ./b'.format(isa, build),
                           shell=True)
-            tasks.append(t)
+            t.get(args.incremental)
 
     # build M³Linux for riscv64
     t = BuildTask(name='build/m3lx',
@@ -194,8 +196,6 @@ elif args.command == 'build':
                   out_path='build/linux',
                   cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mklx -n',
                   shell=True)
-    tasks.append(t)
-
-    build_all(tasks)
+    t.get(args.incremental)
 else:
     print("Unknown command '{}'".format(args.command))

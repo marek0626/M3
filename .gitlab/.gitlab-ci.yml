@@ -26,7 +26,7 @@ test:
   stage: test
   script:
     - kubectl exec -n os -t m3-build -- sh -c "
-        ./build.sh -n --commit $CI_COMMIT_SHA
+        ./build.sh --commit $CI_COMMIT_SHA
           && cd M3
           && nix develop path:. -c
             ./ci/benchs/gem5.sh /cache/results/$(date -I)-$CI_COMMIT_SHA

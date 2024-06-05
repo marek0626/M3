@@ -28,6 +28,6 @@ done
 cd M3
 git checkout "$commit"
 
-/usr/bin/env python3 ./ci/cache.py prepare
+/usr/bin/env python3 ./ci/builder.py --cache-dir /cache prepare
 nix develop path:. -c \
-    /usr/bin/env python3 ./ci/cache.py build
+    /usr/bin/env python3 ./ci/builder.py --cache-dir /cache build
