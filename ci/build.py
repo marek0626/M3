@@ -4,7 +4,11 @@ import shutil
 import subprocess
 import sys
 
+from datetime import datetime
+from functools import cmp_to_key
+
 CACHE_DIR = '/cache'
+CACHE_CAP = 3
 REPO = 'https://ci:gldt-Y6KXy-AKNDZ8uUb8PnY3@gitlab.barkhauseninstitut.org/os/code/M3/M3.git'
 
 
@@ -53,6 +57,7 @@ class BuildTask:
         self.finish(rebuild)
 
     def start(self):
+        self.gc()
         mkdir(os.path.dirname('{}/logs/{}'.format(CACHE_DIR, self.name)))
         logfile = '{}/logs/{}.log'.format(CACHE_DIR, self.name)
         log = open(logfile, 'w+')
@@ -77,6 +82,23 @@ class BuildTask:
         if os.path.split(self.out_path)[0] != '':
             mkdir(os.path.dirname(self.out_path))
         os.symlink(self.cache_path(), self.out_path)
+
+    def gc(self):
+        dir = '{}/{}'.format(CACHE_DIR, self.name)
+        files = []
+        if os.path.isdir(dir):
+            for f in os.listdir(dir):
+                mtime = os.path.getmtime(os.path.join(dir, f))
+                files.append((mtime, f))
+            if len(files) > CACHE_CAP:
+                sorted_files = sorted(files,
+                                      key=cmp_to_key(lambda f1, f2: f2[0] - f1[0]))
+                for i in range(CACHE_CAP, len(files)):
+                    fpath = os.path.join(dir, sorted_files[i][1])
+                    mdate = datetime.utcfromtimestamp(sorted_files[i][0])
+                    hdate = mdate.strftime('%Y-%m-%d %H:%M:%S')
+                    print('{}: evicting {} (modified on {})...'.format(dir, fpath, hdate))
+                    shutil.rmtree(fpath)
 
 
 def build_all(tasks: [BuildTask], no_build: bool):
