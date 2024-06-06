@@ -181,7 +181,7 @@ jobs_init "$(nproc)"
 
 all=""
 all+="rust-algo-tests rust-misc-tests rust-vfs-tests hashmux-tests rust-benchs"
-all+=" unittests cpp-benchs hashmux-benchs resmngtest"
+all+=" unittests cpp-algo-benchs cpp-misc-benchs cpp-vfs-benchs hashmux-benchs resmngtest"
 all+=" rust-net-tests cpp-net-tests rust-net-benchs cpp-net-benchs facever"
 all+=" find tar untar sqlite leveldb sha256sum sort"
 all+=" cat_awk cat_wc grep_awk grep_wc"

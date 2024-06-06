@@ -23,7 +23,7 @@
                     <mod name="tilemux" perm="r" />
                     <tiles type="perf|core" count="1" />
                     <dom tile="perf|core">
-                        <app args="/bin/cppbenchs">
+                        <app args="/bin/cppvfsbenchs">
                             <mount fs="m3fs" path="/" />
                             <sess name="pipes" />
                             <tiles type="perf|core" count="2" />

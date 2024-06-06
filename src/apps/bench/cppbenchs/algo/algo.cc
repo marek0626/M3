@@ -16,9 +16,9 @@
  * General Public License version 2 for more details.
  */
 
-#include "cppbenchs.h"
-
 #include <m3/stream/Standard.h>
+
+#include "../cppbenchs.h"
 
 using namespace m3;
 
@@ -27,16 +27,9 @@ int failed;
 int main() {
     RUN_SUITE(bdlist);
     RUN_SUITE(bslist);
-    RUN_SUITE(btreap);
-    RUN_SUITE(bregfile);
-    RUN_SUITE(bmemgate);
     RUN_SUITE(bstream);
-    RUN_SUITE(bsyscall);
-    RUN_SUITE(bpipe);
-    RUN_SUITE(bfsmeta);
-    RUN_SUITE(bactivity);
-    RUN_SUITE(bpagefaults);
     RUN_SUITE(bstring);
+    RUN_SUITE(btreap);
 
     m3::println("\033[1;32mAll tests successful!\033[0;m"_cf);
     return 0;

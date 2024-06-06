@@ -26,15 +26,15 @@
     name();                                                   \
     m3::println();
 
-void bslist();
-void bdlist();
-void btreap();
-void bfsmeta();
-void bregfile();
-void bmemgate();
-void bstream();
-void bsyscall();
-void bpipe();
-void bactivity();
-void bpagefaults();
-void bstring();
+extern void bslist();
+extern void bdlist();
+extern void btreap();
+extern void bfsmeta();
+extern void bregfile();
+extern void bmemgate();
+extern void bstream();
+extern void bsyscall();
+extern void bpipe();
+extern void bactivity();
+extern void bpagefaults();
+extern void bstring();

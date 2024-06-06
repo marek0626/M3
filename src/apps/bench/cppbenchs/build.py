@@ -1,2 +1,10 @@
+dirs = [
+    'algo',
+    'misc',
+    'vfs'
+]
+
+
 def build(gen, env):
-    env.m3_exe(gen, out='cppbenchs', ins=['cppbenchs.cc'] + env.glob(gen, 'benchs/*.cc'))
+    for d in dirs:
+        env.sub_build(gen, d)
