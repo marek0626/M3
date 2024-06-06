@@ -20,14 +20,8 @@
 
 mod bboxlist;
 mod bdlist;
-mod bipc;
 mod bmemmap;
-mod bmgate;
-mod bpipe;
-mod bregfile;
 mod bstream;
-mod bsyscall;
-mod btilemux;
 mod btreap;
 mod btreemap;
 
@@ -41,13 +35,7 @@ pub fn main() -> Result<(), Error> {
     wv_run_suite!(tester, bboxlist::run);
     wv_run_suite!(tester, bdlist::run);
     wv_run_suite!(tester, bmemmap::run);
-    wv_run_suite!(tester, bmgate::run);
-    wv_run_suite!(tester, bipc::run);
-    wv_run_suite!(tester, btilemux::run);
-    wv_run_suite!(tester, bpipe::run);
-    wv_run_suite!(tester, bregfile::run);
     wv_run_suite!(tester, bstream::run);
-    wv_run_suite!(tester, bsyscall::run);
     wv_run_suite!(tester, btreap::run);
     wv_run_suite!(tester, btreemap::run);
     println!("{}", tester);

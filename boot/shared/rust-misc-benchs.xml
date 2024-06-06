@@ -1,0 +1,26 @@
+<config>
+    <mods>
+        <mod name="fs" file="bench.img" />
+    </mods>
+    <kernel args="kernel" />
+    <dom>
+        <app args="root">
+            <app args="m3fs mem" daemon="1">
+                <serv name="m3fs" />
+                <mod name="fs" />
+            </app>
+            <dom>
+                <app args="pager">
+                    <sess name="m3fs" />
+                    <mod name="fs" perm="r" />
+                    <mod name="tilemux" perm="r" />
+                    <tiles type="perf|core" count="1" />
+                    <app args="/bin/rustmiscbenchs" time="1s">
+                        <mount fs="m3fs" path="/" />
+                        <tiles type="perf|core" count="1" />
+                    </app>
+                </app>
+            </dom>
+        </app>
+    </dom>
+</config>

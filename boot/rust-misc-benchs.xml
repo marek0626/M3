@@ -12,20 +12,14 @@
                 </app>
             </dom>
             <dom>
-                <app args="pipes" daemon="1">
-                    <serv name="pipes" />
-                </app>
-            </dom>
-            <dom>
                 <app args="pager">
                     <sess name="m3fs" />
                     <mod name="fs" perm="r" />
                     <mod name="tilemux" perm="r" />
                     <tiles type="perf|core" count="1" />
                     <dom tile="perf|core">
-                        <app args="/bin/rustbenchs" time="1s">
+                        <app args="/bin/rustmiscbenchs" time="1s">
                             <mount fs="m3fs" path="/" />
-                            <sess name="pipes" />
                             <tiles type="perf|core" count="1" />
                         </app>
                     </dom>
