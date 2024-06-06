@@ -41,7 +41,9 @@ else
     cd M3 && git fetch origin
 fi
 git checkout "$commit"
-git submodule sync
+if [ "$incremental" = "-i" ]; then
+    git submodule sync
+fi
 
 /usr/bin/env python3 \
     ./ci/builder.py --cache-dir "$cachedir" $incremental prepare
