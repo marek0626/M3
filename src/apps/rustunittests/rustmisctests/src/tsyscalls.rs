@@ -19,7 +19,7 @@
 use m3::cap::{CapFlags, Capability, SelSpace, Selector};
 use m3::cfg::{self, PAGE_SIZE};
 use m3::client::M3FS;
-use m3::com::{EpMng, GateCap, MemCap, MemGate, RecvCap, RecvGate, Semaphore, SendCap};
+use m3::com::{EpMng, GateCap, MemCap, MemGate, RecvCap, RecvGate, SendCap};
 use m3::cpu::{CPUOps, CPU};
 use m3::errors::{Code, Error};
 use m3::kif::syscalls::{ActivityOp, SemOp};
@@ -33,7 +33,7 @@ use m3::tiles::{Activity, ActivityArgs, ChildActivity, Tile};
 use m3::time::TimeDuration;
 use m3::util::math;
 use m3::vec::Vec;
-use m3::{println, wv_assert, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_run_test};
+use m3::{wv_assert, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, create_srv);
@@ -1142,7 +1142,7 @@ fn revoke_wide(_: &mut dyn WvTester) {
     let mut caps = Vec::with_capacity(WIDTH);
 
     // Create a wide sibling structure in the derivation tree.
-    for i in 0..WIDTH {
+    for _ in 0..WIDTH {
         let mem = wv_assert_ok!(root_mem.derive(0, SIZE, PERM));
         // Keep capability around to avoid revocation.
         caps.push(mem);
