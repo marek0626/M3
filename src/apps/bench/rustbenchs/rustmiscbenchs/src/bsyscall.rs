@@ -449,9 +449,9 @@ fn revoke_send_gate(_t: &mut dyn WvTester) {
 fn revoke_deep(_t: &mut dyn WvTester) {
     const SIZE: u64 = 0x1000;
     const PERM: Perm = Perm::RW;
-    const DEPTH: usize = 128;
+    const DEPTH: usize = 16;
 
-    let prof = Profiler::default().repeats(20).warmup(2);
+    let prof = Profiler::default().repeats(100).warmup(2);
 
     let mcap = wv_assert_ok!(MemCap::new(SIZE, PERM));
 
@@ -491,9 +491,9 @@ fn revoke_deep(_t: &mut dyn WvTester) {
 fn revoke_wide(_t: &mut dyn WvTester) {
     const SIZE: u64 = 0x1000;
     const PERM: Perm = Perm::RW;
-    const WIDTH: usize = 128;
+    const WIDTH: usize = 64;
 
-    let prof = Profiler::default().repeats(20).warmup(2);
+    let prof = Profiler::default().repeats(50).warmup(2);
 
     let mcap = wv_assert_ok!(MemCap::new(SIZE, PERM));
 
