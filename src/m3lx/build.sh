@@ -36,7 +36,7 @@ build_bbl() {
 case "$command" in
     mklx)
         # for some weird reason, the path for O needs to be relative
-        makeargs=("O=../../../$lxbuild" "-j$(nproc)")
+        makeargs=("O=$root/$lxbuild" "-j$(nproc)")
         mkdir -p "$lxbuild"
 
         export ARCH=riscv
