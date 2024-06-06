@@ -227,19 +227,9 @@ impl CapTable {
                     }
 
                     let len = cap.len();
-                    if own {
-                        Capability::revoke_async(cap, false, revoker);
+                    if Capability::revoke_single(cap, own, revoker) {
+                        sel += len;
                     }
-                    else if let Ok(child) = RefMut::filter_map(cap, |c| c.child.as_mut()) {
-                        unsafe {
-                            Capability::revoke_async(
-                                RefMut::map(child, |c| &mut (*c.as_ptr())),
-                                true,
-                                revoker,
-                            );
-                        }
-                    }
-                    sel += len;
                 },
 
                 Err(_tbl) => {
@@ -254,7 +244,9 @@ impl CapTable {
         loop {
             let tbl_ref = tbl.borrow_mut();
             match RefMut::filter_map(tbl_ref, |t| t.caps.get_root_mut()) {
-                Ok(cap) => Capability::revoke_async(cap, false, revoker),
+                Ok(cap) => {
+                    Capability::revoke_single(cap, true, revoker);
+                },
                 Err(_tbl) => break,
             }
         }
@@ -365,7 +357,36 @@ impl Capability {
         }
     }
 
-    fn revoke_async(mut cap: RefMut<'_, Self>, rev_next: bool, revoker: ActId) {
+    /// Revoke a single leaf capability in the derivation tree of `self`.
+    ///
+    /// Returns `true` when no more capabilities are found.
+    fn revoke_single(mut cap: RefMut<'_, Self>, self_included: bool, revoker: ActId) -> bool {
+        let mut is_child = false;
+        // Loop to the first child.
+        loop {
+            match RefMut::filter_map(cap, |c| c.child.as_mut()) {
+                // SAFETY: This should be safe since no other thread must
+                // currently hold a reference inside the RefCell of a
+                // capability table of any application.
+                // Additionally, all capability references should always be
+                // valid when switching threads.
+                Ok(child) => unsafe {
+                    is_child = true;
+                    cap = RefMut::map(child, |c| c.as_mut())
+                },
+                Err(c) => {
+                    cap = c;
+                    break;
+                },
+            }
+        }
+
+        if !self_included && !is_child {
+            return true;
+        }
+
+        // Unlink cap from derivation tree.
+        // SAFETY: All references in the derivation tree must be valid.
         unsafe {
             if let Some(n) = cap.next {
                 (*n.as_ptr()).prev = cap.prev;
@@ -376,64 +397,35 @@ impl Capability {
             if let Some(p) = cap.parent {
                 if cap.prev.is_none() {
                     let child = &mut (*p.as_ptr()).child;
-                    *child = if rev_next {
-                        // Do not set child when we delete the siblings anyway.
-                        None
-                    }
-                    else {
-                        cap.next
-                    };
+                    *child = cap.next;
                 }
             }
+            // cap is a leaf and has no child.
         }
 
-        // remove it from the table
-        let sels = SelRange::new(cap.sel());
-        let owned_cap = cap.table_mut().caps.remove(&sels).unwrap();
+        // Remove cap from table.
+        let mut tbl = cap.table.unwrap();
+        let sel = cap.sel();
         drop(cap);
+        // SAFETY: The reference to the cap table should be valid as long as
+        // the cap is reachable.
+        // No one should hold a reference to any cap table (content) currently.
+        // (We dropped our cap just above.)
+        let tbl = unsafe { tbl.as_mut() };
+        // Move the very cap we just dropped out of its cap table.
+        let cap = tbl.caps.remove(&SelRange::new(sel)).unwrap();
 
-        owned_cap.revoke_rec_async(rev_next, revoker);
-    }
+        // Release the cap that is now completely unreachable.
+        cap.release_async(revoker);
 
-    fn revoke_rec_async(self, rev_next: bool, revoker: ActId) {
-        unsafe {
-            if let Some(c) = self.child {
-                let child_cap = &mut (*c.as_ptr());
-                let child_sels = SelRange::new(child_cap.sel());
-                let owned_child = child_cap.table_mut().caps.remove(&child_sels).unwrap();
-                owned_child.revoke_rec_async(true, revoker);
-            }
-            // on the first level, we don't want to revoke siblings
-            if rev_next {
-                let mut cap_next = self.next;
-                while let Some(n) = cap_next {
-                    let sib = &mut *n.as_ptr();
-                    // remove it from the table
-                    let sels = SelRange::new(sib.sel());
-                    let owned_sib = sib.table_mut().caps.remove(&sels).unwrap();
-
-                    if let Some(c) = owned_sib.child {
-                        let child_cap = &mut (*c.as_ptr());
-                        let child_sels = SelRange::new(child_cap.sel());
-                        let owned_child = child_cap.table_mut().caps.remove(&child_sels).unwrap();
-                        owned_child.revoke_rec_async(true, revoker);
-                    }
-
-                    cap_next = owned_sib.next;
-                    owned_sib.release_async(revoker);
-                }
-            }
-        }
-
-        // do that after making the cap inaccessible to make sure that no one can still access it,
-        // because we might do a thread switch in release().
-        self.release_async(revoker);
+        !is_child
     }
 
     fn table(&self) -> &CapTable {
         unsafe { &*self.table.unwrap().as_ptr() }
     }
 
+    #[allow(dead_code)]
     fn table_mut(&mut self) -> &mut CapTable {
         unsafe { &mut *self.table.unwrap().as_ptr() }
     }
