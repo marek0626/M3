@@ -194,6 +194,13 @@ elif args.command == 'build':
                   cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mklx -n',
                   shell=True)
     tasks.append(t)
+    # build bbl separately as it has a different out_path
+    t = BuildTask(name='build/riscv-pk',
+                  in_path='.',
+                  out_path='build/riscv-pk',
+                  cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mkbbl -n',
+                  shell=True)
+    tasks.append(t)
 
     # actually we cannot use ninja in parallel, because it writes to the same .ninja_log etc..
     # However, this seems to only be a problem when we rebuild later. Thus, we only build in
