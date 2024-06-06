@@ -42,7 +42,10 @@ if [ ! -d M3 ]; then
     repo="https://$user:$pw@gitlab.barkhauseninstitut.org/os/code/M3/M3.git"
     git clone "$repo" && cd M3
 else
-    cd M3 && git fetch origin
+    cd M3
+    if [ "$incremental" = "-i" ]; then
+        git fetch origin
+    fi
 fi
 git checkout "$commit"
 if [ "$incremental" = "-i" ]; then
