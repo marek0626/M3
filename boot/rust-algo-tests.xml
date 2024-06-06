@@ -12,23 +12,14 @@
                 </app>
             </dom>
             <dom>
-                <app args="pipes" daemon="1">
-                    <serv name="pipes" />
-                </app>
-            </dom>
-            <dom>
                 <app args="pager">
                     <sess name="m3fs" />
                     <mod name="fs" perm="r" />
                     <mod name="tilemux" perm="r" />
                     <tiles type="core" count="1" />
                     <dom>
-                        <app args="/bin/rustunittests">
+                        <app args="/bin/rustalgotests">
                             <mount fs="m3fs" path="/" />
-                            <sess lname="m3fs-clone" gname="m3fs" />
-                            <sess name="pipes" />
-                            <serv name="test" />
-                            <sess name="test" dep="false" />
                             <tiles type="core" count="2" />
                         </app>
                     </dom>

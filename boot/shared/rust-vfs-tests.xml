@@ -5,25 +5,24 @@
     <kernel args="kernel" />
     <dom>
         <app args="root">
-            <app args="pipes" daemon="1">
-                <serv name="pipes" />
-            </app>
             <app args="m3fs mem" daemon="1">
                 <serv name="m3fs" />
                 <mod name="fs" />
             </app>
-            <dom tile="perf|core">
+            <app args="pipes" daemon="1">
+                <serv name="pipes" />
+            </app>
+            <dom>
                 <app args="pager">
                     <sess name="m3fs" />
                     <mod name="fs" perm="r" />
                     <mod name="tilemux" perm="r" />
-                    <app args="/bin/rustunittests">
+                    <tiles type="core" count="1" />
+                    <app args="/bin/rustvfstests">
                         <mount fs="m3fs" path="/" />
                         <sess lname="m3fs-clone" gname="m3fs" />
                         <sess name="pipes" />
-                        <serv name="test" />
-                        <sess name="test" dep="false" />
-                        <tiles type="perf|core" count="2" />
+                        <tiles type="core" count="2" />
                     </app>
                 </app>
             </dom>

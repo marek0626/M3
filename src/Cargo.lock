@@ -524,6 +524,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustalgotests"
+version = "0.1.0"
+dependencies = [
+ "m3",
+]
+
+[[package]]
 name = "rustbenchs"
 version = "0.1.0"
 dependencies = [
@@ -532,6 +539,13 @@ dependencies = [
 
 [[package]]
 name = "rusthello"
+version = "0.1.0"
+dependencies = [
+ "m3",
+]
+
+[[package]]
+name = "rustmisctests"
 version = "0.1.0"
 dependencies = [
  "m3",
@@ -559,7 +573,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustunittests"
+name = "rustvfstests"
 version = "0.1.0"
 dependencies = [
  "m3",

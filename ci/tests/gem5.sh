@@ -79,7 +79,8 @@ run_bench() {
         export M3_GEM5_CPU=TimingSimpleCPU
     fi
 
-    if [ "$bench" = "unittests" ] || [ "$bench" = "rust-unittests" ] || [ "$bench" = "hello" ] ||
+    if [ "$bench" = "unittests" ] || [ "$bench" = "rust-algo-tests" ] || [ "$bench" = "rust-misc-tests" ] ||
+        [ "$bench" = "rust-vfs-tests" ] || [ "$bench" = "hello" ] ||
         [ "$bench" = "rust-net-tests" ] || [ "$bench" = "cpp-net-tests" ] || [ "$bench" = "facever" ] ||
         [ "$bench" = "hashmux-tests" ] || [ "$bench" = "msgchan" ] || [ "$bench" = "resmngtest" ] ||
         [ "$bench" = "standalone" ] || [ "$bench" = "vmtest" ] || [ "$bench" = "rust-sndrcv" ] ||
@@ -179,7 +180,8 @@ done
 jobs_init "$(nproc)"
 
 all=""
-all+="rust-unittests hashmux-tests rust-benchs unittests cpp-benchs hashmux-benchs resmngtest"
+all+="rust-algo-tests rust-misc-tests rust-vfs-tests hashmux-tests rust-benchs"
+all+=" unittests cpp-benchs hashmux-benchs resmngtest"
 all+=" rust-net-tests cpp-net-tests rust-net-benchs cpp-net-benchs facever"
 all+=" find tar untar sqlite leveldb sha256sum sort"
 all+=" cat_awk cat_wc grep_awk grep_wc"

@@ -98,7 +98,7 @@ fn run_arguments(t: &mut dyn WvTester) {
         let mut t = DefaultWvTester::default();
         wv_assert_eq!(t, env::args().count(), 1);
         assert!(env::args().next().is_some());
-        assert!(env::args().next().unwrap().ends_with("rustunittests"));
+        assert!(env::args().next().unwrap().ends_with("rustmisctests"));
         Ok(())
     }));
 

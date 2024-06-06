@@ -1,2 +1,10 @@
+dirs = [
+    'rustalgotests',
+    'rustmisctests',
+    'rustvfstests'
+]
+
+
 def build(gen, env):
-    env.m3_rust_exe(gen, out='rustunittests')
+    for d in dirs:
+        env.sub_build(gen, d)
