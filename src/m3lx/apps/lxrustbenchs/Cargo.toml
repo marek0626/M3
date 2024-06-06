@@ -1,0 +1,11 @@
+[package]
+name = "lxrustbenchs"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "lxrustbenchs"
+path = "src/lxrustbenchs.rs"
+
+[dependencies]
+m3impl = { path = "../../../libs/rust/m3impl", features = ["linux"] }

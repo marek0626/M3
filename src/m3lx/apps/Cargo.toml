@@ -1,0 +1,10 @@
+[workspace]
+members = [
+    "lxrustbenchs",
+    "starter",
+    "tcutest",
+]
+resolver = "2"
+
+[profile.release]
+lto = true

@@ -25,3 +25,9 @@
 [submodule "src/libs/crypto/kecacc-xkcp"]
 	path = src/libs/crypto/kecacc-xkcp
 	url = https://github.com/Barkhausen-Institut/m3-kecacc-xkcp
+[submodule "riscv-pk"]
+	path = src/m3lx/riscv-pk
+	url = https://github.com/Barkhausen-Institut/riscv-pk.git
+[submodule "linux"]
+	path = src/m3lx/linux
+	url = https://github.com/Barkhausen-Institut/linux-bench.git

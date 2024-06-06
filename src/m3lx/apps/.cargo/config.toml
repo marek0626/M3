@@ -1,0 +1,6 @@
+[build]
+rustflags = ["-Wrust-2018-idioms"]
+target = "riscv64gc-unknown-linux-gnu"
+
+[target.riscv64gc-unknown-linux-gnu]
+linker = "../../../build/cross-riscv64/host/bin/riscv64-linux-gcc"
