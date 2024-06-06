@@ -79,7 +79,7 @@ generate_m3lx_deps() {
 
     # generate final initrd
     crossroot="$(readlink -f "$crossdir/../../")"
-    bbl="$(readlink -f "$build/../riscv-pk/bbl")"
+    bbl="$(readlink -f "build/riscv-pk/bbl")"
     initrd="$crossroot/images/rootfs.cpio"
     targetdir="$crossroot/build/buildroot-fs/cpio/target"
     # we build upon the initrd generation of buildroot
