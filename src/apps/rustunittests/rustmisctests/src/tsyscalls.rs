@@ -16,14 +16,14 @@
  * General Public License version 2 for more details.
  */
 
-use m3::cap::{SelSpace, Selector};
+use m3::cap::{CapFlags, Capability, SelSpace, Selector};
 use m3::cfg::{self, PAGE_SIZE};
 use m3::client::M3FS;
-use m3::com::{EpMng, GateCap, MemCap, MemGate, RecvCap, RecvGate, SendCap};
+use m3::com::{EpMng, GateCap, MemCap, MemGate, RecvCap, RecvGate, Semaphore, SendCap};
 use m3::cpu::{CPUOps, CPU};
 use m3::errors::{Code, Error};
 use m3::kif::syscalls::{ActivityOp, SemOp};
-use m3::kif::{CapRngDesc, CapType, Perm, INVALID_SEL, SEL_ACT, SEL_KMEM, SEL_TILE};
+use m3::kif::{CapRngDesc, CapSel, CapType, Perm, INVALID_SEL, SEL_ACT, SEL_KMEM, SEL_TILE};
 use m3::mem::{GlobOff, VirtAddr};
 use m3::server::{CapExchange, Handler, Server, ServerSession, SessId, SessionContainer};
 use m3::syscalls;
@@ -1091,6 +1091,14 @@ fn revoke(t: &mut dyn WvTester) {
     );
 }
 
+// Assert that the given selector is unused in the kernel's cap table.
+fn assert_sel_unused(sel: CapSel) {
+    // Try to create semaphore at this selector.
+    wv_assert_ok!(syscalls::create_sem(sel, 0));
+    // Drop capability to revoke created semaphore.
+    drop(Capability::new(sel, CapFlags::empty()));
+}
+
 /// Test revocation of a deep derivation tree.
 ///
 /// This test might unveil limitations like naive, unbound recursion.
@@ -1115,6 +1123,11 @@ fn revoke_deep(_: &mut dyn WvTester) {
     let crd_root_mem = CapRngDesc::new(CapType::Object, root_mem.sel(), 1);
     wv_assert_ok!(syscalls::revoke(act, crd_root_mem, false));
 
+    // Test that all derived capabilities are removed.
+    for cap in &caps[1..] {
+        assert_sel_unused(cap.sel());
+    }
+
     // Errors when dropping the revoked capabilities are ignored.
 }
 
@@ -1138,6 +1151,11 @@ fn revoke_wide(_: &mut dyn WvTester) {
     // Revoke the wide tree from the root.
     let crd_root_mem = CapRngDesc::new(CapType::Object, root_mem.sel(), 1);
     wv_assert_ok!(syscalls::revoke(act, crd_root_mem, false));
+
+    // Test that all derived capabilities are removed.
+    for cap in &caps {
+        assert_sel_unused(cap.sel());
+    }
 
     // Errors when dropping the revoked capabilities are ignored.
 }
