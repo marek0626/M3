@@ -2,8 +2,6 @@
 
 set -e
 
-REPO='https://ci:gldt-Y6KXy-AKNDZ8uUb8PnY3@gitlab.barkhauseninstitut.org/os/code/M3/M3.git'
-
 args=$(getopt -o c:d:i --long commit:,cache-dir:,incremental -n "$0" -- "$@")
 eval set -- "$args"
 
@@ -35,7 +33,10 @@ while true; do
 done
 
 if [ ! -d M3 ]; then
-    git clone "$REPO" && cd M3
+    user=$(cat "$HOME/.gitlab/user")
+    pw=$(cat "$HOME/.gitlab/pw")
+    repo="https://$user:$pw@gitlab.barkhauseninstitut.org/os/code/M3/M3.git"
+    git clone "$repo" && cd M3
 else
     cd M3 && git fetch origin
 fi

@@ -2,6 +2,7 @@ FROM ubuntu:latest
 
 LABEL description="Build environment for M³"
 
+# install basic packages
 RUN set -x \
     && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -28,10 +29,18 @@ RUN curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | \
 ARG KUBECFG
 COPY $KUBECFG /root/.kube/config
 
+# user and password for the BI gitlab (pull token)
+ARG GITLAB_USER
+COPY $GITLAB_USER /root/.gitlab/user
+ARG GITLAB_PW
+COPY $GITLAB_PW /root/.gitlab/pw
+
+# resolve the hosts that we need during git clone to prevent human interaction
 RUN mkdir -p $HOME/.ssh \
     && ssh-keyscan -H github.com >> $HOME/.ssh/known_hosts \
     && ssh-keyscan -H gitlab.barkhauseninstitut.org >> $HOME/.ssh/known_hosts
 
+# allow the usage of the new nix-command syntax and flakes
 RUN mkdir -p $HOME/.config/nix && \
     echo "experimental-features = nix-command flakes" \
         > $HOME/.config/nix/nix.conf

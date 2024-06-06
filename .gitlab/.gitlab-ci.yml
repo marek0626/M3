@@ -13,7 +13,7 @@ prepare:
     - kubectl delete -n os pod/m3-ci --now || true
     - kubectl wait -n os --for=delete --timeout=5m pod/m3-ci
     # now (re-)create the pod
-    - sh ci/config/pod.sh m3-ci m3-ci /cache m3-build-cache |
+    - sh ci/config/pod.sh m3-ci m3-ci /cache m3-ci-cache |
         kubectl apply -f -
     - kubectl wait -n os --for=condition=ready --timeout=5m pod/m3-ci
 
