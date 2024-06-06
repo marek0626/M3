@@ -24,13 +24,12 @@ def mkdir(path: str):
 
 class BuildTask:
     def __init__(self, name: str, in_path: str, out_path: str,
-                 cmd, shell=False, cleanup=""):
+                 cmd, shell=False):
         self.name = name
         self.in_path = in_path
         self.out_path = out_path
         self.cmd = cmd
         self.shell = shell
-        self.cleanup = cleanup
 
     def hash(self):
         return get_hash(self.in_path)
@@ -76,8 +75,6 @@ class BuildTask:
         sys.stdout.flush()
         if not incremental:
             if rebuild:
-                if len(self.cleanup) > 0:
-                    subprocess.run(self.cleanup, shell=True)
                 mkdir(os.path.dirname(self.cache_path()))
                 subprocess.run(['mv', self.out_path, self.cache_path()])
             if os.path.islink(self.out_path):
@@ -158,7 +155,6 @@ elif args.command == 'build':
                       in_path='cross/buildroot',
                       out_path='build/cross-{}'.format(isa),
                       cmd='cd cross && ./build.sh {}'.format(isa),
-                      cleanup='rm -rf build/cross-{}/build'.format(isa),
                       shell=True)
         tasks.append(t)
 
