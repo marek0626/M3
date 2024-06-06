@@ -55,6 +55,7 @@ exec_shell() {
     kubectl exec -n "$ns" -ti "$name" -- bash
 }
 
+mkdir -p out
 cp -f "$HOME/.kube/config" out/kubecfg
 trap 'rm -f out/kubecfg 2>/dev/null' EXIT ERR INT TERM
 
