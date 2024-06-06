@@ -8,6 +8,7 @@ eval set -- "$args"
 commit="origin/ci"
 cachedir="ci/out"
 incremental=""
+nixargs="path:."
 while true; do
     case "$1" in
         -c | --commit)
@@ -20,6 +21,9 @@ while true; do
             ;;
         -i | --incremental)
             incremental="-i"
+            # if building incrementally, we have a huge build directory etc. and thus we don't want
+            # to put all of that into the nix store.
+            nixargs=""
             shift 1
             ;;
         --)
@@ -47,6 +51,6 @@ fi
 
 /usr/bin/env python3 \
     ./ci/builder.py --cache-dir "$cachedir" $incremental prepare
-nix develop path:. -c \
+nix develop $nixargs -c \
     /usr/bin/env python3 \
         ./ci/builder.py --cache-dir "$cachedir" $incremental build
