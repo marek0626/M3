@@ -8,10 +8,6 @@ create_cache_stor() {
     sh ./config/storage.sh m3-ci-cache 500Gi | kubectl apply -f -
 }
 
-create_perm_stor() {
-    sh ./config/storage.sh m3-perm 250Gi | kubectl apply -f -
-}
-
 create_image() {
     name="$1"
     user="$2"
@@ -60,14 +56,12 @@ cp -f "$HOME/.kube/config" out/kubecfg
 trap 'rm -f out/kubecfg 2>/dev/null' EXIT ERR INT TERM
 
 usage() {
-    echo "Usage: $1 (img ...|ci|test|rmci|rmtest)"
+    echo "Usage: $1 (img ...|run|rm)"
     echo ""
     echo "Commands:"
     echo "  img <gitlab-user> <gitlab-pw> - create new image"
-    echo "  ci                            - start shell in CI pod"
-    echo "  test                          - start shell in test pod"
-    echo "  rmci                          - remove CI pod"
-    echo "  rmtest                        - remove test pod"
+    echo "  run                           - run shell in CI pod"
+    echo "  rm                            - remove CI pod"
     exit 1
 }
 
@@ -78,25 +72,15 @@ case "$1" in
         fi
         create_image m3-ci "$2" "$3"
         ;;
-    ci)
+    run)
         create_cache_stor
         if ! kubectl get pod -n "$ns" m3-ci &>/dev/null; then
             create_pod m3-ci m3-ci /cache m3-ci-cache
         fi
         exec_shell m3-ci
         ;;
-    test)
-        create_perm_stor
-        if ! kubectl get pod -n "$ns" m3-test &>/dev/null; then
-            create_pod m3-test m3-ci /code m3-perm
-        fi
-        exec_shell m3-test
-        ;;
-    rmci)
+    rm)
         remove_pod m3-ci
-        ;;
-    rmtest)
-        remove_pod m3-test
         ;;
     *)
         usage "$0"
