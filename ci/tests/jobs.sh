@@ -7,11 +7,14 @@ sigusr1() {
 }
 
 term() {
-    echo "Terminating running jobs ($(jobs -p -r | wc -l))..."
-    # kill the whole process group to kill also the childs in an easy and reliable way.
-    for pid in $(jobs -p -r); do
-        kill -INT "-$pid"
-    done
+    count=$(jobs -p -r | wc -l)
+    if [ "$count" -gt 0 ]; then
+        echo "Terminating running jobs ($count)..."
+        # kill the whole process group to kill also the childs in an easy and reliable way.
+        for pid in $(jobs -p -r); do
+            kill -INT "-$pid"
+        done
+    fi
 }
 
 sigint() {
