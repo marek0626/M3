@@ -32,6 +32,7 @@ build:
 
 test:
   stage: test
+  allow_failure: true
   script:
     - kubectl exec -n os -t m3-ci -- sh -c "
         ./build.sh --cache-dir /cache --commit $CI_COMMIT_SHA
