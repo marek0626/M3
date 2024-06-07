@@ -176,16 +176,19 @@ elif args.command == 'build':
 
     build_all(tasks, args.incremental)
 
-    # now build M³ for gem5 and all supported ISAs
+    # now build M³ for all targets, build types, and ISAs
     tasks = []
-    for build in ['debug', 'bench']:
-        for isa in ['riscv32', 'riscv64', 'x86_64']:
-            t = BuildTask(name='build/m3-gem5-{}-{}'.format(isa, build),
-                          in_path='.',
-                          out_path='build/gem5-{}-{}'.format(isa, build),
-                          cmd='M3_TARGET=gem5 M3_ISA={} M3_BUILD={} ./b'.format(isa, build),
-                          shell=True)
-            tasks.append(t)
+    for tgt in ['gem5', 'hw22', 'hw23']:
+        for build in ['debug', 'bench']:
+            for isa in ['riscv32', 'riscv64', 'x86_64']:
+                if tgt != 'gem5' and isa != 'riscv64':
+                    continue
+                t = BuildTask(name='build/m3-{}-{}-{}'.format(tgt, isa, build),
+                              in_path='.',
+                              out_path='build/{}-{}-{}'.format(tgt, isa, build),
+                              cmd='M3_TARGET={} M3_ISA={} M3_BUILD={} ./b'.format(tgt, isa, build),
+                              shell=True)
+                tasks.append(t)
 
     # build M³Linux for riscv64
     t = BuildTask(name='build/m3lx',
