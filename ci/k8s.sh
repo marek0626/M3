@@ -60,12 +60,14 @@ cp -f "$HOME/.kube/config" out/kubecfg
 trap 'rm -f out/kubecfg 2>/dev/null' EXIT ERR INT TERM
 
 usage() {
-    echo "Usage: $1 (img ...|ci|test)"
+    echo "Usage: $1 (img ...|ci|test|rmci|rmtest)"
     echo ""
     echo "Commands:"
     echo "  img <gitlab-user> <gitlab-pw> - create new image"
     echo "  ci                            - start shell in CI pod"
     echo "  test                          - start shell in test pod"
+    echo "  rmci                          - remove CI pod"
+    echo "  rmtest                        - remove test pod"
     exit 1
 }
 
@@ -78,15 +80,23 @@ case "$1" in
         ;;
     ci)
         create_cache_stor
-        remove_pod m3-ci
-        create_pod m3-ci m3-ci /cache m3-ci-cache
+        if ! kubectl get pod -n "$ns" m3-ci &>/dev/null; then
+            create_pod m3-ci m3-ci /cache m3-ci-cache
+        fi
         exec_shell m3-ci
         ;;
     test)
         create_perm_stor
-        remove_pod m3-test
-        create_pod m3-test m3-ci /code m3-perm
+        if ! kubectl get pod -n "$ns" m3-test &>/dev/null; then
+            create_pod m3-test m3-ci /code m3-perm
+        fi
         exec_shell m3-test
+        ;;
+    rmci)
+        remove_pod m3-ci
+        ;;
+    rmtest)
+        remove_pod m3-test
         ;;
     *)
         usage "$0"
