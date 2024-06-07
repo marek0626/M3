@@ -11,9 +11,13 @@ CACHE_CAP = 3
 
 
 def get_hash(path: str):
+    # for the root of the repository (current directory), we don't find the hash via ls-tree, but
+    # have to use rev-parse instead.
     if path == '.':
         res = subprocess.check_output(['git', 'rev-parse', 'HEAD'])
         return res.split()[0].decode()
+
+    # here we receive: <perm> <type> <hash> <name>
     res = subprocess.check_output(['git', 'ls-tree', 'HEAD', path])
     return res.split()[2].decode()
 
@@ -41,11 +45,15 @@ class BuildTask:
         return not os.path.exists(self.cache_path())
 
     def get(self, incremental=False):
+        # in incremental mode, we always want to build, because most of the time it is not actually
+        # a complete rebuild.
         rebuild = incremental or self.needs_rebuild()
         if rebuild:
+            # start and synchronously wait for the process to finish
             log, proc = self.start()
             proc.wait()
             log.close()
+            # immediately stop on any error
             if proc.returncode != 0:
                 print('{}: exited with status {}'
                       .format(self.name, proc.returncode))
@@ -53,6 +61,8 @@ class BuildTask:
         self.finish(rebuild, incremental)
 
     def start(self, incremental=False):
+        # evict entries from the cache (in incremental mode we are not using the cache), if
+        # required.
         if not incremental:
             self.gc()
 
@@ -74,24 +84,33 @@ class BuildTask:
         print("{}: ready".format(self.out_path))
         sys.stdout.flush()
         if not incremental:
+            # if we rebuilt, we move the out directory into the cache
             if rebuild:
                 mkdir(os.path.dirname(self.cache_path()))
                 subprocess.run(['mv', self.out_path, self.cache_path()])
+            # make sure that the out directory does not exist
             if os.path.islink(self.out_path):
                 os.unlink(self.out_path)
             elif os.path.isdir(self.out_path):
                 shutil.rmtree(self.out_path)
+            # ensure that at least the parent directory exist
             if os.path.split(self.out_path)[0] != '':
                 mkdir(os.path.dirname(self.out_path))
+            # now link to the cache
             os.symlink(self.cache_path(), self.out_path)
 
     def gc(self):
         dir = '{}/{}'.format(args.cache_dir, self.name)
         files = []
         if os.path.isdir(dir):
+            # collect folder items including the last modification time. note that the last access
+            # time would be better, but we would need to track that manually and that's maybe not
+            # worth the trouble.
             for f in os.listdir(dir):
                 mtime = os.path.getmtime(os.path.join(dir, f))
                 files.append((mtime, f))
+
+            # if we're at the limit, evict the least recently modified entries
             if len(files) >= CACHE_CAP:
                 sorted_files = sorted(files,
                                       key=cmp_to_key(lambda f1, f2: f2[0] - f1[0]))
@@ -105,12 +124,17 @@ class BuildTask:
 
 
 def build_all(tasks: [BuildTask], incremental: bool):
+    # start all tasks that have to run and let them run in parallel
     running = []
     for t in tasks:
+        # start task (incremental always (re)builds)
         if incremental or t.needs_rebuild():
             running.append((t, t.start()))
+        # otherwise, finish the task right away
         else:
             t.finish(False, incremental)
+
+    # now wait for all tasks
     for (task, (log, proc)) in running:
         proc.wait()
         log.close()
@@ -128,6 +152,7 @@ parser.add_argument('command')
 args = parser.parse_args()
 
 if args.command == 'prepare':
+    # pull in all submodules
     for m in ['src/m3lx/linux', 'src/m3lx/riscv-pk',
               'tools/ninjapie', 'cross/buildroot',
               'platform/gem5', 'platform/hw',
