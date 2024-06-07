@@ -30,7 +30,7 @@ bpes="32 64"
 while true; do
     case "$1" in
         -h | --help)
-            usage "$0"
+            usage
             ;;
         -t | --tests)
             tests="$2"
@@ -59,7 +59,7 @@ while true; do
 done
 
 if [ "$1" = "" ]; then
-    usage "$0"
+    usage
 fi
 result="$1"
 
