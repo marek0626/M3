@@ -28,14 +28,14 @@ build:
   stage: build
   script:
     - kubectl exec -n os -t m3-ci --
-        ./build.sh --cache-dir /cache --commit $CI_COMMIT_SHA
+        ./bootstrap.sh --cache-dir /cache --commit $CI_COMMIT_SHA
 
 test:
   stage: test
   allow_failure: true
   script:
     - kubectl exec -n os -t m3-ci -- sh -c "
-        ./build.sh --cache-dir /cache --commit $CI_COMMIT_SHA
+        ./bootstrap.sh --cache-dir /cache --commit $CI_COMMIT_SHA
           && cd M3
           && nix develop path:. -c
             ./ci/tests/gem5.sh /cache/results/$(date -I)-$CI_COMMIT_SHA
