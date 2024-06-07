@@ -1,11 +1,12 @@
 #!/bin/bash
 
+root=$(dirname "$0")
 ns="os"
 
 set -e
 
 create_cache_stor() {
-    sh ./config/storage.sh m3-ci-cache 500Gi | kubectl apply -f -
+    sh "$root/config/storage.sh" m3-ci-cache 500Gi | kubectl apply -f -
 }
 
 create_image() {
@@ -14,16 +15,16 @@ create_image() {
     pw="$3"
 
     # create tmp files for gitlab user/pw
-    echo "$user" > out/user
-    echo "$pw" > out/pw
-    trap 'rm -f out/user out/pw 2>/dev/null' EXIT ERR INT TERM
+    echo "$user" > "$root/out/user"
+    echo "$pw" > "$root/out/pw"
+    trap 'rm -f "$root/out/user" "$root/out/pw" 2>/dev/null' EXIT ERR INT TERM
 
     # create image
-    podman build \
+    ( cd "$root" && podman build \
         --build-arg "KUBECFG=out/kubecfg" \
         --build-arg "GITLAB_USER=out/user" \
         --build-arg "GITLAB_PW=out/pw" \
-        -t "$name" .
+        -t "$name" . )
 
     # tag and push to repo
     podman image tag "$name:latest" "registry.hpc.barkhauseninstitut.org/$ns/$name:latest"
@@ -35,7 +36,7 @@ create_pod() {
     image="$2"
     mount="$3"
     volume="$4"
-    buildpod=$(sh ./config/pod.sh "$name" "$image" "$mount" "$volume")
+    buildpod=$(sh "$root/config/pod.sh" "$name" "$image" "$mount" "$volume")
     echo "$buildpod" | kubectl apply -f -
     kubectl wait -n "$ns" --for=condition=ready --timeout=5m "pod/$name"
 }
@@ -51,9 +52,9 @@ exec_shell() {
     kubectl exec -n "$ns" -ti "$name" -- bash
 }
 
-mkdir -p out
-cp -f "$HOME/.kube/config" out/kubecfg
-trap 'rm -f out/kubecfg 2>/dev/null' EXIT ERR INT TERM
+mkdir -p "$root/out"
+cp -f "$HOME/.kube/config" "$root/out/kubecfg"
+trap 'rm -f "$root/out/kubecfg" 2>/dev/null' EXIT ERR INT TERM
 
 usage() {
     echo "Usage: $1 (img ...|run|rm)"
