@@ -3,6 +3,8 @@ image: "registry.hpc.barkhauseninstitut.org/os/m3-ci:latest"
 # run the pipeline only for merge requests into dev or master
 workflow:
    rules:
+     - if: $CI_PIPELINE_SOURCE == "web"
+     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
      - if: $CI_MERGE_REQUEST_ID && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /dev|master/
        when: always
      - when: never
