@@ -165,8 +165,10 @@ run_bench() {
     if nice ./b run "$M3_OUT/boot.gen.xml" -n < /dev/null > "$M3_OUT/output.txt" 2>&1 \
         && "$root/check_result.py" "$M3_OUT/output.txt" 2>/dev/null; then
         /bin/echo -e "\e[1mFinished $dirname:\e[0m \e[1;32mSUCCESS\e[0m"
+        rm -f "$M3_OUT/.failed"
     else
         /bin/echo -e "\e[1mFinished $dirname:\e[0m \e[1;31mFAILED\e[0m"
+        echo > "$M3_OUT/.failed"
     fi
 
     gzip -f "$M3_OUT/gem5.log"
@@ -250,3 +252,32 @@ for test in $tests; do
 done
 
 jobs_wait
+
+# count succeeded and failed tests
+failed=0
+success=0
+for test in "$result"/*; do
+    if [ -f "$test/.failed" ]; then
+        failed=$((failed + 1))
+    elif [ -d "$test" ]; then
+        success=$((success + 1))
+    fi
+done
+
+# print summary
+echo
+if [ $failed -eq 0 ]; then
+    /bin/echo -e "\e[1mSummary: \e[1;32m$success of $((success + failed)) succeeded.\e[0m"
+else
+    /bin/echo -e "\e[1mSummary: \e[1;31m$success of $((success + failed)) succeeded.\e[0m"
+    # now run over all directories and show failed tests
+    printf "\nThe following tests failed:\n"
+    for test in "$result"/*; do
+        if [ -f "$test/.failed" ]; then
+            echo "$test:"
+            "$root/check_result.py" "$test/output.txt" || true
+            echo
+        fi
+    done
+    exit 1
+fi
