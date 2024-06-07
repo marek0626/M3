@@ -2,15 +2,28 @@
 
 set -e
 
-args=$(getopt -o c:d:i --long commit:,cache-dir:,incremental -n "$0" -- "$@")
+args=$(getopt -o hc:d:i --long help,commit:,cache-dir:,incremental -n "$0" -- "$@")
 eval set -- "$args"
 
-commit="origin/ci"
+usage() {
+    echo "Usage: $0 [-c|--commit <commit>] [-d|--cache-dir <dir>] [-i|--incremental]"
+    echo
+    echo "  --commit     : the M³ commit to checkout (origin/dev by default)"
+    echo "  --cache-dir  : the cache directory to use during build"
+    echo "  --incremental: if set, the cache is not used, but everything is"
+    echo "                 built in place and incrementally."
+    exit 1
+}
+
+commit="origin/dev"
 cachedir="ci/out"
 incremental=""
 nixargs="path:."
 while true; do
     case "$1" in
+        -h | --help)
+            usage
+            ;;
         -c | --commit)
             commit="$2"
             shift 2
