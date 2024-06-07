@@ -7,8 +7,21 @@ inputdir="$root/../input"
 
 source "$root/jobs.sh"
 
-args=$(getopt -o t:i: --long tests:,isas:,types:,bpe: -n "$0" -- "$@")
+args=$(getopt -o ht:i:y:b: --long help,tests:,isas:,types:,bpes: -n "$0" -- "$@")
 eval set -- "$args"
+
+usage() {
+    echo "Usage: $0 [-t|--tests <tests>] [-i|--isas <isas>]"
+    echo "          [-y|--types <types>] [-b|--bpe <bpe>] <results>"
+    echo
+    echo "  --tests <tests>: the list of tests to run, space separated."
+    echo "  --isas <isas>  : the list of ISAs to use, space separated."
+    echo "  --types <types>: the list of tile types (a, b, sh) to use, space separated."
+    echo "  --bpes <bpes>  : the list of blocks per extents to use, space separated."
+    echo "                   This is used for the file system images."
+    echo "  <results>      : the directory to store the results in."
+    exit 1
+}
 
 isas="riscv32 riscv64 x86_64"
 types="a b sh"
@@ -16,6 +29,9 @@ tests=""
 bpes="32 64"
 while true; do
     case "$1" in
+        -h | --help)
+            usage "$0"
+            ;;
         -t | --tests)
             tests="$2"
             shift 2
@@ -24,11 +40,11 @@ while true; do
             isas="$2"
             shift 2
             ;;
-        --types)
+        -y | --types)
             types="$2"
             shift 2
             ;;
-        --bpe)
+        -b | --bpes)
             bpes="$2"
             shift 2
             ;;
@@ -43,14 +59,13 @@ while true; do
 done
 
 if [ "$1" = "" ]; then
-    echo "Please specify the result directory as last argument." >&2
-    exit 1
+    usage "$0"
 fi
 result="$1"
 
 export M3_TARGET=gem5
 if [ -z "$M3_GEM5_LOG" ]; then
-	export M3_GEM5_LOG=Tcu,TcuRegWrite,TcuCmd,TcuConnector
+    export M3_GEM5_LOG=Tcu,TcuRegWrite,TcuCmd,TcuConnector
 fi
 export M3_GEM5_CPUFREQ=3GHz M3_GEM5_MEMFREQ=1GHz
 export M3_CORES=12
