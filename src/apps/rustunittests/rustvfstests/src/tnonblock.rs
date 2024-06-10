@@ -22,7 +22,7 @@ use m3::mem::GlobOff;
 use m3::test::WvTester;
 use m3::tiles::OwnActivity;
 use m3::vfs::{File, IndirectPipe, OpenFlags, VFS};
-use m3::{wv_assert_eq, wv_assert_err, wv_require_ok, wv_require_some, wv_run_test};
+use m3::{wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_require_some, wv_run_test};
 
 const PIPE_SIZE: usize = 16;
 const DATA_SIZE: usize = PIPE_SIZE / 4;
@@ -72,8 +72,8 @@ fn pipes(t: &mut dyn WvTester) {
 
     let mut fin = wv_require_some!(pipe.reader());
     let mut fout = wv_require_some!(pipe.writer());
-    wv_require_ok!(fin.set_blocking(false));
-    wv_require_ok!(fout.set_blocking(false));
+    wv_assert_ok!(t, fin.set_blocking(false));
+    wv_assert_ok!(t, fout.set_blocking(false));
 
     let send_data: [u8; DATA_SIZE] = *b"test";
     let mut recv_data = [0u8; DATA_SIZE];

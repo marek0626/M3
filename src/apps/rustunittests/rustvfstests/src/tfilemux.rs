@@ -24,7 +24,7 @@ use m3::kif;
 use m3::mem::GlobOff;
 use m3::test::WvTester;
 use m3::vfs::{BufReader, FileRef, GenericFile, IndirectPipe, OpenFlags, VFS};
-use m3::{vec, wv_assert_eq, wv_require_ok, wv_run_test};
+use m3::{vec, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, genfile_mux);
@@ -89,14 +89,14 @@ fn pipe_mux(t: &mut dyn WvTester) {
     let mut pos = 0;
     while pos < DATA_SIZE {
         for p in &mut pipes {
-            wv_require_ok!(p.writer.write(&src_buf));
-            wv_require_ok!(p.writer.flush());
+            wv_assert_ok!(t, p.writer.write(&src_buf));
+            wv_assert_ok!(t, p.writer.flush());
         }
 
         for p in &mut pipes {
             let mut dst_buf = [0u8; STEP_SIZE];
 
-            wv_require_ok!(p.reader.read(&mut dst_buf));
+            wv_assert_ok!(t, p.reader.read(&mut dst_buf));
             wv_assert_eq!(t, dst_buf, src_buf);
         }
 

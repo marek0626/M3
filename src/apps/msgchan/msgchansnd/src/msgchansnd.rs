@@ -20,11 +20,11 @@ use m3::com::{recv_msg, RecvGate, SendGate};
 use m3::env;
 use m3::errors::Error;
 use m3::test::{DefaultWvTester, WvTester};
-use m3::{println, reply_vmsg, send_recv, wv_assert_eq, wv_require_ok};
+use m3::{println, reply_vmsg, send_recv, wv_assert_eq, wv_assert_ok, wv_require_ok};
 
 #[no_mangle]
 pub fn main() -> Result<(), Error> {
-    let mut tester = DefaultWvTester::default();
+    let mut t = DefaultWvTester::default();
 
     let sgate = wv_require_ok!(SendGate::new_named("chan"));
     let rgate = wv_require_ok!(RecvGate::new_named(env::args().nth(1).unwrap()));
@@ -32,18 +32,18 @@ pub fn main() -> Result<(), Error> {
     let mut val = 42;
     for _ in 0..16 {
         println!("Sending {}", val);
-        wv_require_ok!(send_recv!(&sgate, RecvGate::def(), val));
+        wv_assert_ok!(t, send_recv!(&sgate, RecvGate::def(), val));
 
         let mut reply = wv_require_ok!(recv_msg(&rgate));
         let res = reply.pop::<u64>();
         println!("Received {:?}", res);
-        wv_assert_eq!(tester, res, Ok(val + 1));
-        wv_require_ok!(reply_vmsg!(reply, 0));
+        wv_assert_eq!(t, res, Ok(val + 1));
+        wv_assert_ok!(t, reply_vmsg!(reply, 0));
 
         val += 100;
     }
 
-    println!("{}", tester);
+    println!("{}", t);
 
     Ok(())
 }

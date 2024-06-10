@@ -22,7 +22,9 @@ use m3::errors::Code;
 use m3::mem::MsgBuf;
 use m3::test::WvTester;
 use m3::util::math;
-use m3::{reply_vmsg, send_vmsg, wv_assert_eq, wv_assert_err, wv_require_ok, wv_run_test};
+use m3::{
+    reply_vmsg, send_vmsg, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_run_test,
+};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, create);
@@ -45,7 +47,7 @@ fn send_errors(t: &mut dyn WvTester) {
     let sgate = wv_require_ok!(SendGate::new_with(SGateArgs::new(&rgate).label(0x1234)));
 
     {
-        wv_require_ok!(send_vmsg!(&sgate, &rgate, 1, 2));
+        wv_assert_ok!(t, send_vmsg!(&sgate, &rgate, 1, 2));
 
         let mut is = wv_require_ok!(recv_msg(&rgate));
         wv_assert_eq!(t, is.pop(), Ok(1));
@@ -54,14 +56,14 @@ fn send_errors(t: &mut dyn WvTester) {
     }
 
     {
-        wv_require_ok!(send_vmsg!(&sgate, &rgate, 4));
+        wv_assert_ok!(t, send_vmsg!(&sgate, &rgate, 4));
 
         let mut is = wv_require_ok!(recv_msg(&rgate));
         wv_assert_err!(t, is.pop::<String>(), Code::InvArgs);
     }
 
     {
-        wv_require_ok!(send_vmsg!(&sgate, &rgate, 0, "123"));
+        wv_assert_ok!(t, send_vmsg!(&sgate, &rgate, 0, "123"));
 
         let mut is = wv_require_ok!(recv_msg(&rgate));
         wv_assert_err!(t, is.pop::<String>(), Code::InvArgs);
@@ -76,8 +78,8 @@ fn send_recv(t: &mut dyn WvTester) {
 
     let mut buf = MsgBuf::borrow_def();
     buf.set([0u8; 16]);
-    wv_require_ok!(sgate.send(&buf, RecvGate::def()));
-    wv_require_ok!(sgate.send(&buf, RecvGate::def()));
+    wv_assert_ok!(t, sgate.send(&buf, RecvGate::def()));
+    wv_assert_ok!(t, sgate.send(&buf, RecvGate::def()));
     wv_assert_err!(t, sgate.send(&buf, RecvGate::def()), Code::NoCredits);
 
     {
@@ -98,7 +100,7 @@ fn send_reply(t: &mut dyn WvTester) {
         SGateArgs::new(&rgate).credits(1).label(0x1234)
     ));
 
-    wv_require_ok!(send_vmsg!(&sgate, reply_gate, 0x123, 12, "test"));
+    wv_assert_ok!(t, send_vmsg!(&sgate, reply_gate, 0x123, 12, "test"));
 
     // sgate -> rgate
     {
@@ -112,7 +114,7 @@ fn send_reply(t: &mut dyn WvTester) {
         wv_assert_eq!(t, i2, 12);
         wv_assert_eq!(t, s, "test");
 
-        wv_require_ok!(reply_vmsg!(msg, 44, 3));
+        wv_assert_ok!(t, reply_vmsg!(msg, 44, 3));
     }
 
     // rgate -> reply_gate

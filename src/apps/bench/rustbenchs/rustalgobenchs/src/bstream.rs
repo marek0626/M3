@@ -20,7 +20,7 @@ use m3::col::String;
 use m3::com::{recv_msg, RecvGate, SGateArgs, SendGate};
 use m3::test::WvTester;
 use m3::time::{CycleInstant, Profiler};
-use m3::{reply_vmsg, send_vmsg, wv_assert_eq, wv_perf, wv_require_ok, wv_run_test};
+use m3::{reply_vmsg, send_vmsg, wv_assert_eq, wv_assert_ok, wv_perf, wv_require_ok, wv_run_test};
 
 const MSG_ORD: u32 = 8;
 
@@ -42,11 +42,11 @@ fn pingpong_1u64(t: &mut dyn WvTester) {
     wv_perf!(
         "pingpong with (1 * u64) msgs",
         prof.run::<CycleInstant, _>(|| {
-            wv_require_ok!(send_vmsg!(&sgate, reply_gate, 0u64));
+            wv_assert_ok!(t, send_vmsg!(&sgate, reply_gate, 0u64));
 
             let mut msg = wv_require_ok!(recv_msg(&rgate));
             wv_assert_eq!(t, msg.pop::<u64>(), Ok(0));
-            wv_require_ok!(reply_vmsg!(msg, 0u64));
+            wv_assert_ok!(t, reply_vmsg!(msg, 0u64));
 
             let mut reply = wv_require_ok!(recv_msg(reply_gate));
             wv_assert_eq!(t, reply.pop::<u64>(), Ok(0));
@@ -64,12 +64,12 @@ fn pingpong_2u64(t: &mut dyn WvTester) {
     wv_perf!(
         "pingpong with (2 * u64) msgs",
         prof.run::<CycleInstant, _>(|| {
-            wv_require_ok!(send_vmsg!(&sgate, reply_gate, 23u64, 42u64));
+            wv_assert_ok!(t, send_vmsg!(&sgate, reply_gate, 23u64, 42u64));
 
             let mut msg = wv_require_ok!(recv_msg(&rgate));
             wv_assert_eq!(t, msg.pop::<u64>(), Ok(23));
             wv_assert_eq!(t, msg.pop::<u64>(), Ok(42));
-            wv_require_ok!(reply_vmsg!(msg, 5u64, 6u64));
+            wv_assert_ok!(t, reply_vmsg!(msg, 5u64, 6u64));
 
             let mut reply = wv_require_ok!(recv_msg(reply_gate));
             wv_assert_eq!(t, reply.pop::<u64>(), Ok(5));
@@ -88,14 +88,17 @@ fn pingpong_4u64(t: &mut dyn WvTester) {
     wv_perf!(
         "pingpong with (4 * u64) msgs",
         prof.run::<CycleInstant, _>(|| {
-            wv_require_ok!(send_vmsg!(&sgate, reply_gate, 23u64, 42u64, 10u64, 12u64));
+            wv_assert_ok!(
+                t,
+                send_vmsg!(&sgate, reply_gate, 23u64, 42u64, 10u64, 12u64)
+            );
 
             let mut msg = wv_require_ok!(recv_msg(&rgate));
             wv_assert_eq!(t, msg.pop::<u64>(), Ok(23));
             wv_assert_eq!(t, msg.pop::<u64>(), Ok(42));
             wv_assert_eq!(t, msg.pop::<u64>(), Ok(10));
             wv_assert_eq!(t, msg.pop::<u64>(), Ok(12));
-            wv_require_ok!(reply_vmsg!(msg, 5u64, 6u64, 7u64, 8u64));
+            wv_assert_ok!(t, reply_vmsg!(msg, 5u64, 6u64, 7u64, 8u64));
 
             let mut reply = wv_require_ok!(recv_msg(reply_gate));
             wv_assert_eq!(t, reply.pop::<u64>(), Ok(5));
@@ -116,11 +119,11 @@ fn pingpong_str(t: &mut dyn WvTester) {
     wv_perf!(
         "pingpong with (String) msgs",
         prof.run::<CycleInstant, _>(|| {
-            wv_require_ok!(send_vmsg!(&sgate, reply_gate, "test"));
+            wv_assert_ok!(t, send_vmsg!(&sgate, reply_gate, "test"));
 
             let mut msg = wv_require_ok!(recv_msg(&rgate));
             wv_assert_eq!(t, msg.pop::<String>().unwrap().len(), 4);
-            wv_require_ok!(reply_vmsg!(msg, "foobar"));
+            wv_assert_ok!(t, reply_vmsg!(msg, "foobar"));
 
             let mut reply = wv_require_ok!(recv_msg(reply_gate));
             wv_assert_eq!(t, reply.pop::<String>().unwrap().len(), 6);
@@ -138,11 +141,11 @@ fn pingpong_strslice(t: &mut dyn WvTester) {
     wv_perf!(
         "pingpong with (&str) msgs",
         prof.run::<CycleInstant, _>(|| {
-            wv_require_ok!(send_vmsg!(&sgate, reply_gate, "test"));
+            wv_assert_ok!(t, send_vmsg!(&sgate, reply_gate, "test"));
 
             let mut msg = wv_require_ok!(recv_msg(&rgate));
             wv_assert_eq!(t, msg.pop::<&str>().unwrap().len(), 4);
-            wv_require_ok!(reply_vmsg!(msg, "foobar"));
+            wv_assert_ok!(t, reply_vmsg!(msg, "foobar"));
 
             let mut reply = wv_require_ok!(recv_msg(reply_gate));
             wv_assert_eq!(t, reply.pop::<&str>().unwrap().len(), 6);

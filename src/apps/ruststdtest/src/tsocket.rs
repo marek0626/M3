@@ -19,7 +19,7 @@ use m3::test::DefaultWvTester;
 use m3::test::WvTester;
 use m3::tiles::{ActivityArgs, ChildActivity, OwnActivity, RunningActivity, Tile};
 use m3::time::TimeDuration;
-use m3::{wv_assert, wv_assert_eq, wv_require_ok, wv_run_test};
+use m3::{wv_assert, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
 
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -41,7 +41,7 @@ fn udp_echo(t: &mut dyn WvTester) {
     wv_assert_eq!(t, local.ip(), IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
     wv_assert_eq!(t, local.port(), 3000);
 
-    wv_require_ok!(socket.connect("127.0.0.1:1337"));
+    wv_assert_ok!(t, socket.connect("127.0.0.1:1337"));
 
     let peer = wv_require_ok!(socket.peer_addr());
     wv_assert_eq!(t, peer.ip(), IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));

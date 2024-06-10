@@ -19,7 +19,7 @@
 use m3::com::{RGateArgs, RecvGate, SendCap};
 use m3::errors::Code;
 use m3::test::WvTester;
-use m3::{wv_assert_err, wv_run_test};
+use m3::{wv_assert_err, wv_assert_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, create);
@@ -52,7 +52,7 @@ fn destroy(t: &mut dyn WvTester) {
         // because we would need to move rg to the child *and* use it in the parent
         let sg = wv_require_ok!(SendCap::new_with(SGateArgs::new(&rg).credits(1)));
 
-        wv_require_ok!(child.delegate_obj(sg.sel()));
+        wv_assert_ok!(t, child.delegate_obj(sg.sel()));
 
         let mut dst = child.data_sink();
         dst.push(sg.sel());
@@ -64,7 +64,7 @@ fn destroy(t: &mut dyn WvTester) {
 
             let mut i = 0;
             for _ in 0..10 {
-                wv_require_ok!(send_recv!(&sg, RecvGate::def(), i, i + 1, i + 2));
+                wv_assert_ok!(t, send_recv!(&sg, RecvGate::def(), i, i + 1, i + 2));
                 i += 3;
             }
             wv_assert_err!(
@@ -85,7 +85,7 @@ fn destroy(t: &mut dyn WvTester) {
             wv_assert_eq!(t, a1, i * 3 + 0);
             wv_assert_eq!(t, a2, i * 3 + 1);
             wv_assert_eq!(t, a3, i * 3 + 2);
-            wv_require_ok!(reply_vmsg!(msg, 0));
+            wv_assert_ok!(t, reply_vmsg!(msg, 0));
         }
 
         act

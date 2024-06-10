@@ -17,7 +17,7 @@ use m3::chan::msgs as msgschan;
 use m3::errors::Code;
 use m3::test::WvTester;
 use m3::tiles::{Activity, ActivityArgs, ChildActivity, RunningActivity, Tile};
-use m3::{run_with_channels, wv_assert_eq, wv_require_ok, wv_run_test};
+use m3::{run_with_channels, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, test_chan);
@@ -31,8 +31,8 @@ fn test_chan(t: &mut dyn WvTester) {
     let tile = wv_require_ok!(Tile::get("compat|own"));
     let mut act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
 
-    wv_require_ok!(act.delegate_obj(rx.sel()));
-    wv_require_ok!(act.delegate_obj(res_tx.sel()));
+    wv_assert_ok!(t, act.delegate_obj(rx.sel()));
+    wv_assert_ok!(t, act.delegate_obj(res_tx.sel()));
 
     let mut sink = act.data_sink();
     sink.push(rx.sel());
@@ -54,7 +54,7 @@ fn test_chan(t: &mut dyn WvTester) {
     // for the activities to finish.
     let tx = wv_require_ok!(tx.activate());
     let res_rx = wv_require_ok!(res_rx.activate());
-    wv_require_ok!(tx.send::<u32>(42));
+    wv_assert_ok!(t, tx.send::<u32>(42));
     let res: i32 = wv_require_ok!(res_rx.recv());
     wv_assert_eq!(t, res, 42 + 5);
 
@@ -80,7 +80,7 @@ fn test_chan_macro(t: &mut dyn WvTester) {
 
     let tx = wv_require_ok!(tx.activate());
     let res_rx = wv_require_ok!(res_rx.activate());
-    wv_require_ok!(tx.send::<u32>(42));
+    wv_assert_ok!(t, tx.send::<u32>(42));
     let res: i32 = wv_require_ok!(res_rx.recv());
     wv_assert_eq!(t, res, 42 + 5);
 

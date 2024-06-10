@@ -19,7 +19,7 @@ use m3::io::{Read, Write};
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ChildActivity, RunningActivity, Tile};
 use m3::vfs::{OpenFlags, VFS};
-use m3::{wv_assert_eq, wv_require_ok, wv_run_test};
+use m3::{wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, taking_turns);
@@ -32,12 +32,12 @@ fn get_counter(filename: &str) -> u32 {
     buf.parse::<u32>().unwrap()
 }
 
-fn set_counter(filename: &str, value: u32) {
+fn set_counter(t: &mut dyn WvTester, filename: &str, value: u32) {
     let mut file = wv_require_ok!(VFS::open(
         filename,
         OpenFlags::W | OpenFlags::TRUNC | OpenFlags::CREATE
     ));
-    wv_require_ok!(write!(file, "{}", value));
+    wv_assert_ok!(t, write!(file, "{}", value));
 }
 
 fn taking_turns(t: &mut dyn WvTester) {
@@ -46,13 +46,13 @@ fn taking_turns(t: &mut dyn WvTester) {
 
     let tile = wv_require_ok!(Tile::get("compat|own"));
     let mut child = wv_require_ok!(ChildActivity::new(tile, "child"));
-    wv_require_ok!(child.delegate_obj(sem0.sel()));
-    wv_require_ok!(child.delegate_obj(sem1.sel()));
+    wv_assert_ok!(t, child.delegate_obj(sem0.sel()));
+    wv_assert_ok!(t, child.delegate_obj(sem1.sel()));
 
     child.add_mount("/", "/");
 
-    set_counter("/sem0", 0);
-    set_counter("/sem1", 0);
+    set_counter(t, "/sem0", 0);
+    set_counter(t, "/sem1", 0);
 
     let mut dst = child.data_sink();
     dst.push(sem0.sel());
@@ -67,20 +67,20 @@ fn taking_turns(t: &mut dyn WvTester) {
         let sem0 = Semaphore::bind(sem0_sel);
         let sem1 = Semaphore::bind(sem1_sel);
         for i in 0..10 {
-            wv_require_ok!(sem0.down());
+            wv_assert_ok!(t, sem0.down());
             wv_assert_eq!(t, get_counter("/sem0"), i);
-            set_counter("/sem1", i);
-            wv_require_ok!(sem1.up());
+            set_counter(&mut t, "/sem1", i);
+            wv_assert_ok!(t, sem1.up());
         }
         Ok(())
     }));
 
     for i in 0..10 {
-        wv_require_ok!(sem1.down());
+        wv_assert_ok!(t, sem1.down());
         wv_assert_eq!(t, get_counter("/sem1"), i);
-        set_counter("/sem0", i + 1);
-        wv_require_ok!(sem0.up());
+        set_counter(t, "/sem0", i + 1);
+        wv_assert_ok!(t, sem0.up());
     }
 
-    wv_require_ok!(act.wait());
+    wv_assert_ok!(t, act.wait());
 }

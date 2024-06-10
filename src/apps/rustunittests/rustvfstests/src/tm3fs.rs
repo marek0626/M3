@@ -21,7 +21,7 @@ use m3::errors::Code;
 use m3::io::Write;
 use m3::test::WvTester;
 use m3::vfs::{FileMode, OpenFlags, VFS};
-use m3::{wv_assert_eq, wv_assert_err, wv_require_ok, wv_run_test};
+use m3::{wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, paths);
@@ -30,19 +30,22 @@ pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, rename);
 }
 
-fn setup() {
-    wv_require_ok!(VFS::mkdir("/example", FileMode::from_bits(0o755).unwrap()));
+fn setup(t: &mut dyn WvTester) {
+    wv_assert_ok!(
+        t,
+        VFS::mkdir("/example", FileMode::from_bits(0o755).unwrap())
+    );
 
     let mut file = wv_require_ok!(VFS::open(
         "/example/myfile",
         OpenFlags::W | OpenFlags::CREATE
     ));
-    wv_require_ok!(write!(file, "text\n"));
+    wv_assert_ok!(t, write!(file, "text\n"));
 }
 
-fn teardown() {
-    wv_require_ok!(VFS::unlink("/example/myfile/"));
-    wv_require_ok!(VFS::rmdir("/example/"));
+fn teardown(t: &mut dyn WvTester) {
+    wv_assert_ok!(t, VFS::unlink("/example/myfile/"));
+    wv_assert_ok!(t, VFS::rmdir("/example/"));
 }
 
 fn paths(t: &mut dyn WvTester) {
@@ -65,7 +68,7 @@ fn paths(t: &mut dyn WvTester) {
 
     wv_assert_err!(t, VFS::set_cwd("/non-existing-dir"), Code::NoSuchFile);
     wv_assert_err!(t, VFS::set_cwd("/test.txt"), Code::IsNoDir);
-    wv_require_ok!(VFS::set_cwd(".././bin/./."));
+    wv_assert_ok!(t, VFS::set_cwd(".././bin/./."));
     wv_assert_eq!(t, VFS::cwd(), "/bin".to_string());
 
     wv_assert_eq!(t, VFS::abs_path(""), "/bin".to_string());
@@ -84,20 +87,23 @@ fn paths(t: &mut dyn WvTester) {
         "/bin/.test".to_string()
     );
 
-    wv_require_ok!(VFS::set_cwd("/"));
+    wv_assert_ok!(t, VFS::set_cwd("/"));
 }
 
 fn mkdir_rmdir(t: &mut dyn WvTester) {
-    setup();
+    setup(t);
 
     // create and remove directory within directory
-    wv_require_ok!(VFS::mkdir("/parent", FileMode::from_bits(0o755).unwrap()));
-    wv_require_ok!(VFS::mkdir(
-        "/parent/child",
-        FileMode::from_bits(0o755).unwrap()
-    ));
-    wv_require_ok!(VFS::rmdir("/parent/child"));
-    wv_require_ok!(VFS::rmdir("/parent"));
+    wv_assert_ok!(
+        t,
+        VFS::mkdir("/parent", FileMode::from_bits(0o755).unwrap())
+    );
+    wv_assert_ok!(
+        t,
+        VFS::mkdir("/parent/child", FileMode::from_bits(0o755).unwrap())
+    );
+    wv_assert_ok!(t, VFS::rmdir("/parent/child"));
+    wv_assert_ok!(t, VFS::rmdir("/parent"));
 
     // use weird paths
     wv_assert_err!(
@@ -110,13 +116,13 @@ fn mkdir_rmdir(t: &mut dyn WvTester) {
         VFS::mkdir("/foo/..", FileMode::from_bits(0o755).unwrap()),
         Code::NoSuchFile
     );
-    wv_require_ok!(VFS::mkdir(
-        "/./../foo/",
-        FileMode::from_bits(0o755).unwrap()
-    ));
+    wv_assert_ok!(
+        t,
+        VFS::mkdir("/./../foo/", FileMode::from_bits(0o755).unwrap())
+    );
     wv_assert_err!(t, VFS::rmdir("/foo/."), Code::InvArgs);
     wv_assert_err!(t, VFS::rmdir("/foo/bar/.."), Code::NoSuchFile);
-    wv_require_ok!(VFS::rmdir("///.././foo///"));
+    wv_assert_ok!(t, VFS::rmdir("///.././foo///"));
 
     // test mkdir errors
     wv_assert_err!(
@@ -141,16 +147,16 @@ fn mkdir_rmdir(t: &mut dyn WvTester) {
     wv_assert_err!(t, VFS::rmdir("/example"), Code::DirNotEmpty);
     wv_assert_err!(t, VFS::rmdir("/"), Code::InvArgs);
 
-    teardown();
+    teardown(t);
 }
 
 fn link_unlink(t: &mut dyn WvTester) {
-    setup();
+    setup(t);
 
     // test link errors
     wv_assert_err!(t, VFS::link("/example/", "/"), Code::IsDir);
     wv_assert_err!(t, VFS::link("/example", "/newpath"), Code::IsDir);
-    wv_require_ok!(VFS::link("/example/myfile/", "/newpath"));
+    wv_assert_ok!(t, VFS::link("/example/myfile/", "/newpath"));
     wv_assert_err!(t, VFS::link("/example/myfile", "/newpath"), Code::Exists);
 
     // use weird paths
@@ -170,10 +176,10 @@ fn link_unlink(t: &mut dyn WvTester) {
         VFS::link("/example/myfile", "/newtest/.."),
         Code::NoSuchFile
     );
-    wv_require_ok!(VFS::link("//example/./../example/myfile", "/newtest"));
+    wv_assert_ok!(t, VFS::link("//example/./../example/myfile", "/newtest"));
     wv_assert_err!(t, VFS::unlink("/example/myfile/."), Code::InvArgs);
     wv_assert_err!(t, VFS::unlink("/example/myfile/.."), Code::InvArgs);
-    wv_require_ok!(VFS::unlink("///example///../newtest"));
+    wv_assert_ok!(t, VFS::unlink("///example///../newtest"));
 
     // test unlink errors
     wv_assert_err!(t, VFS::unlink("/"), Code::InvArgs);
@@ -181,15 +187,15 @@ fn link_unlink(t: &mut dyn WvTester) {
     wv_assert_err!(t, VFS::unlink("/example/foo"), Code::NoSuchFile);
 
     // test cross-fs link
-    wv_require_ok!(VFS::mount("/fs/", "m3fs", "m3fs-clone"));
+    wv_assert_ok!(t, VFS::mount("/fs/", "m3fs", "m3fs-clone"));
     wv_assert_err!(t, VFS::link("/example/myfile", "/fs/foo"), Code::XfsLink);
-    wv_require_ok!(VFS::unmount("/fs/"));
+    wv_assert_ok!(t, VFS::unmount("/fs/"));
 
-    teardown();
+    teardown(t);
 }
 
 fn rename(t: &mut dyn WvTester) {
-    setup();
+    setup(t);
 
     // test errors
     wv_assert_err!(t, VFS::rename("/", "/example"), Code::InvArgs);
@@ -229,26 +235,32 @@ fn rename(t: &mut dyn WvTester) {
     );
 
     // successful rename
-    wv_require_ok!(VFS::rename(
-        "//example/./myfile",
-        "/example/../example/myotherfile//"
-    ));
+    wv_assert_ok!(
+        t,
+        VFS::rename("//example/./myfile", "/example/../example/myotherfile//")
+    );
     wv_assert_err!(
         t,
         VFS::open("/example/myfile", OpenFlags::R),
         Code::NoSuchFile
     );
-    wv_require_ok!(VFS::open("/example/myotherfile", OpenFlags::R));
+    wv_assert_ok!(t, VFS::open("/example/myotherfile", OpenFlags::R));
 
     // if both link to the same file, rename has no effect
-    wv_require_ok!(VFS::link("/example/myotherfile", "/example/myotherfile2"));
-    wv_require_ok!(VFS::rename("/example/myotherfile", "/example/myotherfile2"));
-    wv_require_ok!(VFS::open("/example/myotherfile", OpenFlags::R));
-    wv_require_ok!(VFS::open("/example/myotherfile2", OpenFlags::R));
+    wv_assert_ok!(
+        t,
+        VFS::link("/example/myotherfile", "/example/myotherfile2")
+    );
+    wv_assert_ok!(
+        t,
+        VFS::rename("/example/myotherfile", "/example/myotherfile2")
+    );
+    wv_assert_ok!(t, VFS::open("/example/myotherfile", OpenFlags::R));
+    wv_assert_ok!(t, VFS::open("/example/myotherfile2", OpenFlags::R));
 
     // undo changes
-    wv_require_ok!(VFS::unlink("/example/myotherfile"));
-    wv_require_ok!(VFS::rename("/example/myotherfile2", "/example/myfile"));
+    wv_assert_ok!(t, VFS::unlink("/example/myotherfile"));
+    wv_assert_ok!(t, VFS::rename("/example/myotherfile2", "/example/myfile"));
 
-    teardown();
+    teardown(t);
 }

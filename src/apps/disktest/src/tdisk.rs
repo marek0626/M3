@@ -17,10 +17,10 @@ use m3::col::{ToString, Vec};
 use m3::io::{Read, Write};
 use m3::test::WvTester;
 use m3::vfs::{FileRef, GenericFile, OpenFlags, VFS};
-use m3::{vec, wv_assert_eq, wv_require_ok, wv_run_test};
+use m3::{vec, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
-    wv_require_ok!(VFS::mount("/", "m3fs", "m3fs"));
+    wv_assert_ok!(t, VFS::mount("/", "m3fs", "m3fs"));
 
     wv_run_test!(t, text_files);
     wv_run_test!(t, pat_file);
@@ -56,9 +56,9 @@ fn write_file(t: &mut dyn WvTester) {
             "/newfile",
             OpenFlags::W | OpenFlags::CREATE | OpenFlags::TRUNC
         ));
-        wv_require_ok!(write!(file, "my content is {:#x}", 0x1234));
+        wv_assert_ok!(t, write!(file, "my content is {:#x}", 0x1234));
         // ensure it's written to disk
-        wv_require_ok!(file.sync());
+        wv_assert_ok!(t, file.sync());
     }
 
     // read content back

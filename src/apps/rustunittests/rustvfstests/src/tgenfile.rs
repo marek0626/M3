@@ -21,7 +21,7 @@ use m3::errors::Code;
 use m3::io::{Read, Write};
 use m3::test::WvTester;
 use m3::vfs::{File, FileRef, GenericFile, OpenFlags, Seek, SeekMode, VFS};
-use m3::{vec, wv_assert_eq, wv_assert_err, wv_require_ok, wv_run_test};
+use m3::{vec, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, permissions);
@@ -75,11 +75,11 @@ fn read_exact(t: &mut dyn WvTester) {
     let mut file = wv_require_ok!(VFS::open(filename, OpenFlags::R));
 
     let mut buf = [0u8; 32];
-    wv_require_ok!(file.read_exact(&mut buf[0..8]));
+    wv_assert_ok!(t, file.read_exact(&mut buf[0..8]));
     wv_assert_eq!(t, &buf[0..8], &content[0..8]);
 
     wv_assert_eq!(t, file.seek(0, SeekMode::Set), Ok(0));
-    wv_require_ok!(file.read_exact(&mut buf[0..16]));
+    wv_assert_ok!(t, file.read_exact(&mut buf[0..16]));
     wv_assert_eq!(t, &buf[0..16], &content[0..16]);
 
     wv_assert_eq!(t, file.seek(0, SeekMode::Set), Ok(0));
@@ -126,7 +126,7 @@ fn write_and_read_file(t: &mut dyn WvTester) {
 
     let mut file = wv_require_ok!(VFS::open(filename, OpenFlags::RW));
 
-    wv_require_ok!(write!(file, "{}", content));
+    wv_assert_ok!(t, write!(file, "{}", content));
 
     wv_assert_eq!(t, file.seek(0, SeekMode::Cur), Ok(content.len()));
     wv_assert_eq!(t, file.seek(0, SeekMode::Set), Ok(0));
@@ -146,14 +146,14 @@ fn write_and_read_file(t: &mut dyn WvTester) {
 fn write_then_read_file(t: &mut dyn WvTester) {
     {
         let mut file = wv_require_ok!(VFS::open("/newfile", OpenFlags::CREATE | OpenFlags::W));
-        wv_require_ok!(write!(file, "Hallo World!"));
+        wv_assert_ok!(t, write!(file, "Hallo World!"));
     }
 
     {
         let mut file = wv_require_ok!(VFS::open("/newfile", OpenFlags::RW));
 
         // Replace some text
-        wv_require_ok!(write!(file, "Hello "));
+        wv_assert_ok!(t, write!(file, "Hello "));
 
         // Read the rest of the text
         let text = wv_require_ok!(file.read_to_string());
@@ -171,12 +171,15 @@ fn write_then_read_file(t: &mut dyn WvTester) {
 fn write_fmt(t: &mut dyn WvTester) {
     let mut file = wv_require_ok!(VFS::open("/newfile", OpenFlags::CREATE | OpenFlags::RW));
 
-    wv_require_ok!(write!(
-        file,
-        "This {:.3} is the {}th test of {:#0X}!\n",
-        "foobar", 42, 0xAB_CDEF
-    ));
-    wv_require_ok!(write!(file, "More formatting: {:?}", Some(Some(1))));
+    wv_assert_ok!(
+        t,
+        write!(
+            file,
+            "This {:.3} is the {}th test of {:#0X}!\n",
+            "foobar", 42, 0xAB_CDEF
+        )
+    );
+    wv_assert_ok!(t, write!(file, "More formatting: {:?}", Some(Some(1))));
 
     wv_assert_eq!(t, file.seek(0, SeekMode::Set), Ok(0));
 
@@ -232,7 +235,7 @@ fn append(t: &mut dyn WvTester) {
         let mut file = wv_require_ok!(VFS::open("/test.txt", OpenFlags::W | OpenFlags::APPEND));
         // TODO perform the seek to end here, because we cannot do that during open atm (m3fs
         // already borrowed as mutable). it's the wrong semantic anyway, so ...
-        wv_require_ok!(file.seek(0, SeekMode::End));
+        wv_assert_ok!(t, file.seek(0, SeekMode::End));
 
         let buf = _get_pat_vector(1024);
         for _ in 0..2 {

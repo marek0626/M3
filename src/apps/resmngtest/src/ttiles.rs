@@ -19,7 +19,7 @@ use m3::rc::Rc;
 use m3::tcu::TileId;
 use m3::test::WvTester;
 use m3::tiles::Tile;
-use m3::{wv_assert_eq, wv_assert_err, wv_require_ok, wv_run_test};
+use m3::{wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_run_test};
 
 use resmng::resources::tiles::TileManager;
 
@@ -78,7 +78,10 @@ fn find(t: &mut dyn WvTester) {
 fn usage(t: &mut dyn WvTester) {
     let mng = create_tiles();
 
-    wv_require_ok!(mng.find(TileDesc::new(TileType::Comp, TileISA::RISCV64, 0)));
+    wv_assert_ok!(
+        t,
+        mng.find(TileDesc::new(TileType::Comp, TileISA::RISCV64, 0))
+    );
     let riscv = wv_require_ok!(mng.find(TileDesc::new(TileType::Comp, TileISA::RISCV64, 0)));
     mng.add_user(&riscv);
 
@@ -99,5 +102,8 @@ fn usage(t: &mut dyn WvTester) {
 
     mng.remove_user(&riscv);
 
-    wv_require_ok!(mng.find(TileDesc::new(TileType::Comp, TileISA::RISCV64, 0)));
+    wv_assert_ok!(
+        t,
+        mng.find(TileDesc::new(TileType::Comp, TileISA::RISCV64, 0))
+    );
 }

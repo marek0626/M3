@@ -28,7 +28,7 @@ use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ActivityArgs, ChildActivity, RunningActivity, Tile};
 use m3::time::{CycleInstant, Profiler};
 use m3::util::math::next_log2;
-use m3::{format, wv_assert_eq, wv_perf, wv_require_ok};
+use m3::{format, wv_assert_eq, wv_assert_ok, wv_perf, wv_require_ok};
 
 static BUF: StaticRefCell<AlignedBuf<8192>> = StaticRefCell::new(AlignedBuf::new_zeroed());
 
@@ -46,12 +46,14 @@ pub fn main() -> Result<(), Error> {
 
     let rgate = wv_require_ok!(RecvCap::new(MSG_ORD, MSG_ORD));
 
-    wv_require_ok!(act.delegate_obj(rgate.sel()));
+    wv_assert_ok!(t, act.delegate_obj(rgate.sel()));
 
     let mut dst = act.data_sink();
     dst.push(rgate.sel());
 
     let act = wv_require_ok!(act.run(|| {
+        let mut t = DefaultWvTester::default();
+
         let rgate_sel: Selector = Activity::own().data_source().pop().unwrap();
         let rgate = RecvGate::new_bind(rgate_sel).unwrap();
 
@@ -59,7 +61,7 @@ pub fn main() -> Result<(), Error> {
             let size = (1 << i).min(MAX_MSG_SIZE);
             for _ in 0..RUNS + WARMUP {
                 let mut msg = wv_require_ok!(recv_msg(&rgate));
-                wv_require_ok!(msg.reply_aligned(BUF.borrow().as_ptr(), size));
+                wv_assert_ok!(t, msg.reply_aligned(BUF.borrow().as_ptr(), size));
             }
         }
         Ok(())
@@ -76,9 +78,12 @@ pub fn main() -> Result<(), Error> {
         wv_perf!(
             format!("pingpong with {}b msgs", size),
             prof.run::<CycleInstant, _>(|| {
-                wv_require_ok!(sgate.send_aligned(BUF.borrow().as_ptr(), size, &reply_gate));
+                wv_assert_ok!(
+                    t,
+                    sgate.send_aligned(BUF.borrow().as_ptr(), size, &reply_gate)
+                );
                 let msg = wv_require_ok!(reply_gate.receive(Some(&sgate)));
-                wv_require_ok!(reply_gate.ack_msg(msg));
+                wv_assert_ok!(t, reply_gate.ack_msg(msg));
             })
         );
     }

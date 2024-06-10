@@ -19,7 +19,7 @@
 use m3::io::{Read, Write};
 use m3::test::WvTester;
 use m3::vfs::{BufReader, BufWriter, OpenFlags, VFS};
-use m3::{wv_assert_eq, wv_require_ok, wv_run_test};
+use m3::{wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, read_write);
@@ -30,11 +30,14 @@ fn read_write(t: &mut dyn WvTester) {
         let file = wv_require_ok!(VFS::open("/myfile", OpenFlags::CREATE | OpenFlags::W));
         let mut bfile = BufWriter::new(file);
 
-        wv_require_ok!(write!(
-            bfile,
-            "This {:.3} is the {}th test of {:#0X}!\n",
-            "foobar", 42, 0xAB_CDEF
-        ));
+        wv_assert_ok!(
+            t,
+            write!(
+                bfile,
+                "This {:.3} is the {}th test of {:#0X}!\n",
+                "foobar", 42, 0xAB_CDEF
+            )
+        );
     }
 
     {

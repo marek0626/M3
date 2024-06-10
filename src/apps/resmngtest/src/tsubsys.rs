@@ -19,7 +19,7 @@ use m3::kif::Perm;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ActivityArgs, ChildActivity, RunningActivity, Tile};
 use m3::time::TimeDuration;
-use m3::{wv_assert, wv_assert_eq, wv_require_ok, wv_require_some, wv_run_test};
+use m3::{wv_assert, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_require_some, wv_run_test};
 
 use resmng::childs::Child;
 use resmng::subsys::{Subsystem, SubsystemBuilder};
@@ -45,14 +45,15 @@ fn subsys_builder(t: &mut dyn WvTester) {
 
     let mut child_sub = SubsystemBuilder::default();
 
-    wv_require_ok!(
+    wv_assert_ok!(
+        t,
         child_sub.add_config("<app args=\"test\"/>", |size| MemGate::new(size, Perm::RW))
     );
     child_sub.add_mod(wv_require_ok!(MemCap::new(0x1000, Perm::RW)), "test");
     child_sub.add_mem(wv_require_ok!(MemCap::new(0x4000, Perm::R)), false);
     child_sub.add_tile(wv_require_ok!(Tile::get("compat")));
 
-    wv_require_ok!(child_sub.finalize_async(&mut res, 0, &mut child));
+    wv_assert_ok!(t, child_sub.finalize_async(&mut res, 0, &mut child));
 
     let run = wv_require_ok!(child.run(|| {
         let mut t = DefaultWvTester::default();
@@ -96,13 +97,16 @@ fn start_simple(t: &mut dyn WvTester) {
             ));
             wv_assert_eq!(t, childs.len(), 1);
 
-            wv_require_ok!(Subsystem::start_async(
-                &mut childmng,
-                &mut childs,
-                &reqs,
-                &mut res,
-                &mut TestStarter {}
-            ));
+            wv_assert_ok!(
+                t,
+                Subsystem::start_async(
+                    &mut childmng,
+                    &mut childs,
+                    &reqs,
+                    &mut res,
+                    &mut TestStarter {}
+                )
+            );
 
             wv_assert_eq!(t, childmng.children(), 1);
             wv_assert_eq!(t, childmng.daemons(), 0);
@@ -157,13 +161,16 @@ fn start_service_deps(t: &mut dyn WvTester) {
             ));
             wv_assert_eq!(t, childs.len(), 4);
 
-            wv_require_ok!(Subsystem::start_async(
-                &mut childmng,
-                &mut childs,
-                &reqs,
-                &mut res,
-                &mut TestStarter {}
-            ));
+            wv_assert_ok!(
+                t,
+                Subsystem::start_async(
+                    &mut childmng,
+                    &mut childs,
+                    &reqs,
+                    &mut res,
+                    &mut TestStarter {}
+                )
+            );
 
             wv_assert_eq!(t, childs.len(), 1);
             wv_assert_eq!(t, childs[0].name(), "2");
@@ -231,13 +238,16 @@ fn start_resource_split(t: &mut dyn WvTester) {
             ));
             wv_assert_eq!(t, childs.len(), 5);
 
-            wv_require_ok!(Subsystem::start_async(
-                &mut childmng,
-                &mut childs,
-                &reqs,
-                &mut res,
-                &mut TestStarter {}
-            ));
+            wv_assert_ok!(
+                t,
+                Subsystem::start_async(
+                    &mut childmng,
+                    &mut childs,
+                    &reqs,
+                    &mut res,
+                    &mut TestStarter {}
+                )
+            );
             wv_assert_eq!(t, childs.len(), 0);
 
             wv_assert_eq!(t, childmng.children(), 5);

@@ -23,11 +23,11 @@ use m3::{
     mem::{MsgBuf, VirtAddr},
     serialize::M3Deserializer,
     tcu::{self, EpId},
-    test::WvTester,
+    test::{DefaultWvTester, WvTester},
     tiles::Activity,
     time::{CycleInstant, Profiler, Runner},
     vfs::{FileMode, FileRef, GenericFile, OpenFlags, VFS},
-    wv_perf, wv_require_ok, wv_run_test,
+    wv_assert_ok, wv_perf, wv_require_ok, wv_run_test,
 };
 
 pub fn run(t: &mut dyn WvTester) {
@@ -68,26 +68,26 @@ fn noop_syscall(rbuf: VirtAddr) -> Result<(), Error> {
 }
 
 #[inline(never)]
-fn bench_custom_noop_syscall(_t: &mut dyn WvTester) {
+fn bench_custom_noop_syscall(t: &mut dyn WvTester) {
     let profiler = Profiler::default().warmup(10).repeats(100);
 
     let (rbuf, _) = Activity::own().tile_desc().rbuf_std_space();
     wv_perf!(
         "custom-noop-syscall",
         profiler.run::<CycleInstant, _>(|| {
-            wv_require_ok!(noop_syscall(rbuf));
+            wv_assert_ok!(t, noop_syscall(rbuf));
         })
     );
 }
 
 #[inline(never)]
-fn bench_m3_noop_syscall(_t: &mut dyn WvTester) {
+fn bench_m3_noop_syscall(t: &mut dyn WvTester) {
     let profiler = Profiler::default().warmup(10).repeats(100);
 
     wv_perf!(
         "noop-syscall",
         profiler.run::<CycleInstant, _>(|| {
-            wv_require_ok!(m3::syscalls::noop());
+            wv_assert_ok!(t, m3::syscalls::noop());
         })
     );
 }
@@ -121,7 +121,7 @@ const READ_STR_LEN: usize = 1024 * 1024;
 const WRITE_STR_LEN: usize = 8 * 1024;
 
 #[inline(never)]
-fn bench_m3fs_read(_t: &mut dyn WvTester) {
+fn bench_m3fs_read(t: &mut dyn WvTester) {
     let profiler = Profiler::default().warmup(10).repeats(100);
 
     let mut file = wv_require_ok!(VFS::open(
@@ -129,7 +129,7 @@ fn bench_m3fs_read(_t: &mut dyn WvTester) {
         OpenFlags::CREATE | OpenFlags::RW
     ));
     let content: String = (0..READ_STR_LEN).map(|_| "a").collect();
-    wv_require_ok!(write!(file, "{}", content));
+    wv_assert_ok!(t, write!(file, "{}", content));
 
     wv_perf!(
         "m3fs-read",
@@ -142,6 +142,7 @@ fn bench_m3fs_read(_t: &mut dyn WvTester) {
 }
 
 struct WriteBenchmark {
+    tester: DefaultWvTester,
     file: FileRef<GenericFile>,
     content: String,
 }
@@ -149,6 +150,7 @@ struct WriteBenchmark {
 impl WriteBenchmark {
     fn new() -> WriteBenchmark {
         WriteBenchmark {
+            tester: DefaultWvTester::default(),
             file: wv_require_ok!(VFS::open("/new-file.txt", OpenFlags::CREATE | OpenFlags::W)),
             content: (0..WRITE_STR_LEN).map(|_| "a").collect(),
         }
@@ -157,17 +159,17 @@ impl WriteBenchmark {
 
 impl Drop for WriteBenchmark {
     fn drop(&mut self) {
-        wv_require_ok!(VFS::unlink("/new-file.txt"));
+        wv_assert_ok!(self.tester, VFS::unlink("/new-file.txt"));
     }
 }
 
 impl Runner for WriteBenchmark {
     fn run(&mut self) {
-        wv_require_ok!(self.file.write_all(self.content.as_bytes()));
+        wv_assert_ok!(self.tester, self.file.write_all(self.content.as_bytes()));
     }
 
     fn post(&mut self) {
-        wv_require_ok!(self.file.borrow().truncate(0));
+        wv_assert_ok!(self.tester, self.file.borrow().truncate(0));
     }
 }
 
@@ -182,33 +184,36 @@ fn bench_m3fs_write(_t: &mut dyn WvTester) {
 }
 
 #[inline(never)]
-fn bench_m3fs_meta(_t: &mut dyn WvTester) {
+fn bench_m3fs_meta(t: &mut dyn WvTester) {
     let profiler = Profiler::default().warmup(10).repeats(100);
 
     wv_perf!(
         "m3fs-meta",
         profiler.run::<CycleInstant, _>(|| {
-            wv_require_ok!(VFS::mkdir("/new-dir", FileMode::from_bits(0o755).unwrap()));
-            wv_require_ok!(VFS::stat("/new-dir"));
-            wv_require_ok!(VFS::open("/new-dir/new-file", OpenFlags::CREATE));
+            wv_assert_ok!(
+                t,
+                VFS::mkdir("/new-dir", FileMode::from_bits(0o755).unwrap())
+            );
+            wv_assert_ok!(t, VFS::stat("/new-dir"));
+            wv_assert_ok!(t, VFS::open("/new-dir/new-file", OpenFlags::CREATE));
 
             {
                 let mut file = wv_require_ok!(VFS::open("/new-dir/new-file", OpenFlags::W));
-                wv_require_ok!(write!(file, "test"));
+                wv_assert_ok!(t, write!(file, "test"));
             }
 
             {
                 let mut file = wv_require_ok!(VFS::open("/new-dir/new-file", OpenFlags::R));
-                wv_require_ok!(file.read_to_string());
-                wv_require_ok!(VFS::stat("/new-dir/new-file"));
+                wv_assert_ok!(t, file.read_to_string());
+                wv_assert_ok!(t, VFS::stat("/new-dir/new-file"));
             }
 
-            wv_require_ok!(VFS::link("/new-dir/new-file", "/new-link"));
-            wv_require_ok!(VFS::rename("/new-link", "/new-blink"));
-            wv_require_ok!(VFS::stat("/new-blink"));
-            wv_require_ok!(VFS::unlink("/new-blink"));
-            wv_require_ok!(VFS::unlink("/new-dir/new-file"));
-            wv_require_ok!(VFS::rmdir("/new-dir"));
+            wv_assert_ok!(t, VFS::link("/new-dir/new-file", "/new-link"));
+            wv_assert_ok!(t, VFS::rename("/new-link", "/new-blink"));
+            wv_assert_ok!(t, VFS::stat("/new-blink"));
+            wv_assert_ok!(t, VFS::unlink("/new-blink"));
+            wv_assert_ok!(t, VFS::unlink("/new-dir/new-file"));
+            wv_assert_ok!(t, VFS::rmdir("/new-dir"));
         })
     );
 }

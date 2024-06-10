@@ -14,7 +14,7 @@
  */
 
 use m3::test::WvTester;
-use m3::{wv_assert, wv_assert_eq, wv_require_ok, wv_require_some, wv_run_test};
+use m3::{wv_assert, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_require_some, wv_run_test};
 
 use std::fs::{self, File};
 use std::io::{ErrorKind, Write};
@@ -29,7 +29,7 @@ pub fn run(t: &mut dyn WvTester) {
 }
 
 fn mkdir_rmdir(t: &mut dyn WvTester) {
-    wv_require_ok!(fs::create_dir("/tmp/foo"));
+    wv_assert_ok!(t, fs::create_dir("/tmp/foo"));
     wv_assert_stderr!(t, fs::create_dir("/tmp/foo"), ErrorKind::AlreadyExists);
 
     {
@@ -38,17 +38,17 @@ fn mkdir_rmdir(t: &mut dyn WvTester) {
     }
 
     wv_assert_stderr!(t, fs::remove_dir("/tmp/foo"), ErrorKind::DirectoryNotEmpty);
-    wv_require_ok!(fs::remove_file("/tmp/foo/myfile.txt"));
-    wv_require_ok!(fs::remove_dir("/tmp/foo"));
+    wv_assert_ok!(t, fs::remove_file("/tmp/foo/myfile.txt"));
+    wv_assert_ok!(t, fs::remove_dir("/tmp/foo"));
     wv_assert_stderr!(t, fs::remove_dir("/tmp/foo"), ErrorKind::NotFound);
 }
 
 fn rename(t: &mut dyn WvTester) {
-    wv_require_ok!(File::create("/tmp/myfile.txt"));
+    wv_assert_ok!(t, File::create("/tmp/myfile.txt"));
 
-    wv_require_ok!(fs::rename("/tmp/myfile.txt", "/tmp/yourfile.txt"));
+    wv_assert_ok!(t, fs::rename("/tmp/myfile.txt", "/tmp/yourfile.txt"));
     wv_assert_stderr!(t, fs::remove_file("/tmp/myfile.txt"), ErrorKind::NotFound);
-    wv_require_ok!(fs::remove_file("/tmp/yourfile.txt"));
+    wv_assert_ok!(t, fs::remove_file("/tmp/yourfile.txt"));
 }
 
 fn listing(t: &mut dyn WvTester) {

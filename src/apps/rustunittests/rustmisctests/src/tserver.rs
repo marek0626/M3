@@ -33,7 +33,7 @@ use m3::server::{
 use m3::syscalls;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ActivityArgs, ChildActivity, OwnActivity, RunningActivity, Tile};
-use m3::{send_vmsg, wv_assert_eq, wv_assert_err, wv_require_ok, wv_run_test};
+use m3::{send_vmsg, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, testnoresp);
@@ -67,12 +67,14 @@ impl CrashSession {
 }
 
 fn server_crash_main() -> Result<(), Error> {
+    let mut t = DefaultWvTester::default();
+
     let mut hdl = wv_require_ok!(RequestHandler::new());
     let mut srv = wv_require_ok!(Server::new("test", &mut hdl));
 
     hdl.reg_cap_handler(0usize, ExcType::Obt(1), CrashSession::dummy);
 
-    wv_require_ok!(hdl.run(&mut srv));
+    wv_assert_ok!(t, hdl.run(&mut srv));
 
     Ok(())
 }
@@ -145,12 +147,14 @@ fn testcliexit(t: &mut dyn WvTester) {
     ));
 
     let sg = wv_require_ok!(SendCap::new_with(SGateArgs::new(&rg).credits(2)));
-    wv_require_ok!(client.delegate_obj(sg.sel()));
+    wv_assert_ok!(t, client.delegate_obj(sg.sel()));
 
     let mut dst = client.data_sink();
     dst.push(sg.sel());
 
     let cact = wv_require_ok!(client.run(|| {
+        let mut t = DefaultWvTester::default();
+
         let mut src = Activity::own().data_source();
         let sg_sel: Selector = src.pop().unwrap();
 
@@ -162,7 +166,7 @@ fn testcliexit(t: &mut dyn WvTester) {
 
         // first send to activate the gate
         let sg = wv_require_ok!(SendGate::new_bind(sg_sel));
-        wv_require_ok!(send_vmsg!(&sg, RecvGate::def(), 1));
+        wv_assert_ok!(t, send_vmsg!(&sg, RecvGate::def(), 1));
 
         // ensure that we drop MsgBuf before using send_vmsg below
         {
@@ -183,11 +187,11 @@ fn testcliexit(t: &mut dyn WvTester) {
                     obtain: true,
                 }
             );
-            wv_require_ok!(syscalls::send_gate().send(&req_buf, RecvGate::syscall()));
+            wv_assert_ok!(t, syscalls::send_gate().send(&req_buf, RecvGate::syscall()));
         }
 
         // now we're ready to be killed
-        wv_require_ok!(send_vmsg!(&sg, RecvGate::def(), 1));
+        wv_assert_ok!(t, send_vmsg!(&sg, RecvGate::def(), 1));
 
         // wait here; don't exit (we don't have credits anymore)
         loop {
@@ -199,11 +203,11 @@ fn testcliexit(t: &mut dyn WvTester) {
     }));
 
     // wait until the child is ready to be killed
-    wv_require_ok!(recv_msg(&rg));
-    wv_require_ok!(recv_msg(&rg));
+    wv_assert_ok!(t, recv_msg(&rg));
+    wv_assert_ok!(t, recv_msg(&rg));
 
     wv_assert_eq!(t, sact.wait(), Ok(Code::EndOfFile));
-    wv_require_ok!(cact.stop());
+    wv_assert_ok!(t, cact.stop());
 }
 
 static STOP: StaticCell<bool> = StaticCell::new(false);

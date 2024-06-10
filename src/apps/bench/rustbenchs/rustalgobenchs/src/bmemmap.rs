@@ -20,33 +20,35 @@ use m3::col::Vec;
 use m3::mem::MemMap;
 use m3::test::WvTester;
 use m3::time::{CycleInstant, Profiler, Runner};
-use m3::{wv_perf, wv_require_ok, wv_run_test};
+use m3::{wv_assert_ok, wv_perf, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, perf_alloc);
     wv_run_test!(t, perf_free);
 }
 
-fn perf_alloc(_t: &mut dyn WvTester) {
+fn perf_alloc(t: &mut dyn WvTester) {
     let prof = Profiler::default().repeats(10);
 
-    struct MemMapTester {
+    struct MemMapTester<'a> {
+        tester: &'a mut dyn WvTester,
         map: MemMap<usize>,
     }
 
-    impl Runner for MemMapTester {
+    impl Runner for MemMapTester<'_> {
         fn pre(&mut self) {
             self.map = MemMap::new(0, 0x0100_0000);
         }
 
         fn run(&mut self) {
             for _ in 0..100 {
-                wv_require_ok!(self.map.allocate(0x1000, 0x1000));
+                wv_assert_ok!(self.tester, self.map.allocate(0x1000, 0x1000));
             }
         }
     }
 
     let mut tester = MemMapTester {
+        tester: t,
         map: MemMap::new(0, 0x0010_0000),
     };
 

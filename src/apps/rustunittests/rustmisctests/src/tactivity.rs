@@ -25,7 +25,7 @@ use m3::tiles::{Activity, ActivityArgs, ChildActivity, OwnActivity, RunningActiv
 use m3::time::TimeDuration;
 use m3::util::math;
 
-use m3::{send_vmsg, wv_assert_eq, wv_require_ok, wv_run_test};
+use m3::{send_vmsg, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, run_stop);
@@ -36,7 +36,7 @@ pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, exec_rust_hello);
 }
 
-fn run_stop(_t: &mut dyn WvTester) {
+fn run_stop(t: &mut dyn WvTester) {
     use m3::com::RGateArgs;
     use m3::vfs;
 
@@ -55,7 +55,7 @@ fn run_stop(_t: &mut dyn WvTester) {
 
         // pass sendgate to child
         let sg = wv_require_ok!(SendCap::new_with(SGateArgs::new(&rg).credits(1)));
-        wv_require_ok!(act.delegate_obj(sg.sel()));
+        wv_assert_ok!(t, act.delegate_obj(sg.sel()));
 
         // pass root fs to child
         act.add_mount("/", "/");
@@ -64,12 +64,14 @@ fn run_stop(_t: &mut dyn WvTester) {
         dst.push(sg.sel());
 
         let act = wv_require_ok!(act.run(|| {
+            let mut t = DefaultWvTester::default();
+
             let mut src = Activity::own().data_source();
             let sg_sel: Selector = src.pop().unwrap();
 
             // notify parent that we're running
             let sg = wv_require_ok!(SendGate::new_bind(sg_sel));
-            wv_require_ok!(send_vmsg!(&sg, RecvGate::def(), 1));
+            wv_assert_ok!(t, send_vmsg!(&sg, RecvGate::def(), 1));
             let mut _n = 0;
             loop {
                 _n += 1;
@@ -79,11 +81,11 @@ fn run_stop(_t: &mut dyn WvTester) {
         }));
 
         // wait for child
-        wv_require_ok!(recv_msg(&rg));
+        wv_assert_ok!(t, recv_msg(&rg));
 
         // wait a bit and stop activity
-        wv_require_ok!(OwnActivity::sleep_for(wait_time));
-        wv_require_ok!(act.stop());
+        wv_assert_ok!(t, OwnActivity::sleep_for(wait_time));
+        wv_assert_ok!(t, act.stop());
 
         // increase by one ns to attempt interrupts at many points in the instruction stream
         wait_time += TimeDuration::from_nanos(1);
@@ -111,7 +113,7 @@ fn run_send_receive(t: &mut dyn WvTester) {
 
     let rgate = wv_require_ok!(RecvCap::new(math::next_log2(256), math::next_log2(256)));
 
-    wv_require_ok!(act.delegate_obj(rgate.sel()));
+    wv_assert_ok!(t, act.delegate_obj(rgate.sel()));
 
     let mut dst = act.data_sink();
     dst.push(rgate.sel());
@@ -130,7 +132,7 @@ fn run_send_receive(t: &mut dyn WvTester) {
     }));
 
     let sgate = wv_require_ok!(SendGate::new_with(SGateArgs::new(&rgate).credits(1)));
-    wv_require_ok!(send_vmsg!(&sgate, RecvGate::def(), 42, 23));
+    wv_assert_ok!(t, send_vmsg!(&sgate, RecvGate::def(), 42, 23));
 
     wv_assert_eq!(t, act.wait(), Ok(Code::NoFreeTile));
 }

@@ -33,7 +33,7 @@ use m3::tiles::{Activity, ActivityArgs, ChildActivity, Tile};
 use m3::time::TimeDuration;
 use m3::util::math;
 use m3::vec::Vec;
-use m3::{wv_assert, wv_assert_eq, wv_assert_err, wv_require_ok, wv_run_test};
+use m3::{wv_assert, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, create_srv);
@@ -173,14 +173,10 @@ fn create_mgate(t: &mut dyn WvTester) {
         // create 4-page mapping
         let virt = VirtAddr::new(0x3000_0000);
         let mem = wv_require_ok!(MemGate::new((PAGE_SIZE * 4) as GlobOff, Perm::RW));
-        wv_require_ok!(syscalls::create_map(
-            virt,
-            Activity::own().sel(),
-            mem.sel(),
-            0,
-            4,
-            Perm::RW
-        ));
+        wv_assert_ok!(
+            t,
+            syscalls::create_map(virt, Activity::own().sel(), mem.sel(), 0, 4, Perm::RW)
+        );
 
         // it has to be within bounds
         wv_assert_err!(
@@ -233,7 +229,7 @@ fn create_rgate(t: &mut dyn WvTester) {
 fn create_sess(t: &mut dyn WvTester) {
     let srv = SelSpace::get().alloc_sel();
     let rgate = wv_require_ok!(RecvGate::new(10, 10));
-    wv_require_ok!(syscalls::create_srv(srv, rgate.sel(), "test", 0,));
+    wv_assert_ok!(t, syscalls::create_srv(srv, rgate.sel(), "test", 0,));
 
     let sel = SelSpace::get().alloc_sel();
 
@@ -260,7 +256,7 @@ fn create_sess(t: &mut dyn WvTester) {
         ActivityArgs::new("tmp")
     ));
 
-    wv_require_ok!(child_act.delegate_obj(srv));
+    wv_assert_ok!(t, child_act.delegate_obj(srv));
     let copy_sel = wv_require_ok!(child_act.obtain_obj(srv));
 
     // only possible with root cap
@@ -270,11 +266,14 @@ fn create_sess(t: &mut dyn WvTester) {
         Code::InvArgs
     );
 
-    wv_require_ok!(syscalls::revoke(
-        Activity::own().sel(),
-        CapRngDesc::new(CapType::Object, srv, 1),
-        true
-    ));
+    wv_assert_ok!(
+        t,
+        syscalls::revoke(
+            Activity::own().sel(),
+            CapRngDesc::new(CapType::Object, srv, 1),
+            true
+        )
+    );
 }
 
 fn create_map(t: &mut dyn WvTester) {
@@ -380,7 +379,7 @@ fn create_activity(t: &mut dyn WvTester) {
         Code::InvArgs
     );
 
-    wv_require_ok!(syscalls::create_activity(sels, "test", tile.sel(), kmem));
+    wv_assert_ok!(t, syscalls::create_activity(sels, "test", tile.sel(), kmem));
     if !tile.desc().has_virtmem() {
         let new_sels = SelSpace::get().alloc_sels(3);
         wv_assert_err!(
@@ -389,7 +388,10 @@ fn create_activity(t: &mut dyn WvTester) {
             Code::NotSup
         );
     }
-    wv_require_ok!(Activity::own().revoke(CapRngDesc::new(CapType::Object, sels, 1), false));
+    wv_assert_ok!(
+        t,
+        Activity::own().revoke(CapRngDesc::new(CapType::Object, sels, 1), false)
+    );
 }
 
 fn create_sem(t: &mut dyn WvTester) {
@@ -397,11 +399,14 @@ fn create_sem(t: &mut dyn WvTester) {
 
     // invalid selector
     wv_assert_err!(t, syscalls::create_sem(SEL_ACT, 0), Code::InvArgs);
-    wv_require_ok!(syscalls::create_sem(sel, 1));
+    wv_assert_ok!(t, syscalls::create_sem(sel, 1));
     // one down does not block us
-    wv_require_ok!(syscalls::sem_ctrl(sel, SemOp::Down));
+    wv_assert_ok!(t, syscalls::sem_ctrl(sel, SemOp::Down));
 
-    wv_require_ok!(Activity::own().revoke(CapRngDesc::new(CapType::Object, sel, 1), false));
+    wv_assert_ok!(
+        t,
+        Activity::own().revoke(CapRngDesc::new(CapType::Object, sel, 1), false)
+    );
 }
 
 fn alloc_ep(t: &mut dyn WvTester) {
@@ -413,7 +418,7 @@ fn alloc_ep(t: &mut dyn WvTester) {
         {
             let tile = wv_require_ok!(Tile::get("compat"));
             let act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
-            wv_require_ok!(syscalls::alloc_ep(sel, act.sel(), INVALID_EP, 1));
+            wv_assert_ok!(t, syscalls::alloc_ep(sel, act.sel(), INVALID_EP, 1));
         }
 
         let mgate = wv_require_ok!(MemGate::new(0x1000, Perm::RW));
@@ -467,7 +472,10 @@ fn alloc_ep(t: &mut dyn WvTester) {
     ));
     wv_assert!(t, ep >= FIRST_USER_EP);
     wv_assert!(t, ep < ep_count);
-    wv_require_ok!(Activity::own().revoke(CapRngDesc::new(CapType::Object, sel, 1), false));
+    wv_assert_ok!(
+        t,
+        Activity::own().revoke(CapRngDesc::new(CapType::Object, sel, 1), false)
+    );
 
     // specific EP
     let ep = wv_require_ok!(syscalls::alloc_ep(
@@ -477,7 +485,10 @@ fn alloc_ep(t: &mut dyn WvTester) {
         1
     ));
     wv_assert_eq!(t, ep, ep_count - 2);
-    wv_require_ok!(Activity::own().revoke(CapRngDesc::new(CapType::Object, sel, 1), false));
+    wv_assert_ok!(
+        t,
+        Activity::own().revoke(CapRngDesc::new(CapType::Object, sel, 1), false)
+    );
 
     // specific, but invalid EP
     wv_assert_err!(
@@ -581,14 +592,23 @@ fn activate(t: &mut dyn WvTester) {
         syscalls::activate(ep3.sel(), rgate.sel(), INVALID_SEL, 0),
         Code::Exists
     );
-    wv_require_ok!(syscalls::activate(ep1.sel(), sgate.sel(), INVALID_SEL, 0));
+    wv_assert_ok!(
+        t,
+        syscalls::activate(ep1.sel(), sgate.sel(), INVALID_SEL, 0)
+    );
     wv_assert_err!(
         t,
         syscalls::activate(ep2.sel(), sgate.sel(), INVALID_SEL, 0),
         Code::Exists
     );
-    wv_require_ok!(syscalls::activate(ep1.sel(), INVALID_SEL, INVALID_SEL, 0));
-    wv_require_ok!(syscalls::activate(ep1.sel(), mgate.sel(), INVALID_SEL, 0));
+    wv_assert_ok!(
+        t,
+        syscalls::activate(ep1.sel(), INVALID_SEL, INVALID_SEL, 0)
+    );
+    wv_assert_ok!(
+        t,
+        syscalls::activate(ep1.sel(), mgate.sel(), INVALID_SEL, 0)
+    );
     wv_assert_err!(
         t,
         syscalls::activate(ep2.sel(), mgate.sel(), INVALID_SEL, 0),
@@ -716,7 +736,10 @@ fn derive_kmem(t: &mut dyn WvTester) {
     }
 
     // now we can revoke it
-    wv_require_ok!(Activity::own().revoke(CapRngDesc::new(CapType::Object, kmem.sel(), 1), false));
+    wv_assert_ok!(
+        t,
+        Activity::own().revoke(CapRngDesc::new(CapType::Object, kmem.sel(), 1), false)
+    );
 }
 
 fn derive_tile(t: &mut dyn WvTester) {
@@ -789,7 +812,10 @@ fn derive_tile(t: &mut dyn WvTester) {
     }
 
     // now we can revoke it
-    wv_require_ok!(Activity::own().revoke(CapRngDesc::new(CapType::Object, tile.sel(), 1), false));
+    wv_assert_ok!(
+        t,
+        Activity::own().revoke(CapRngDesc::new(CapType::Object, tile.sel(), 1), false)
+    );
 }
 
 struct DummyHandler {
@@ -896,7 +922,10 @@ fn get_sess(t: &mut dyn WvTester) {
     );
 
     // success
-    wv_require_ok!(syscalls::get_sess(srv.sel(), act.sel(), sel, 0xDEAD_BEEF));
+    wv_assert_ok!(
+        t,
+        syscalls::get_sess(srv.sel(), act.sel(), sel, 0xDEAD_BEEF)
+    );
 }
 
 fn mgate_region(t: &mut dyn WvTester) {
@@ -1093,9 +1122,9 @@ fn revoke(t: &mut dyn WvTester) {
 }
 
 // Assert that the given selector is unused in the kernel's cap table.
-fn assert_sel_unused(sel: CapSel) {
+fn assert_sel_unused(t: &mut dyn WvTester, sel: CapSel) {
     // Try to create semaphore at this selector.
-    wv_require_ok!(syscalls::create_sem(sel, 0));
+    wv_assert_ok!(t, syscalls::create_sem(sel, 0));
     // Drop capability to revoke created semaphore.
     drop(Capability::new(sel, CapFlags::empty()));
 }
@@ -1103,7 +1132,7 @@ fn assert_sel_unused(sel: CapSel) {
 /// Test revocation of a deep derivation tree.
 ///
 /// This test might unveil limitations like naive, unbound recursion.
-fn revoke_deep(_: &mut dyn WvTester) {
+fn revoke_deep(t: &mut dyn WvTester) {
     const SIZE: u64 = 0x4000;
     const PERM: Perm = Perm::RW;
     const DEPTH: usize = 1024;
@@ -1122,18 +1151,18 @@ fn revoke_deep(_: &mut dyn WvTester) {
 
     // Revoke the deep tree from the root.
     let crd_root_mem = CapRngDesc::new(CapType::Object, root_mem.sel(), 1);
-    wv_require_ok!(syscalls::revoke(act, crd_root_mem, false));
+    wv_assert_ok!(t, syscalls::revoke(act, crd_root_mem, false));
 
     // Test that all derived capabilities are removed.
     for cap in &caps[1..] {
-        assert_sel_unused(cap.sel());
+        assert_sel_unused(t, cap.sel());
     }
 
     // Errors when dropping the revoked capabilities are ignored.
 }
 
 /// Test revocation of a wide derivation tree.
-fn revoke_wide(_: &mut dyn WvTester) {
+fn revoke_wide(t: &mut dyn WvTester) {
     const SIZE: u64 = 0x4000;
     const PERM: Perm = Perm::RW;
     const WIDTH: usize = 1024;
@@ -1151,11 +1180,11 @@ fn revoke_wide(_: &mut dyn WvTester) {
 
     // Revoke the wide tree from the root.
     let crd_root_mem = CapRngDesc::new(CapType::Object, root_mem.sel(), 1);
-    wv_require_ok!(syscalls::revoke(act, crd_root_mem, false));
+    wv_assert_ok!(t, syscalls::revoke(act, crd_root_mem, false));
 
     // Test that all derived capabilities are removed.
     for cap in &caps {
-        assert_sel_unused(cap.sel());
+        assert_sel_unused(t, cap.sel());
     }
 
     // Errors when dropping the revoked capabilities are ignored.

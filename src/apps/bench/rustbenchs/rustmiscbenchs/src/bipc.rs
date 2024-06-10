@@ -21,7 +21,8 @@ use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ActivityArgs, ChildActivity, RunningActivity, Tile};
 use m3::time::{CycleInstant, Profiler, TimeDuration};
 use m3::{
-    format, println, reply_vmsg, send_vmsg, wv_assert_eq, wv_perf, wv_require_ok, wv_run_test,
+    format, println, reply_vmsg, send_vmsg, wv_assert_eq, wv_assert_ok, wv_perf, wv_require_ok,
+    wv_run_test,
 };
 
 const MSG_ORD: u32 = 8;
@@ -58,7 +59,7 @@ fn pingpong_with_tile(t: &mut dyn WvTester, name: &str, tile: Rc<Tile>) {
 
     let rgate = wv_require_ok!(RecvCap::new(MSG_ORD, MSG_ORD));
 
-    wv_require_ok!(act.delegate_obj(rgate.sel()));
+    wv_assert_ok!(t, act.delegate_obj(rgate.sel()));
 
     let mut dst = act.data_sink();
     dst.push(rgate.sel());
@@ -70,7 +71,7 @@ fn pingpong_with_tile(t: &mut dyn WvTester, name: &str, tile: Rc<Tile>) {
         for _ in 0..RUNS + WARMUP {
             let mut msg = wv_require_ok!(recv_msg(&rgate));
             wv_assert_eq!(t, msg.pop::<u64>(), Ok(0));
-            wv_require_ok!(reply_vmsg!(msg, 0u64));
+            wv_assert_ok!(t, reply_vmsg!(msg, 0u64));
         }
         Ok(())
     }));
@@ -83,7 +84,7 @@ fn pingpong_with_tile(t: &mut dyn WvTester, name: &str, tile: Rc<Tile>) {
     wv_perf!(
         format!("{} pingpong with (1 * u64) msgs", name),
         prof.run::<CycleInstant, _>(|| {
-            wv_require_ok!(send_vmsg!(&sgate, reply_gate, 0u64));
+            wv_assert_ok!(t, send_vmsg!(&sgate, reply_gate, 0u64));
 
             let mut reply = wv_require_ok!(recv_msg(reply_gate));
             wv_assert_eq!(t, reply.pop::<u64>(), Ok(0));
@@ -101,10 +102,13 @@ fn pingpong_with_multiple(t: &mut dyn WvTester) {
 
     let tile = wv_require_ok!(Tile::get("compat"));
     // use long time slices for childs (minimize timer interrupts)
-    wv_require_ok!(tile.set_quota(
-        TimeDuration::from_secs(1),
-        tile.quota().unwrap().page_tables().remaining(),
-    ));
+    wv_assert_ok!(
+        t,
+        tile.set_quota(
+            TimeDuration::from_secs(1),
+            tile.quota().unwrap().page_tables().remaining(),
+        )
+    );
 
     // split time quota between childs
     let cur_quota = wv_require_ok!(tile.quota()).time().total();
@@ -117,8 +121,8 @@ fn pingpong_with_multiple(t: &mut dyn WvTester) {
     let rgate1 = wv_require_ok!(RecvCap::new(MSG_ORD, MSG_ORD));
     let rgate2 = wv_require_ok!(RecvCap::new(MSG_ORD, MSG_ORD));
 
-    wv_require_ok!(act1.delegate_obj(rgate1.sel()));
-    wv_require_ok!(act2.delegate_obj(rgate2.sel()));
+    wv_assert_ok!(t, act1.delegate_obj(rgate1.sel()));
+    wv_assert_ok!(t, act2.delegate_obj(rgate2.sel()));
 
     act1.data_sink().push(rgate1.sel());
     act2.data_sink().push(rgate2.sel());
@@ -130,7 +134,7 @@ fn pingpong_with_multiple(t: &mut dyn WvTester) {
         for _ in 0..(RUNS + WARMUP) / 2 {
             let mut msg = wv_require_ok!(recv_msg(&rgate));
             wv_assert_eq!(t, msg.pop::<u64>(), Ok(0));
-            wv_require_ok!(reply_vmsg!(msg, 0u64));
+            wv_assert_ok!(t, reply_vmsg!(msg, 0u64));
         }
         Ok(())
     };
@@ -151,10 +155,10 @@ fn pingpong_with_multiple(t: &mut dyn WvTester) {
             // alternate between bothr receivers to ensure that we always need a context switch on
             // the other tile
             if count % 2 == 0 {
-                wv_require_ok!(send_vmsg!(&sgate1, reply_gate, 0u64));
+                wv_assert_ok!(t, send_vmsg!(&sgate1, reply_gate, 0u64));
             }
             else {
-                wv_require_ok!(send_vmsg!(&sgate2, reply_gate, 0u64));
+                wv_assert_ok!(t, send_vmsg!(&sgate2, reply_gate, 0u64));
             }
 
             let mut reply = wv_require_ok!(recv_msg(reply_gate));

@@ -22,7 +22,7 @@ use m3::println;
 use m3::test::WvTester;
 use m3::time::{Results, TimeDuration, TimeInstant};
 use m3::vfs::{File, FileEvent, FileWaiter};
-use m3::{wv_assert_eq, wv_perf, wv_require_ok, wv_run_test};
+use m3::{wv_assert_eq, wv_assert_ok, wv_perf, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, latency);
@@ -33,9 +33,9 @@ fn latency(t: &mut dyn WvTester) {
     let net = wv_require_ok!(Network::new("net"));
     let mut socket = wv_require_ok!(TcpSocket::new(StreamSocketArgs::new(net)));
 
-    wv_require_ok!(Semaphore::attach("net-tcp").unwrap().down());
+    wv_assert_ok!(t, Semaphore::attach("net-tcp").unwrap().down());
 
-    wv_require_ok!(socket.connect(Endpoint::new(crate::DST_IP.get(), 1338)));
+    wv_assert_ok!(t, socket.connect(Endpoint::new(crate::DST_IP.get(), 1338)));
 
     let samples = 5;
 
@@ -79,7 +79,7 @@ fn latency(t: &mut dyn WvTester) {
         );
     }
 
-    wv_require_ok!(socket.close());
+    wv_assert_ok!(t, socket.close());
 }
 
 fn bandwidth(t: &mut dyn WvTester) {
@@ -94,18 +94,18 @@ fn bandwidth(t: &mut dyn WvTester) {
             .recv_buffer(256 * 1024)
     ));
 
-    wv_require_ok!(Semaphore::attach("net-tcp").unwrap().down());
+    wv_assert_ok!(t, Semaphore::attach("net-tcp").unwrap().down());
 
-    wv_require_ok!(socket.connect(Endpoint::new(crate::DST_IP.get(), 1338)));
+    wv_assert_ok!(t, socket.connect(Endpoint::new(crate::DST_IP.get(), 1338)));
 
     let mut buf = [0u8; 1024];
 
     for _ in 0..10 {
         wv_assert_eq!(t, socket.send(&buf), Ok(buf.len()));
-        wv_require_ok!(socket.recv(&mut buf));
+        wv_assert_ok!(t, socket.recv(&mut buf));
     }
 
-    wv_require_ok!(socket.set_blocking(false));
+    wv_assert_ok!(t, socket.set_blocking(false));
 
     let start = TimeInstant::now();
     let mut timeout = start + TIMEOUT;
@@ -187,6 +187,6 @@ fn bandwidth(t: &mut dyn WvTester) {
         format!("{} MiB/s (+/- 0 with 1 runs)", mbps)
     );
 
-    wv_require_ok!(socket.set_blocking(true));
-    wv_require_ok!(socket.close());
+    wv_assert_ok!(t, socket.set_blocking(true));
+    wv_assert_ok!(t, socket.close());
 }

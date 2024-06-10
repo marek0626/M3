@@ -19,7 +19,7 @@ use m3::errors::{Code, Error, VerboseError};
 use m3::kif::Perm;
 use m3::test::WvTester;
 use m3::tiles::{ActivityArgs, ChildActivity, RunningActivity, RunningDeviceActivity, Tile};
-use m3::{wv_assert_eq, wv_require_ok};
+use m3::{wv_assert_eq, wv_assert_ok, wv_require_ok};
 
 use resmng::childs::{Child, ChildManager, OwnChild};
 use resmng::config::Domain;
@@ -73,7 +73,10 @@ pub fn run_subsys<F>(
     let (_our_sub, mut res) = wv_require_ok!(Subsystem::new());
     let mut child_sub = SubsystemBuilder::default();
 
-    wv_require_ok!(child_sub.add_config(cfg, |size| MemGate::new(size, Perm::RW)));
+    wv_assert_ok!(
+        t,
+        child_sub.add_config(cfg, |size| MemGate::new(size, Perm::RW))
+    );
     let tile_quota = wv_require_ok!(tile.quota());
     child_sub.add_tile(wv_require_ok!(tile.derive(
         Some(tile_quota.endpoints().remaining() / 2),
@@ -87,7 +90,7 @@ pub fn run_subsys<F>(
     child_sub.add_mem(wv_require_ok!(sub_mem.derive()), false);
     customize_subsys(&mut child_sub);
 
-    wv_require_ok!(child_sub.finalize_async(&mut res, 0, &mut child));
+    wv_assert_ok!(t, child_sub.finalize_async(&mut res, 0, &mut child));
 
     let run = wv_require_ok!(child.run(func));
 

@@ -21,7 +21,7 @@ use m3::tcu::TileId;
 use m3::tiles::Tile;
 
 use m3::test::WvTester;
-use m3::{wv_assert_err, wv_require_ok, wv_run_test};
+use m3::{wv_assert_err, wv_assert_ok, wv_require_ok, wv_run_test};
 
 use resmng::config::{validator, AppConfig};
 use resmng::resources::Resources;
@@ -92,7 +92,7 @@ fn services(t: &mut dyn WvTester) {
             </app>
         </app>";
         let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
-        wv_require_ok!(validator::validate(&cfg, &res));
+        wv_assert_ok!(t, validator::validate(&cfg, &res));
     }
 }
 
@@ -156,7 +156,7 @@ fn gates(t: &mut dyn WvTester) {
             </app>
         </app>";
         let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
-        wv_require_ok!(validator::validate(&cfg, &res));
+        wv_assert_ok!(t, validator::validate(&cfg, &res));
     }
 }
 
@@ -201,7 +201,7 @@ fn tiles(t: &mut dyn WvTester) {
             </app>
         </app>";
         let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
-        wv_require_ok!(validator::validate(&cfg, &res));
+        wv_assert_ok!(t, validator::validate(&cfg, &res));
     }
 }
 
@@ -230,6 +230,6 @@ fn mods(t: &mut dyn WvTester) {
             </app>
         </app>";
         let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
-        wv_require_ok!(validator::validate(&cfg, &res));
+        wv_assert_ok!(t, validator::validate(&cfg, &res));
     }
 }

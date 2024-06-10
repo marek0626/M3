@@ -23,11 +23,11 @@ use m3::errors::Code;
 use m3::io::{self, stdin, stdout, Read, Write};
 use m3::kif;
 use m3::mem::AlignedBuf;
-use m3::test::WvTester;
+use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{ActivityArgs, ChildActivity, RunningActivity, Tile};
 use m3::time::{CycleInstant, Profiler};
 use m3::vfs::IndirectPipe;
-use m3::{format, wv_assert_eq, wv_perf, wv_require_ok, wv_run_test};
+use m3::{format, wv_assert_eq, wv_assert_ok, wv_perf, wv_require_ok, wv_run_test};
 
 const DATA_SIZE: usize = 2 * 1024 * 1024;
 const BUF_SIZE: usize = 8 * 1024;
@@ -55,10 +55,12 @@ fn child_to_parent(t: &mut dyn WvTester) {
         act.add_file(io::STDOUT_FILENO, pipe.writer().unwrap().fd());
 
         let act = wv_require_ok!(act.run(|| {
+            let mut t = DefaultWvTester::default();
+
             let buf = BUF.borrow();
             let mut rem = DATA_SIZE;
             while rem > 0 {
-                wv_require_ok!(stdout().write(&buf[..]));
+                wv_assert_ok!(t, stdout().write(&buf[..]));
                 rem -= BUF_SIZE;
             }
             Ok(())
@@ -110,7 +112,7 @@ fn parent_to_child(t: &mut dyn WvTester) {
         let buf = BUF.borrow();
         let mut rem = DATA_SIZE;
         while rem > 0 {
-            wv_require_ok!(output.write(&buf[..]));
+            wv_assert_ok!(t, output.write(&buf[..]));
             rem -= BUF_SIZE;
         }
 

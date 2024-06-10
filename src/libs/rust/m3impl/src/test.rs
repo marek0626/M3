@@ -177,6 +177,29 @@ macro_rules! wv_assert_eq {
     });
 }
 
+/// Convenience macro that tests whether the argument is [`Ok`] and reports failures
+#[macro_export]
+macro_rules! wv_assert_ok {
+    ($t:expr, $res:expr) => {{
+        let res = $res;
+        match res {
+            Ok(r) => {
+                $t.test_succeeded();
+            },
+            Err(e) => {
+                ::m3::println!(
+                    "! {}:{}  expected Ok for {}, got {:?} FAILED",
+                    file!(),
+                    line!(),
+                    stringify!($res),
+                    e
+                );
+                $t.test_failed();
+            },
+        }
+    }};
+}
+
 /// Convenience macro that tests whether the argument is [`Ok`], returns the inner value if so, and
 /// panics otherwise
 #[macro_export]
@@ -194,6 +217,28 @@ macro_rules! wv_require_ok {
                     e
                 );
                 panic!("Stopping tests here.")
+            },
+        }
+    }};
+}
+
+/// Convenience macro that tests whether the argument is [`Some`] and reports failures
+#[macro_export]
+macro_rules! wv_assert_some {
+    ($t:expr, $res:expr) => {{
+        let res = $res;
+        match res {
+            Some(r) => {
+                $t.test_succeeded();
+            },
+            None => {
+                ::m3::println!(
+                    "! {}:{}  expected Some for {}, received None FAILED",
+                    file!(),
+                    line!(),
+                    stringify!($res)
+                );
+                $t.test_failed();
             },
         }
     }};

@@ -14,7 +14,7 @@
  */
 
 use m3::test::WvTester;
-use m3::{wv_assert, wv_assert_eq, wv_require_ok, wv_run_test};
+use m3::{wv_assert, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
 
 use std::fs::{self, File};
 use std::io::{ErrorKind, Read, Seek, Write};
@@ -47,7 +47,7 @@ fn basics(t: &mut dyn WvTester) {
         let mut file = wv_require_ok!(File::options().read(true).write(true).open("test.txt"));
         let mut buf = [0u8; 1];
         wv_assert!(t, matches!(file.read(&mut buf), Ok(1)));
-        wv_require_ok!(file.rewind());
+        wv_assert_ok!(t, file.rewind());
         wv_assert!(t, matches!(file.write(&buf), Ok(1)));
     }
 
@@ -59,11 +59,11 @@ fn basics(t: &mut dyn WvTester) {
             .open("test.txt"));
         let mut buf = [0u8; 30];
         wv_assert!(t, matches!(file.write(&TEST_CONTENT), Ok(15)));
-        wv_require_ok!(file.rewind());
+        wv_assert_ok!(t, file.rewind());
         wv_assert!(t, matches!(file.read(&mut buf), Ok(30)));
         wv_assert_eq!(t, buf, TEST_CONTENT_TWICE);
-        wv_require_ok!(file.set_len(20));
-        wv_require_ok!(file.rewind());
+        wv_assert_ok!(t, file.set_len(20));
+        wv_assert_ok!(t, file.rewind());
         wv_assert!(t, matches!(file.read(&mut buf), Ok(20)));
         wv_assert_eq!(t, buf[..20], TEST_CONTENT_TWICE[..20]);
     }
@@ -76,23 +76,23 @@ fn basics(t: &mut dyn WvTester) {
             .open("test.txt"));
         let mut buf = [0u8; 15];
         wv_assert!(t, matches!(file.write(&TEST_CONTENT), Ok(15)));
-        wv_require_ok!(file.rewind());
+        wv_assert_ok!(t, file.rewind());
         wv_assert!(t, matches!(file.read(&mut buf), Ok(15)));
         wv_assert_eq!(t, buf, TEST_CONTENT);
     }
 
     {
-        wv_require_ok!(File::create("/tmp/test.txt"));
-        wv_require_ok!(File::open("/tmp/test.txt"));
-        wv_require_ok!(fs::remove_file("/tmp/test.txt"));
+        wv_assert_ok!(t, File::create("/tmp/test.txt"));
+        wv_assert_ok!(t, File::open("/tmp/test.txt"));
+        wv_assert_ok!(t, fs::remove_file("/tmp/test.txt"));
     }
 }
 
 fn misc(t: &mut dyn WvTester) {
     {
         let file = wv_require_ok!(File::open("test.txt"));
-        wv_require_ok!(file.sync_data());
-        wv_require_ok!(file.sync_all());
+        wv_assert_ok!(t, file.sync_data());
+        wv_assert_ok!(t, file.sync_all());
         let meta = wv_require_ok!(file.metadata());
         wv_assert_eq!(t, meta.len(), 15);
         wv_assert!(t, meta.file_type().is_file());
