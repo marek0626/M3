@@ -38,10 +38,7 @@ Note: If you have `pyenv` installed and therefore `/usr/bin/python` does not exi
 
 ### 2. Bootstrap
 
-To pull in all required submodules and build them (cross compiler, gem5, etc.), you can use the
-`tools/bootstrap` script (independent of whether you are using Nix or not). If you only work with a
-subset of targets or ISAs, you can specify that via the `--target`, `--isa`, and `--build`
-arguments. For example:
+To pull in all required submodules and build them (cross compiler, gem5, etc.), you can use the `tools/bootstrap` script (independent of whether you are using Nix or not). If you only work with a subset of targets, ISAs or build types, you can specify that via the `--target`, `--isa`, and `--build` arguments. For example:
 
     $ ./tools/bootstrap --target gem5 --isa riscv32 riscv64 --build release
 
