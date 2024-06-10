@@ -51,7 +51,7 @@ class BuildTask:
         rebuild = incremental or self.needs_rebuild()
         if rebuild:
             # start and synchronously wait for the process to finish
-            log, proc = self.start()
+            log, proc = self.start(incremental)
             proc.wait()
             log.close()
             # immediately stop on any error
@@ -130,7 +130,7 @@ def build_all(tasks: [BuildTask], incremental: bool):
     for t in tasks:
         # start task (incremental always (re)builds)
         if incremental or t.needs_rebuild():
-            running.append((t, t.start()))
+            running.append((t, t.start(incremental)))
         # otherwise, finish the task right away
         else:
             t.finish(False, incremental)
