@@ -14,10 +14,13 @@ parser = argparse.ArgumentParser(description='This is the M³ bootstrapper.')
 parser.add_argument('--target', nargs='+', default=['gem5', 'hw22', 'hw23'])
 parser.add_argument('--isa', nargs='+', default=['riscv32', 'riscv64', 'x86_64'])
 parser.add_argument('--build', nargs='+', default=['debug', 'release'])
+parser.add_argument('--command', nargs='+', default=['prepare', 'build'])
 args = parser.parse_args()
 
 cache_dir = 'build/bootstrap'
-builder.prepare(targets=args.target, isas=args.isa,
-                cache_dir=cache_dir, incremental=True)
-builder.build(targets=args.target, isas=args.isa, builds=args.build,
-              cache_dir=cache_dir, incremental=True)
+if 'prepare' in args.command:
+    builder.prepare(targets=args.target, isas=args.isa,
+                    cache_dir=cache_dir, incremental=True)
+if 'build' in args.command:
+    builder.build(targets=args.target, isas=args.isa, builds=args.build,
+                  cache_dir=cache_dir, incremental=True)
