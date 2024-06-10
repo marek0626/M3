@@ -68,9 +68,12 @@ class BuildTask:
             self.gc()
 
         # create log file
-        date = datetime.today().strftime('%Y-%m-%d')
-        logfile = '{}/logs/{}/{}-{}.log'.format(
-                self.cache_dir, self.name, date, self.hash())
+        if incremental:
+            logfile = '{}/logs/{}.log'.format(self.cache_dir, self.name)
+        else:
+            date = datetime.today().strftime('%Y-%m-%d')
+            logfile = '{}/logs/{}/{}-{}.log'.format(
+                    self.cache_dir, self.name, date, self.hash())
         mkdir(os.path.dirname(logfile))
         log = open(logfile, 'w+')
 
