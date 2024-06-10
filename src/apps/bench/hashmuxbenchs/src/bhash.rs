@@ -21,7 +21,7 @@ use m3::mem::GlobOff;
 use m3::test::WvTester;
 use m3::time::{CycleInstant, Duration, Profiler};
 use m3::vfs::{OpenFlags, VFS};
-use m3::{format, println, vec, wv_assert_ok, wv_perf, wv_run_test};
+use m3::{format, println, vec, wv_perf, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, reset);
@@ -36,11 +36,11 @@ pub fn run(t: &mut dyn WvTester) {
 
 fn reset(_t: &mut dyn WvTester) {
     let prof = Profiler::default();
-    let mut hash = wv_assert_ok!(HashSession::new("hash-bench", &HashAlgorithm::SHA3_256));
+    let mut hash = wv_require_ok!(HashSession::new("hash-bench", &HashAlgorithm::SHA3_256));
 
     wv_perf!(
         "reset hash",
-        prof.run::<CycleInstant, _>(|| wv_assert_ok!(hash.reset(&HashAlgorithm::SHA3_256)))
+        prof.run::<CycleInstant, _>(|| wv_require_ok!(hash.reset(&HashAlgorithm::SHA3_256)))
     );
 }
 
@@ -51,13 +51,13 @@ fn hash_empty(_t: &mut dyn WvTester) {
             continue;
         }
 
-        let mut hash = wv_assert_ok!(HashSession::new("hash-bench", algo));
+        let mut hash = wv_require_ok!(HashSession::new("hash-bench", algo));
         let mut result = vec![0u8; algo.output_bytes];
         wv_perf!(
             format!("hash reset + finish with {}", algo.name),
             prof.run::<CycleInstant, _>(|| {
-                wv_assert_ok!(hash.reset(algo));
-                wv_assert_ok!(hash.finish(&mut result));
+                wv_require_ok!(hash.reset(algo));
+                wv_require_ok!(hash.finish(&mut result));
             })
         );
     }
@@ -65,7 +65,7 @@ fn hash_empty(_t: &mut dyn WvTester) {
 
 fn _prepare_hash_mem(size: usize) -> (MemGate, MemCap) {
     let mgate = util::prepare_shake_mem(size);
-    let mgated = wv_assert_ok!(mgate.derive_cap(0, size as GlobOff, Perm::R));
+    let mgated = wv_require_ok!(mgate.derive_cap(0, size as GlobOff, Perm::R));
     (mgate, mgated)
 }
 
@@ -76,7 +76,7 @@ fn create_sess(algo: &'static HashAlgorithm) -> Result<HashSession, Error> {
             println!("Ignoring test -- {} not supported", algo.name);
             Err(e)
         },
-        Err(e) => wv_assert_ok!(Err(e)),
+        Err(e) => wv_require_ok!(Err(e)),
         Ok(sess) => Ok(sess),
     }
 }
@@ -92,10 +92,10 @@ fn hash_mem(_t: &mut dyn WvTester) {
             Ok(sess) => sess,
             Err(_) => continue,
         };
-        wv_assert_ok!(hash.ep().configure(mgated.sel()));
+        wv_require_ok!(hash.ep().configure(mgated.sel()));
 
         let res = prof.run::<CycleInstant, _>(|| {
-            wv_assert_ok!(hash.input(0, SIZE));
+            wv_require_ok!(hash.input(0, SIZE));
         });
 
         wv_perf!(
@@ -119,8 +119,8 @@ fn hash_mem_sizes(_t: &mut dyn WvTester) {
     let mut prof = Profiler::default().warmup(5).repeats(15);
 
     for shift in 0..=MAX_SIZE_SHIFT {
-        let hash = wv_assert_ok!(HashSession::new("hash-bench", TEST_ALGO));
-        wv_assert_ok!(hash.ep().configure(mgated.sel()));
+        let hash = wv_require_ok!(HashSession::new("hash-bench", TEST_ALGO));
+        wv_require_ok!(hash.ep().configure(mgated.sel()));
 
         let size = 1usize << shift;
         if shift == 14 {
@@ -128,7 +128,7 @@ fn hash_mem_sizes(_t: &mut dyn WvTester) {
         }
 
         let res = prof.run::<CycleInstant, _>(|| {
-            wv_assert_ok!(hash.input(0, size));
+            wv_require_ok!(hash.input(0, size));
         });
 
         wv_perf!(
@@ -147,12 +147,12 @@ fn hash_file(_t: &mut dyn WvTester) {
 
     {
         // Fill file with pseudo random data using SHAKE
-        let hash = wv_assert_ok!(HashSession::new("hash-prepare", &HashAlgorithm::SHAKE128));
-        let mut file = wv_assert_ok!(VFS::open(
+        let hash = wv_require_ok!(HashSession::new("hash-prepare", &HashAlgorithm::SHAKE128));
+        let mut file = wv_require_ok!(VFS::open(
             "/shake.bin",
             OpenFlags::W | OpenFlags::CREATE | OpenFlags::NEW_SESS
         ));
-        wv_assert_ok!(file.hash_output(&hash, SIZE));
+        wv_require_ok!(file.hash_output(&hash, SIZE));
     }
 
     let prof = Profiler::default().warmup(2).repeats(5);
@@ -164,8 +164,8 @@ fn hash_file(_t: &mut dyn WvTester) {
         };
         let res = prof.run::<CycleInstant, _>(|| {
             let mut file =
-                wv_assert_ok!(VFS::open("/shake.bin", OpenFlags::R | OpenFlags::NEW_SESS));
-            wv_assert_ok!(file.hash_input(&hash, usize::MAX));
+                wv_require_ok!(VFS::open("/shake.bin", OpenFlags::R | OpenFlags::NEW_SESS));
+            wv_require_ok!(file.hash_input(&hash, usize::MAX));
         });
 
         wv_perf!(
@@ -180,8 +180,8 @@ fn hash_file(_t: &mut dyn WvTester) {
 }
 
 fn _prepare_shake_mem(size: usize) -> (MemGate, MemCap) {
-    let mgate = wv_assert_ok!(MemGate::new(size as GlobOff, Perm::RW));
-    let mgated = wv_assert_ok!(mgate.derive_cap(0, size as GlobOff, Perm::W));
+    let mgate = wv_require_ok!(MemGate::new(size as GlobOff, Perm::RW));
+    let mgated = wv_require_ok!(mgate.derive_cap(0, size as GlobOff, Perm::W));
     (mgate, mgated)
 }
 
@@ -200,10 +200,10 @@ fn shake_mem(_t: &mut dyn WvTester) {
             Ok(sess) => sess,
             Err(_) => continue,
         };
-        wv_assert_ok!(hash.ep().configure(mgated.sel()));
+        wv_require_ok!(hash.ep().configure(mgated.sel()));
 
         let res = prof.run::<CycleInstant, _>(|| {
-            wv_assert_ok!(hash.output(0, SIZE));
+            wv_require_ok!(hash.output(0, SIZE));
         });
 
         wv_perf!(
@@ -232,11 +232,11 @@ fn shake_mem_sizes(_t: &mut dyn WvTester) {
             prof = prof.warmup(2).repeats(5); // 2^14 = 16 KiB
         }
 
-        let hash = wv_assert_ok!(HashSession::new("hash-bench", SHAKE_TEST_ALGO));
-        wv_assert_ok!(hash.ep().configure(mgated.sel()));
+        let hash = wv_require_ok!(HashSession::new("hash-bench", SHAKE_TEST_ALGO));
+        wv_require_ok!(hash.ep().configure(mgated.sel()));
 
         let res = prof.run::<CycleInstant, _>(|| {
-            wv_assert_ok!(hash.output(0, size));
+            wv_require_ok!(hash.output(0, size));
         });
 
         wv_perf!(
@@ -266,8 +266,8 @@ fn shake_file(_t: &mut dyn WvTester) {
         };
         let res = prof.run::<CycleInstant, _>(|| {
             let mut file =
-                wv_assert_ok!(VFS::open("/shake.bin", OpenFlags::W | OpenFlags::NEW_SESS));
-            wv_assert_ok!(file.hash_output(&hash, SIZE));
+                wv_require_ok!(VFS::open("/shake.bin", OpenFlags::W | OpenFlags::NEW_SESS));
+            wv_require_ok!(file.hash_output(&hash, SIZE));
         });
 
         wv_perf!(

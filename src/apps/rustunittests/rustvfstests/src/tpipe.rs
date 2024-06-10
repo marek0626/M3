@@ -25,7 +25,7 @@ use m3::kif;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{ActivityArgs, ChildActivity, RunningActivity, Tile};
 use m3::vfs::{BufReader, IndirectPipe};
-use m3::{println, wv_assert_eq, wv_assert_ok, wv_run_test};
+use m3::{println, wv_assert_eq, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, child_to_parent);
@@ -37,15 +37,15 @@ pub fn run(t: &mut dyn WvTester) {
 }
 
 fn child_to_parent(t: &mut dyn WvTester) {
-    let pipeserv = wv_assert_ok!(Pipes::new("pipes"));
-    let pipe_mem = wv_assert_ok!(MemGate::new(0x10000, kif::Perm::RW));
-    let pipe = wv_assert_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
+    let pipeserv = wv_require_ok!(Pipes::new("pipes"));
+    let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+    let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
-    let mut act = wv_assert_ok!(ChildActivity::new_with(tile, ActivityArgs::new("writer")));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let mut act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("writer")));
     act.add_file(io::STDOUT_FILENO, pipe.writer().unwrap().fd());
 
-    let act = wv_assert_ok!(act.run(|| {
+    let act = wv_require_ok!(act.run(|| {
         println!("This is a test!");
         Ok(())
     }));
@@ -53,7 +53,7 @@ fn child_to_parent(t: &mut dyn WvTester) {
     pipe.close_writer();
 
     let mut input = pipe.reader().unwrap();
-    let s = wv_assert_ok!(input.read_to_string());
+    let s = wv_require_ok!(input.read_to_string());
     wv_assert_eq!(t, s, "This is a test!\n");
 
     pipe.close_reader();
@@ -62,17 +62,17 @@ fn child_to_parent(t: &mut dyn WvTester) {
 }
 
 fn parent_to_child(t: &mut dyn WvTester) {
-    let pipeserv = wv_assert_ok!(Pipes::new("pipes"));
-    let pipe_mem = wv_assert_ok!(MemGate::new(0x10000, kif::Perm::RW));
-    let pipe = wv_assert_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
+    let pipeserv = wv_require_ok!(Pipes::new("pipes"));
+    let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+    let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
-    let mut act = wv_assert_ok!(ChildActivity::new_with(tile, ActivityArgs::new("reader")));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let mut act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("reader")));
     act.add_file(io::STDIN_FILENO, pipe.reader().unwrap().fd());
 
-    let act = wv_assert_ok!(act.run(|| {
+    let act = wv_require_ok!(act.run(|| {
         let mut t = DefaultWvTester::default();
-        let s = wv_assert_ok!(io::stdin().read_to_string());
+        let s = wv_require_ok!(io::stdin().read_to_string());
         wv_assert_eq!(t, s, "This is a test!\n");
         Ok(())
     }));
@@ -88,25 +88,25 @@ fn parent_to_child(t: &mut dyn WvTester) {
 }
 
 fn child_to_child(t: &mut dyn WvTester) {
-    let pipeserv = wv_assert_ok!(Pipes::new("pipes"));
-    let pipe_mem = wv_assert_ok!(MemGate::new(0x10000, kif::Perm::RW));
-    let pipe = wv_assert_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
+    let pipeserv = wv_require_ok!(Pipes::new("pipes"));
+    let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+    let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
-    let tile1 = wv_assert_ok!(Tile::get("compat|own"));
-    let tile2 = wv_assert_ok!(Tile::get("compat|own"));
-    let mut writer = wv_assert_ok!(ChildActivity::new_with(tile1, ActivityArgs::new("writer")));
-    let mut reader = wv_assert_ok!(ChildActivity::new_with(tile2, ActivityArgs::new("reader")));
+    let tile1 = wv_require_ok!(Tile::get("compat|own"));
+    let tile2 = wv_require_ok!(Tile::get("compat|own"));
+    let mut writer = wv_require_ok!(ChildActivity::new_with(tile1, ActivityArgs::new("writer")));
+    let mut reader = wv_require_ok!(ChildActivity::new_with(tile2, ActivityArgs::new("reader")));
     writer.add_file(io::STDOUT_FILENO, pipe.writer().unwrap().fd());
     reader.add_file(io::STDIN_FILENO, pipe.reader().unwrap().fd());
 
-    let wr_act = wv_assert_ok!(writer.run(|| {
+    let wr_act = wv_require_ok!(writer.run(|| {
         println!("This is a test!");
         Ok(())
     }));
 
-    let rd_act = wv_assert_ok!(reader.run(|| {
+    let rd_act = wv_require_ok!(reader.run(|| {
         let mut t = DefaultWvTester::default();
-        let s = wv_assert_ok!(io::stdin().read_to_string());
+        let s = wv_require_ok!(io::stdin().read_to_string());
         wv_assert_eq!(t, s, "This is a test!\n");
         Ok(())
     }));
@@ -119,22 +119,22 @@ fn child_to_child(t: &mut dyn WvTester) {
 }
 
 fn exec_child_to_child(t: &mut dyn WvTester) {
-    let pipeserv = wv_assert_ok!(Pipes::new("pipes"));
-    let pipe_mem = wv_assert_ok!(MemGate::new(0x10000, kif::Perm::RW));
-    let pipe = wv_assert_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
+    let pipeserv = wv_require_ok!(Pipes::new("pipes"));
+    let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+    let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
-    let tile1 = wv_assert_ok!(Tile::get("compat|own"));
-    let tile2 = wv_assert_ok!(Tile::get("compat|own"));
-    let mut writer = wv_assert_ok!(ChildActivity::new_with(tile1, ActivityArgs::new("writer")));
-    let mut reader = wv_assert_ok!(ChildActivity::new_with(tile2, ActivityArgs::new("reader")));
+    let tile1 = wv_require_ok!(Tile::get("compat|own"));
+    let tile2 = wv_require_ok!(Tile::get("compat|own"));
+    let mut writer = wv_require_ok!(ChildActivity::new_with(tile1, ActivityArgs::new("writer")));
+    let mut reader = wv_require_ok!(ChildActivity::new_with(tile2, ActivityArgs::new("reader")));
     writer.add_file(io::STDOUT_FILENO, pipe.writer().unwrap().fd());
     reader.add_file(io::STDIN_FILENO, pipe.reader().unwrap().fd());
 
-    let wr_act = wv_assert_ok!(writer.exec(&["/bin/hello"]));
+    let wr_act = wv_require_ok!(writer.exec(&["/bin/hello"]));
 
-    let rd_act = wv_assert_ok!(reader.run(|| {
+    let rd_act = wv_require_ok!(reader.run(|| {
         let mut t = DefaultWvTester::default();
-        let s = wv_assert_ok!(io::stdin().read_to_string());
+        let s = wv_require_ok!(io::stdin().read_to_string());
         wv_assert_eq!(t, s, "Hello World\n");
         Ok(())
     }));
@@ -147,15 +147,15 @@ fn exec_child_to_child(t: &mut dyn WvTester) {
 }
 
 fn writer_quit(t: &mut dyn WvTester) {
-    let pipeserv = wv_assert_ok!(Pipes::new("pipes"));
-    let pipe_mem = wv_assert_ok!(MemGate::new(0x10000, kif::Perm::RW));
-    let pipe = wv_assert_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
+    let pipeserv = wv_require_ok!(Pipes::new("pipes"));
+    let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+    let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
-    let mut act = wv_assert_ok!(ChildActivity::new_with(tile, ActivityArgs::new("writer")));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let mut act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("writer")));
     act.add_file(io::STDOUT_FILENO, pipe.writer().unwrap().fd());
 
-    let act = wv_assert_ok!(act.run(|| {
+    let act = wv_require_ok!(act.run(|| {
         println!("This is a test!");
         println!("This is a test!");
         Ok(())
@@ -181,15 +181,15 @@ fn writer_quit(t: &mut dyn WvTester) {
 }
 
 fn reader_quit(t: &mut dyn WvTester) {
-    let pipeserv = wv_assert_ok!(Pipes::new("pipes"));
-    let pipe_mem = wv_assert_ok!(MemGate::new(0x10000, kif::Perm::RW));
-    let pipe = wv_assert_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
+    let pipeserv = wv_require_ok!(Pipes::new("pipes"));
+    let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+    let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
-    let mut act = wv_assert_ok!(ChildActivity::new_with(tile, ActivityArgs::new("reader")));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let mut act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("reader")));
     act.add_file(io::STDIN_FILENO, pipe.reader().unwrap().fd());
 
-    let act = wv_assert_ok!(act.run(|| {
+    let act = wv_require_ok!(act.run(|| {
         let mut t = DefaultWvTester::default();
         let mut s = String::new();
         wv_assert_eq!(t, io::stdin().read_line(&mut s), Ok(15));

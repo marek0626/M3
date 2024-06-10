@@ -39,32 +39,32 @@ fn destroy(t: &mut dyn WvTester) {
     use m3::cap::Selector;
     use m3::com::{recv_msg, SGateArgs, SendGate};
     use m3::tiles::{Activity, ChildActivity, RunningActivity, Tile};
-    use m3::{reply_vmsg, send_recv, wv_assert_eq, wv_assert_ok};
+    use m3::{reply_vmsg, send_recv, wv_assert_eq, wv_require_ok};
 
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
-    let mut child = wv_assert_ok!(ChildActivity::new(tile, "test"));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let mut child = wv_require_ok!(ChildActivity::new(tile, "test"));
 
     let act = {
-        let rg = wv_assert_ok!(RecvGate::new_with(
+        let rg = wv_require_ok!(RecvGate::new_with(
             RGateArgs::default().order(6).msg_order(6)
         ));
         // TODO actually, we could create it in the child, but this is not possible in rust atm
         // because we would need to move rg to the child *and* use it in the parent
-        let sg = wv_assert_ok!(SendCap::new_with(SGateArgs::new(&rg).credits(1)));
+        let sg = wv_require_ok!(SendCap::new_with(SGateArgs::new(&rg).credits(1)));
 
-        wv_assert_ok!(child.delegate_obj(sg.sel()));
+        wv_require_ok!(child.delegate_obj(sg.sel()));
 
         let mut dst = child.data_sink();
         dst.push(sg.sel());
 
-        let act = wv_assert_ok!(child.run(|| {
+        let act = wv_require_ok!(child.run(|| {
             let mut t = m3::test::DefaultWvTester::default();
             let sg_sel: Selector = Activity::own().data_source().pop().unwrap();
-            let sg = wv_assert_ok!(SendGate::new_bind(sg_sel));
+            let sg = wv_require_ok!(SendGate::new_bind(sg_sel));
 
             let mut i = 0;
             for _ in 0..10 {
-                wv_assert_ok!(send_recv!(&sg, RecvGate::def(), i, i + 1, i + 2));
+                wv_require_ok!(send_recv!(&sg, RecvGate::def(), i, i + 1, i + 2));
                 i += 3;
             }
             wv_assert_err!(
@@ -76,16 +76,16 @@ fn destroy(t: &mut dyn WvTester) {
         }));
 
         for i in 0..10 {
-            let mut msg = wv_assert_ok!(recv_msg(&rg));
+            let mut msg = wv_require_ok!(recv_msg(&rg));
             let (a1, a2, a3): (i32, i32, i32) = (
-                wv_assert_ok!(msg.pop()),
-                wv_assert_ok!(msg.pop()),
-                wv_assert_ok!(msg.pop()),
+                wv_require_ok!(msg.pop()),
+                wv_require_ok!(msg.pop()),
+                wv_require_ok!(msg.pop()),
             );
             wv_assert_eq!(t, a1, i * 3 + 0);
             wv_assert_eq!(t, a2, i * 3 + 1);
             wv_assert_eq!(t, a3, i * 3 + 2);
-            wv_assert_ok!(reply_vmsg!(msg, 0));
+            wv_require_ok!(reply_vmsg!(msg, 0));
         }
 
         act

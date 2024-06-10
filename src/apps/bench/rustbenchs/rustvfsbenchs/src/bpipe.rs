@@ -27,7 +27,7 @@ use m3::test::WvTester;
 use m3::tiles::{ActivityArgs, ChildActivity, RunningActivity, Tile};
 use m3::time::{CycleInstant, Profiler};
 use m3::vfs::IndirectPipe;
-use m3::{format, wv_assert_eq, wv_assert_ok, wv_perf, wv_run_test};
+use m3::{format, wv_assert_eq, wv_perf, wv_require_ok, wv_run_test};
 
 const DATA_SIZE: usize = 2 * 1024 * 1024;
 const BUF_SIZE: usize = 8 * 1024;
@@ -40,25 +40,25 @@ pub fn run(t: &mut dyn WvTester) {
 }
 
 fn child_to_parent(t: &mut dyn WvTester) {
-    let pipeserv = wv_assert_ok!(Pipes::new("pipes"));
+    let pipeserv = wv_require_ok!(Pipes::new("pipes"));
     let prof = Profiler::default().repeats(2).warmup(1);
 
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
     let res = prof.run::<CycleInstant, _>(|| {
-        let pipe_mem = wv_assert_ok!(MemGate::new(0x10000, kif::Perm::RW));
-        let pipe = wv_assert_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
+        let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+        let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
-        let mut act = wv_assert_ok!(ChildActivity::new_with(
+        let mut act = wv_require_ok!(ChildActivity::new_with(
             tile.clone(),
             ActivityArgs::new("writer")
         ));
         act.add_file(io::STDOUT_FILENO, pipe.writer().unwrap().fd());
 
-        let act = wv_assert_ok!(act.run(|| {
+        let act = wv_require_ok!(act.run(|| {
             let buf = BUF.borrow();
             let mut rem = DATA_SIZE;
             while rem > 0 {
-                wv_assert_ok!(stdout().write(&buf[..]));
+                wv_require_ok!(stdout().write(&buf[..]));
                 rem -= BUF_SIZE;
             }
             Ok(())
@@ -68,7 +68,7 @@ fn child_to_parent(t: &mut dyn WvTester) {
 
         let mut input = pipe.reader().unwrap();
         let mut buf = BUF.borrow_mut();
-        while wv_assert_ok!(input.read(&mut buf[..])) > 0 {}
+        while wv_require_ok!(input.read(&mut buf[..])) > 0 {}
 
         wv_assert_eq!(t, act.wait(), Ok(Code::Success));
     });
@@ -84,23 +84,23 @@ fn child_to_parent(t: &mut dyn WvTester) {
 }
 
 fn parent_to_child(t: &mut dyn WvTester) {
-    let pipeserv = wv_assert_ok!(Pipes::new("pipes"));
+    let pipeserv = wv_require_ok!(Pipes::new("pipes"));
     let prof = Profiler::default().repeats(2).warmup(1);
 
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
     let res = prof.run::<CycleInstant, _>(|| {
-        let pipe_mem = wv_assert_ok!(MemGate::new(0x10000, kif::Perm::RW));
-        let pipe = wv_assert_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
+        let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+        let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
-        let mut act = wv_assert_ok!(ChildActivity::new_with(
+        let mut act = wv_require_ok!(ChildActivity::new_with(
             tile.clone(),
             ActivityArgs::new("reader")
         ));
         act.add_file(io::STDIN_FILENO, pipe.reader().unwrap().fd());
 
-        let act = wv_assert_ok!(act.run(|| {
+        let act = wv_require_ok!(act.run(|| {
             let mut buf = BUF.borrow_mut();
-            while wv_assert_ok!(stdin().read(&mut buf[..])) > 0 {}
+            while wv_require_ok!(stdin().read(&mut buf[..])) > 0 {}
             Ok(())
         }));
 
@@ -110,7 +110,7 @@ fn parent_to_child(t: &mut dyn WvTester) {
         let buf = BUF.borrow();
         let mut rem = DATA_SIZE;
         while rem > 0 {
-            wv_assert_ok!(output.write(&buf[..]));
+            wv_require_ok!(output.write(&buf[..]));
             rem -= BUF_SIZE;
         }
 

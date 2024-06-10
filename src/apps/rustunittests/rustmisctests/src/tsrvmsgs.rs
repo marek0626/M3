@@ -23,7 +23,7 @@ use m3::server::{RequestHandler, RequestSession, Server, ServerSession};
 use m3::test::WvTester;
 use m3::tiles::{ActivityArgs, ChildActivity, OwnActivity, RunningActivity, Tile};
 
-use m3::{reply_vmsg, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_run_test};
+use m3::{reply_vmsg, wv_assert_eq, wv_assert_err, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, testmsgs);
@@ -65,8 +65,8 @@ impl MsgSession {
 }
 
 fn server_msgs_main() -> Result<(), Error> {
-    let mut hdl = wv_assert_ok!(RequestHandler::new());
-    let mut srv = wv_assert_ok!(Server::new("test", &mut hdl));
+    let mut hdl = wv_require_ok!(RequestHandler::new());
+    let mut srv = wv_require_ok!(Server::new("test", &mut hdl));
 
     hdl.reg_msg_handler(0usize, MsgSession::test);
 
@@ -76,30 +76,30 @@ fn server_msgs_main() -> Result<(), Error> {
 fn testmsgs(t: &mut dyn WvTester) {
     use m3::send_recv;
 
-    let server_tile = wv_assert_ok!(Tile::get("compat|own"));
-    let serv = wv_assert_ok!(ChildActivity::new_with(
+    let server_tile = wv_require_ok!(Tile::get("compat|own"));
+    let serv = wv_require_ok!(ChildActivity::new_with(
         server_tile,
         ActivityArgs::new("server")
     ));
-    let sact = wv_assert_ok!(serv.run(server_msgs_main));
+    let sact = wv_require_ok!(serv.run(server_msgs_main));
 
     {
         let sess = crate::tserver::open_sess("test");
-        let sgate = wv_assert_ok!(sess.connect());
+        let sgate = wv_require_ok!(sess.connect());
 
         for _ in 0..5 {
-            let mut reply = wv_assert_ok!(send_recv!(&sgate, RecvGate::def(), 0, "123456"));
-            let resp: String = wv_assert_ok!(reply.pop());
+            let mut reply = wv_require_ok!(send_recv!(&sgate, RecvGate::def(), 0, "123456"));
+            let resp: String = wv_require_ok!(reply.pop());
             wv_assert_eq!(t, resp, "654321");
         }
     }
 
     {
         let sess = crate::tserver::open_sess("test");
-        let sgate = wv_assert_ok!(sess.connect());
+        let sgate = wv_require_ok!(sess.connect());
 
-        let mut reply = wv_assert_ok!(send_recv!(&sgate, RecvGate::def(), 0, "123456"));
-        let resp: String = wv_assert_ok!(reply.pop());
+        let mut reply = wv_require_ok!(send_recv!(&sgate, RecvGate::def(), 0, "123456"));
+        let resp: String = wv_require_ok!(reply.pop());
         wv_assert_eq!(t, resp, "654321");
 
         wv_assert_err!(

@@ -33,7 +33,7 @@ use m3::server::{
 use m3::syscalls;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ActivityArgs, ChildActivity, OwnActivity, RunningActivity, Tile};
-use m3::{send_vmsg, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_run_test};
+use m3::{send_vmsg, wv_assert_eq, wv_assert_err, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, testnoresp);
@@ -67,12 +67,12 @@ impl CrashSession {
 }
 
 fn server_crash_main() -> Result<(), Error> {
-    let mut hdl = wv_assert_ok!(RequestHandler::new());
-    let mut srv = wv_assert_ok!(Server::new("test", &mut hdl));
+    let mut hdl = wv_require_ok!(RequestHandler::new());
+    let mut srv = wv_require_ok!(Server::new("test", &mut hdl));
 
     hdl.reg_cap_handler(0usize, ExcType::Obt(1), CrashSession::dummy);
 
-    wv_assert_ok!(hdl.run(&mut srv));
+    wv_require_ok!(hdl.run(&mut srv));
 
     Ok(())
 }
@@ -89,22 +89,22 @@ pub fn open_sess(name: &str) -> ClientSession {
 }
 
 fn testnoresp(t: &mut dyn WvTester) {
-    let client_tile = wv_assert_ok!(Tile::get("compat|own"));
-    let client = wv_assert_ok!(ChildActivity::new_with(
+    let client_tile = wv_require_ok!(Tile::get("compat|own"));
+    let client = wv_require_ok!(ChildActivity::new_with(
         client_tile,
         ActivityArgs::new("client")
     ));
 
-    let server_tile = wv_assert_ok!(Tile::get("compat|own"));
+    let server_tile = wv_require_ok!(Tile::get("compat|own"));
     let cact = {
-        let serv = wv_assert_ok!(ChildActivity::new_with(
+        let serv = wv_require_ok!(ChildActivity::new_with(
             server_tile,
             ActivityArgs::new("server")
         ));
 
-        let sact = wv_assert_ok!(serv.run(server_crash_main));
+        let sact = wv_require_ok!(serv.run(server_crash_main));
 
-        let cact = wv_assert_ok!(client.run(|| {
+        let cact = wv_require_ok!(client.run(|| {
             let mut t = DefaultWvTester::default();
             let sess = open_sess("test");
             wv_assert_err!(
@@ -126,31 +126,31 @@ fn testnoresp(t: &mut dyn WvTester) {
 }
 
 fn testcliexit(t: &mut dyn WvTester) {
-    let client_tile = wv_assert_ok!(Tile::get("compat|own"));
-    let mut client = wv_assert_ok!(ChildActivity::new_with(
+    let client_tile = wv_require_ok!(Tile::get("compat|own"));
+    let mut client = wv_require_ok!(ChildActivity::new_with(
         client_tile,
         ActivityArgs::new("client")
     ));
 
-    let server_tile = wv_assert_ok!(Tile::get("compat|own"));
-    let serv = wv_assert_ok!(ChildActivity::new_with(
+    let server_tile = wv_require_ok!(Tile::get("compat|own"));
+    let serv = wv_require_ok!(ChildActivity::new_with(
         server_tile,
         ActivityArgs::new("server")
     ));
 
-    let sact = wv_assert_ok!(serv.run(server_crash_main));
+    let sact = wv_require_ok!(serv.run(server_crash_main));
 
-    let rg = wv_assert_ok!(RecvGate::new_with(
+    let rg = wv_require_ok!(RecvGate::new_with(
         RGateArgs::default().order(7).msg_order(6)
     ));
 
-    let sg = wv_assert_ok!(SendCap::new_with(SGateArgs::new(&rg).credits(2)));
-    wv_assert_ok!(client.delegate_obj(sg.sel()));
+    let sg = wv_require_ok!(SendCap::new_with(SGateArgs::new(&rg).credits(2)));
+    wv_require_ok!(client.delegate_obj(sg.sel()));
 
     let mut dst = client.data_sink();
     dst.push(sg.sel());
 
-    let cact = wv_assert_ok!(client.run(|| {
+    let cact = wv_require_ok!(client.run(|| {
         let mut src = Activity::own().data_source();
         let sg_sel: Selector = src.pop().unwrap();
 
@@ -161,8 +161,8 @@ fn testcliexit(t: &mut dyn WvTester) {
         };
 
         // first send to activate the gate
-        let sg = wv_assert_ok!(SendGate::new_bind(sg_sel));
-        wv_assert_ok!(send_vmsg!(&sg, RecvGate::def(), 1));
+        let sg = wv_require_ok!(SendGate::new_bind(sg_sel));
+        wv_require_ok!(send_vmsg!(&sg, RecvGate::def(), 1));
 
         // ensure that we drop MsgBuf before using send_vmsg below
         {
@@ -183,11 +183,11 @@ fn testcliexit(t: &mut dyn WvTester) {
                     obtain: true,
                 }
             );
-            wv_assert_ok!(syscalls::send_gate().send(&req_buf, RecvGate::syscall()));
+            wv_require_ok!(syscalls::send_gate().send(&req_buf, RecvGate::syscall()));
         }
 
         // now we're ready to be killed
-        wv_assert_ok!(send_vmsg!(&sg, RecvGate::def(), 1));
+        wv_require_ok!(send_vmsg!(&sg, RecvGate::def(), 1));
 
         // wait here; don't exit (we don't have credits anymore)
         loop {
@@ -199,11 +199,11 @@ fn testcliexit(t: &mut dyn WvTester) {
     }));
 
     // wait until the child is ready to be killed
-    wv_assert_ok!(recv_msg(&rg));
-    wv_assert_ok!(recv_msg(&rg));
+    wv_require_ok!(recv_msg(&rg));
+    wv_require_ok!(recv_msg(&rg));
 
     wv_assert_eq!(t, sact.wait(), Ok(Code::EndOfFile));
-    wv_assert_ok!(cact.stop());
+    wv_require_ok!(cact.stop());
 }
 
 static STOP: StaticCell<bool> = StaticCell::new(false);
@@ -243,8 +243,8 @@ fn server_notsup_main() -> Result<(), Error> {
     for _ in 0..5 {
         STOP.set(false);
 
-        let mut hdl = wv_assert_ok!(RequestHandler::new());
-        let srv = wv_assert_ok!(Server::new("test", &mut hdl));
+        let mut hdl = wv_require_ok!(RequestHandler::new());
+        let srv = wv_require_ok!(Server::new("test", &mut hdl));
 
         hdl.reg_cap_handler(0usize, ExcType::Obt(1), NotSupSession::fivetimes);
         hdl.reg_cap_handler(1usize, ExcType::Del(1), NotSupSession::fivetimes);
@@ -270,12 +270,12 @@ fn server_notsup_main() -> Result<(), Error> {
 }
 
 fn testcaps(t: &mut dyn WvTester) {
-    let server_tile = wv_assert_ok!(Tile::get("compat|own"));
-    let serv = wv_assert_ok!(ChildActivity::new_with(
+    let server_tile = wv_require_ok!(Tile::get("compat|own"));
+    let serv = wv_require_ok!(ChildActivity::new_with(
         server_tile,
         ActivityArgs::new("server")
     ));
-    let sact = wv_assert_ok!(serv.run(server_notsup_main));
+    let sact = wv_require_ok!(serv.run(server_notsup_main));
 
     for i in 0..5 {
         let sess = open_sess("test");

@@ -19,7 +19,7 @@ use m3::test::DefaultWvTester;
 use m3::test::WvTester;
 use m3::tiles::{ActivityArgs, ChildActivity, OwnActivity, RunningActivity, Tile};
 use m3::time::TimeDuration;
-use m3::{wv_assert, wv_assert_eq, wv_assert_ok, wv_run_test};
+use m3::{wv_assert, wv_assert_eq, wv_require_ok, wv_run_test};
 
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -35,15 +35,15 @@ pub fn run(t: &mut dyn WvTester) {
 }
 
 fn udp_echo(t: &mut dyn WvTester) {
-    let socket = wv_assert_ok!(UdpSocket::bind("127.0.0.1:3000"));
+    let socket = wv_require_ok!(UdpSocket::bind("127.0.0.1:3000"));
 
-    let local = wv_assert_ok!(socket.local_addr());
+    let local = wv_require_ok!(socket.local_addr());
     wv_assert_eq!(t, local.ip(), IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
     wv_assert_eq!(t, local.port(), 3000);
 
-    wv_assert_ok!(socket.connect("127.0.0.1:1337"));
+    wv_require_ok!(socket.connect("127.0.0.1:1337"));
 
-    let peer = wv_assert_ok!(socket.peer_addr());
+    let peer = wv_require_ok!(socket.peer_addr());
     wv_assert_eq!(t, peer.ip(), IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
     wv_assert_eq!(t, peer.port(), 1337);
 
@@ -59,7 +59,7 @@ fn udp_echo(t: &mut dyn WvTester) {
             matches!(socket.send_to(b"foobar", "127.0.0.1:1337"), Ok(6))
         );
         let mut buf = [0u8; 6];
-        let (res, src) = wv_assert_ok!(socket.recv_from(&mut buf));
+        let (res, src) = wv_require_ok!(socket.recv_from(&mut buf));
         wv_assert_eq!(t, res, 6);
         wv_assert_eq!(t, src.ip(), IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
         wv_assert_eq!(t, src.port(), 1337);
@@ -70,12 +70,12 @@ fn udp_echo(t: &mut dyn WvTester) {
 fn tcp_echo(t: &mut dyn WvTester) {
     Semaphore::attach("net-tcp").unwrap().down().unwrap();
 
-    let mut socket = wv_assert_ok!(TcpStream::connect("127.0.0.1:1338"));
+    let mut socket = wv_require_ok!(TcpStream::connect("127.0.0.1:1338"));
 
-    let local = wv_assert_ok!(socket.local_addr());
+    let local = wv_require_ok!(socket.local_addr());
     wv_assert_eq!(t, local.ip(), IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
 
-    let peer = wv_assert_ok!(socket.peer_addr());
+    let peer = wv_require_ok!(socket.peer_addr());
     wv_assert_eq!(t, peer.ip(), IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
     wv_assert_eq!(t, peer.port(), 1338);
 
@@ -106,9 +106,9 @@ fn tcp_server() -> Result<(), Error> {
         Code::Success
     );
 
-    let listener = wv_assert_ok!(TcpListener::bind("127.0.0.1:2000"));
+    let listener = wv_require_ok!(TcpListener::bind("127.0.0.1:2000"));
 
-    let (mut stream, peer) = wv_assert_ok!(listener.accept());
+    let (mut stream, peer) = wv_require_ok!(listener.accept());
     wv_assert_eq!(t, peer.ip(), IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
 
     let mut buf = [0u8; 4];
@@ -121,15 +121,15 @@ fn tcp_server() -> Result<(), Error> {
 fn tcp_accept(t: &mut dyn WvTester) {
     Semaphore::attach("net-tcp").unwrap().down().unwrap();
 
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
-    let act = wv_assert_ok!(ChildActivity::new_with(tile, ActivityArgs::new("server")));
-    let act = wv_assert_ok!(act.run(tcp_server));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("server")));
+    let act = wv_require_ok!(act.run(tcp_server));
 
     OwnActivity::sleep_for(TimeDuration::from_millis(10)).unwrap();
 
     // close the socket before we wait for the child
     {
-        let mut socket = wv_assert_ok!(TcpStream::connect("127.0.0.1:2000"));
+        let mut socket = wv_require_ok!(TcpStream::connect("127.0.0.1:2000"));
 
         {
             wv_assert!(t, matches!(socket.write(b"test"), Ok(4)));

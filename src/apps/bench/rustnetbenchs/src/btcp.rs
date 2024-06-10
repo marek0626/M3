@@ -22,7 +22,7 @@ use m3::println;
 use m3::test::WvTester;
 use m3::time::{Results, TimeDuration, TimeInstant};
 use m3::vfs::{File, FileEvent, FileWaiter};
-use m3::{wv_assert_eq, wv_assert_ok, wv_perf, wv_run_test};
+use m3::{wv_assert_eq, wv_perf, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, latency);
@@ -30,12 +30,12 @@ pub fn run(t: &mut dyn WvTester) {
 }
 
 fn latency(t: &mut dyn WvTester) {
-    let net = wv_assert_ok!(Network::new("net"));
-    let mut socket = wv_assert_ok!(TcpSocket::new(StreamSocketArgs::new(net)));
+    let net = wv_require_ok!(Network::new("net"));
+    let mut socket = wv_require_ok!(TcpSocket::new(StreamSocketArgs::new(net)));
 
-    wv_assert_ok!(Semaphore::attach("net-tcp").unwrap().down());
+    wv_require_ok!(Semaphore::attach("net-tcp").unwrap().down());
 
-    wv_assert_ok!(socket.connect(Endpoint::new(crate::DST_IP.get(), 1338)));
+    wv_require_ok!(socket.connect(Endpoint::new(crate::DST_IP.get(), 1338)));
 
     let samples = 5;
 
@@ -59,7 +59,7 @@ fn latency(t: &mut dyn WvTester) {
 
             let mut recv_size = 0;
             while recv_size < *pkt_size {
-                recv_size += wv_assert_ok!(socket.recv(&mut buf));
+                recv_size += wv_require_ok!(socket.recv(&mut buf));
             }
 
             let stop = TimeInstant::now();
@@ -79,7 +79,7 @@ fn latency(t: &mut dyn WvTester) {
         );
     }
 
-    wv_assert_ok!(socket.close());
+    wv_require_ok!(socket.close());
 }
 
 fn bandwidth(t: &mut dyn WvTester) {
@@ -87,25 +87,25 @@ fn bandwidth(t: &mut dyn WvTester) {
     const BURST_SIZE: usize = 2;
     const TIMEOUT: TimeDuration = TimeDuration::from_secs(1);
 
-    let net = wv_assert_ok!(Network::new("net"));
-    let mut socket = wv_assert_ok!(TcpSocket::new(
+    let net = wv_require_ok!(Network::new("net"));
+    let mut socket = wv_require_ok!(TcpSocket::new(
         StreamSocketArgs::new(net)
             .send_buffer(64 * 1024)
             .recv_buffer(256 * 1024)
     ));
 
-    wv_assert_ok!(Semaphore::attach("net-tcp").unwrap().down());
+    wv_require_ok!(Semaphore::attach("net-tcp").unwrap().down());
 
-    wv_assert_ok!(socket.connect(Endpoint::new(crate::DST_IP.get(), 1338)));
+    wv_require_ok!(socket.connect(Endpoint::new(crate::DST_IP.get(), 1338)));
 
     let mut buf = [0u8; 1024];
 
     for _ in 0..10 {
         wv_assert_eq!(t, socket.send(&buf), Ok(buf.len()));
-        wv_assert_ok!(socket.recv(&mut buf));
+        wv_require_ok!(socket.recv(&mut buf));
     }
 
-    wv_assert_ok!(socket.set_blocking(false));
+    wv_require_ok!(socket.set_blocking(false));
 
     let start = TimeInstant::now();
     let mut timeout = start + TIMEOUT;
@@ -187,6 +187,6 @@ fn bandwidth(t: &mut dyn WvTester) {
         format!("{} MiB/s (+/- 0 with 1 runs)", mbps)
     );
 
-    wv_assert_ok!(socket.set_blocking(true));
-    wv_assert_ok!(socket.close());
+    wv_require_ok!(socket.set_blocking(true));
+    wv_require_ok!(socket.close());
 }

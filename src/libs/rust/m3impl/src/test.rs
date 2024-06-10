@@ -180,7 +180,7 @@ macro_rules! wv_assert_eq {
 /// Convenience macro that tests whether the argument is [`Ok`], returns the inner value if so, and
 /// panics otherwise
 #[macro_export]
-macro_rules! wv_assert_ok {
+macro_rules! wv_require_ok {
     ($res:expr) => {{
         let res = $res;
         match res {
@@ -202,7 +202,7 @@ macro_rules! wv_assert_ok {
 /// Convenience macro that tests whether the argument is [`Some`], returns the inner value if so,
 /// and panics otherwise
 #[macro_export]
-macro_rules! wv_assert_some {
+macro_rules! wv_require_some {
     ($res:expr) => {{
         let res = $res;
         match res {

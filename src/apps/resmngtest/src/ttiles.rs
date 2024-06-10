@@ -19,7 +19,7 @@ use m3::rc::Rc;
 use m3::tcu::TileId;
 use m3::test::WvTester;
 use m3::tiles::Tile;
-use m3::{wv_assert_eq, wv_assert_err, wv_assert_ok, wv_run_test};
+use m3::{wv_assert_eq, wv_assert_err, wv_require_ok, wv_run_test};
 
 use resmng::resources::tiles::TileManager;
 
@@ -51,10 +51,10 @@ pub fn run(t: &mut dyn WvTester) {
 fn find(t: &mut dyn WvTester) {
     let mng = create_tiles();
 
-    let riscv = wv_assert_ok!(mng.find(TileDesc::new(TileType::Comp, TileISA::RISCV64, 0)));
+    let riscv = wv_require_ok!(mng.find(TileDesc::new(TileType::Comp, TileISA::RISCV64, 0)));
     wv_assert_eq!(t, riscv.tile_id(), TileId::new(0, 1));
     wv_assert_eq!(t, riscv.tile_obj().sel(), 64);
-    let rv32 = wv_assert_ok!(mng.find(TileDesc::new_with_attr(
+    let rv32 = wv_require_ok!(mng.find(TileDesc::new_with_attr(
         TileType::Comp,
         TileISA::RISCV32,
         0,
@@ -69,17 +69,17 @@ fn find(t: &mut dyn WvTester) {
     );
 
     let base = TileDesc::new(TileType::Comp, TileISA::RISCV64, 0);
-    let riscv = wv_assert_ok!(mng.find_with_attr(base, "perf|core"));
+    let riscv = wv_require_ok!(mng.find_with_attr(base, "perf|core"));
     wv_assert_eq!(t, riscv.tile_id(), TileId::new(0, 1));
-    let rv32 = wv_assert_ok!(mng.find_with_attr(base, "riscv32+imem"));
+    let rv32 = wv_require_ok!(mng.find_with_attr(base, "riscv32+imem"));
     wv_assert_eq!(t, rv32.tile_id(), TileId::new(0, 2));
 }
 
 fn usage(t: &mut dyn WvTester) {
     let mng = create_tiles();
 
-    wv_assert_ok!(mng.find(TileDesc::new(TileType::Comp, TileISA::RISCV64, 0)));
-    let riscv = wv_assert_ok!(mng.find(TileDesc::new(TileType::Comp, TileISA::RISCV64, 0)));
+    wv_require_ok!(mng.find(TileDesc::new(TileType::Comp, TileISA::RISCV64, 0)));
+    let riscv = wv_require_ok!(mng.find(TileDesc::new(TileType::Comp, TileISA::RISCV64, 0)));
     mng.add_user(&riscv);
 
     wv_assert_err!(
@@ -99,5 +99,5 @@ fn usage(t: &mut dyn WvTester) {
 
     mng.remove_user(&riscv);
 
-    wv_assert_ok!(mng.find(TileDesc::new(TileType::Comp, TileISA::RISCV64, 0)));
+    wv_require_ok!(mng.find(TileDesc::new(TileType::Comp, TileISA::RISCV64, 0)));
 }

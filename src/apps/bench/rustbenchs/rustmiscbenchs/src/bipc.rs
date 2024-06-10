@@ -21,7 +21,7 @@ use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ActivityArgs, ChildActivity, RunningActivity, Tile};
 use m3::time::{CycleInstant, Profiler, TimeDuration};
 use m3::{
-    format, println, reply_vmsg, send_vmsg, wv_assert_eq, wv_assert_ok, wv_perf, wv_run_test,
+    format, println, reply_vmsg, send_vmsg, wv_assert_eq, wv_perf, wv_require_ok, wv_run_test,
 };
 
 const MSG_ORD: u32 = 8;
@@ -36,7 +36,7 @@ pub fn run(t: &mut dyn WvTester) {
 }
 
 fn pingpong_remote(t: &mut dyn WvTester) {
-    let tile = wv_assert_ok!(Tile::get("compat"));
+    let tile = wv_require_ok!(Tile::get("compat"));
     pingpong_with_tile(t, "remote", tile);
 }
 
@@ -48,44 +48,44 @@ fn pingpong_local(t: &mut dyn WvTester) {
 
     let tile = Activity::own().tile().clone();
     // give the child half of our time quota (minimize timer interrupts)
-    let own_quota = wv_assert_ok!(tile.quota()).time().total();
-    let tile = wv_assert_ok!(tile.derive(None, Some(own_quota / 2), None));
+    let own_quota = wv_require_ok!(tile.quota()).time().total();
+    let tile = wv_require_ok!(tile.derive(None, Some(own_quota / 2), None));
     pingpong_with_tile(t, "local", tile);
 }
 
 fn pingpong_with_tile(t: &mut dyn WvTester, name: &str, tile: Rc<Tile>) {
-    let mut act = wv_assert_ok!(ChildActivity::new_with(tile, ActivityArgs::new("sender")));
+    let mut act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("sender")));
 
-    let rgate = wv_assert_ok!(RecvCap::new(MSG_ORD, MSG_ORD));
+    let rgate = wv_require_ok!(RecvCap::new(MSG_ORD, MSG_ORD));
 
-    wv_assert_ok!(act.delegate_obj(rgate.sel()));
+    wv_require_ok!(act.delegate_obj(rgate.sel()));
 
     let mut dst = act.data_sink();
     dst.push(rgate.sel());
 
-    let act = wv_assert_ok!(act.run(|| {
+    let act = wv_require_ok!(act.run(|| {
         let mut t = DefaultWvTester::default();
         let rgate_sel: Selector = Activity::own().data_source().pop().unwrap();
         let rgate = RecvGate::new_bind(rgate_sel).unwrap();
         for _ in 0..RUNS + WARMUP {
-            let mut msg = wv_assert_ok!(recv_msg(&rgate));
+            let mut msg = wv_require_ok!(recv_msg(&rgate));
             wv_assert_eq!(t, msg.pop::<u64>(), Ok(0));
-            wv_assert_ok!(reply_vmsg!(msg, 0u64));
+            wv_require_ok!(reply_vmsg!(msg, 0u64));
         }
         Ok(())
     }));
 
     let prof = Profiler::default().repeats(RUNS).warmup(WARMUP);
 
-    let sgate = wv_assert_ok!(SendGate::new_with(SGateArgs::new(&rgate).credits(1)));
+    let sgate = wv_require_ok!(SendGate::new_with(SGateArgs::new(&rgate).credits(1)));
     let reply_gate = RecvGate::def();
 
     wv_perf!(
         format!("{} pingpong with (1 * u64) msgs", name),
         prof.run::<CycleInstant, _>(|| {
-            wv_assert_ok!(send_vmsg!(&sgate, reply_gate, 0u64));
+            wv_require_ok!(send_vmsg!(&sgate, reply_gate, 0u64));
 
-            let mut reply = wv_assert_ok!(recv_msg(reply_gate));
+            let mut reply = wv_require_ok!(recv_msg(reply_gate));
             wv_assert_eq!(t, reply.pop::<u64>(), Ok(0));
         })
     );
@@ -99,26 +99,26 @@ fn pingpong_with_multiple(t: &mut dyn WvTester) {
         return;
     }
 
-    let tile = wv_assert_ok!(Tile::get("compat"));
+    let tile = wv_require_ok!(Tile::get("compat"));
     // use long time slices for childs (minimize timer interrupts)
-    wv_assert_ok!(tile.set_quota(
+    wv_require_ok!(tile.set_quota(
         TimeDuration::from_secs(1),
         tile.quota().unwrap().page_tables().remaining(),
     ));
 
     // split time quota between childs
-    let cur_quota = wv_assert_ok!(tile.quota()).time().total();
-    let tile1 = wv_assert_ok!(tile.derive(None, Some(cur_quota / 2), None));
-    let tile2 = wv_assert_ok!(tile.derive(None, Some(cur_quota / 2), None));
+    let cur_quota = wv_require_ok!(tile.quota()).time().total();
+    let tile1 = wv_require_ok!(tile.derive(None, Some(cur_quota / 2), None));
+    let tile2 = wv_require_ok!(tile.derive(None, Some(cur_quota / 2), None));
 
-    let mut act1 = wv_assert_ok!(ChildActivity::new_with(tile1, ActivityArgs::new("recv1")));
-    let mut act2 = wv_assert_ok!(ChildActivity::new_with(tile2, ActivityArgs::new("recv2")));
+    let mut act1 = wv_require_ok!(ChildActivity::new_with(tile1, ActivityArgs::new("recv1")));
+    let mut act2 = wv_require_ok!(ChildActivity::new_with(tile2, ActivityArgs::new("recv2")));
 
-    let rgate1 = wv_assert_ok!(RecvCap::new(MSG_ORD, MSG_ORD));
-    let rgate2 = wv_assert_ok!(RecvCap::new(MSG_ORD, MSG_ORD));
+    let rgate1 = wv_require_ok!(RecvCap::new(MSG_ORD, MSG_ORD));
+    let rgate2 = wv_require_ok!(RecvCap::new(MSG_ORD, MSG_ORD));
 
-    wv_assert_ok!(act1.delegate_obj(rgate1.sel()));
-    wv_assert_ok!(act2.delegate_obj(rgate2.sel()));
+    wv_require_ok!(act1.delegate_obj(rgate1.sel()));
+    wv_require_ok!(act2.delegate_obj(rgate2.sel()));
 
     act1.data_sink().push(rgate1.sel());
     act2.data_sink().push(rgate2.sel());
@@ -128,20 +128,20 @@ fn pingpong_with_multiple(t: &mut dyn WvTester) {
         let rgate_sel: Selector = Activity::own().data_source().pop().unwrap();
         let rgate = RecvGate::new_bind(rgate_sel).unwrap();
         for _ in 0..(RUNS + WARMUP) / 2 {
-            let mut msg = wv_assert_ok!(recv_msg(&rgate));
+            let mut msg = wv_require_ok!(recv_msg(&rgate));
             wv_assert_eq!(t, msg.pop::<u64>(), Ok(0));
-            wv_assert_ok!(reply_vmsg!(msg, 0u64));
+            wv_require_ok!(reply_vmsg!(msg, 0u64));
         }
         Ok(())
     };
 
-    let act1 = wv_assert_ok!(act1.run(func));
-    let act2 = wv_assert_ok!(act2.run(func));
+    let act1 = wv_require_ok!(act1.run(func));
+    let act2 = wv_require_ok!(act2.run(func));
 
     let prof = Profiler::default().repeats(RUNS).warmup(WARMUP);
 
-    let sgate1 = wv_assert_ok!(SendGate::new_with(SGateArgs::new(&rgate1).credits(1)));
-    let sgate2 = wv_assert_ok!(SendGate::new_with(SGateArgs::new(&rgate2).credits(1)));
+    let sgate1 = wv_require_ok!(SendGate::new_with(SGateArgs::new(&rgate1).credits(1)));
+    let sgate2 = wv_require_ok!(SendGate::new_with(SGateArgs::new(&rgate2).credits(1)));
     let reply_gate = RecvGate::def();
 
     let mut count = 0;
@@ -151,13 +151,13 @@ fn pingpong_with_multiple(t: &mut dyn WvTester) {
             // alternate between bothr receivers to ensure that we always need a context switch on
             // the other tile
             if count % 2 == 0 {
-                wv_assert_ok!(send_vmsg!(&sgate1, reply_gate, 0u64));
+                wv_require_ok!(send_vmsg!(&sgate1, reply_gate, 0u64));
             }
             else {
-                wv_assert_ok!(send_vmsg!(&sgate2, reply_gate, 0u64));
+                wv_require_ok!(send_vmsg!(&sgate2, reply_gate, 0u64));
             }
 
-            let mut reply = wv_assert_ok!(recv_msg(reply_gate));
+            let mut reply = wv_require_ok!(recv_msg(reply_gate));
             wv_assert_eq!(t, reply.pop::<u64>(), Ok(0));
 
             count += 1;

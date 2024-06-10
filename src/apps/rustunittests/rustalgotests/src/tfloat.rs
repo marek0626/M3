@@ -17,7 +17,7 @@ use m3::rc::Rc;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ActivityArgs, ChildActivity, RunningActivity, Tile};
 use m3::tmif;
-use m3::{println, wv_assert, wv_assert_ok, wv_run_test};
+use m3::{println, wv_assert, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, calc_pi_local);
@@ -34,7 +34,7 @@ fn calc_pi_local(t: &mut dyn WvTester) {
 }
 
 fn calc_pi_remote(t: &mut dyn WvTester) {
-    let tile = wv_assert_ok!(Tile::get("compat"));
+    let tile = wv_require_ok!(Tile::get("compat"));
     calc_pi(t, &tile);
 }
 
@@ -44,12 +44,12 @@ const PI_MIN: f64 = 3.141;
 const PI_MAX: f64 = 3.143;
 
 fn calc_pi(t: &mut dyn WvTester, tile: &Rc<Tile>) {
-    let act = wv_assert_ok!(ChildActivity::new_with(
+    let act = wv_require_ok!(ChildActivity::new_with(
         tile.clone(),
         ActivityArgs::new("t1")
     ));
 
-    let act = wv_assert_ok!(act.run(|| {
+    let act = wv_require_ok!(act.run(|| {
         let mut t = DefaultWvTester::default();
         let steps = 1000;
         let mut pi = 3.0;
@@ -65,7 +65,7 @@ fn calc_pi(t: &mut dyn WvTester, tile: &Rc<Tile>) {
 
             // yield every now and then to test if the FPU registers are saved/restored correctly
             if i % 10 == 0 {
-                wv_assert_ok!(tmif::switch_activity());
+                wv_require_ok!(tmif::switch_activity());
             }
 
             div += 2.0;
@@ -89,7 +89,7 @@ fn calc_pi(t: &mut dyn WvTester, tile: &Rc<Tile>) {
         }
 
         if i % 10 == 0 {
-            wv_assert_ok!(tmif::switch_activity());
+            wv_require_ok!(tmif::switch_activity());
         }
 
         div += 2.0;
@@ -100,5 +100,5 @@ fn calc_pi(t: &mut dyn WvTester, tile: &Rc<Tile>) {
     wv_assert!(t, pi <= PI_MAX);
     println!("PI (Leibniz) on {} = {}", Activity::own().tile_id(), pi);
 
-    wv_assert_ok!(act.wait());
+    wv_require_ok!(act.wait());
 }

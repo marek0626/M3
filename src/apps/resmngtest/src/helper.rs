@@ -19,7 +19,7 @@ use m3::errors::{Code, Error, VerboseError};
 use m3::kif::Perm;
 use m3::test::WvTester;
 use m3::tiles::{ActivityArgs, ChildActivity, RunningActivity, RunningDeviceActivity, Tile};
-use m3::{wv_assert_eq, wv_assert_ok};
+use m3::{wv_assert_eq, wv_require_ok};
 
 use resmng::childs::{Child, ChildManager, OwnChild};
 use resmng::config::Domain;
@@ -35,7 +35,7 @@ impl ChildStarter for TestStarter {
         _res: &mut Resources,
         child: &mut OwnChild,
     ) -> Result<(), VerboseError> {
-        let act = wv_assert_ok!(ChildActivity::new(
+        let act = wv_require_ok!(ChildActivity::new(
             child.child_tile().tile_obj().clone(),
             child.name(),
         ));
@@ -64,45 +64,45 @@ pub fn run_subsys<F>(
 ) where
     F: Fn(&mut SubsystemBuilder),
 {
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
-    let mut child = wv_assert_ok!(ChildActivity::new_with(
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let mut child = wv_require_ok!(ChildActivity::new_with(
         tile.clone(),
         ActivityArgs::new("test").first_sel(1000)
     ));
 
-    let (_our_sub, mut res) = wv_assert_ok!(Subsystem::new());
+    let (_our_sub, mut res) = wv_require_ok!(Subsystem::new());
     let mut child_sub = SubsystemBuilder::default();
 
-    wv_assert_ok!(child_sub.add_config(cfg, |size| MemGate::new(size, Perm::RW)));
-    let tile_quota = wv_assert_ok!(tile.quota());
-    child_sub.add_tile(wv_assert_ok!(tile.derive(
+    wv_require_ok!(child_sub.add_config(cfg, |size| MemGate::new(size, Perm::RW)));
+    let tile_quota = wv_require_ok!(tile.quota());
+    child_sub.add_tile(wv_require_ok!(tile.derive(
         Some(tile_quota.endpoints().remaining() / 2),
         Some(tile_quota.time().remaining() / 2),
         Some(tile_quota.page_tables().remaining() / 2)
     )));
     let mux = "tilemux";
-    let mux_mod = wv_assert_ok!(MemCap::new_bind_bootmod(mux));
+    let mux_mod = wv_require_ok!(MemCap::new_bind_bootmod(mux));
     child_sub.add_mod(mux_mod, mux);
-    let sub_mem = wv_assert_ok!(res.memory_mut().alloc_mem(64 * 1024 * 1024));
-    child_sub.add_mem(wv_assert_ok!(sub_mem.derive()), false);
+    let sub_mem = wv_require_ok!(res.memory_mut().alloc_mem(64 * 1024 * 1024));
+    child_sub.add_mem(wv_require_ok!(sub_mem.derive()), false);
     customize_subsys(&mut child_sub);
 
-    wv_assert_ok!(child_sub.finalize_async(&mut res, 0, &mut child));
+    wv_require_ok!(child_sub.finalize_async(&mut res, 0, &mut child));
 
-    let run = wv_assert_ok!(child.run(func));
+    let run = wv_require_ok!(child.run(func));
 
     wv_assert_eq!(t, run.wait(), Ok(Code::Success));
 }
 
 pub fn setup_resmng() -> (Requests, ChildManager, Subsystem, Resources) {
-    let req_rgate = wv_assert_ok!(RecvGate::new_with(
+    let req_rgate = wv_require_ok!(RecvGate::new_with(
         RGateArgs::default().order(6).msg_order(6),
     ));
     let reqs = Requests::new(req_rgate);
 
     let childs = ChildManager::default();
 
-    let (child_sub, res) = wv_assert_ok!(Subsystem::new());
+    let (child_sub, res) = wv_require_ok!(Subsystem::new());
 
     (reqs, childs, child_sub, res)
 }

@@ -18,7 +18,7 @@
 
 use m3::col::DList;
 use m3::test::WvTester;
-use m3::{wv_assert_eq, wv_assert_some, wv_run_test};
+use m3::{wv_assert_eq, wv_require_some, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, create);
@@ -61,17 +61,17 @@ fn iter(t: &mut dyn WvTester) {
 
     {
         let mut it = l.iter_mut();
-        let e = wv_assert_some!(it.next());
+        let e = wv_require_some!(it.next());
         wv_assert_eq!(t, e, &mut 23);
         wv_assert_eq!(t, it.peek_prev(), None);
         *e = 32;
 
-        let e = wv_assert_some!(it.next());
+        let e = wv_require_some!(it.next());
         wv_assert_eq!(t, e, &mut 42);
         wv_assert_eq!(t, it.peek_prev(), Some(&mut 32));
         *e = 24;
 
-        let e = wv_assert_some!(it.next());
+        let e = wv_require_some!(it.next());
         wv_assert_eq!(t, e, &mut 57);
         wv_assert_eq!(t, it.peek_prev(), Some(&mut 24));
         *e = 75;

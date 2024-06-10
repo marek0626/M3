@@ -29,7 +29,7 @@ use m3::tiles::{Activity, ActivityArgs, ChildActivity, Tile};
 use m3::time::{CycleInstant, Profiler, Runner};
 use m3::util::math;
 use m3::vec::Vec;
-use m3::{println, wv_assert_ok, wv_perf, wv_run_test};
+use m3::{println, wv_perf, wv_require_ok, wv_run_test};
 
 static SEL: StaticCell<kif::CapSel> = StaticCell::new(0);
 
@@ -58,21 +58,21 @@ fn noop(_t: &mut dyn WvTester) {
     wv_perf!(
         "noop",
         prof.run::<CycleInstant, _>(|| {
-            wv_assert_ok!(syscalls::noop());
+            wv_require_ok!(syscalls::noop());
         })
     );
 }
 
 fn activate(_t: &mut dyn WvTester) {
-    let mcap = wv_assert_ok!(MemCap::new(0x1000, Perm::RW));
-    let ep = wv_assert_ok!(EpMng::get().acquire(0));
+    let mcap = wv_require_ok!(MemCap::new(0x1000, Perm::RW));
+    let ep = wv_require_ok!(EpMng::get().acquire(0));
 
     let prof = Profiler::default();
 
     wv_perf!(
         "activate",
         prof.run::<CycleInstant, _>(|| {
-            wv_assert_ok!(syscalls::activate(
+            wv_require_ok!(syscalls::activate(
                 ep.sel(),
                 mcap.sel(),
                 kif::INVALID_SEL,
@@ -92,7 +92,7 @@ fn create_mgate(_t: &mut dyn WvTester) {
 
     impl Runner for Tester {
         fn run(&mut self) {
-            wv_assert_ok!(syscalls::create_mgate(
+            wv_require_ok!(syscalls::create_mgate(
                 SEL.get(),
                 Activity::own().sel(),
                 self.0,
@@ -102,7 +102,7 @@ fn create_mgate(_t: &mut dyn WvTester) {
         }
 
         fn post(&mut self) {
-            wv_assert_ok!(syscalls::revoke(
+            wv_require_ok!(syscalls::revoke(
                 Activity::own().sel(),
                 kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
                 true
@@ -128,11 +128,11 @@ fn create_rgate(_t: &mut dyn WvTester) {
 
     impl Runner for Tester {
         fn run(&mut self) {
-            wv_assert_ok!(syscalls::create_rgate(SEL.get(), 10, 10));
+            wv_require_ok!(syscalls::create_rgate(SEL.get(), 10, 10));
         }
 
         fn post(&mut self) {
-            wv_assert_ok!(syscalls::revoke(
+            wv_require_ok!(syscalls::revoke(
                 Activity::own().sel(),
                 kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
                 true
@@ -155,12 +155,12 @@ fn create_sgate(_t: &mut dyn WvTester) {
     impl Runner for Tester {
         fn pre(&mut self) {
             if self.0.is_none() {
-                self.0 = Some(wv_assert_ok!(RecvGate::new(10, 10)));
+                self.0 = Some(wv_require_ok!(RecvGate::new(10, 10)));
             }
         }
 
         fn run(&mut self) {
-            wv_assert_ok!(syscalls::create_sgate(
+            wv_require_ok!(syscalls::create_sgate(
                 SEL.get(),
                 self.0.as_ref().unwrap().sel(),
                 0x1234,
@@ -169,7 +169,7 @@ fn create_sgate(_t: &mut dyn WvTester) {
         }
 
         fn post(&mut self) {
-            wv_assert_ok!(syscalls::revoke(
+            wv_require_ok!(syscalls::revoke(
                 Activity::own().sel(),
                 kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
                 true
@@ -198,7 +198,7 @@ fn create_map(_t: &mut dyn WvTester) {
         fn pre(&mut self) {
             // one warmup run, because the revoke leads to an unmap, which flushes and invalidates
             // all cache lines
-            wv_assert_ok!(syscalls::create_map(
+            wv_require_ok!(syscalls::create_map(
                 DEST,
                 Activity::own().sel(),
                 self.0.sel(),
@@ -209,7 +209,7 @@ fn create_map(_t: &mut dyn WvTester) {
         }
 
         fn run(&mut self) {
-            wv_assert_ok!(syscalls::create_map(
+            wv_require_ok!(syscalls::create_map(
                 DEST + cfg::PAGE_SIZE,
                 Activity::own().sel(),
                 self.0.sel(),
@@ -220,7 +220,7 @@ fn create_map(_t: &mut dyn WvTester) {
         }
 
         fn post(&mut self) {
-            wv_assert_ok!(syscalls::revoke(
+            wv_require_ok!(syscalls::revoke(
                 Activity::own().sel(),
                 kif::CapRngDesc::new(
                     kif::CapType::Mapping,
@@ -245,12 +245,12 @@ fn create_srv(_t: &mut dyn WvTester) {
     impl Runner for Tester {
         fn pre(&mut self) {
             if self.0.is_none() {
-                self.0 = Some(wv_assert_ok!(RecvGate::new(10, 10)));
+                self.0 = Some(wv_require_ok!(RecvGate::new(10, 10)));
             }
         }
 
         fn run(&mut self) {
-            wv_assert_ok!(syscalls::create_srv(
+            wv_require_ok!(syscalls::create_srv(
                 SEL.get(),
                 self.0.as_ref().unwrap().sel(),
                 "test",
@@ -259,7 +259,7 @@ fn create_srv(_t: &mut dyn WvTester) {
         }
 
         fn post(&mut self) {
-            wv_assert_ok!(syscalls::revoke(
+            wv_require_ok!(syscalls::revoke(
                 Activity::own().sel(),
                 kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
                 true
@@ -282,12 +282,12 @@ fn derive_mem(_t: &mut dyn WvTester) {
     impl Runner for Tester {
         fn pre(&mut self) {
             if self.0.is_none() {
-                self.0 = Some(wv_assert_ok!(MemGate::new(0x1000, Perm::RW)));
+                self.0 = Some(wv_require_ok!(MemGate::new(0x1000, Perm::RW)));
             }
         }
 
         fn run(&mut self) {
-            wv_assert_ok!(syscalls::derive_mem(
+            wv_require_ok!(syscalls::derive_mem(
                 Activity::own().sel(),
                 SEL.get(),
                 self.0.as_ref().unwrap().sel(),
@@ -298,7 +298,7 @@ fn derive_mem(_t: &mut dyn WvTester) {
         }
 
         fn post(&mut self) {
-            wv_assert_ok!(syscalls::revoke(
+            wv_require_ok!(syscalls::revoke(
                 Activity::own().sel(),
                 kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
                 true
@@ -323,7 +323,7 @@ fn exchange(_t: &mut dyn WvTester) {
     impl Runner for Tester {
         fn pre(&mut self) {
             if self.act.is_none() {
-                self.act = Some(wv_assert_ok!(ChildActivity::new_with(
+                self.act = Some(wv_require_ok!(ChildActivity::new_with(
                     self.tile.clone(),
                     ActivityArgs::new("test")
                 )));
@@ -331,7 +331,7 @@ fn exchange(_t: &mut dyn WvTester) {
         }
 
         fn run(&mut self) {
-            wv_assert_ok!(syscalls::exchange(
+            wv_require_ok!(syscalls::exchange(
                 self.act.as_ref().unwrap().sel(),
                 kif::CapRngDesc::new(kif::CapType::Object, kif::SEL_ACT, 1),
                 SEL.get(),
@@ -340,7 +340,7 @@ fn exchange(_t: &mut dyn WvTester) {
         }
 
         fn post(&mut self) {
-            wv_assert_ok!(syscalls::revoke(
+            wv_require_ok!(syscalls::revoke(
                 self.act.as_ref().unwrap().sel(),
                 kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
                 true
@@ -352,7 +352,7 @@ fn exchange(_t: &mut dyn WvTester) {
         "exchange",
         prof.runner::<CycleInstant, _>(&mut Tester {
             act: None,
-            tile: wv_assert_ok!(Tile::get("compat|own")),
+            tile: wv_require_ok!(Tile::get("compat|own")),
         })
     );
 }
@@ -360,7 +360,7 @@ fn exchange(_t: &mut dyn WvTester) {
 fn revoke_mem_gate(_t: &mut dyn WvTester) {
     let prof = Profiler::default().repeats(100).warmup(10);
 
-    let mcap = wv_assert_ok!(MemCap::new(0x1000, Perm::RW));
+    let mcap = wv_require_ok!(MemCap::new(0x1000, Perm::RW));
 
     struct Tester {
         mcap: MemCap,
@@ -369,7 +369,7 @@ fn revoke_mem_gate(_t: &mut dyn WvTester) {
 
     impl Runner for Tester {
         fn pre(&mut self) {
-            self._derived = Some(wv_assert_ok!(self.mcap.derive(0, 0x1000, Perm::RW)));
+            self._derived = Some(wv_require_ok!(self.mcap.derive(0, 0x1000, Perm::RW)));
         }
 
         fn run(&mut self) {
@@ -395,11 +395,11 @@ fn revoke_recv_gate(_t: &mut dyn WvTester) {
 
     impl Runner for Tester {
         fn pre(&mut self) {
-            wv_assert_ok!(syscalls::create_rgate(SEL.get(), 10, 10));
+            wv_require_ok!(syscalls::create_rgate(SEL.get(), 10, 10));
         }
 
         fn run(&mut self) {
-            wv_assert_ok!(syscalls::revoke(
+            wv_require_ok!(syscalls::revoke(
                 Activity::own().sel(),
                 kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
                 true
@@ -421,8 +421,8 @@ fn revoke_send_gate(_t: &mut dyn WvTester) {
 
     impl Runner for Tester {
         fn pre(&mut self) {
-            self.0 = Some(wv_assert_ok!(RecvCap::new(10, 10)));
-            wv_assert_ok!(syscalls::create_sgate(
+            self.0 = Some(wv_require_ok!(RecvCap::new(10, 10)));
+            wv_require_ok!(syscalls::create_sgate(
                 SEL.get(),
                 self.0.as_ref().unwrap().sel(),
                 0x1234,
@@ -431,7 +431,7 @@ fn revoke_send_gate(_t: &mut dyn WvTester) {
         }
 
         fn run(&mut self) {
-            wv_assert_ok!(syscalls::revoke(
+            wv_require_ok!(syscalls::revoke(
                 Activity::own().sel(),
                 kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
                 true
@@ -453,7 +453,7 @@ fn revoke_deep(_t: &mut dyn WvTester) {
 
     let prof = Profiler::default().repeats(100).warmup(2);
 
-    let mcap = wv_assert_ok!(MemCap::new(SIZE, PERM));
+    let mcap = wv_require_ok!(MemCap::new(SIZE, PERM));
 
     struct Tester {
         mcap: MemCap,
@@ -468,7 +468,7 @@ fn revoke_deep(_t: &mut dyn WvTester) {
             // Create a deep branch in the derivation tree.
             self._derived.push(MemCap::new_bind(self.mcap.sel()));
             for _ in 0..DEPTH {
-                let mem = wv_assert_ok!(self._derived.last().unwrap().derive(0, SIZE, PERM));
+                let mem = wv_require_ok!(self._derived.last().unwrap().derive(0, SIZE, PERM));
                 // Keep capability around to avoid revocation.
                 self._derived.push(mem);
             }
@@ -476,7 +476,7 @@ fn revoke_deep(_t: &mut dyn WvTester) {
 
         fn run(&mut self) {
             let crd = kif::CapRngDesc::new(kif::CapType::Object, self.mcap.sel(), 1);
-            wv_assert_ok!(syscalls::revoke(Activity::own().sel(), crd, false));
+            wv_require_ok!(syscalls::revoke(Activity::own().sel(), crd, false));
         }
     }
 
@@ -495,7 +495,7 @@ fn revoke_wide(_t: &mut dyn WvTester) {
 
     let prof = Profiler::default().repeats(50).warmup(2);
 
-    let mcap = wv_assert_ok!(MemCap::new(SIZE, PERM));
+    let mcap = wv_require_ok!(MemCap::new(SIZE, PERM));
 
     struct Tester {
         mcap: MemCap,
@@ -509,7 +509,7 @@ fn revoke_wide(_t: &mut dyn WvTester) {
 
             // Create a wide sibling structure in the derivation tree.
             for _ in 0..WIDTH {
-                let mem = wv_assert_ok!(self.mcap.derive(0, SIZE, PERM));
+                let mem = wv_require_ok!(self.mcap.derive(0, SIZE, PERM));
                 // Keep capability around to avoid revocation.
                 self._derived.push(mem);
             }
@@ -517,7 +517,7 @@ fn revoke_wide(_t: &mut dyn WvTester) {
 
         fn run(&mut self) {
             let crd = kif::CapRngDesc::new(kif::CapType::Object, self.mcap.sel(), 1);
-            wv_assert_ok!(syscalls::revoke(Activity::own().sel(), crd, false));
+            wv_require_ok!(syscalls::revoke(Activity::own().sel(), crd, false));
         }
     }
 
