@@ -27,11 +27,12 @@ def mkdir(path: str):
 
 
 class BuildTask:
-    def __init__(self, name: str, in_path: str, out_path: str,
+    def __init__(self, name: str, in_path: str, out_path: str, cache_dir: str,
                  cmd, shell=False):
         self.name = name
         self.in_path = in_path
         self.out_path = out_path
+        self.cache_dir = cache_dir
         self.cmd = cmd
         self.shell = shell
 
@@ -39,7 +40,7 @@ class BuildTask:
         return get_hash(self.in_path)
 
     def cache_path(self):
-        return '{}/{}/{}'.format(args.cache_dir, self.name, self.hash())
+        return '{}/{}/{}'.format(self.cache_dir, self.name, self.hash())
 
     def needs_rebuild(self):
         return not os.path.exists(self.cache_path())
@@ -69,7 +70,7 @@ class BuildTask:
         # create log file
         date = datetime.today().strftime('%Y-%m-%d')
         logfile = '{}/logs/{}/{}-{}.log'.format(
-                args.cache_dir, self.name, date, self.hash())
+                self.cache_dir, self.name, date, self.hash())
         mkdir(os.path.dirname(logfile))
         log = open(logfile, 'w+')
 
@@ -100,7 +101,7 @@ class BuildTask:
             os.symlink(self.cache_path(), self.out_path)
 
     def gc(self):
-        dir = '{}/{}'.format(args.cache_dir, self.name)
+        dir = '{}/{}'.format(self.cache_dir, self.name)
         files = []
         if os.path.isdir(dir):
             # collect folder items including the last modification time. note that the last access
@@ -145,99 +146,139 @@ def build_all(tasks: [BuildTask], incremental: bool):
         task.finish(True, incremental)
 
 
-parser = argparse.ArgumentParser(description='This is the M³ builder.')
-parser.add_argument('-i', '--incremental', action='store_true')
-parser.add_argument('-c', '--cache-dir', default='ci/out')
-parser.add_argument('command')
-args = parser.parse_args()
+def prepare(targets: [str], isas: [str], cache_dir: str, incremental: bool):
+    # determine required submodules
+    mods = ['tools/ninjapie', 'cross/buildroot',
+            'src/libs/leveldb', 'src/libs/musl', 'src/libs/flac',
+            'src/apps/bsdutils', 'src/libs/crypto/kecacc-xkcp']
+    if 'riscv64' in isas:
+        mods.append('src/m3lx/linux')
+        mods.append('src/m3lx/riscv-pk')
+    if 'gem5' in targets:
+        mods.append('platform/gem5')
+    if 'hw22' in targets or 'hw23' in targets:
+        mods.append('platform/hw')
 
-if args.command == 'prepare':
-    # pull in all submodules
-    for m in ['src/m3lx/linux', 'src/m3lx/riscv-pk',
-              'tools/ninjapie', 'cross/buildroot',
-              'platform/gem5', 'platform/hw',
-              'src/libs/leveldb', 'src/libs/musl', 'src/libs/flac',
-              'src/apps/bsdutils', 'src/libs/crypto/kecacc-xkcp']:
+    # pull in required submodules
+    for m in mods:
         t = BuildTask(
             name="submodules/{}".format(os.path.basename(m)),
             in_path=m,
             out_path=m,
+            cache_dir=cache_dir,
             cmd=['git', 'submodule', 'update', '--init', '--recursive', m],
         )
-        t.get(args.incremental)
+        t.get(incremental)
 
-    # disable git hooks for gem5 to avoid user interaction
-    subprocess.run(
-        'sed --in-place -e "s/return env\\.Entry/return False and env.Entry/" \
-                platform/gem5/site_scons/site_tools/git.py',
-        shell=True
-    )
-elif args.command == 'build':
+    if 'gem5' in targets:
+        # disable git hooks for gem5 to avoid user interaction
+        subprocess.run(
+            'sed --in-place -e "s/return env\\.Entry/return False and env.Entry/" \
+                    platform/gem5/site_scons/site_tools/git.py',
+            shell=True
+        )
+
+
+def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
+          incremental: bool):
     # build all cross compilers
     tasks = []
-    for isa in ['riscv32', 'riscv64', 'x86_64']:
+    for isa in isas:
         t = BuildTask(name="build/buildroot-{}".format(isa),
                       in_path='cross/buildroot',
                       out_path='build/cross-{}'.format(isa),
+                      cache_dir=cache_dir,
                       cmd='cd cross && ./build.sh {}'.format(isa),
                       shell=True)
         tasks.append(t)
 
-    # build gem5 for all ISAs
-    t = BuildTask(name="build/gem5",
-                  in_path="platform/gem5",
-                  out_path="platform/gem5/build",
-                  cmd='cd platform/gem5 && scons -j32 build/{RISCV,X86}/gem5.opt',
-                  shell=True)
-    tasks.append(t)
+    if 'gem5' in targets:
+        # build gem5 for all ISAs
+        gem5isas = []
+        if 'riscv32' in isas or 'riscv64' in isas:
+            gem5isas.append('RISCV')
+        if 'x86_64' in isas:
+            gem5isas.append('X86')
+        gem5isas = gem5isas[0] if len(gem5isas) == 1 else '{' + ','.join(gem5isas) + '}'
+        t = BuildTask(name="build/gem5",
+                      in_path="platform/gem5",
+                      out_path="platform/gem5/build",
+                      cache_dir=cache_dir,
+                      cmd='cd platform/gem5 && scons -j32 build/' + gem5isas + '/gem5.opt',
+                      shell=True)
+        tasks.append(t)
 
     # ensure that we install the requested nightly version for M³
     # and have the target for M³Lx available.
     t = BuildTask(name='build/rustup',
                   in_path='rust-toolchain.toml',
                   out_path='.rustup',
+                  cache_dir=cache_dir,
                   cmd=['rustup', 'target', 'add', 'riscv64gc-unknown-linux-gnu'])
     tasks.append(t)
 
-    build_all(tasks, args.incremental)
+    build_all(tasks, incremental)
 
     # now build M³ for all targets, build types, and ISAs
     tasks = []
-    for tgt in ['gem5', 'hw22', 'hw23']:
-        for build in ['debug', 'bench']:
-            for isa in ['riscv32', 'riscv64', 'x86_64']:
+    for tgt in targets:
+        for build in builds:
+            for isa in isas:
                 if tgt != 'gem5' and isa != 'riscv64':
                     continue
                 t = BuildTask(name='build/m3-{}-{}-{}'.format(tgt, isa, build),
                               in_path='.',
                               out_path='build/{}-{}-{}'.format(tgt, isa, build),
+                              cache_dir=cache_dir,
                               cmd='M3_TARGET={} M3_ISA={} M3_BUILD={} ./b'.format(tgt, isa, build),
                               shell=True)
                 tasks.append(t)
 
     # build M³Linux for riscv64
-    t = BuildTask(name='build/m3lx',
-                  in_path='.',
-                  out_path='build/linux',
-                  cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mklx -n',
-                  shell=True)
-    tasks.append(t)
+    if 'riscv64' in isas:
+        t = BuildTask(name='build/m3lx',
+                      in_path='.',
+                      out_path='build/linux',
+                      cache_dir=cache_dir,
+                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mklx -n',
+                      shell=True)
+        tasks.append(t)
 
     # actually we cannot use ninja in parallel, because it writes to the same .ninja_log etc..
     # However, this seems to only be a problem when we rebuild later. Thus, we only build in
     # parallel when not doing incremental builds (which is *much* faster).
-    if args.incremental:
+    if incremental:
         for t in tasks:
-            t.get(args.incremental)
+            t.get(incremental)
     else:
-        build_all(tasks, args.incremental)
+        build_all(tasks, incremental)
 
     # build bbl separately as it has a different out_path
-    t = BuildTask(name='build/riscv-pk',
-                  in_path='.',
-                  out_path='build/riscv-pk',
-                  cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mkbbl -n',
-                  shell=True)
-    t.get(args.incremental)
-else:
-    print("Unknown command '{}'".format(args.command))
+    if 'riscv64' in isas:
+        t = BuildTask(name='build/riscv-pk',
+                      in_path='.',
+                      out_path='build/riscv-pk',
+                      cache_dir=cache_dir,
+                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mkbbl -n',
+                      shell=True)
+        t.get(incremental)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='This is the M³ builder.')
+    parser.add_argument('--target', nargs='+', default=['gem5', 'hw22', 'hw23'])
+    parser.add_argument('--isa', nargs='+', default=['riscv32', 'riscv64', 'x86_64'])
+    parser.add_argument('--build', nargs='+', default=['debug', 'release'])
+    parser.add_argument('command')
+    args = parser.parse_args()
+
+    cache_dir = '/cache'
+    if args.command == 'prepare':
+        prepare(targets=args.target, isas=args.isa,
+                cache_dir=cache_dir, incremental=False)
+    elif args.command == 'build':
+        build(targets=args.target, isas=args.isa, builds=args.build,
+              cache_dir=cache_dir, incremental=False)
+    else:
+        print("Unknown command '{}'".format(args.command))
+        sys.exit(1)

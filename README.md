@@ -32,29 +32,32 @@ Nix will then install all required packages in a known-to-work version and drop 
 
 Without Nix, you need to install the packages manually and hope that all versions are as expected. On Debian-based distributions, this should be something like:
 
-    $ sudo apt install git build-essential scons zlib1g-dev clang gawk m4 ninja-build libxml2-utils
+    $ sudo apt install git build-essential scons zlib1g-dev clang gawk m4 ninja-build libxml2-utils rustup
 
 Note: If you have `pyenv` installed and therefore `/usr/bin/python` does not exist, you might need to install the package `python-dev-is-python3`.
 
-Afterwards, pull in the submodules:
+### 2. Bootstrap
 
-    $ git submodule update --init tools/ninjapie cross/buildroot src/apps/bsdutils src/libs/musl src/libs/flac src/libs/leveldb src/libs/crypto/kecacc-xkcp
+To pull in all required submodules and build them (cross compiler, gem5, etc.), you can use the
+`tools/bootstrap` script (independent of whether you are using Nix or not). If you only work with a
+subset of targets or ISAs, you can specify that via the `--target`, `--isa`, and `--build`
+arguments. For example:
 
-### 2. Preparations for gem5
+    $ ./tools/bootstrap --target gem5 --isa riscv32 riscv64 --build release
 
-These preparations are required when gem5 should be used as the M³ target. To use gem5, pull in the submodule `platform/gem5` and build it:
+Building all the infrastructure will take some time, but should not require manual interventions.
 
-    $ git submodule update --init --recursive platform/gem5
-    $ cd platform/gem5
-    $ scons build/RISCV/gem5.opt # change ISA as needed
+### 3. Running
 
-The build directory (`build/RISCV` in the example above) will be created automatically. You can build gem5 for a different ISA by changing the path to `build/X86/gem5.opt`. Note that you can specify the number of threads to use for building in the last command via, for example, `-j8`.
+On all platforms, scenarios can be run by starting the desired boot script in the directory `boot`, e.g.:
 
-### 3. Preparations for the hardware platform
+    $ ./b run boot/hello.xml
 
-These preparations are required when hw/hw22/hw23 should be used as the M³ target. To use the hardware platform, pull in the submodule `platform/hw`:
+Note that this command ensures that everything is up to date as well. For more information, run
 
-    $ git submodule update --init platform/hw
+    $ ./b -h
+
+### 4. Working with the hardware platform
 
 The current workflow assumes that the FPGA is connected to a machine `M_fpga` that is reachable via SSH from the machine `M_m3` that hosts M³. A couple of environment variables have to be set before starting with the FPGA:
 
@@ -74,50 +77,9 @@ not supported.
 
 Note that the source of the hardware platform is [openly available](https://github.com/Barkhausen-Institut/M3-hardware) as well.
 
-### 4. Cross compiler
+### 5. Running M³Linux
 
-To build M³, you need to first build a cross compiler for the desired ISA. Note that only gem5 supports all three ISAs; the hardware platform only supports RISC-V. You can build the cross compiler as follows:
-
-    $ cd cross
-    $ ./build.sh (x86_64|riscv32|riscv64)
-
-The cross compiler will be installed to ``<m3-root>/build/cross-<ISA>``.
-
-### 5. Rust
-
-M³ is primarily written in Rust and requires some nightly features of Rust. The nightly toolchain will be installed automatically, but you need to install `rustup` manually first. Visit [rustup.rs](https://rustup.rs/) for further information.
-
-### 6. Building
-
-Before you build M³, you should choose your target platform, the build mode, and the ISA by exporting the corresponding environment variables. For example:
-
-    $ export M3_BUILD=release M3_TARGET=gem5 M3_ISA=riscv64
-
-Now, M³ can be built by using the script `b`:
-
-    $ ./b
-
-### 7. Running
-
-On all platforms, scenarios can be run by starting the desired boot script in the directory `boot`, e.g.:
-
-    $ ./b run boot/hello.xml
-
-Note that this command ensures that everything is up to date as well. For more information, run
-
-    $ ./b -h
-
-### 8. M³Linux
-
-M³Linux allows to run Linux on an isolated tile within M³. Before it can be used, submodules have to be pulled in:
-
-    $ git submodule update --init --recursive src/m3lx/linux src/m3lx/riscv-pk
-
-Additionally, the Rust target needs to be installed:
-
-    $ rustup target add riscv64gc-unknown-linux-gnu
-
-M³Linux consists of Linux itself, riscv-pk with the bbl bootloader, and applications. The applications can both interface with M³ and Linux and thereby bridge the gap between both systems.
+M³Linux allows to run Linux on an isolated tile within M³ and consists of Linux itself, riscv-pk with the bbl bootloader, and applications. The applications can both interface with M³ and Linux and thereby bridge the gap between both systems.
 
 Linux and bbl need to be built explicitly due to the long build times and different build systems. `b` offers two commands for this purpose:
 
