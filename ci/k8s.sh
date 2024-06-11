@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 root=$(dirname "$0")
 ns="os"
