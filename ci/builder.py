@@ -176,9 +176,15 @@ def prepare(targets: [str], isas: [str], cache_dir: str, incremental: bool):
 
 def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
           incremental: bool):
+    # when we build for riscv64, we always need the riscv32 toolchain as well to run stuff on the
+    # accelerator co-processors
+    ccisas = isas.copy()
+    if 'riscv64' in ccisas:
+        ccisas.append('riscv32')
+
     # build all cross compilers
     tasks = []
-    for isa in isas:
+    for isa in ccisas:
         t = BuildTask(name="build/buildroot-{}".format(isa),
                       in_path='cross/buildroot',
                       out_path='build/cross-{}'.format(isa),
