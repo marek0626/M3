@@ -195,4 +195,3 @@ impl CPUOps for RISCVCPU {
         res as u64
     }
 }
-

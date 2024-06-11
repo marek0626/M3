@@ -144,4 +144,3 @@ impl KecAcc {
         self.start_cmd(Cmd::sponge(CmdType::Squeeze, buf));
     }
 }
-

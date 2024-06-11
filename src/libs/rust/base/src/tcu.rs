@@ -1406,4 +1406,3 @@ impl TCU {
         MMIO_EPS_ADDR + (EP_REGS * ep as usize) * mem::size_of::<Reg>()
     }
 }
-
