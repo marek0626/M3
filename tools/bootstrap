@@ -17,6 +17,11 @@ parser.add_argument('--build', nargs='+', default=['debug', 'release'])
 parser.add_argument('--command', nargs='+', default=['prepare', 'build'])
 args = parser.parse_args()
 
+# when we build for riscv64, we always need the riscv32 toolchain as well to run stuff on the
+# accelerator co-processors
+if 'riscv64' in args.isa:
+    args.isa.append('riscv32')
+
 cache_dir = 'build/bootstrap'
 if 'prepare' in args.command:
     builder.prepare(targets=args.target, isas=args.isa,
