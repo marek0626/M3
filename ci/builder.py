@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -28,13 +29,14 @@ def mkdir(path: str):
 
 class BuildTask:
     def __init__(self, name: str, in_path: str, out_path: str, cache_dir: str,
-                 cmd, shell=False):
+                 cmd, shell=False, werror=False):
         self.name = name
         self.in_path = in_path
         self.out_path = out_path
         self.cache_dir = cache_dir
         self.cmd = cmd
         self.shell = shell
+        self.werror = werror
 
     def hash(self):
         return get_hash(self.in_path)
@@ -46,6 +48,9 @@ class BuildTask:
         return not os.path.exists(self.cache_path())
 
     def get(self, incremental=False):
+        log = None
+        returncode = 0
+
         # in incremental mode, we always want to build, because most of the time it is not actually
         # a complete rebuild.
         rebuild = incremental or self.needs_rebuild()
@@ -53,13 +58,9 @@ class BuildTask:
             # start and synchronously wait for the process to finish
             log, proc = self.start(incremental)
             proc.wait()
-            log.close()
-            # immediately stop on any error
-            if proc.returncode != 0:
-                print('{}: exited with status {}'
-                      .format(self.name, proc.returncode))
-                sys.exit(1)
-        self.finish(rebuild, incremental)
+            returncode = proc.returncode
+
+        self.finish(rebuild, incremental, returncode, log)
 
     def start(self, incremental=False):
         # evict entries from the cache (in incremental mode we are not using the cache), if
@@ -84,9 +85,37 @@ class BuildTask:
                                 stdout=log, stderr=log)
         return (log, proc)
 
-    def finish(self, rebuild: bool, incremental: bool):
+    def detect_errors(self, log):
+        log.seek(0)
+        errors = False
+        seen_ninja = False
+        for line in log.readlines():
+            # all lines that don't start with the ninja build progress are considered
+            # warnings/errors. thus, print them here and exit with failure afterwards
+            if re.search(r'^\[\d+/\d+\]', line):
+                seen_ninja = True
+            elif seen_ninja:
+                if not errors:
+                    print("{}: build failed:".format(self.out_path))
+                sys.stdout.write(line)
+                errors = True
+        if errors:
+            sys.exit(1)
+
+    def finish(self, rebuild: bool, incremental: bool, returncode: int, log):
+        # check for errors
+        if rebuild:
+            if self.werror:
+                self.detect_errors(log)
+            if returncode != 0:
+                print('{}: exited with status {}'
+                      .format(self.out_path, returncode))
+                sys.exit(1)
+            log.close()
+
         print("{}: ready".format(self.out_path))
         sys.stdout.flush()
+
         if not incremental:
             # if we rebuilt, we move the out directory into the cache
             if rebuild:
@@ -136,17 +165,12 @@ def build_all(tasks: [BuildTask], incremental: bool):
             running.append((t, t.start(incremental)))
         # otherwise, finish the task right away
         else:
-            t.finish(False, incremental)
+            t.finish(False, incremental, 0, None)
 
     # now wait for all tasks
     for (task, (log, proc)) in running:
         proc.wait()
-        log.close()
-        if proc.returncode != 0:
-            print('{}: exited with status {}'
-                  .format(task.name, proc.returncode))
-            sys.exit(1)
-        task.finish(True, incremental)
+        task.finish(True, incremental, proc.returncode, log)
 
 
 def prepare(targets: [str], isas: [str], cache_dir: str, incremental: bool):
@@ -176,9 +200,15 @@ def prepare(targets: [str], isas: [str], cache_dir: str, incremental: bool):
 
 def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
           incremental: bool):
+    # when we build for riscv64, we always need the riscv32 toolchain as well to run stuff on the
+    # accelerator co-processors
+    ccisas = isas.copy()
+    if 'riscv64' in ccisas:
+        ccisas.append('riscv32')
+
     # build all cross compilers
     tasks = []
-    for isa in isas:
+    for isa in ccisas:
         t = BuildTask(name="build/buildroot-{}".format(isa),
                       in_path='cross/buildroot',
                       out_path='build/cross-{}'.format(isa),
@@ -226,7 +256,8 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
                               out_path='build/{}-{}-{}'.format(tgt, isa, build),
                               cache_dir=cache_dir,
                               cmd='M3_TARGET={} M3_ISA={} M3_BUILD={} ./b'.format(tgt, isa, build),
-                              shell=True)
+                              shell=True,
+                              werror=True)
                 tasks.append(t)
 
     # build M³Linux for riscv64
