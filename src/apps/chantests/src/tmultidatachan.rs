@@ -62,6 +62,7 @@ struct NodeConfig<T> {
     send: Option<MultiSenderDesc>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn start_activity<S: ToString, T: Serialize>(
     add: T,
     name: S,
@@ -114,19 +115,19 @@ where
 
     for mut mblk in recv.iter::<T, T>() {
         let last = mblk.is_last();
-        let user = mblk.blocks()[0].user().clone();
+        let user = *mblk.blocks()[0].user();
 
         mblk.with_data(|data| {
             for chk in data.chunks_mut(cfg.chunk_size) {
                 utils::compute_for(&cfg.name, cfg.comp_time);
 
                 for b in chk.iter_mut() {
-                    *b += cfg.add.clone();
+                    *b += cfg.add;
                 }
             }
 
             if let Some(send) = send.as_mut() {
-                wv_assert_ok!(t, send.send_slice(&data, last, user + cfg.add));
+                wv_assert_ok!(t, send.send_slice(data, last, user + cfg.add));
             }
         })
     }
@@ -172,6 +173,7 @@ where
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_chain<'a: 'static, T>(
     t: &mut dyn WvTester,
     func: fn() -> Result<(), Error>,
@@ -253,7 +255,7 @@ fn run_chain<'a: 'static, T>(
     let mut pos = 0;
     wv_assert_ok!(
         t,
-        datachan::pass_through(&mut chan_n0n1, &mut chan_mn0, &input, true, user, |mblk| {
+        datachan::pass_through(&mut chan_n0n1, &mut chan_mn0, input, true, user, |mblk| {
             wv_assert_eq!(t, mblk.blocks()[0].user().clone(), expected[42]);
             for blk in mblk.blocks() {
                 wv_assert_eq!(t, blk.buf(), &expected[pos..pos + blk.buf().len()]);

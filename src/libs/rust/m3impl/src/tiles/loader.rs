@@ -19,7 +19,6 @@
 use core::cmp;
 use core::mem::size_of_val;
 
-use crate::boxed::Box;
 use crate::cfg;
 use crate::client::MapFlags;
 use crate::com::MemGate;
@@ -45,7 +44,7 @@ pub(crate) fn load_program(
     file.seek(0, SeekMode::Set)?;
     let hdr = hdr.load_hdr(file)?;
 
-    let heap_begin = load_segments(act, mapper, file, &hdr, &mut buf)?;
+    let heap_begin = load_segments(act, mapper, file, hdr.as_ref(), &mut buf)?;
     create_heap(act, mapper, heap_begin)?;
     create_stack(act, mapper)?;
 
@@ -87,7 +86,7 @@ fn load_segments(
     act: &Activity,
     mapper: &mut dyn Mapper,
     file: &mut BufReader<FileRef<dyn File>>,
-    hdr: &Box<dyn elf::ElfHeader>,
+    hdr: &dyn elf::ElfHeader,
     buf: &mut [u8],
 ) -> Result<VirtAddr, Error> {
     let mut end = 0;
@@ -103,7 +102,7 @@ fn load_segments(
             continue;
         }
 
-        load_segment(act, mapper, file, &phdr, buf)?;
+        load_segment(act, mapper, file, phdr.as_ref(), buf)?;
 
         end = phdr.virt_addr() + phdr.mem_size();
     }
@@ -115,7 +114,7 @@ fn load_segment(
     act: &Activity,
     mapper: &mut dyn Mapper,
     file: &mut BufReader<FileRef<dyn File>>,
-    phdr: &Box<dyn elf::ProgramHeader>,
+    phdr: &dyn elf::ProgramHeader,
     buf: &mut [u8],
 ) -> Result<(), Error> {
     let prot = kif::Perm::from(elf::PHFlags::from_bits_truncate(phdr.flags()));

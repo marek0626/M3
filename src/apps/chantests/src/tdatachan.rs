@@ -62,6 +62,7 @@ struct NodeConfig<T> {
     send: Option<SenderDesc>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn start_activity<S: ToString, T: Serialize>(
     name: S,
     add: T,

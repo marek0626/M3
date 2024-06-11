@@ -709,7 +709,7 @@ impl TileObject {
             LogFlags::KernTiles,
             "Tile[{}, {:#x}]: reset with EPs={}",
             self.tile,
-            &*self as *const _ as usize,
+            self as *const _ as usize,
             total_eps,
         );
         self.ep_quota.total.set(total_eps);
