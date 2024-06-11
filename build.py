@@ -400,8 +400,8 @@ else:
 if btype == 'bench':
     env['CPPFLAGS'] += ['-Dbench']
 
-if target == 'gem5':
-    env['ALL_ISAS'] = ['riscv32', 'riscv64', 'x86_64']
+if isa == 'x86_64':
+    env['ALL_ISAS'] = [isa]
 else:
     env['ALL_ISAS'] = ['riscv32', 'riscv64']
 

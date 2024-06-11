@@ -17,7 +17,6 @@ use base::backtrace;
 use base::env;
 use base::kif::PageFlags;
 use base::libc;
-use base::mem::size_of;
 use base::mem::VirtAddr;
 use base::tcu;
 use base::{read_csr, set_csr_bits, write_csr};
@@ -96,7 +95,7 @@ pub enum Vector {
     MachExtIRQ     = 27,
 }
 
-const CAUSE_INT: usize = 1 << ((size_of::<usize>() * 8) - 1);
+const CAUSE_INT: usize = 1 << (usize::BITS as usize - 1);
 
 impl fmt::Debug for RISCVState {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {

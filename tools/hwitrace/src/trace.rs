@@ -101,7 +101,7 @@ fn rv32_trace(
     for line in lines {
         let line = line?;
 
-        let raw_data = u64::from_str_radix(&line.replace("x", "0"), 16)?;
+        let raw_data = u64::from_str_radix(&line.replace('x', "0"), 16)?;
         let payload = (raw_data & 0xffffffff) as u32;
         let irq_active = (raw_data & 0x800000000) != 0;
         let is_addr = (raw_data & 0x200000000) != 0;
@@ -186,13 +186,11 @@ fn rv32_trace(
                 pc = -1;
             }
         }
+        else if is_branch {
+            println!("{} ** FOUND BRANCH AND STARTING DECODING **", info);
+        }
         else {
-            if is_branch {
-                println!("{} ** FOUND BRANCH AND STARTING DECODING **", info);
-            }
-            else {
-                println!("{} ** SKIPPING DATA UNTIL NEXT BRANCH **", info);
-            }
+            println!("{} ** SKIPPING DATA UNTIL NEXT BRANCH **", info);
         }
 
         if is_branch {

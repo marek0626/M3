@@ -89,14 +89,14 @@ impl TileState {
         // the PMP EPs cannot be allocated
         let mut start = cmp::max(tcu::FIRST_USER_EP as usize, self.eps.first_clear());
         let mut bit = start;
-        while bit < start + count as usize && bit < self.eps.size() {
+        while bit < start + count && bit < self.eps.size() {
             if self.eps.is_set(bit) {
                 start = bit + 1;
             }
             bit += 1;
         }
 
-        if bit != start + count as usize {
+        if bit != start + count {
             Err(Error::new(Code::NoSpace))
         }
         else {

@@ -165,7 +165,7 @@ pub fn init() {
     let ep_mem_size = tile_descs.iter().fold(0, |acc, t| {
         if !t.has_internal_eps() {
             // we reserve space for the maximum endpoint count (2^(16+5) = 2MiB)
-            acc + 1 << (size_of::<EpId>() * 8 + math::next_log2(EP_REGS * 8) as usize)
+            acc + (1 << (EpId::BITS as usize + math::next_log2(EP_REGS * 8) as usize))
         }
         else {
             acc

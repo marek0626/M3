@@ -647,4 +647,3 @@ pub extern "C" fn env_run() {
     log!(LogFlags::Info, "Shutting down");
     helper::exit(0);
 }
-

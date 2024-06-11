@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 name="$1"
 image="$2"
 mount="$3"

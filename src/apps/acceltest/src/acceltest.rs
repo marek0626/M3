@@ -21,7 +21,6 @@
 use m3::col::Vec;
 use m3::env;
 use m3::errors::{Code, Error};
-use m3::format;
 use m3::println;
 use m3::tiles::{ChildActivity, RunningActivity, Tile, TileArgs};
 use m3::vfs::{OpenFlags, VFS};
@@ -45,12 +44,12 @@ pub fn main() -> Result<(), Error> {
 
     let mut accel = StreamAccel::new(&act)?;
     let mut input = VFS::open(infile, OpenFlags::R | OpenFlags::NEW_SESS)
-        .expect(&format!("open {} for reading", infile));
+        .unwrap_or_else(|_| panic!("open {} for reading", infile));
     let mut output = VFS::open(
         outfile,
         OpenFlags::W | OpenFlags::CREATE | OpenFlags::NEW_SESS,
     )
-    .expect(&format!("creating {} for writing", outfile));
+    .unwrap_or_else(|_| panic!("creating {} for writing", outfile));
     accel.attach_input(&mut input).expect("attach input");
     accel.attach_output(&mut output).expect("attach output");
 

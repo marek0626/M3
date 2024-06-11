@@ -124,4 +124,3 @@ pub fn shutdown() -> ! {
     }
     unreachable!();
 }
-

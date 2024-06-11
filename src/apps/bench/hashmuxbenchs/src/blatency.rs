@@ -167,4 +167,3 @@ fn small_client_latency(t: &mut dyn WvTester) {
         );
     }
 }
-
