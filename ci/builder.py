@@ -173,14 +173,6 @@ def prepare(targets: [str], isas: [str], cache_dir: str, incremental: bool):
         )
         t.get(incremental)
 
-    if 'gem5' in targets:
-        # disable git hooks for gem5 to avoid user interaction
-        subprocess.run(
-            'sed --in-place -e "s/return env\\.Entry/return False and env.Entry/" \
-                    platform/gem5/site_scons/site_tools/git.py',
-            shell=True
-        )
-
 
 def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
           incremental: bool):
