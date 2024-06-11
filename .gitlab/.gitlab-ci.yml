@@ -31,7 +31,7 @@ build:
   stage: build
   script:
     - kubectl exec -n os -t m3-ci --
-        ./bootstrap.sh --cache-dir /cache --commit $CI_COMMIT_SHA
+        ./bootstrap.sh $CI_COMMIT_SHA
   resource_group: pod
 
 test:
@@ -39,7 +39,7 @@ test:
   allow_failure: true
   script:
     - kubectl exec -n os -t m3-ci -- sh -c "
-        ./bootstrap.sh --cache-dir /cache --commit $CI_COMMIT_SHA
+        ./bootstrap.sh $CI_COMMIT_SHA
           && cd M3
           && nix develop path:. -c
             ./ci/tests/gem5.sh /cache/results/$(date -I)-$CI_COMMIT_SHA
