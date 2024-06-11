@@ -17,10 +17,10 @@ use m3::col::{ToString, Vec};
 use m3::io::{Read, Write};
 use m3::test::WvTester;
 use m3::vfs::{FileRef, GenericFile, OpenFlags, VFS};
-use m3::{vec, wv_assert_eq, wv_assert_ok, wv_run_test};
+use m3::{vec, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
-    wv_assert_ok!(VFS::mount("/", "m3fs", "m3fs"));
+    wv_assert_ok!(t, VFS::mount("/", "m3fs", "m3fs"));
 
     wv_run_test!(t, text_files);
     wv_run_test!(t, pat_file);
@@ -30,20 +30,20 @@ pub fn run(t: &mut dyn WvTester) {
 
 fn text_files(t: &mut dyn WvTester) {
     {
-        let mut file = wv_assert_ok!(VFS::open("/test.txt", OpenFlags::R));
-        let s = wv_assert_ok!(file.read_to_string());
+        let mut file = wv_require_ok!(VFS::open("/test.txt", OpenFlags::R));
+        let s = wv_require_ok!(file.read_to_string());
         wv_assert_eq!(t, s, "This is a test\n");
     }
 
     {
-        let mut file = wv_assert_ok!(VFS::open("/test/test.txt", OpenFlags::R));
-        let s = wv_assert_ok!(file.read_to_string());
+        let mut file = wv_require_ok!(VFS::open("/test/test.txt", OpenFlags::R));
+        let s = wv_require_ok!(file.read_to_string());
         wv_assert_eq!(t, s, "This is a test\n");
     }
 }
 
 fn pat_file(t: &mut dyn WvTester) {
-    let file = wv_assert_ok!(VFS::open("/pat.bin", OpenFlags::R));
+    let file = wv_require_ok!(VFS::open("/pat.bin", OpenFlags::R));
     let mut buf = vec![0u8; 8 * 1024];
 
     wv_assert_eq!(t, _validate_pattern_content(t, file, &mut buf), 64 * 1024);
@@ -52,26 +52,26 @@ fn pat_file(t: &mut dyn WvTester) {
 fn write_file(t: &mut dyn WvTester) {
     // create new file
     {
-        let mut file = wv_assert_ok!(VFS::open(
+        let mut file = wv_require_ok!(VFS::open(
             "/newfile",
             OpenFlags::W | OpenFlags::CREATE | OpenFlags::TRUNC
         ));
-        wv_assert_ok!(write!(file, "my content is {:#x}", 0x1234));
+        wv_assert_ok!(t, write!(file, "my content is {:#x}", 0x1234));
         // ensure it's written to disk
-        wv_assert_ok!(file.sync());
+        wv_assert_ok!(t, file.sync());
     }
 
     // read content back
     {
-        let mut file = wv_assert_ok!(VFS::open("/newfile", OpenFlags::R));
-        let s = wv_assert_ok!(file.read_to_string());
+        let mut file = wv_require_ok!(VFS::open("/newfile", OpenFlags::R));
+        let s = wv_require_ok!(file.read_to_string());
         wv_assert_eq!(t, s, "my content is 0x1234");
     }
 }
 
 fn list_dir(t: &mut dyn WvTester) {
     let mut vec = Vec::new();
-    for e in wv_assert_ok!(VFS::read_dir("/")) {
+    for e in wv_require_ok!(VFS::read_dir("/")) {
         if e.file_name() != "." && e.file_name() != ".." {
             vec.push(e.file_name().to_string());
         }
@@ -92,7 +92,7 @@ fn _validate_pattern_content(
 ) -> usize {
     let mut pos: usize = 0;
     loop {
-        let count = wv_assert_ok!(file.read(buf));
+        let count = wv_require_ok!(file.read(buf));
         if count == 0 {
             break;
         }

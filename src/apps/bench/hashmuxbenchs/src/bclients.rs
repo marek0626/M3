@@ -24,15 +24,15 @@ use m3::com::{
 use m3::crypto::{HashAlgorithm, HashType};
 use m3::errors::Error;
 use m3::io::LogFlags;
-use m3::mem;
 use m3::serialize::{Deserialize, Serialize};
 use m3::tcu;
 use m3::tcu::INVALID_EP;
-use m3::test::WvTester;
+use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ChildActivity, RunningActivity, RunningProgramActivity, Tile};
 use m3::time::{CycleDuration, CycleInstant, Duration, Results};
 use m3::util::math;
-use m3::{format, log, println, send_recv, wv_assert_ok, wv_run_test};
+use m3::{format, log, println, send_recv, wv_require_ok, wv_run_test};
+use m3::{mem, wv_assert_ok};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, hashmux_clients);
@@ -40,7 +40,7 @@ pub fn run(t: &mut dyn WvTester) {
 
 fn _create_rgate(max_clients: usize) -> RecvGate {
     let msg_size = math::next_log2(mem::size_of::<tcu::Header>() + mem::size_of::<u64>());
-    wv_assert_ok!(RecvGate::new(
+    wv_require_ok!(RecvGate::new(
         math::next_log2(max_clients) + msg_size,
         msg_size
     ))
@@ -74,7 +74,9 @@ fn _run_client_bench<F>(
 where
     F: FnMut(&HashSession) -> Result<(), Error>,
 {
-    let sgate = wv_assert_ok!(SendGate::new_bind(sgate_sel));
+    let mut t = DefaultWvTester::default();
+
+    let sgate = wv_require_ok!(SendGate::new_bind(sgate_sel));
 
     // Use a separate RecvGate for replies since this is used
     // in parallel with other requests later
@@ -86,10 +88,10 @@ where
     let mut res = Results::new(params.runs as usize);
     if SYNC_EVERY_RUN {
         for i in 0..(params.warm + params.runs) {
-            let hash = wv_assert_ok!(HashSession::new(&name, algo));
+            let hash = wv_require_ok!(HashSession::new(&name, algo));
 
             // Wait until everyone is ready to start
-            wv_assert_ok!(send_recv!(&sgate, &rgate, hash.ep().sel()));
+            wv_assert_ok!(t, send_recv!(&sgate, &rgate, hash.ep().sel()));
 
             let start = CycleInstant::now();
             fun(&hash).unwrap();
@@ -100,7 +102,7 @@ where
             }
 
             // Notify that the run is complete
-            wv_assert_ok!(sgate.send(&mem::MsgBuf::borrow_def(), &rgate));
+            wv_assert_ok!(t, sgate.send(&mem::MsgBuf::borrow_def(), &rgate));
 
             for num in 1.. {
                 if fun(&hash).is_err() {
@@ -112,14 +114,14 @@ where
             }
 
             // Wait for reply
-            wv_assert_ok!(recv_reply(&rgate, Some(&sgate)));
+            wv_assert_ok!(t, recv_reply(&rgate, Some(&sgate)));
         }
     }
     else {
-        let hash = wv_assert_ok!(HashSession::new(&name, algo));
+        let hash = wv_require_ok!(HashSession::new(&name, algo));
 
         // Wait until everyone is ready to start
-        wv_assert_ok!(send_recv!(&sgate, &rgate, hash.ep().sel()));
+        wv_assert_ok!(t, send_recv!(&sgate, &rgate, hash.ep().sel()));
 
         for i in 0..(params.warm + params.runs) {
             let start = CycleInstant::now();
@@ -132,7 +134,7 @@ where
         }
 
         // Notify that the run is complete
-        wv_assert_ok!(sgate.send(&mem::MsgBuf::borrow_def(), &rgate));
+        wv_assert_ok!(t, sgate.send(&mem::MsgBuf::borrow_def(), &rgate));
 
         // Keep runnning for other clients that need more time
         for num in 1.. {
@@ -145,25 +147,27 @@ where
         }
 
         // Wait for reply
-        wv_assert_ok!(recv_reply(&rgate, Some(&sgate)));
+        wv_assert_ok!(t, recv_reply(&rgate, Some(&sgate)));
     }
 
-    wv_assert_ok!(send_recv!(&sgate, &rgate, 0));
+    wv_assert_ok!(t, send_recv!(&sgate, &rgate, 0));
     res
 }
 
 fn _start_client(params: ClientParams, rgate: &RecvGate, mgate: &MemGate) -> Client {
-    let tile = wv_assert_ok!(Tile::new(Activity::own().tile_desc()));
-    let mut act = wv_assert_ok!(ChildActivity::new(tile, &format!("hash-c{}", params.num)));
+    let mut t = DefaultWvTester::default();
 
-    let scap = wv_assert_ok!(SendCap::new_with(
+    let tile = wv_require_ok!(Tile::new(Activity::own().tile_desc()));
+    let mut act = wv_require_ok!(ChildActivity::new(tile, &format!("hash-c{}", params.num)));
+
+    let scap = wv_require_ok!(SendCap::new_with(
         SGateArgs::new(rgate)
             .credits(1)
             .label(params.num as tcu::Label)
     ));
-    wv_assert_ok!(act.delegate_obj(scap.sel()));
+    wv_assert_ok!(t, act.delegate_obj(scap.sel()));
 
-    let mcap = wv_assert_ok!(mgate.derive_cap(0, params.size as mem::GlobOff, Perm::R));
+    let mcap = wv_require_ok!(mgate.derive_cap(0, params.size as mem::GlobOff, Perm::R));
 
     assert_eq!(params.size % params.div, 0);
     let slice = params.size / params.div;
@@ -176,7 +180,7 @@ fn _start_client(params: ClientParams, rgate: &RecvGate, mgate: &MemGate) -> Cli
     Client {
         _scap: scap,
         mcap,
-        act: wv_assert_ok!(act.run(|| {
+        act: wv_require_ok!(act.run(|| {
             let mut src = Activity::own().data_source();
             let sgate_sel: Selector = src.pop().unwrap();
             let slice: usize = src.pop().unwrap();
@@ -208,10 +212,12 @@ fn _sync_clients<F, R>(rgate: &RecvGate, num: usize, action: F) -> R
 where
     F: FnOnce(&mut [GateIStream<'_>]) -> R,
 {
+    let mut t = DefaultWvTester::default();
+
     // Collect messages from all clients
     let mut msgs: Vec<GateIStream<'_>> = Vec::with_capacity(num);
     while msgs.len() != num {
-        msgs.push(wv_assert_ok!(recv_msg(rgate)));
+        msgs.push(wv_require_ok!(recv_msg(rgate)));
     }
     // Sort by client number
     msgs.sort_unstable_by_key(|msg| msg.label());
@@ -221,26 +227,28 @@ where
     // Reply to unblock clients again
     let empty_msg = mem::MsgBuf::borrow_def();
     for mut msg in msgs {
-        wv_assert_ok!(msg.reply(&empty_msg));
+        wv_assert_ok!(t, msg.reply(&empty_msg));
     }
     res
 }
 
 fn _sync_and_wait_for_clients(rgate: &RecvGate, mut clients: Vec<Client>) {
+    let mut t = DefaultWvTester::default();
+
     loop {
         // Sync start of benchmark
         let mut eps: Vec<EP> = Vec::with_capacity(clients.len());
         let done = !_sync_clients(rgate, clients.len(), |msgs| {
             for (i, msg) in msgs.iter_mut().enumerate() {
-                let sel: Selector = wv_assert_ok!(msg.pop());
+                let sel: Selector = wv_require_ok!(msg.pop());
                 if sel == 0 {
                     return false; // No EP sent, benchmark completed
                 }
 
                 // Obtain EP from activity and configure it with the MemGate
-                let sel = wv_assert_ok!(clients[i].act.activity_mut().obtain_obj(sel));
+                let sel = wv_require_ok!(clients[i].act.activity_mut().obtain_obj(sel));
                 let ep = EP::new_bind(INVALID_EP, sel);
-                wv_assert_ok!(ep.configure(clients[i].mcap.sel()));
+                wv_assert_ok!(t, ep.configure(clients[i].mcap.sel()));
                 eps.push(ep);
             }
             true
@@ -254,22 +262,22 @@ fn _sync_and_wait_for_clients(rgate: &RecvGate, mut clients: Vec<Client>) {
             for ep in eps {
                 // Invalidate EP so additional runs cancel early
                 // This will cause [0] hash::work() failed with NoMEP but this is expected
-                wv_assert_ok!(ep.invalidate());
+                wv_assert_ok!(t, ep.invalidate());
             }
         });
     }
 
     // Wait until everyone is done
     for client in clients {
-        wv_assert_ok!(client.act.wait());
+        wv_assert_ok!(t, client.act.wait());
     }
 }
 
-fn hashmux_clients(_t: &mut dyn WvTester) {
+fn hashmux_clients(t: &mut dyn WvTester) {
     const MAX_CLIENTS: usize = 2;
     const MAX_SIZE: usize = 512 * 1024; // 512 KiB
 
-    let mgate = util::prepare_shake_mem(MAX_SIZE);
+    let mgate = util::prepare_shake_mem(t, MAX_SIZE);
 
     // For synchronization all clients sent a message and the reply
     // is only sent once the message from all clients has arrived.

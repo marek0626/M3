@@ -24,7 +24,7 @@ use m3::kif;
 use m3::mem::GlobOff;
 use m3::test::WvTester;
 use m3::vfs::{BufReader, FileRef, GenericFile, IndirectPipe, OpenFlags, VFS};
-use m3::{vec, wv_assert_eq, wv_assert_ok, wv_run_test};
+use m3::{vec, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, genfile_mux);
@@ -38,7 +38,7 @@ fn genfile_mux(t: &mut dyn WvTester) {
 
     let mut files = vec![];
     for _ in 0..NUM {
-        let file = wv_assert_ok!(VFS::open("/pat.bin", OpenFlags::R));
+        let file = wv_require_ok!(VFS::open("/pat.bin", OpenFlags::R));
         files.push(BufReader::new(file));
     }
 
@@ -69,11 +69,11 @@ fn pipe_mux(t: &mut dyn WvTester) {
         writer: FileRef<GenericFile>,
     }
 
-    let pipeserv = wv_assert_ok!(Pipes::new("pipes"));
+    let pipeserv = wv_require_ok!(Pipes::new("pipes"));
     let mut pipes = vec![];
     for _ in 0..NUM {
-        let mgate = wv_assert_ok!(MemGate::new(PIPE_SIZE as GlobOff, kif::Perm::RW));
-        let pipe = wv_assert_ok!(IndirectPipe::new(&pipeserv, mgate));
+        let mgate = wv_require_ok!(MemGate::new(PIPE_SIZE as GlobOff, kif::Perm::RW));
+        let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, mgate));
         pipes.push(Pipe {
             reader: pipe.reader().unwrap(),
             writer: pipe.writer().unwrap(),
@@ -89,14 +89,14 @@ fn pipe_mux(t: &mut dyn WvTester) {
     let mut pos = 0;
     while pos < DATA_SIZE {
         for p in &mut pipes {
-            wv_assert_ok!(p.writer.write(&src_buf));
-            wv_assert_ok!(p.writer.flush());
+            wv_assert_ok!(t, p.writer.write(&src_buf));
+            wv_assert_ok!(t, p.writer.flush());
         }
 
         for p in &mut pipes {
             let mut dst_buf = [0u8; STEP_SIZE];
 
-            wv_assert_ok!(p.reader.read(&mut dst_buf));
+            wv_assert_ok!(t, p.reader.read(&mut dst_buf));
             wv_assert_eq!(t, dst_buf, src_buf);
         }
 

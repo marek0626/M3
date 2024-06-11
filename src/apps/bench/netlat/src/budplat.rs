@@ -19,7 +19,7 @@ use m3::net::{DGramSocket, DgramSocketArgs, Endpoint, Socket, UdpSocket};
 use m3::test::WvTester;
 use m3::time::{CycleInstant, Results, TimeDuration};
 use m3::vfs::{File, FileEvent, FileRef, FileWaiter};
-use m3::{wv_assert_ok, wv_perf, wv_run_test};
+use m3::{wv_assert_ok, wv_perf, wv_require_ok, wv_run_test};
 
 const TIMEOUT: TimeDuration = TimeDuration::from_millis(30);
 
@@ -27,10 +27,15 @@ pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, latency);
 }
 
-fn send_recv(waiter: &mut FileWaiter, socket: &mut FileRef<UdpSocket>, dest: Endpoint) -> bool {
+fn send_recv(
+    t: &mut dyn WvTester,
+    waiter: &mut FileWaiter,
+    socket: &mut FileRef<UdpSocket>,
+    dest: Endpoint,
+) -> bool {
     let mut buf = [0u8; 1];
 
-    wv_assert_ok!(socket.send_to(&buf, dest));
+    wv_assert_ok!(t, socket.send_to(&buf, dest));
 
     waiter.wait_for(TIMEOUT);
 
@@ -43,11 +48,11 @@ fn send_recv(waiter: &mut FileWaiter, socket: &mut FileRef<UdpSocket>, dest: End
     }
 }
 
-fn latency(_t: &mut dyn WvTester) {
-    let net = wv_assert_ok!(Network::new("net"));
-    let mut socket = wv_assert_ok!(UdpSocket::new(DgramSocketArgs::new(net)));
+fn latency(t: &mut dyn WvTester) {
+    let net = wv_require_ok!(Network::new("net"));
+    let mut socket = wv_require_ok!(UdpSocket::new(DgramSocketArgs::new(net)));
 
-    wv_assert_ok!(socket.set_blocking(false));
+    wv_assert_ok!(t, socket.set_blocking(false));
 
     let samples = 100;
     let dest = Endpoint::new(crate::DST_IP.get(), crate::DST_PORT.get());
@@ -57,7 +62,7 @@ fn latency(_t: &mut dyn WvTester) {
 
     // warmup
     for _ in 0..5 {
-        send_recv(&mut waiter, &mut socket, dest);
+        send_recv(t, &mut waiter, &mut socket, dest);
     }
 
     let mut res = Results::new(samples);
@@ -65,7 +70,7 @@ fn latency(_t: &mut dyn WvTester) {
     while res.runs() < samples {
         let start = CycleInstant::now();
 
-        if send_recv(&mut waiter, &mut socket, dest) {
+        if send_recv(t, &mut waiter, &mut socket, dest) {
             let stop = CycleInstant::now();
             res.push(stop.duration_since(start));
         }

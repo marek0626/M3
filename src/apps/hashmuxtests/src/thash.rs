@@ -26,7 +26,9 @@ use m3::mem::{GlobOff, VirtAddr};
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ChildActivity, RunningActivity, RunningProgramActivity, Tile};
 use m3::vfs::{File, FileRef, IndirectPipe, OpenFlags, Seek, SeekMode, VFS};
-use m3::{format, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_assert_some, wv_run_test};
+use m3::{
+    format, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_require_some, wv_run_test,
+};
 use m3::{println, tmif, util, vec};
 
 pub fn run(t: &mut dyn WvTester) {
@@ -50,17 +52,17 @@ fn _hash_empty(
     algo: &'static HashAlgorithm,
     expected: &[u8],
 ) {
-    wv_assert_ok!(hash.reset(algo));
+    wv_assert_ok!(t, hash.reset(algo));
 
     let mut buf = vec![0u8; algo.output_bytes];
-    wv_assert_ok!(hash.finish(&mut buf));
+    wv_assert_ok!(t, hash.finish(&mut buf));
     wv_assert_err!(t, hash.finish(&mut buf), Code::InvArgs); // Can only request hash once
 
     wv_assert_eq!(t, &buf, expected);
 }
 
 fn hash_empty(t: &mut dyn WvTester) {
-    let mut hash = wv_assert_ok!(HashSession::new("hash", &HashAlgorithm::SHA3_256));
+    let mut hash = wv_require_ok!(HashSession::new("hash", &HashAlgorithm::SHA3_256));
 
     _hash_empty(
         t,
@@ -100,17 +102,20 @@ fn hash_mapped_mem(t: &mut dyn WvTester) {
 
     const ADDR: VirtAddr = VirtAddr::new(0x3000_0000);
     const SIZE: usize = 32 * 1024; // 32 KiB
-    let mcap = wv_assert_ok!(MemCap::new(SIZE as GlobOff, Perm::RW));
+    let mcap = wv_require_ok!(MemCap::new(SIZE as GlobOff, Perm::RW));
 
     // Prepare hash session
-    let hash = wv_assert_ok!(HashSession::new("hash", &HashAlgorithm::SHA3_256));
-    wv_assert_ok!(hash.ep().configure(mcap.sel()));
+    let hash = wv_require_ok!(HashSession::new("hash", &HashAlgorithm::SHA3_256));
+    wv_assert_ok!(t, hash.ep().configure(mcap.sel()));
 
     // Map memory
-    wv_assert_ok!(Activity::own()
-        .pager()
-        .unwrap()
-        .map_mem(ADDR, mcap.sel(), SIZE, Perm::RW));
+    wv_assert_ok!(
+        t,
+        Activity::own()
+            .pager()
+            .unwrap()
+            .map_mem(ADDR, mcap.sel(), SIZE, Perm::RW)
+    );
 
     // Fill memory with some data
     let buf = unsafe { util::slice_for_mut(ADDR.as_mut_ptr(), SIZE) };
@@ -123,12 +128,12 @@ fn hash_mapped_mem(t: &mut dyn WvTester) {
     // Flush the cache, otherwise the writes above might not have ended up in
     // physical memory yet. It should be enough to flush the memory for the buffer
     // but the TileMux does not seem to provide that functionality at the moment.
-    wv_assert_ok!(tmif::flush_invalidate());
+    wv_assert_ok!(t, tmif::flush_invalidate());
 
     // Check resulting hash
     let mut buf = [0u8; HashAlgorithm::SHA3_256.output_bytes];
-    wv_assert_ok!(hash.input(0, SIZE));
-    wv_assert_ok!(hash.finish(&mut buf));
+    wv_assert_ok!(t, hash.input(0, SIZE));
+    wv_assert_ok!(t, hash.finish(&mut buf));
     wv_assert_eq!(
         t,
         &buf,
@@ -136,7 +141,7 @@ fn hash_mapped_mem(t: &mut dyn WvTester) {
     );
 
     // Unmap the memory again. This is important otherwise act.run(...) will fail below
-    wv_assert_ok!(Activity::own().pager().unwrap().unmap(ADDR));
+    wv_assert_ok!(t, Activity::own().pager().unwrap().unmap(ADDR));
 }
 
 fn _hash_file(
@@ -146,11 +151,11 @@ fn _hash_file(
     algo: &'static HashAlgorithm,
     expected: &[u8],
 ) -> Result<(), Error> {
-    wv_assert_ok!(hash.reset(algo));
-    wv_assert_ok!(file.hash_input(hash, usize::MAX));
+    wv_assert_ok!(t, hash.reset(algo));
+    wv_assert_ok!(t, file.hash_input(hash, usize::MAX));
 
     let mut buf = vec![0u8; algo.output_bytes];
-    wv_assert_ok!(hash.finish(&mut buf));
+    wv_assert_ok!(t, hash.finish(&mut buf));
 
     wv_assert_eq!(t, &buf, expected);
     match buf == expected {
@@ -180,8 +185,8 @@ fn _hash_file_start(
     file: &FileRef<dyn File>,
     expected: &str,
 ) -> RunningProgramActivity {
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
-    let mut act = wv_assert_ok!(ChildActivity::new(tile, algo.name));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let mut act = wv_require_ok!(ChildActivity::new(tile, algo.name));
 
     act.add_file(io::STDIN_FILENO, file.fd());
 
@@ -189,14 +194,14 @@ fn _hash_file_start(
     dst.push(algo.ty);
     dst.push(expected);
 
-    wv_assert_ok!(act.run(|| {
+    wv_require_ok!(act.run(|| {
         let mut t = DefaultWvTester::default();
         let mut src = Activity::own().data_source();
         let ty: HashType = src.pop().unwrap();
         let expected_bytes = _to_hex_bytes(src.pop().unwrap());
 
         let algo = HashAlgorithm::from_type(ty).unwrap();
-        let mut hash = wv_assert_ok!(HashSession::new(&format!("hash{}", ty as usize), algo));
+        let mut hash = wv_require_ok!(HashSession::new(&format!("hash{}", ty as usize), algo));
         _hash_file(
             &mut t,
             io::stdin().get_mut(),
@@ -208,7 +213,7 @@ fn _hash_file_start(
 }
 
 fn hash_file(t: &mut dyn WvTester) {
-    let file = wv_assert_ok!(VFS::open(
+    let file = wv_require_ok!(VFS::open(
         "/movies/starwars.txt",
         OpenFlags::R | OpenFlags::NEW_SESS
     ));
@@ -240,13 +245,13 @@ fn hash_file(t: &mut dyn WvTester) {
 }
 
 fn seek_then_hash_file(t: &mut dyn WvTester) {
-    let mut hash = wv_assert_ok!(HashSession::new("hash", &HashAlgorithm::SHA3_256));
-    let mut file = wv_assert_ok!(VFS::open(
+    let mut hash = wv_require_ok!(HashSession::new("hash", &HashAlgorithm::SHA3_256));
+    let mut file = wv_require_ok!(VFS::open(
         "/movies/starwars.txt",
         OpenFlags::R | OpenFlags::NEW_SESS
     ));
 
-    wv_assert_ok!(file.seek(1 * 1024 * 1024, SeekMode::Cur));
+    wv_assert_ok!(t, file.seek(1 * 1024 * 1024, SeekMode::Cur));
     _hash_file(
         t,
         &mut file.into_generic(),
@@ -258,15 +263,15 @@ fn seek_then_hash_file(t: &mut dyn WvTester) {
 }
 
 fn read0_then_hash_file(t: &mut dyn WvTester) {
-    let mut hash = wv_assert_ok!(HashSession::new("hash", &HashAlgorithm::SHA3_256));
-    let mut file = wv_assert_ok!(VFS::open(
+    let mut hash = wv_require_ok!(HashSession::new("hash", &HashAlgorithm::SHA3_256));
+    let mut file = wv_require_ok!(VFS::open(
         "/testfile.txt",
         OpenFlags::RW | OpenFlags::NEW_SESS
     ));
 
     // Read zero bytes
     let mut buf = [0u8; 0];
-    wv_assert_ok!(file.read(&mut buf));
+    wv_assert_ok!(t, file.read(&mut buf));
 
     _hash_file(
         t,
@@ -279,15 +284,15 @@ fn read0_then_hash_file(t: &mut dyn WvTester) {
 }
 
 fn write0_then_hash_file(t: &mut dyn WvTester) {
-    let mut hash = wv_assert_ok!(HashSession::new("hash", &HashAlgorithm::SHA3_256));
-    let mut file = wv_assert_ok!(VFS::open(
+    let mut hash = wv_require_ok!(HashSession::new("hash", &HashAlgorithm::SHA3_256));
+    let mut file = wv_require_ok!(VFS::open(
         "/testfile.txt",
         OpenFlags::RW | OpenFlags::NEW_SESS
     ));
 
     // Write zero bytes
     let buf = [0u8; 0];
-    wv_assert_ok!(file.write(&buf));
+    wv_assert_ok!(t, file.write(&buf));
 
     _hash_file(
         t,
@@ -300,14 +305,14 @@ fn write0_then_hash_file(t: &mut dyn WvTester) {
 }
 
 fn read_then_hash_file(t: &mut dyn WvTester) {
-    let mut hash = wv_assert_ok!(HashSession::new("hash", &HashAlgorithm::SHA3_256));
-    let mut file = wv_assert_ok!(VFS::open(
+    let mut hash = wv_require_ok!(HashSession::new("hash", &HashAlgorithm::SHA3_256));
+    let mut file = wv_require_ok!(VFS::open(
         "/testfile.txt",
         OpenFlags::R | OpenFlags::NEW_SESS
     ));
 
     // Read some bytes
-    let res = wv_assert_ok!(file.read_string(4));
+    let res = wv_require_ok!(file.read_string(4));
     wv_assert_eq!(t, res, "This");
 
     // Hash rest of the file
@@ -333,28 +338,28 @@ fn _shake_and_hash(
     const SEED: &str = "M3";
 
     // Generate 1 MiB pseudo-random bytes with seed
-    wv_assert_ok!(hash.reset(algo));
-    wv_assert_ok!(mgate.write(SEED.as_bytes(), 0)); // Write seed
-    wv_assert_ok!(hash.input(0, SEED.len())); // Absorb seed
-    wv_assert_ok!(hash.output(0, SHAKE_SIZE));
+    wv_assert_ok!(t, hash.reset(algo));
+    wv_assert_ok!(t, mgate.write(SEED.as_bytes(), 0)); // Write seed
+    wv_assert_ok!(t, hash.input(0, SEED.len())); // Absorb seed
+    wv_assert_ok!(t, hash.output(0, SHAKE_SIZE));
 
     // For now, input should not be allowed after output
     wv_assert_err!(t, hash.input(0, SHAKE_SIZE), Code::InvState);
 
     // Verify generated bytes using hash
-    wv_assert_ok!(hash.reset(&HashAlgorithm::SHA3_256));
-    wv_assert_ok!(hash.input(0, SHAKE_SIZE));
+    wv_assert_ok!(t, hash.reset(&HashAlgorithm::SHA3_256));
+    wv_assert_ok!(t, hash.input(0, SHAKE_SIZE));
 
     let mut buf = [0u8; HashAlgorithm::SHA3_256.output_bytes];
-    wv_assert_ok!(hash.finish(&mut buf));
+    wv_assert_ok!(t, hash.finish(&mut buf));
     wv_assert_eq!(t, &buf, expected_sha3_256);
 }
 
 fn shake_and_hash(t: &mut dyn WvTester) {
-    let mut hash = wv_assert_ok!(HashSession::new("hash", &HashAlgorithm::SHAKE128));
-    let mgate = wv_assert_ok!(MemGate::new(SHAKE_SIZE as GlobOff, Perm::RW));
-    let mgate_derived = wv_assert_ok!(mgate.derive_cap(0, SHAKE_SIZE as GlobOff, Perm::RW));
-    wv_assert_ok!(hash.ep().configure(mgate_derived.sel()));
+    let mut hash = wv_require_ok!(HashSession::new("hash", &HashAlgorithm::SHAKE128));
+    let mgate = wv_require_ok!(MemGate::new(SHAKE_SIZE as GlobOff, Perm::RW));
+    let mgate_derived = wv_require_ok!(mgate.derive_cap(0, SHAKE_SIZE as GlobOff, Perm::RW));
+    wv_assert_ok!(t, hash.ep().configure(mgate_derived.sel()));
 
     _shake_and_hash(
         t,
@@ -378,42 +383,45 @@ fn _shake_and_hash_file(
     algo: &'static HashAlgorithm,
     expected_sha3_256: &[u8],
 ) {
-    wv_assert_ok!(hash.reset(algo));
+    wv_assert_ok!(t, hash.reset(algo));
 
     {
         // Absorb seed
-        let mut file = wv_assert_ok!(VFS::open(
+        let mut file = wv_require_ok!(VFS::open(
             "/movies/starwars.txt",
             OpenFlags::R | OpenFlags::NEW_SESS
         ));
-        wv_assert_ok!(file.hash_input(hash, usize::MAX));
+        wv_assert_ok!(t, file.hash_input(hash, usize::MAX));
     }
 
     // Squeeze output
-    let mut file = wv_assert_ok!(VFS::open(
+    let mut file = wv_require_ok!(VFS::open(
         "/shake.bin",
         OpenFlags::RW | OpenFlags::CREATE | OpenFlags::NEW_SESS
     ));
-    wv_assert_ok!(file.hash_output(hash, SHAKE_SIZE));
-    wv_assert_ok!(file.seek(0, SeekMode::Set));
+    wv_assert_ok!(t, file.hash_output(hash, SHAKE_SIZE));
+    wv_assert_ok!(t, file.seek(0, SeekMode::Set));
 
     // Verify generated bytes using hash
-    wv_assert_ok!(hash.reset(&HashAlgorithm::SHA3_256));
-    wv_assert_ok!(file.hash_input(hash, usize::MAX));
+    wv_assert_ok!(t, hash.reset(&HashAlgorithm::SHA3_256));
+    wv_assert_ok!(t, file.hash_input(hash, usize::MAX));
 
     // Write hash to file
-    wv_assert_ok!(file.seek(0, SeekMode::Set));
-    wv_assert_ok!(file.hash_output(hash, HashAlgorithm::SHA3_256.output_bytes));
+    wv_assert_ok!(t, file.seek(0, SeekMode::Set));
+    wv_assert_ok!(
+        t,
+        file.hash_output(hash, HashAlgorithm::SHA3_256.output_bytes)
+    );
 
     // Read hash from file
-    wv_assert_ok!(file.seek(0, SeekMode::Set));
+    wv_assert_ok!(t, file.seek(0, SeekMode::Set));
     let mut buf = [0u8; HashAlgorithm::SHA3_256.output_bytes];
-    wv_assert_ok!(file.read_exact(&mut buf));
+    wv_assert_ok!(t, file.read_exact(&mut buf));
     wv_assert_eq!(t, &buf, expected_sha3_256);
 }
 
 fn shake_and_hash_file(t: &mut dyn WvTester) {
-    let mut hash = wv_assert_ok!(HashSession::new("hash", &HashAlgorithm::SHAKE128));
+    let mut hash = wv_require_ok!(HashSession::new("hash", &HashAlgorithm::SHAKE128));
 
     _shake_and_hash_file(
         t,
@@ -433,23 +441,27 @@ const PIPE_SHAKE_SIZE: usize = 256 * 1024; // 256 KiB
 
 // echo Pipe! | hashsum shake128 -O 262144 -o - | hashsum sha3-256
 fn shake_and_hash_pipe(t: &mut dyn WvTester) {
-    let pipes = wv_assert_ok!(Pipes::new("pipes"));
+    let pipes = wv_require_ok!(Pipes::new("pipes"));
 
     // Create two pipes
-    let imgate = wv_assert_ok!(MemGate::new(0x1000, Perm::RW));
-    let ipipe = wv_assert_ok!(IndirectPipe::new(&pipes, imgate));
-    let omgate = wv_assert_ok!(MemGate::new(0x10000, Perm::RW));
-    let opipe = wv_assert_ok!(IndirectPipe::new(&pipes, omgate));
+    let imgate = wv_require_ok!(MemGate::new(0x1000, Perm::RW));
+    let ipipe = wv_require_ok!(IndirectPipe::new(&pipes, imgate));
+    let omgate = wv_require_ok!(MemGate::new(0x10000, Perm::RW));
+    let opipe = wv_require_ok!(IndirectPipe::new(&pipes, omgate));
 
     // Setup child activity that runs "hashsum shake128 -O 262144 -o -"
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
-    let mut act = wv_assert_ok!(ChildActivity::new(tile, "shaker"));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let mut act = wv_require_ok!(ChildActivity::new(tile, "shaker"));
     act.add_file(io::STDIN_FILENO, ipipe.reader().unwrap().fd());
     act.add_file(io::STDOUT_FILENO, opipe.writer().unwrap().fd());
-    let closure = wv_assert_ok!(act.run(|| {
-        let hash = wv_assert_ok!(HashSession::new("hash2", &HashAlgorithm::SHAKE128));
-        wv_assert_ok!(io::stdin().get_mut().hash_input(&hash, usize::MAX));
-        wv_assert_ok!(io::stdout().get_mut().hash_output(&hash, PIPE_SHAKE_SIZE));
+    let closure = wv_require_ok!(act.run(|| {
+        let mut t = DefaultWvTester::default();
+        let hash = wv_require_ok!(HashSession::new("hash2", &HashAlgorithm::SHAKE128));
+        wv_assert_ok!(t, io::stdin().get_mut().hash_input(&hash, usize::MAX));
+        wv_assert_ok!(
+            t,
+            io::stdout().get_mut().hash_output(&hash, PIPE_SHAKE_SIZE)
+        );
         Ok(())
     }));
 
@@ -457,22 +469,22 @@ fn shake_and_hash_pipe(t: &mut dyn WvTester) {
     ipipe.close_reader();
     opipe.close_writer();
 
-    let hash = wv_assert_ok!(HashSession::new("hash1", &HashAlgorithm::SHA3_256));
+    let hash = wv_require_ok!(HashSession::new("hash1", &HashAlgorithm::SHA3_256));
     {
         // echo "Pipe!"
-        let mut ifile = wv_assert_some!(ipipe.writer());
-        wv_assert_ok!(writeln!(ifile, "Pipe!"));
+        let mut ifile = wv_require_some!(ipipe.writer());
+        wv_assert_ok!(t, writeln!(ifile, "Pipe!"));
         ipipe.close_writer();
     }
     {
         // hashsum sha3-256
-        let mut ofile = wv_assert_some!(opipe.reader());
-        wv_assert_ok!(ofile.hash_input(&hash, usize::MAX));
+        let mut ofile = wv_require_some!(opipe.reader());
+        wv_assert_ok!(t, ofile.hash_input(&hash, usize::MAX));
         opipe.close_reader();
     }
 
     let mut buf = [0u8; HashAlgorithm::SHA3_256.output_bytes];
-    wv_assert_ok!(hash.finish(&mut buf));
+    wv_assert_ok!(t, hash.finish(&mut buf));
     wv_assert_eq!(
         t,
         &buf,
@@ -928,7 +940,7 @@ fn create_cshake_sess() -> Result<HashSession, Error> {
             println!("Ignoring test -- CSHAKE128 not supported");
             Err(e)
         },
-        Err(e) => wv_assert_ok!(Err(e)),
+        Err(e) => wv_require_ok!(Err(e)),
         Ok(sess) => Ok(sess),
     }
 }
@@ -938,26 +950,26 @@ fn cshake_nist(t: &mut dyn WvTester) {
         Ok(sess) => sess,
         Err(_) => return,
     };
-    let mgate = wv_assert_ok!(MemGate::new(256, Perm::RW));
-    let mgate_derived = wv_assert_ok!(mgate.derive_cap(0, 256, Perm::RW));
-    wv_assert_ok!(hash.ep().configure(mgate_derived.sel()));
+    let mgate = wv_require_ok!(MemGate::new(256, Perm::RW));
+    let mgate_derived = wv_require_ok!(mgate.derive_cap(0, 256, Perm::RW));
+    wv_assert_ok!(t, hash.ep().configure(mgate_derived.sel()));
     let mut buf = [0u8; CSHAKE_BUF_LEN];
 
     for test in &CSHAKE_NIST_SAMPLES {
-        wv_assert_ok!(hash.reset(test.algo));
+        wv_assert_ok!(t, hash.reset(test.algo));
 
         // Absorb cSHAKE header
         let size = cshake::prepend_header(&mut buf, test.n, test.s, test.algo.block_bytes);
-        wv_assert_ok!(mgate.write(&buf[..size], 0));
-        wv_assert_ok!(hash.input(0, size));
+        wv_assert_ok!(t, mgate.write(&buf[..size], 0));
+        wv_assert_ok!(t, hash.input(0, size));
 
         // Write test data
-        wv_assert_ok!(mgate.write(test.data, 0));
-        wv_assert_ok!(hash.input(0, test.data.len()));
+        wv_assert_ok!(t, mgate.write(test.data, 0));
+        wv_assert_ok!(t, hash.input(0, test.data.len()));
 
         // Check resulting hash
-        wv_assert_ok!(hash.output(0, test.expected.len()));
-        wv_assert_ok!(mgate.read(&mut buf[..test.expected.len()], 0));
+        wv_assert_ok!(t, hash.output(0, test.expected.len()));
+        wv_assert_ok!(t, mgate.read(&mut buf[..test.expected.len()], 0));
         wv_assert_eq!(t, &buf[..test.expected.len()], test.expected);
     }
 }
@@ -967,30 +979,33 @@ fn kmac_nist(t: &mut dyn WvTester) {
         Ok(sess) => sess,
         Err(_) => return,
     };
-    let mgate = wv_assert_ok!(MemGate::new(512, Perm::RW));
-    let mgate_derived = wv_assert_ok!(mgate.derive_cap(0, 512, Perm::RW));
-    wv_assert_ok!(hash.ep().configure(mgate_derived.sel()));
+    let mgate = wv_require_ok!(MemGate::new(512, Perm::RW));
+    let mgate_derived = wv_require_ok!(mgate.derive_cap(0, 512, Perm::RW));
+    wv_assert_ok!(t, hash.ep().configure(mgate_derived.sel()));
     let mut buf = [0u8; CSHAKE_BUF_LEN * 2]; // KMAC header and key, separately padded
 
     for test in &KMAC_NIST_SAMPLES {
-        wv_assert_ok!(hash.reset(test.algo));
+        wv_assert_ok!(t, hash.reset(test.algo));
 
         // Absorb KMAC header and key
         let mut size = 0;
         size += kmac::prepend_header(&mut buf[size..], test.s, test.algo.block_bytes);
         size += kmac::prepend_key(&mut buf[size..], test.key, test.algo.block_bytes);
-        wv_assert_ok!(mgate.write(&buf[..size], 0));
-        wv_assert_ok!(hash.input(0, size));
+        wv_assert_ok!(t, mgate.write(&buf[..size], 0));
+        wv_assert_ok!(t, hash.input(0, size));
 
         // Write test data and append KMAC output length
-        wv_assert_ok!(mgate.write(test.data, 0));
+        wv_assert_ok!(t, mgate.write(test.data, 0));
         let appended_size = kmac::append_output_length(&mut buf, test.output_length);
-        wv_assert_ok!(mgate.write(&buf[..appended_size], test.data.len() as GlobOff));
-        wv_assert_ok!(hash.input(0, test.data.len() + appended_size));
+        wv_assert_ok!(
+            t,
+            mgate.write(&buf[..appended_size], test.data.len() as GlobOff)
+        );
+        wv_assert_ok!(t, hash.input(0, test.data.len() + appended_size));
 
         // Check resulting hash
-        wv_assert_ok!(hash.output(0, test.expected.len()));
-        wv_assert_ok!(mgate.read(&mut buf[..test.expected.len()], 0));
+        wv_assert_ok!(t, hash.output(0, test.expected.len()));
+        wv_assert_ok!(t, mgate.read(&mut buf[..test.expected.len()], 0));
         wv_assert_eq!(t, &buf[..test.expected.len()], test.expected);
     }
 }

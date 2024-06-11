@@ -25,7 +25,7 @@ use m3::tiles::{Activity, ActivityArgs, ChildActivity, OwnActivity, RunningActiv
 use m3::time::TimeDuration;
 use m3::util::math;
 
-use m3::{send_vmsg, wv_assert_eq, wv_assert_ok, wv_run_test};
+use m3::{send_vmsg, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, run_stop);
@@ -36,26 +36,26 @@ pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, exec_rust_hello);
 }
 
-fn run_stop(_t: &mut dyn WvTester) {
+fn run_stop(t: &mut dyn WvTester) {
     use m3::com::RGateArgs;
     use m3::vfs;
 
-    let rg = wv_assert_ok!(RecvGate::new_with(
+    let rg = wv_require_ok!(RecvGate::new_with(
         RGateArgs::default().order(6).msg_order(6)
     ));
 
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
 
     let mut wait_time = TimeDuration::from_nanos(10000);
     for _ in 1..100 {
-        let mut act = wv_assert_ok!(ChildActivity::new_with(
+        let mut act = wv_require_ok!(ChildActivity::new_with(
             tile.clone(),
             ActivityArgs::new("test")
         ));
 
         // pass sendgate to child
-        let sg = wv_assert_ok!(SendCap::new_with(SGateArgs::new(&rg).credits(1)));
-        wv_assert_ok!(act.delegate_obj(sg.sel()));
+        let sg = wv_require_ok!(SendCap::new_with(SGateArgs::new(&rg).credits(1)));
+        wv_assert_ok!(t, act.delegate_obj(sg.sel()));
 
         // pass root fs to child
         act.add_mount("/", "/");
@@ -63,13 +63,15 @@ fn run_stop(_t: &mut dyn WvTester) {
         let mut dst = act.data_sink();
         dst.push(sg.sel());
 
-        let act = wv_assert_ok!(act.run(|| {
+        let act = wv_require_ok!(act.run(|| {
+            let mut t = DefaultWvTester::default();
+
             let mut src = Activity::own().data_source();
             let sg_sel: Selector = src.pop().unwrap();
 
             // notify parent that we're running
-            let sg = wv_assert_ok!(SendGate::new_bind(sg_sel));
-            wv_assert_ok!(send_vmsg!(&sg, RecvGate::def(), 1));
+            let sg = wv_require_ok!(SendGate::new_bind(sg_sel));
+            wv_assert_ok!(t, send_vmsg!(&sg, RecvGate::def(), 1));
             let mut _n = 0;
             loop {
                 _n += 1;
@@ -79,11 +81,11 @@ fn run_stop(_t: &mut dyn WvTester) {
         }));
 
         // wait for child
-        wv_assert_ok!(recv_msg(&rg));
+        wv_assert_ok!(t, recv_msg(&rg));
 
         // wait a bit and stop activity
-        wv_assert_ok!(OwnActivity::sleep_for(wait_time));
-        wv_assert_ok!(act.stop());
+        wv_assert_ok!(t, OwnActivity::sleep_for(wait_time));
+        wv_assert_ok!(t, act.stop());
 
         // increase by one ns to attempt interrupts at many points in the instruction stream
         wait_time += TimeDuration::from_nanos(1);
@@ -91,10 +93,10 @@ fn run_stop(_t: &mut dyn WvTester) {
 }
 
 fn run_arguments(t: &mut dyn WvTester) {
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
-    let act = wv_assert_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
 
-    let act = wv_assert_ok!(act.run(|| {
+    let act = wv_require_ok!(act.run(|| {
         let mut t = DefaultWvTester::default();
         wv_assert_eq!(t, env::args().count(), 1);
         assert!(env::args().next().is_some());
@@ -106,40 +108,40 @@ fn run_arguments(t: &mut dyn WvTester) {
 }
 
 fn run_send_receive(t: &mut dyn WvTester) {
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
-    let mut act = wv_assert_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let mut act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
 
-    let rgate = wv_assert_ok!(RecvCap::new(math::next_log2(256), math::next_log2(256)));
+    let rgate = wv_require_ok!(RecvCap::new(math::next_log2(256), math::next_log2(256)));
 
-    wv_assert_ok!(act.delegate_obj(rgate.sel()));
+    wv_assert_ok!(t, act.delegate_obj(rgate.sel()));
 
     let mut dst = act.data_sink();
     dst.push(rgate.sel());
 
-    let act = wv_assert_ok!(act.run(|| {
+    let act = wv_require_ok!(act.run(|| {
         let mut t = DefaultWvTester::default();
         let mut src = Activity::own().data_source();
         let rg_sel: Selector = src.pop().unwrap();
 
-        let rgate = wv_assert_ok!(RecvGate::new_bind(rg_sel));
-        let mut res = wv_assert_ok!(recv_msg(&rgate));
-        let i1 = wv_assert_ok!(res.pop::<u32>());
-        let i2 = wv_assert_ok!(res.pop::<u32>());
+        let rgate = wv_require_ok!(RecvGate::new_bind(rg_sel));
+        let mut res = wv_require_ok!(recv_msg(&rgate));
+        let i1 = wv_require_ok!(res.pop::<u32>());
+        let i2 = wv_require_ok!(res.pop::<u32>());
         wv_assert_eq!(t, (i1, i2), (42, 23));
         Err(Error::new(Code::NoFreeTile))
     }));
 
-    let sgate = wv_assert_ok!(SendGate::new_with(SGateArgs::new(&rgate).credits(1)));
-    wv_assert_ok!(send_vmsg!(&sgate, RecvGate::def(), 42, 23));
+    let sgate = wv_require_ok!(SendGate::new_with(SGateArgs::new(&rgate).credits(1)));
+    wv_assert_ok!(t, send_vmsg!(&sgate, RecvGate::def(), 42, 23));
 
     wv_assert_eq!(t, act.wait(), Ok(Code::NoFreeTile));
 }
 
 fn exec_fail(_t: &mut dyn WvTester) {
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
     // file too small
     {
-        let act = wv_assert_ok!(ChildActivity::new_with(
+        let act = wv_require_ok!(ChildActivity::new_with(
             tile.clone(),
             ActivityArgs::new("test")
         ));
@@ -149,24 +151,24 @@ fn exec_fail(_t: &mut dyn WvTester) {
 
     // not an ELF file
     {
-        let act = wv_assert_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
+        let act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
         let act = act.exec(&["/pat.bin"]);
         assert!(act.is_err() && act.err().unwrap().code() == Code::InvalidElf);
     }
 }
 
 fn exec_hello(t: &mut dyn WvTester) {
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
-    let act = wv_assert_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
 
-    let act = wv_assert_ok!(act.exec(&["/bin/hello"]));
+    let act = wv_require_ok!(act.exec(&["/bin/hello"]));
     wv_assert_eq!(t, act.wait(), Ok(Code::Success));
 }
 
 fn exec_rust_hello(t: &mut dyn WvTester) {
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
-    let act = wv_assert_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
 
-    let act = wv_assert_ok!(act.exec(&["/bin/rusthello"]));
+    let act = wv_require_ok!(act.exec(&["/bin/rusthello"]));
     wv_assert_eq!(t, act.wait(), Ok(Code::Success));
 }

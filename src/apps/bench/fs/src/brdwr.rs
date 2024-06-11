@@ -19,7 +19,7 @@ use m3::mem::AlignedBuf;
 use m3::test::WvTester;
 use m3::time::{CycleInstant, Profiler};
 use m3::vfs::{OpenFlags, VFS};
-use m3::{wv_assert_ok, wv_perf, wv_run_test};
+use m3::{wv_perf, wv_require_ok, wv_run_test};
 
 static BUF: StaticRefCell<AlignedBuf<4096>> = StaticRefCell::new(AlignedBuf::new_zeroed());
 
@@ -36,9 +36,9 @@ fn read(_t: &mut dyn WvTester) {
     wv_perf!(
         "read 2 MiB file with 4K buf",
         prof.run::<CycleInstant, _>(|| {
-            let mut file = wv_assert_ok!(VFS::open("/data/2048k.txt", OpenFlags::R));
+            let mut file = wv_require_ok!(VFS::open("/data/2048k.txt", OpenFlags::R));
             loop {
-                let amount = wv_assert_ok!(file.read(buf));
+                let amount = wv_require_ok!(file.read(buf));
                 if amount == 0 {
                     break;
                 }
@@ -56,14 +56,14 @@ fn write(_t: &mut dyn WvTester) {
     wv_perf!(
         "write 2 MiB file with 4K buf",
         prof.run::<CycleInstant, _>(|| {
-            let mut file = wv_assert_ok!(VFS::open(
+            let mut file = wv_require_ok!(VFS::open(
                 "/newfile",
                 OpenFlags::W | OpenFlags::CREATE | OpenFlags::TRUNC
             ));
 
             let mut total = 0;
             while total < SIZE {
-                let amount = wv_assert_ok!(file.write(buf));
+                let amount = wv_require_ok!(file.write(buf));
                 if amount == 0 {
                     break;
                 }

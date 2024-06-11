@@ -22,26 +22,27 @@ use m3::println;
 use m3::test::WvTester;
 use m3::time::{Results, TimeDuration, TimeInstant};
 use m3::vfs::{File, FileEvent, FileRef, FileWaiter};
-use m3::{wv_assert_eq, wv_assert_ok, wv_perf, wv_run_test};
+use m3::{wv_assert_eq, wv_assert_ok, wv_perf, wv_require_ok, wv_run_test};
 
 const TIMEOUT: TimeDuration = TimeDuration::from_secs(1);
 
 pub fn run(t: &mut dyn WvTester) {
     // wait once for UDP, because it's connection-less
-    wv_assert_ok!(Semaphore::attach("net-udp").unwrap().down());
+    wv_assert_ok!(t, Semaphore::attach("net-udp").unwrap().down());
 
     wv_run_test!(t, latency);
     wv_run_test!(t, bandwidth);
 }
 
 fn send_recv(
+    t: &mut dyn WvTester,
     waiter: &mut FileWaiter,
     socket: &mut FileRef<UdpSocket>,
     dest: Endpoint,
     msg: &mut [u8],
     timeout: TimeDuration,
 ) -> Result<usize, Error> {
-    wv_assert_ok!(socket.send_to(msg, dest));
+    wv_assert_ok!(t, socket.send_to(msg, dest));
 
     waiter.wait_for(timeout);
 
@@ -54,10 +55,10 @@ fn send_recv(
 }
 
 fn latency(t: &mut dyn WvTester) {
-    let net = wv_assert_ok!(Network::new("net"));
-    let mut socket = wv_assert_ok!(UdpSocket::new(DgramSocketArgs::new(net)));
+    let net = wv_require_ok!(Network::new("net"));
+    let mut socket = wv_require_ok!(UdpSocket::new(DgramSocketArgs::new(net)));
 
-    wv_assert_ok!(socket.set_blocking(false));
+    wv_assert_ok!(t, socket.set_blocking(false));
 
     let samples = 5;
     let dest = Endpoint::new(crate::DST_IP.get(), 1337);
@@ -69,18 +70,22 @@ fn latency(t: &mut dyn WvTester) {
 
     // do one initial send-receive with a higher timeout than the smoltcp-internal timeout to
     // workaround the high ARP-request delay with the loopback device.
-    wv_assert_ok!(send_recv(
-        &mut waiter,
-        &mut socket,
-        dest,
-        &mut buf,
-        TimeDuration::from_secs(6)
-    ));
+    wv_assert_ok!(
+        t,
+        send_recv(
+            t,
+            &mut waiter,
+            &mut socket,
+            dest,
+            &mut buf,
+            TimeDuration::from_secs(6)
+        )
+    );
 
     // warmup
     for _ in 0..5 {
         // ignore failures here
-        send_recv(&mut waiter, &mut socket, dest, &mut buf, TIMEOUT).ok();
+        send_recv(t, &mut waiter, &mut socket, dest, &mut buf, TIMEOUT).ok();
     }
 
     let packet_sizes = [8, 16, 32, 64, 128, 256, 512, 1024];
@@ -92,6 +97,7 @@ fn latency(t: &mut dyn WvTester) {
             let start = TimeInstant::now();
 
             if let Ok(recv_size) = send_recv(
+                t,
                 &mut waiter,
                 &mut socket,
                 dest,
@@ -123,13 +129,13 @@ fn bandwidth(t: &mut dyn WvTester) {
     const BURST_SIZE: usize = 2;
     const TIMEOUT: TimeDuration = TimeDuration::from_secs(1);
 
-    let net = wv_assert_ok!(Network::new("net"));
-    let mut socket = wv_assert_ok!(UdpSocket::new(
+    let net = wv_require_ok!(Network::new("net"));
+    let mut socket = wv_require_ok!(UdpSocket::new(
         DgramSocketArgs::new(net)
             .send_buffer(8, 64 * 1024)
             .recv_buffer(32, 256 * 1024)
     ));
-    wv_assert_ok!(socket.set_blocking(false));
+    wv_assert_ok!(t, socket.set_blocking(false));
 
     let dest = Endpoint::new(crate::DST_IP.get(), 1337);
 
@@ -140,7 +146,7 @@ fn bandwidth(t: &mut dyn WvTester) {
 
     for _ in 0..10 {
         // ignore errors here
-        send_recv(&mut waiter, &mut socket, dest, &mut buf, TIMEOUT).ok();
+        send_recv(t, &mut waiter, &mut socket, dest, &mut buf, TIMEOUT).ok();
     }
 
     let start = TimeInstant::now();

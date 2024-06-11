@@ -20,13 +20,13 @@ use m3::net::{DGramSocket, DgramSocketArgs, Endpoint, Socket, State, UdpSocket, 
 use m3::test::WvTester;
 use m3::time::TimeDuration;
 use m3::vfs::{File, FileEvent, FileRef, FileWaiter};
-use m3::{wv_assert_eq, wv_assert_err, wv_assert_ok, wv_run_test};
+use m3::{wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_run_test};
 
 const TIMEOUT: TimeDuration = TimeDuration::from_secs(1);
 
 pub fn run(t: &mut dyn WvTester) {
     // wait once for UDP, because it's connection-less
-    wv_assert_ok!(Semaphore::attach("net-udp").unwrap().down());
+    wv_assert_ok!(t, Semaphore::attach("net-udp").unwrap().down());
 
     wv_run_test!(t, basics);
     wv_run_test!(t, connect);
@@ -34,14 +34,14 @@ pub fn run(t: &mut dyn WvTester) {
 }
 
 fn basics(t: &mut dyn WvTester) {
-    let net = wv_assert_ok!(Network::new("net0"));
+    let net = wv_require_ok!(Network::new("net0"));
 
-    let mut socket = wv_assert_ok!(UdpSocket::new(DgramSocketArgs::new(net)));
+    let mut socket = wv_require_ok!(UdpSocket::new(DgramSocketArgs::new(net)));
 
     wv_assert_eq!(t, socket.state(), State::Closed);
     wv_assert_eq!(t, socket.local_endpoint(), None);
 
-    wv_assert_ok!(socket.bind(2000));
+    wv_assert_ok!(t, socket.bind(2000));
     wv_assert_eq!(t, socket.state(), State::Bound);
     wv_assert_eq!(
         t,
@@ -53,18 +53,19 @@ fn basics(t: &mut dyn WvTester) {
 }
 
 fn connect(t: &mut dyn WvTester) {
-    let net = wv_assert_ok!(Network::new("net0"));
+    let net = wv_require_ok!(Network::new("net0"));
 
-    let mut socket = wv_assert_ok!(UdpSocket::new(DgramSocketArgs::new(net)));
+    let mut socket = wv_require_ok!(UdpSocket::new(DgramSocketArgs::new(net)));
 
     wv_assert_eq!(t, socket.state(), State::Closed);
     wv_assert_eq!(t, socket.local_endpoint(), None);
 
-    wv_assert_ok!(socket.connect(Endpoint::new(crate::NET0_IP.get(), 2000)));
+    wv_assert_ok!(t, socket.connect(Endpoint::new(crate::NET0_IP.get(), 2000)));
     wv_assert_eq!(t, socket.state(), State::Bound);
 }
 
 fn send_recv(
+    t: &mut dyn WvTester,
     waiter: &mut FileWaiter,
     socket: &mut FileRef<UdpSocket>,
     dest: Endpoint,
@@ -72,7 +73,7 @@ fn send_recv(
     recv_buf: &mut [u8],
     timeout: TimeDuration,
 ) -> Result<(usize, Endpoint), Error> {
-    wv_assert_ok!(socket.send_to(send_buf, dest));
+    wv_assert_ok!(t, socket.send_to(send_buf, dest));
 
     waiter.wait_for(timeout);
 
@@ -85,11 +86,11 @@ fn send_recv(
 }
 
 fn data(t: &mut dyn WvTester) {
-    let net = wv_assert_ok!(Network::new("net0"));
+    let net = wv_require_ok!(Network::new("net0"));
 
-    let mut socket = wv_assert_ok!(UdpSocket::new(DgramSocketArgs::new(net)));
+    let mut socket = wv_require_ok!(UdpSocket::new(DgramSocketArgs::new(net)));
 
-    wv_assert_ok!(socket.set_blocking(false));
+    wv_assert_ok!(t, socket.set_blocking(false));
 
     let dest = Endpoint::new(crate::DST_IP.get(), 1337);
 
@@ -105,14 +106,18 @@ fn data(t: &mut dyn WvTester) {
 
     // do one initial send-receive with a higher timeout than the smoltcp-internal timeout to
     // workaround the high ARP-request delay with the loopback device.
-    wv_assert_ok!(send_recv(
-        &mut waiter,
-        &mut socket,
-        dest,
-        &send_buf[0..1],
-        &mut recv_buf,
-        TimeDuration::from_secs(6)
-    ));
+    wv_assert_ok!(
+        t,
+        send_recv(
+            t,
+            &mut waiter,
+            &mut socket,
+            dest,
+            &send_buf[0..1],
+            &mut recv_buf,
+            TimeDuration::from_secs(6)
+        )
+    );
 
     wv_assert_err!(
         t,
@@ -129,6 +134,7 @@ fn data(t: &mut dyn WvTester) {
     for pkt_size in &packet_sizes {
         loop {
             if let Ok((recv_size, src)) = send_recv(
+                t,
                 &mut waiter,
                 &mut socket,
                 dest,

@@ -26,11 +26,10 @@ use m3::errors::{Code, Error};
 use m3::io::LogFlags;
 use m3::mem::GlobOff;
 use m3::serialize::{Deserialize, Serialize};
-use m3::test::WvTester;
+use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ChildActivity, RunningActivity, RunningProgramActivity};
 use m3::time::{CycleDuration, Duration};
-use m3::{log, wv_assert_ok};
-use m3::{wv_assert_eq, wv_run_test};
+use m3::{log, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
 
 use crate::create_data;
 use crate::utils;
@@ -101,13 +100,15 @@ fn compute_copy<'a: 'static, T>() -> Result<(), Error>
 where
     T: Copy + Debug + Add<Output = T> + AddAssign + Serialize + Deserialize<'a>,
 {
-    let mut src = Activity::own().data_source();
-    let cfg: NodeConfig<T> = wv_assert_ok!(src.pop());
+    let mut t = DefaultWvTester::default();
 
-    let recv = wv_assert_ok!(MultiReceiver::new(cfg.name.clone(), cfg.recv));
+    let mut src = Activity::own().data_source();
+    let cfg: NodeConfig<T> = wv_require_ok!(src.pop());
+
+    let recv = wv_require_ok!(MultiReceiver::new(cfg.name.clone(), cfg.recv));
     let mut send = cfg
         .send
-        .map(|s| wv_assert_ok!(MultiSender::new(cfg.name.clone(), s)));
+        .map(|s| wv_require_ok!(MultiSender::new(cfg.name.clone(), s)));
 
     log!(LogFlags::Debug, "{}: starting", cfg.name);
 
@@ -125,7 +126,7 @@ where
             }
 
             if let Some(send) = send.as_mut() {
-                wv_assert_ok!(send.send_slice(&data, last, user + cfg.add));
+                wv_assert_ok!(t, send.send_slice(&data, last, user + cfg.add));
             }
         })
     }
@@ -138,13 +139,15 @@ fn compute_in_place<'a: 'static, T>() -> Result<(), Error>
 where
     T: Clone + Debug + Add<Output = T> + AddAssign + Serialize + Deserialize<'a>,
 {
-    let mut src = Activity::own().data_source();
-    let cfg: NodeConfig<T> = wv_assert_ok!(src.pop());
+    let mut t = DefaultWvTester::default();
 
-    let recv = wv_assert_ok!(MultiReceiver::new(cfg.name.clone(), cfg.recv));
+    let mut src = Activity::own().data_source();
+    let cfg: NodeConfig<T> = wv_require_ok!(src.pop());
+
+    let recv = wv_require_ok!(MultiReceiver::new(cfg.name.clone(), cfg.recv));
     let mut send = cfg
         .send
-        .map(|s| wv_assert_ok!(MultiSender::new(cfg.name.clone(), s)));
+        .map(|s| wv_require_ok!(MultiSender::new(cfg.name.clone(), s)));
 
     log!(LogFlags::Debug, "{}: starting", cfg.name);
 
@@ -161,7 +164,7 @@ where
         }
 
         if let Some(send) = send.as_mut() {
-            wv_assert_ok!(send.send(mblk, user + cfg.add.clone()));
+            wv_assert_ok!(t, send.send(mblk, user + cfg.add.clone()));
         }
     }
 
@@ -187,21 +190,21 @@ fn run_chain<'a: 'static, T>(
 
     let buf_addr = utils::buffer_addr();
 
-    let n1 = wv_assert_ok!(utils::create_activity("n1"));
-    let n2 = wv_assert_ok!(utils::create_activity("n2"));
-    let n3 = wv_assert_ok!(utils::create_activity("n3"));
+    let n1 = wv_require_ok!(utils::create_activity("n1"));
+    let n2 = wv_require_ok!(utils::create_activity("n2"));
+    let n3 = wv_require_ok!(utils::create_activity("n3"));
 
-    let (n0n1_s, n0n1_r) = wv_assert_ok!(mdatachan::create_single(
+    let (n0n1_s, n0n1_r) = wv_require_ok!(mdatachan::create_single(
         &n1, MSG_SIZE, credits, buf_addr, buf_size
     ));
-    let (n1m_s, n1m_r) = wv_assert_ok!(mdatachan::create_fanout(
+    let (n1m_s, n1m_r) = wv_require_ok!(mdatachan::create_fanout(
         [&n2, &n3].iter().map(|&a| a.deref()),
         MSG_SIZE,
         credits,
         buf_addr,
         buf_size
     ));
-    let (mn0_s, mn0_r) = wv_assert_ok!(mdatachan::create_fanin(
+    let (mn0_s, mn0_r) = wv_require_ok!(mdatachan::create_fanin(
         Activity::own(),
         MSG_SIZE,
         credits,
@@ -210,7 +213,7 @@ fn run_chain<'a: 'static, T>(
         2
     ));
 
-    let n1 = wv_assert_ok!(start_activity(
+    let n1 = wv_require_ok!(start_activity(
         1,
         "n1",
         n1,
@@ -221,7 +224,7 @@ fn run_chain<'a: 'static, T>(
         func,
     ));
 
-    let n2 = wv_assert_ok!(start_activity(
+    let n2 = wv_require_ok!(start_activity(
         2,
         "n2",
         n2,
@@ -232,7 +235,7 @@ fn run_chain<'a: 'static, T>(
         func,
     ));
 
-    let n3 = wv_assert_ok!(start_activity(
+    let n3 = wv_require_ok!(start_activity(
         2,
         "n3",
         n3,
@@ -243,25 +246,21 @@ fn run_chain<'a: 'static, T>(
         func,
     ));
 
-    let mut chan_n0n1 = wv_assert_ok!(MultiSender::new("n0", n0n1_s.desc()));
-    let mut chan_mn0 = wv_assert_ok!(MultiReceiver::new("n0", mn0_r.desc()));
+    let mut chan_n0n1 = wv_require_ok!(MultiSender::new("n0", n0n1_s.desc()));
+    let mut chan_mn0 = wv_require_ok!(MultiReceiver::new("n0", mn0_r.desc()));
 
     let user = input[42].clone();
     let mut pos = 0;
-    wv_assert_ok!(datachan::pass_through(
-        &mut chan_n0n1,
-        &mut chan_mn0,
-        &input,
-        true,
-        user,
-        |mblk| {
+    wv_assert_ok!(
+        t,
+        datachan::pass_through(&mut chan_n0n1, &mut chan_mn0, &input, true, user, |mblk| {
             wv_assert_eq!(t, mblk.blocks()[0].user().clone(), expected[42]);
             for blk in mblk.blocks() {
                 wv_assert_eq!(t, blk.buf(), &expected[pos..pos + blk.buf().len()]);
                 pos += blk.buf().len();
             }
-        }
-    ));
+        })
+    );
 
     wv_assert_eq!(t, n1.wait(), Ok(Code::Success));
     wv_assert_eq!(t, n2.wait(), Ok(Code::Success));

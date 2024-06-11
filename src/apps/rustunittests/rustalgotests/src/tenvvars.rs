@@ -18,7 +18,7 @@ use m3::env;
 use m3::errors::Code;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{ActivityArgs, ChildActivity, RunningActivity, Tile};
-use m3::{wv_assert_eq, wv_assert_ok, wv_run_test};
+use m3::{wv_assert_eq, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     // remove the potentially existing LOG variable
@@ -87,12 +87,12 @@ fn to_child(t: &mut dyn WvTester) {
     env::set_var("V2", "val2");
     env::set_var("V3", "val3");
 
-    let act = wv_assert_ok!(ChildActivity::new_with(
-        wv_assert_ok!(Tile::get("compat|own")),
+    let act = wv_require_ok!(ChildActivity::new_with(
+        wv_require_ok!(Tile::get("compat|own")),
         ActivityArgs::new("child")
     ));
 
-    let run = wv_assert_ok!(act.run(|| {
+    let run = wv_require_ok!(act.run(|| {
         let mut t = DefaultWvTester::default();
         wv_assert_eq!(t, env::vars().len(), 3);
         let vars = env::vars();

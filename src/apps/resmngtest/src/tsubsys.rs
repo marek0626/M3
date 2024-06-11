@@ -19,7 +19,7 @@ use m3::kif::Perm;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ActivityArgs, ChildActivity, RunningActivity, Tile};
 use m3::time::TimeDuration;
-use m3::{wv_assert, wv_assert_eq, wv_assert_ok, wv_assert_some, wv_run_test};
+use m3::{wv_assert, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_require_some, wv_run_test};
 
 use resmng::childs::Child;
 use resmng::subsys::{Subsystem, SubsystemBuilder};
@@ -34,27 +34,30 @@ pub fn run(t: &mut dyn WvTester) {
 }
 
 fn subsys_builder(t: &mut dyn WvTester) {
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
-    let mut child = wv_assert_ok!(ChildActivity::new_with(
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let mut child = wv_require_ok!(ChildActivity::new_with(
         tile,
         // ensure that the selector for the resmng and the subsystem don't collide
         ActivityArgs::new("test").first_sel(1000)
     ));
 
-    let (_our_sub, mut res) = wv_assert_ok!(Subsystem::new());
+    let (_our_sub, mut res) = wv_require_ok!(Subsystem::new());
 
     let mut child_sub = SubsystemBuilder::default();
 
-    wv_assert_ok!(child_sub.add_config("<app args=\"test\"/>", |size| MemGate::new(size, Perm::RW)));
-    child_sub.add_mod(wv_assert_ok!(MemCap::new(0x1000, Perm::RW)), "test");
-    child_sub.add_mem(wv_assert_ok!(MemCap::new(0x4000, Perm::R)), false);
-    child_sub.add_tile(wv_assert_ok!(Tile::get("compat")));
+    wv_assert_ok!(
+        t,
+        child_sub.add_config("<app args=\"test\"/>", |size| MemGate::new(size, Perm::RW))
+    );
+    child_sub.add_mod(wv_require_ok!(MemCap::new(0x1000, Perm::RW)), "test");
+    child_sub.add_mem(wv_require_ok!(MemCap::new(0x4000, Perm::R)), false);
+    child_sub.add_tile(wv_require_ok!(Tile::get("compat")));
 
-    wv_assert_ok!(child_sub.finalize_async(&mut res, 0, &mut child));
+    wv_assert_ok!(t, child_sub.finalize_async(&mut res, 0, &mut child));
 
-    let run = wv_assert_ok!(child.run(|| {
+    let run = wv_require_ok!(child.run(|| {
         let mut t = DefaultWvTester::default();
-        let (child_sub, _res) = wv_assert_ok!(Subsystem::new());
+        let (child_sub, _res) = wv_require_ok!(Subsystem::new());
 
         wv_assert_eq!(t, child_sub.mods().len(), 2);
         wv_assert_eq!(t, child_sub.mods()[0].name(), "boot.xml");
@@ -87,26 +90,29 @@ fn start_simple(t: &mut dyn WvTester) {
             let (reqs, mut childmng, child_sub, mut res) = setup_resmng();
 
             let cid = childmng.next_id();
-            let mut childs = wv_assert_ok!(child_sub.create_childs(
+            let mut childs = wv_require_ok!(child_sub.create_childs(
                 &mut childmng,
                 &mut res,
                 &mut TestStarter {}
             ));
             wv_assert_eq!(t, childs.len(), 1);
 
-            wv_assert_ok!(Subsystem::start_async(
-                &mut childmng,
-                &mut childs,
-                &reqs,
-                &mut res,
-                &mut TestStarter {}
-            ));
+            wv_assert_ok!(
+                t,
+                Subsystem::start_async(
+                    &mut childmng,
+                    &mut childs,
+                    &reqs,
+                    &mut res,
+                    &mut TestStarter {}
+                )
+            );
 
             wv_assert_eq!(t, childmng.children(), 1);
             wv_assert_eq!(t, childmng.daemons(), 0);
             wv_assert_eq!(t, childmng.foreigns(), 0);
 
-            let child = wv_assert_some!(childmng.child_by_id(cid));
+            let child = wv_require_some!(childmng.child_by_id(cid));
 
             childmng.kill_child_async(&reqs, &mut res, child.activity_sel(), Code::Success);
 
@@ -148,20 +154,23 @@ fn start_service_deps(t: &mut dyn WvTester) {
             let (reqs, mut childmng, child_sub, mut res) = setup_resmng();
 
             let cid = childmng.next_id();
-            let mut childs = wv_assert_ok!(child_sub.create_childs(
+            let mut childs = wv_require_ok!(child_sub.create_childs(
                 &mut childmng,
                 &mut res,
                 &mut TestStarter {}
             ));
             wv_assert_eq!(t, childs.len(), 4);
 
-            wv_assert_ok!(Subsystem::start_async(
-                &mut childmng,
-                &mut childs,
-                &reqs,
-                &mut res,
-                &mut TestStarter {}
-            ));
+            wv_assert_ok!(
+                t,
+                Subsystem::start_async(
+                    &mut childmng,
+                    &mut childs,
+                    &reqs,
+                    &mut res,
+                    &mut TestStarter {}
+                )
+            );
 
             wv_assert_eq!(t, childs.len(), 1);
             wv_assert_eq!(t, childs[0].name(), "2");
@@ -171,19 +180,19 @@ fn start_service_deps(t: &mut dyn WvTester) {
             wv_assert_eq!(t, childmng.daemons(), 0);
             wv_assert_eq!(t, childmng.foreigns(), 0);
 
-            let c1 = wv_assert_some!(childmng.child_by_id(cid + 0));
+            let c1 = wv_require_some!(childmng.child_by_id(cid + 0));
             wv_assert_eq!(t, c1.name(), "1");
             childmng.kill_child_async(&reqs, &mut res, c1.activity_sel(), Code::Success);
 
             wv_assert_eq!(t, childmng.children(), 2);
 
-            let c2 = wv_assert_some!(childmng.child_by_id(cid + 2));
+            let c2 = wv_require_some!(childmng.child_by_id(cid + 2));
             wv_assert_eq!(t, c2.name(), "3");
             childmng.kill_child_async(&reqs, &mut res, c2.activity_sel(), Code::Success);
 
             wv_assert_eq!(t, childmng.children(), 1);
 
-            let c3 = wv_assert_some!(childmng.child_by_id(cid + 3));
+            let c3 = wv_require_some!(childmng.child_by_id(cid + 3));
             wv_assert_eq!(t, c3.name(), "4");
             childmng.kill_child_async(&reqs, &mut res, c3.activity_sel(), Code::Success);
 
@@ -222,31 +231,34 @@ fn start_resource_split(t: &mut dyn WvTester) {
             let (reqs, mut childmng, child_sub, mut res) = setup_resmng();
 
             let cid = childmng.next_id();
-            let mut childs = wv_assert_ok!(child_sub.create_childs(
+            let mut childs = wv_require_ok!(child_sub.create_childs(
                 &mut childmng,
                 &mut res,
                 &mut TestStarter {}
             ));
             wv_assert_eq!(t, childs.len(), 5);
 
-            wv_assert_ok!(Subsystem::start_async(
-                &mut childmng,
-                &mut childs,
-                &reqs,
-                &mut res,
-                &mut TestStarter {}
-            ));
+            wv_assert_ok!(
+                t,
+                Subsystem::start_async(
+                    &mut childmng,
+                    &mut childs,
+                    &reqs,
+                    &mut res,
+                    &mut TestStarter {}
+                )
+            );
             wv_assert_eq!(t, childs.len(), 0);
 
             wv_assert_eq!(t, childmng.children(), 5);
             wv_assert_eq!(t, childmng.daemons(), 0);
             wv_assert_eq!(t, childmng.foreigns(), 0);
 
-            let c1 = wv_assert_some!(childmng.child_by_id(cid + 0));
-            let c2 = wv_assert_some!(childmng.child_by_id(cid + 1));
-            let c3 = wv_assert_some!(childmng.child_by_id(cid + 2));
-            let c4 = wv_assert_some!(childmng.child_by_id(cid + 3));
-            let c5 = wv_assert_some!(childmng.child_by_id(cid + 4));
+            let c1 = wv_require_some!(childmng.child_by_id(cid + 0));
+            let c2 = wv_require_some!(childmng.child_by_id(cid + 1));
+            let c3 = wv_require_some!(childmng.child_by_id(cid + 2));
+            let c4 = wv_require_some!(childmng.child_by_id(cid + 3));
+            let c5 = wv_require_some!(childmng.child_by_id(cid + 4));
 
             wv_assert_eq!(t, c1.name(), "1");
             wv_assert_eq!(t, c2.name(), "2");
@@ -256,11 +268,11 @@ fn start_resource_split(t: &mut dyn WvTester) {
 
             // kernel memory
             {
-                let c1_kmem = wv_assert_ok!(c1.kmem().quota());
-                let c2_kmem = wv_assert_ok!(c2.kmem().quota());
-                let c3_kmem = wv_assert_ok!(c3.kmem().quota());
-                let c4_kmem = wv_assert_ok!(c4.kmem().quota());
-                let c5_kmem = wv_assert_ok!(c5.kmem().quota());
+                let c1_kmem = wv_require_ok!(c1.kmem().quota());
+                let c2_kmem = wv_require_ok!(c2.kmem().quota());
+                let c3_kmem = wv_require_ok!(c3.kmem().quota());
+                let c4_kmem = wv_require_ok!(c4.kmem().quota());
+                let c5_kmem = wv_require_ok!(c5.kmem().quota());
                 // different domains have different kernel memory quotas
                 wv_assert!(t, c1_kmem.id() != c2_kmem.id());
                 wv_assert!(t, c3_kmem.id() != c2_kmem.id());
@@ -308,11 +320,11 @@ fn start_resource_split(t: &mut dyn WvTester) {
                 wv_assert_eq!(t, c3_tile.tile_id(), c4_tile.tile_id());
                 wv_assert_eq!(t, c3_tile.tile_id(), c5_tile.tile_id());
                 // check ep quota sharing
-                let c1_quota = *wv_assert_ok!(c1_tile.tile_obj().quota()).endpoints();
-                let c2_quota = *wv_assert_ok!(c2_tile.tile_obj().quota()).endpoints();
-                let c3_quota = *wv_assert_ok!(c3_tile.tile_obj().quota()).endpoints();
-                let c4_quota = *wv_assert_ok!(c4_tile.tile_obj().quota()).endpoints();
-                let c5_quota = *wv_assert_ok!(c5_tile.tile_obj().quota()).endpoints();
+                let c1_quota = *wv_require_ok!(c1_tile.tile_obj().quota()).endpoints();
+                let c2_quota = *wv_require_ok!(c2_tile.tile_obj().quota()).endpoints();
+                let c3_quota = *wv_require_ok!(c3_tile.tile_obj().quota()).endpoints();
+                let c4_quota = *wv_require_ok!(c4_tile.tile_obj().quota()).endpoints();
+                let c5_quota = *wv_require_ok!(c5_tile.tile_obj().quota()).endpoints();
                 wv_assert!(t, c1_quota.id() != c2_quota.id());
                 wv_assert!(t, c1_quota.id() != c3_quota.id());
                 wv_assert!(t, c3_quota.id() != c5_quota.id());
@@ -330,11 +342,11 @@ fn start_resource_split(t: &mut dyn WvTester) {
                 let c4_tile = c4.child_tile();
                 let c5_tile = c5.child_tile();
                 // check pagetable quota sharing
-                let c1_quota = *wv_assert_ok!(c1_tile.tile_obj().quota()).page_tables();
-                let c2_quota = *wv_assert_ok!(c2_tile.tile_obj().quota()).page_tables();
-                let c3_quota = *wv_assert_ok!(c3_tile.tile_obj().quota()).page_tables();
-                let c4_quota = *wv_assert_ok!(c4_tile.tile_obj().quota()).page_tables();
-                let c5_quota = *wv_assert_ok!(c5_tile.tile_obj().quota()).page_tables();
+                let c1_quota = *wv_require_ok!(c1_tile.tile_obj().quota()).page_tables();
+                let c2_quota = *wv_require_ok!(c2_tile.tile_obj().quota()).page_tables();
+                let c3_quota = *wv_require_ok!(c3_tile.tile_obj().quota()).page_tables();
+                let c4_quota = *wv_require_ok!(c4_tile.tile_obj().quota()).page_tables();
+                let c5_quota = *wv_require_ok!(c5_tile.tile_obj().quota()).page_tables();
                 wv_assert!(t, c1_quota.id() != c2_quota.id());
                 wv_assert!(t, c1_quota.id() != c3_quota.id());
                 wv_assert!(t, c3_quota.id() != c5_quota.id());
@@ -355,11 +367,11 @@ fn start_resource_split(t: &mut dyn WvTester) {
                 let c4_tile = c4.child_tile();
                 let c5_tile = c5.child_tile();
                 // check time quota sharing
-                let c1_quota = *wv_assert_ok!(c1_tile.tile_obj().quota()).time();
-                let c2_quota = *wv_assert_ok!(c2_tile.tile_obj().quota()).time();
-                let c3_quota = *wv_assert_ok!(c3_tile.tile_obj().quota()).time();
-                let c4_quota = *wv_assert_ok!(c4_tile.tile_obj().quota()).time();
-                let c5_quota = *wv_assert_ok!(c5_tile.tile_obj().quota()).time();
+                let c1_quota = *wv_require_ok!(c1_tile.tile_obj().quota()).time();
+                let c2_quota = *wv_require_ok!(c2_tile.tile_obj().quota()).time();
+                let c3_quota = *wv_require_ok!(c3_tile.tile_obj().quota()).time();
+                let c4_quota = *wv_require_ok!(c4_tile.tile_obj().quota()).time();
+                let c5_quota = *wv_require_ok!(c5_tile.tile_obj().quota()).time();
                 wv_assert!(t, c1_quota.id() != c2_quota.id());
                 wv_assert!(t, c1_quota.id() != c3_quota.id());
                 wv_assert!(t, c3_quota.id() != c4_quota.id());

@@ -21,7 +21,7 @@ use m3::errors::Code;
 use m3::io::{Read, Write};
 use m3::test::WvTester;
 use m3::vfs::{File, FileRef, GenericFile, OpenFlags, Seek, SeekMode, VFS};
-use m3::{vec, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_run_test};
+use m3::{vec, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, permissions);
@@ -45,12 +45,12 @@ fn permissions(t: &mut dyn WvTester) {
     let mut buf = [0u8; 16];
 
     {
-        let mut file = wv_assert_ok!(VFS::open(filename, OpenFlags::R));
+        let mut file = wv_require_ok!(VFS::open(filename, OpenFlags::R));
         wv_assert_err!(t, file.write(&buf), Code::NoPerm);
     }
 
     {
-        let mut file = wv_assert_ok!(VFS::open(filename, OpenFlags::W));
+        let mut file = wv_require_ok!(VFS::open(filename, OpenFlags::W));
         wv_assert_err!(t, file.read(&mut buf), Code::NoPerm);
     }
 }
@@ -59,11 +59,11 @@ fn read_string(t: &mut dyn WvTester) {
     let filename = "/subdir/subsubdir/testfile.txt";
     let content = "This is a test!\n";
 
-    let mut file = wv_assert_ok!(VFS::open(filename, OpenFlags::R));
+    let mut file = wv_require_ok!(VFS::open(filename, OpenFlags::R));
 
     for i in 0..content.len() {
         wv_assert_eq!(t, file.seek(0, SeekMode::Set), Ok(0));
-        let s = wv_assert_ok!(file.read_string(i));
+        let s = wv_require_ok!(file.read_string(i));
         wv_assert_eq!(t, &s, &content[0..i]);
     }
 }
@@ -72,14 +72,14 @@ fn read_exact(t: &mut dyn WvTester) {
     let filename = "/subdir/subsubdir/testfile.txt";
     let content = b"This is a test!\n";
 
-    let mut file = wv_assert_ok!(VFS::open(filename, OpenFlags::R));
+    let mut file = wv_require_ok!(VFS::open(filename, OpenFlags::R));
 
     let mut buf = [0u8; 32];
-    wv_assert_ok!(file.read_exact(&mut buf[0..8]));
+    wv_assert_ok!(t, file.read_exact(&mut buf[0..8]));
     wv_assert_eq!(t, &buf[0..8], &content[0..8]);
 
     wv_assert_eq!(t, file.seek(0, SeekMode::Set), Ok(0));
-    wv_assert_ok!(file.read_exact(&mut buf[0..16]));
+    wv_assert_ok!(t, file.read_exact(&mut buf[0..16]));
     wv_assert_eq!(t, &buf[0..16], &content[0..16]);
 
     wv_assert_eq!(t, file.seek(0, SeekMode::Set), Ok(0));
@@ -89,15 +89,15 @@ fn read_exact(t: &mut dyn WvTester) {
 fn read_file_at_once(t: &mut dyn WvTester) {
     let filename = "/subdir/subsubdir/testfile.txt";
 
-    let mut file = wv_assert_ok!(VFS::open(filename, OpenFlags::R));
-    let s = wv_assert_ok!(file.read_to_string());
+    let mut file = wv_require_ok!(VFS::open(filename, OpenFlags::R));
+    let s = wv_require_ok!(file.read_to_string());
     wv_assert_eq!(t, s, "This is a test!\n");
 }
 
 fn read_file_in_small_steps(t: &mut dyn WvTester) {
     let filename = "/pat.bin";
 
-    let mut file = wv_assert_ok!(VFS::open(filename, OpenFlags::R));
+    let mut file = wv_require_ok!(VFS::open(filename, OpenFlags::R));
     let mut buf = [0u8; 64];
 
     wv_assert_eq!(
@@ -110,7 +110,7 @@ fn read_file_in_small_steps(t: &mut dyn WvTester) {
 fn read_file_in_large_steps(t: &mut dyn WvTester) {
     let filename = "/pat.bin";
 
-    let mut file = wv_assert_ok!(VFS::open(filename, OpenFlags::R));
+    let mut file = wv_require_ok!(VFS::open(filename, OpenFlags::R));
     let mut buf = vec![0u8; 8 * 1024];
 
     wv_assert_eq!(
@@ -124,14 +124,14 @@ fn write_and_read_file(t: &mut dyn WvTester) {
     let content = "Foobar, a test and more and more and more!";
     let filename = "/mat.txt";
 
-    let mut file = wv_assert_ok!(VFS::open(filename, OpenFlags::RW));
+    let mut file = wv_require_ok!(VFS::open(filename, OpenFlags::RW));
 
-    wv_assert_ok!(write!(file, "{}", content));
+    wv_assert_ok!(t, write!(file, "{}", content));
 
     wv_assert_eq!(t, file.seek(0, SeekMode::Cur), Ok(content.len()));
     wv_assert_eq!(t, file.seek(0, SeekMode::Set), Ok(0));
 
-    let res = wv_assert_ok!(file.read_string(content.len()));
+    let res = wv_require_ok!(file.read_string(content.len()));
     wv_assert_eq!(t, &content, &res);
 
     // undo the write
@@ -145,42 +145,45 @@ fn write_and_read_file(t: &mut dyn WvTester) {
 
 fn write_then_read_file(t: &mut dyn WvTester) {
     {
-        let mut file = wv_assert_ok!(VFS::open("/newfile", OpenFlags::CREATE | OpenFlags::W));
-        wv_assert_ok!(write!(file, "Hallo World!"));
+        let mut file = wv_require_ok!(VFS::open("/newfile", OpenFlags::CREATE | OpenFlags::W));
+        wv_assert_ok!(t, write!(file, "Hallo World!"));
     }
 
     {
-        let mut file = wv_assert_ok!(VFS::open("/newfile", OpenFlags::RW));
+        let mut file = wv_require_ok!(VFS::open("/newfile", OpenFlags::RW));
 
         // Replace some text
-        wv_assert_ok!(write!(file, "Hello "));
+        wv_assert_ok!(t, write!(file, "Hello "));
 
         // Read the rest of the text
-        let text = wv_assert_ok!(file.read_to_string());
+        let text = wv_require_ok!(file.read_to_string());
         wv_assert_eq!(t, text, "World!");
     }
 
     {
         // Check end result
-        let mut file = wv_assert_ok!(VFS::open("/newfile", OpenFlags::R));
-        let text = wv_assert_ok!(file.read_to_string());
+        let mut file = wv_require_ok!(VFS::open("/newfile", OpenFlags::R));
+        let text = wv_require_ok!(file.read_to_string());
         wv_assert_eq!(t, text, "Hello World!");
     }
 }
 
 fn write_fmt(t: &mut dyn WvTester) {
-    let mut file = wv_assert_ok!(VFS::open("/newfile", OpenFlags::CREATE | OpenFlags::RW));
+    let mut file = wv_require_ok!(VFS::open("/newfile", OpenFlags::CREATE | OpenFlags::RW));
 
-    wv_assert_ok!(write!(
-        file,
-        "This {:.3} is the {}th test of {:#0X}!\n",
-        "foobar", 42, 0xAB_CDEF
-    ));
-    wv_assert_ok!(write!(file, "More formatting: {:?}", Some(Some(1))));
+    wv_assert_ok!(
+        t,
+        write!(
+            file,
+            "This {:.3} is the {}th test of {:#0X}!\n",
+            "foobar", 42, 0xAB_CDEF
+        )
+    );
+    wv_assert_ok!(t, write!(file, "More formatting: {:?}", Some(Some(1))));
 
     wv_assert_eq!(t, file.seek(0, SeekMode::Set), Ok(0));
 
-    let s = wv_assert_ok!(file.read_to_string());
+    let s = wv_require_ok!(file.read_to_string());
     wv_assert_eq!(
         t,
         s,
@@ -190,7 +193,7 @@ fn write_fmt(t: &mut dyn WvTester) {
 
 fn extend_small_file(t: &mut dyn WvTester) {
     {
-        let mut file = wv_assert_ok!(VFS::open("/test.txt", OpenFlags::W));
+        let mut file = wv_require_ok!(VFS::open("/test.txt", OpenFlags::W));
 
         let buf = _get_pat_vector(1024);
         for _ in 0..33 {
@@ -203,7 +206,7 @@ fn extend_small_file(t: &mut dyn WvTester) {
 
 fn overwrite_beginning(t: &mut dyn WvTester) {
     {
-        let mut file = wv_assert_ok!(VFS::open("/test.txt", OpenFlags::W));
+        let mut file = wv_require_ok!(VFS::open("/test.txt", OpenFlags::W));
 
         let buf = _get_pat_vector(1024);
         for _ in 0..3 {
@@ -216,7 +219,7 @@ fn overwrite_beginning(t: &mut dyn WvTester) {
 
 fn truncate(t: &mut dyn WvTester) {
     {
-        let mut file = wv_assert_ok!(VFS::open("/test.txt", OpenFlags::W | OpenFlags::TRUNC));
+        let mut file = wv_require_ok!(VFS::open("/test.txt", OpenFlags::W | OpenFlags::TRUNC));
 
         let buf = _get_pat_vector(1024);
         for _ in 0..2 {
@@ -229,10 +232,10 @@ fn truncate(t: &mut dyn WvTester) {
 
 fn append(t: &mut dyn WvTester) {
     {
-        let mut file = wv_assert_ok!(VFS::open("/test.txt", OpenFlags::W | OpenFlags::APPEND));
+        let mut file = wv_require_ok!(VFS::open("/test.txt", OpenFlags::W | OpenFlags::APPEND));
         // TODO perform the seek to end here, because we cannot do that during open atm (m3fs
         // already borrowed as mutable). it's the wrong semantic anyway, so ...
-        wv_assert_ok!(file.seek(0, SeekMode::End));
+        wv_assert_ok!(t, file.seek(0, SeekMode::End));
 
         let buf = _get_pat_vector(1024);
         for _ in 0..2 {
@@ -245,7 +248,7 @@ fn append(t: &mut dyn WvTester) {
 
 fn append_read(t: &mut dyn WvTester) {
     {
-        let mut file = wv_assert_ok!(VFS::open(
+        let mut file = wv_require_ok!(VFS::open(
             "/test.txt",
             OpenFlags::RW | OpenFlags::TRUNC | OpenFlags::CREATE
         ));
@@ -285,9 +288,9 @@ fn _get_pat_vector(size: usize) -> Vec<u8> {
 }
 
 fn _validate_pattern_file(t: &mut dyn WvTester, filename: &str, size: usize) {
-    let mut file = wv_assert_ok!(VFS::open(filename, OpenFlags::R));
+    let mut file = wv_require_ok!(VFS::open(filename, OpenFlags::R));
 
-    let info = wv_assert_ok!(file.stat());
+    let info = wv_require_ok!(file.stat());
     wv_assert_eq!(t, { info.size }, size);
 
     let mut buf = [0u8; 1024];
@@ -301,7 +304,7 @@ fn _validate_pattern_content(
 ) -> usize {
     let mut pos: usize = 0;
     loop {
-        let count = wv_assert_ok!(file.read(buf));
+        let count = wv_require_ok!(file.read(buf));
         if count == 0 {
             break;
         }

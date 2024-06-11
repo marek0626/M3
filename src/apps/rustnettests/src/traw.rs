@@ -23,7 +23,7 @@ use m3::net::{RawSocket, RawSocketArgs, MAC};
 use m3::test::WvTester;
 use m3::tiles::{ActivityArgs, ChildActivity, RunningActivity, Tile};
 use m3::vfs::{BufReader, IndirectPipe};
-use m3::{format, wv_assert, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_run_test};
+use m3::{format, wv_assert, wv_assert_eq, wv_assert_err, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, no_perm);
@@ -32,7 +32,7 @@ pub fn run(t: &mut dyn WvTester) {
 }
 
 fn no_perm(t: &mut dyn WvTester) {
-    let net = wv_assert_ok!(Network::new("net0"));
+    let net = wv_require_ok!(Network::new("net0"));
 
     wv_assert_err!(
         t,
@@ -48,15 +48,15 @@ fn mac_addr(t: &mut dyn WvTester) {
 }
 
 fn exec_ping(t: &mut dyn WvTester) {
-    let pipeserv = wv_assert_ok!(Pipes::new("pipes"));
-    let pipe_mem = wv_assert_ok!(MemGate::new(0x10000, kif::Perm::RW));
-    let pipe = wv_assert_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
+    let pipeserv = wv_require_ok!(Pipes::new("pipes"));
+    let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+    let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
-    let tile = wv_assert_ok!(Tile::get("compat|own"));
-    let mut ping = wv_assert_ok!(ChildActivity::new_with(tile, ActivityArgs::new("ping")));
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let mut ping = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("ping")));
     ping.add_file(io::STDOUT_FILENO, pipe.writer().unwrap().fd());
 
-    let ping_act = wv_assert_ok!(ping.exec(&["/bin/ping", &crate::NET1_IP.get().to_string()]));
+    let ping_act = wv_require_ok!(ping.exec(&["/bin/ping", &crate::NET1_IP.get().to_string()]));
 
     pipe.close_writer();
 

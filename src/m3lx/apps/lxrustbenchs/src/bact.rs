@@ -16,7 +16,7 @@
 use m3::errors::Code;
 use m3::test::WvTester;
 use m3::tiles::{ActivityArgs, ChildActivity, RunningActivity, Tile};
-use m3::{wv_assert_eq, wv_assert_ok, wv_run_test};
+use m3::{wv_assert_eq, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, act_exec);
@@ -24,19 +24,19 @@ pub fn run(t: &mut dyn WvTester) {
 }
 
 fn act_exec(t: &mut dyn WvTester) {
-    let tile = wv_assert_ok!(Tile::get("own"));
-    let act = wv_assert_ok!(ChildActivity::new_with(
+    let tile = wv_require_ok!(Tile::get("own"));
+    let act = wv_require_ok!(ChildActivity::new_with(
         tile.clone(),
         ActivityArgs::new("test")
     ));
-    let act = wv_assert_ok!(act.exec(&["/bin/ps"]));
+    let act = wv_require_ok!(act.exec(&["/bin/ps"]));
     wv_assert_eq!(t, act.wait(), Ok(Code::Success));
 }
 
 fn act_run(t: &mut dyn WvTester) {
-    let tile = wv_assert_ok!(Tile::get("own"));
-    let act = wv_assert_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
-    let act = wv_assert_ok!(act.run(|| {
+    let tile = wv_require_ok!(Tile::get("own"));
+    let act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
+    let act = wv_require_ok!(act.run(|| {
         println!("Hello World!");
         Ok(())
     }));

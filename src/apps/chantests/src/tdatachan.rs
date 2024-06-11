@@ -25,11 +25,11 @@ use m3::errors::{Code, Error};
 use m3::io::LogFlags;
 use m3::mem::GlobOff;
 use m3::serialize::{Deserialize, Serialize};
-use m3::test::WvTester;
+use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ChildActivity, RunningActivity, RunningProgramActivity};
 use m3::time::{CycleDuration, Duration};
-use m3::{log, wv_assert_ok};
-use m3::{wv_assert_eq, wv_run_test};
+use m3::{log, wv_require_ok};
+use m3::{wv_assert_eq, wv_assert_ok, wv_run_test};
 
 use crate::create_data;
 use crate::utils;
@@ -94,13 +94,15 @@ fn compute_node<'a: 'static, T>() -> Result<(), Error>
 where
     T: Debug + Clone + Add<Output = T> + AddAssign + Serialize + Deserialize<'a>,
 {
-    let mut src = Activity::own().data_source();
-    let cfg: NodeConfig<T> = wv_assert_ok!(src.pop());
+    let mut t = DefaultWvTester::default();
 
-    let recv = wv_assert_ok!(Receiver::new(cfg.name.clone(), cfg.recv));
+    let mut src = Activity::own().data_source();
+    let cfg: NodeConfig<T> = wv_require_ok!(src.pop());
+
+    let recv = wv_require_ok!(Receiver::new(cfg.name.clone(), cfg.recv));
     let mut send = cfg
         .send
-        .map(|s| wv_assert_ok!(Sender::new(cfg.name.clone(), s)));
+        .map(|s| wv_require_ok!(Sender::new(cfg.name.clone(), s)));
 
     log!(LogFlags::Debug, "{}: starting", cfg.name);
 
@@ -115,7 +117,7 @@ where
 
         if let Some(send) = send.as_mut() {
             let user = blk.user().clone() + cfg.add.clone();
-            wv_assert_ok!(send.send(blk, user));
+            wv_assert_ok!(t, send.send(blk, user));
         }
     }
 
@@ -140,14 +142,14 @@ fn run_chain<'a: 'static, T>(
 
     let buf_addr = utils::buffer_addr();
 
-    let n1 = wv_assert_ok!(utils::create_activity("n1"));
-    let n2 = wv_assert_ok!(utils::create_activity("n2"));
+    let n1 = wv_require_ok!(utils::create_activity("n1"));
+    let n2 = wv_require_ok!(utils::create_activity("n2"));
 
     let (n0n1_s, n0n1_r) =
-        wv_assert_ok!(datachan::create(&n1, MSG_SIZE, credits, buf_addr, buf_size));
+        wv_require_ok!(datachan::create(&n1, MSG_SIZE, credits, buf_addr, buf_size));
     let (n1n2_s, n1n2_r) =
-        wv_assert_ok!(datachan::create(&n2, MSG_SIZE, credits, buf_addr, buf_size));
-    let (n2n0_s, n2n0_r) = wv_assert_ok!(datachan::create(
+        wv_require_ok!(datachan::create(&n2, MSG_SIZE, credits, buf_addr, buf_size));
+    let (n2n0_s, n2n0_r) = wv_require_ok!(datachan::create(
         Activity::own(),
         MSG_SIZE,
         credits,
@@ -155,7 +157,7 @@ fn run_chain<'a: 'static, T>(
         buf_size
     ));
 
-    let n1 = wv_assert_ok!(start_activity(
+    let n1 = wv_require_ok!(start_activity(
         "n1",
         1,
         n1,
@@ -166,7 +168,7 @@ fn run_chain<'a: 'static, T>(
         compute_node::<T>,
     ));
 
-    let n2 = wv_assert_ok!(start_activity(
+    let n2 = wv_require_ok!(start_activity(
         "n2",
         2,
         n2,
@@ -177,23 +179,19 @@ fn run_chain<'a: 'static, T>(
         compute_node::<T>,
     ));
 
-    let mut chan_n0n1 = wv_assert_ok!(Sender::new("n0", n0n1_s.desc()));
-    let mut chan_n2n0 = wv_assert_ok!(Receiver::new("n0", n2n0_r.desc()));
+    let mut chan_n0n1 = wv_require_ok!(Sender::new("n0", n0n1_s.desc()));
+    let mut chan_n2n0 = wv_require_ok!(Receiver::new("n0", n2n0_r.desc()));
 
     let user = input[42].clone();
     let mut pos = 0;
-    wv_assert_ok!(datachan::pass_through(
-        &mut chan_n0n1,
-        &mut chan_n2n0,
-        input,
-        true,
-        user,
-        |blk| {
+    wv_assert_ok!(
+        t,
+        datachan::pass_through(&mut chan_n0n1, &mut chan_n2n0, input, true, user, |blk| {
             wv_assert_eq!(t, blk.user().clone(), expected[42]);
             wv_assert_eq!(t, blk.buf(), &expected[pos..pos + blk.buf().len()]);
             pos += blk.buf().len();
-        }
-    ));
+        })
+    );
 
     wv_assert_eq!(t, n1.wait(), Ok(Code::Success));
     wv_assert_eq!(t, n2.wait(), Ok(Code::Success));
