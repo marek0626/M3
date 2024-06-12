@@ -43,6 +43,17 @@ test:
           && nix develop path:. -c
             ./ci/tests/gem5.sh /cache/results/$(date -I)-$CI_COMMIT_SHA
         "
+  after_script:
+    # the tests were successful if /reports has been created; copy them over to the m3-ci-web pod in
+    # this case to update the website.
+    - kubectl exec -n os -t m3-ci -- sh -c '
+        if [ -d /reports ]; then
+          kubectl exec -n os -t m3-ci-web -- sh -c "rm -rf /web/*";
+          for f in /reports/*; do
+            kubectl cp -n os "$f" m3-ci-web:/web;
+          done
+        fi
+      '
   resource_group: pod
 
 cleanup:

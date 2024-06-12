@@ -13,6 +13,7 @@ RUN set -x \
        htop \
        nix \
        psmisc \
+       rsync \
        vim \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

@@ -162,8 +162,8 @@ run_bench() {
         ulimit -t 1500      # 25min CPU time
     fi
 
-    if nice ./b run "$M3_OUT/boot.gen.xml" -n < /dev/null > "$M3_OUT/output.txt" 2>&1 \
-        && "$root/check_result.py" "$M3_OUT/output.txt" 2>/dev/null; then
+    if nice ./b run "$M3_OUT/boot.gen.xml" -n < /dev/null > /dev/null 2>&1 \
+        && "$root/check_result.py" "$M3_OUT/log.txt" 2>/dev/null; then
         /bin/echo -e "\e[1mFinished $dirname:\e[0m \e[1;32mSUCCESS\e[0m"
         rm -f "$M3_OUT/.failed"
     else
@@ -264,6 +264,16 @@ for test in "$result"/*; do
     fi
 done
 
+# publish results if we consider the run "successful"
+if [ $failed -eq 0 ] || [ "$(((100 * success) / failed))" -gt 90 ]; then
+    # copy all log files to result directory (don't keep gem5 logs etc.)
+    resdst="/results/$(date -I)-$(git rev-parse HEAD)"
+    mkdir "$resdst"
+    rsync -am --include='log.txt' --include='*/' --exclude='*' "$result"/* "$resdst"
+    # generate website
+    "$root/../web/generate.py" /results /reports
+fi
+
 # print summary
 echo
 if [ $failed -eq 0 ]; then
@@ -275,7 +285,7 @@ else
     for test in "$result"/*; do
         if [ -f "$test/.failed" ]; then
             echo "$test:"
-            "$root/check_result.py" "$test/output.txt" || true
+            "$root/check_result.py" "$test/log.txt" || true
             echo
         fi
     done
