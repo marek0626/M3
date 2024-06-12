@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 name="$1"
 image="$2"
-mount="$3"
-volume="$4"
 cat <<EOF
 {
   "apiVersion": "v1",
@@ -30,17 +28,27 @@ cat <<EOF
         },
         "volumeMounts": [
           {
-            "mountPath": "$mount",
-            "name": "volume"
+            "mountPath": "/cache",
+            "name": "cache"
+          },
+          {
+            "mountPath": "/results",
+            "name": "results"
           }
         ]
       }
     ],
     "volumes": [
       {
-        "name": "volume",
+        "name": "cache",
         "persistentVolumeClaim": {
-          "claimName": "$volume"
+          "claimName": "m3-ci-cache"
+        }
+      },
+      {
+        "name": "results",
+        "persistentVolumeClaim": {
+          "claimName": "m3-ci-results"
         }
       }
     ]
