@@ -4,6 +4,7 @@ import argparse
 import os
 import pprint
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -54,9 +55,8 @@ def write_html_footer(report):
 def write_results(report, date, test):
     report.write("<h2>Results of {} on {}:</h2>".format(test, date))
     for cfg in results[date][test]:
-        filename = "results/tests-{}/m3-tests-{}-{}/log.txt".format(date, test, cfg)
-        report.write("<h3>{}: (<a href=\"../{}\">{}</a>)</h3>"
-                     .format(cfg, filename, filename))
+        filename = "{}/tests/{}-{}-log.txt".format(date, test, cfg)
+        report.write("<h3><a href=\"../{}\">{}</a></h3>".format(filename, cfg))
         res = results[date][test][cfg]
         report.write("<ul>\n")
         for failed in res.failures:
@@ -101,8 +101,11 @@ for key in sorted(all_results.keys())[-NUM_DAYS:]:
                 if test not in results[key]:
                     results[key][test] = {}
                 subkey = "{}-{}-{}".format(tiletype, isa, bpe)
-                results[key][test][subkey] = check_result.parse_output(
-                        str(dir) + '/' + str(f) + '/log.txt')
+                logfile = str(dir) + '/' + str(f) + '/log.txt'
+                logcopy = '{}/{}/tests/{}-{}-log.txt'.format(args.output, key, test, subkey)
+                results[key][test][subkey] = check_result.parse_output(logfile)
+                os.makedirs(os.path.dirname(logcopy), exist_ok=True)
+                shutil.copyfile(logfile, logcopy)
     except Exception as e:
         print("warning: ignoring directory '{}': {}".format(key, e), file=sys.stderr)
         del results[key]
@@ -122,16 +125,12 @@ for key in results:
 
 for key in results:
     outdir = args.output + '/' + key
-    if not os.path.exists(outdir):
-        os.mkdir(outdir)
     with open(outdir + '/log.html', 'w') as report:
         write_html_header(report)
         for test in results[key]:
             write_results(report, key, test)
         write_html_footer(report)
 
-    if not os.path.exists(outdir + '/tests'):
-        os.mkdir(outdir + '/tests')
     for test in results[key]:
         with open(outdir + '/tests/' + test + '.html', 'w') as report:
             write_html_header(report)
@@ -345,7 +344,7 @@ for test in TESTS:
             report.write("var benchData{} = {{\n".format(chart_name))
             report.write("  labels: [")
             for key in sorted(results.keys()):
-                report.write("\"{}\", ".format(key))
+                report.write("\"{}\", ".format(key[0:19]))
             report.write("  ],\n")
             report.write("  datasets: [\n")
             i = 0
