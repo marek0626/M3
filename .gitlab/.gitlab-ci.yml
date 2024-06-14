@@ -22,8 +22,7 @@ prepare:
     - kubectl delete -n os pod/m3-ci --now || true
     - kubectl wait -n os --for=delete --timeout=5m pod/m3-ci
     # now (re-)create the pod
-    - sh ci/config/pod.sh m3-ci m3-ci /cache m3-ci-cache |
-        kubectl apply -f -
+    - sh ci/config/pod.sh m3-ci m3-ci | kubectl apply -f -
     - kubectl wait -n os --for=condition=ready --timeout=5m pod/m3-ci
   resource_group: pod
 
@@ -42,8 +41,12 @@ test:
         ./bootstrap.sh $CI_COMMIT_SHA
           && cd M3
           && nix develop path:. -c
-            ./ci/tests/gem5.sh /cache/results/$(date -I)-$CI_COMMIT_SHA
+            ./ci/tests/gem5.sh --publish /results --web /web
+              /cache/results/$(date -I)-$CI_COMMIT_SHA
         "
+  after_script:
+    # copy generated web pages to the m3-ci-web pod
+    - kubectl exec -n os -t m3-ci -- /M3/ci/web/publish.sh /web
   resource_group: pod
 
 cleanup:

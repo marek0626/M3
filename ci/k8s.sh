@@ -9,6 +9,10 @@ create_cache_stor() {
     sh "$root/config/storage.sh" m3-ci-cache 500Gi | kubectl apply -f -
 }
 
+create_results_stor() {
+    sh "$root/config/storage.sh" m3-ci-results 100Gi | kubectl apply -f -
+}
+
 create_image() {
     name="$1"
     user="$2"
@@ -34,9 +38,7 @@ create_image() {
 create_pod() {
     name="$1"
     image="$2"
-    mount="$3"
-    volume="$4"
-    buildpod=$(sh "$root/config/pod.sh" "$name" "$image" "$mount" "$volume")
+    buildpod=$(sh "$root/config/pod.sh" "$name" "$image")
     echo "$buildpod" | kubectl apply -f -
     kubectl wait -n "$ns" --for=condition=ready --timeout=5m "pod/$name"
 }
@@ -75,8 +77,9 @@ case "$1" in
         ;;
     run)
         create_cache_stor
+        create_results_stor
         if ! kubectl get pod -n "$ns" m3-ci &>/dev/null; then
-            create_pod m3-ci m3-ci /cache m3-ci-cache
+            create_pod m3-ci m3-ci
         fi
         exec_shell m3-ci
         ;;
