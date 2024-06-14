@@ -26,7 +26,7 @@ use crate::cap::{Capability, KObject};
 use crate::cap::{EPCategory, EPObject, SemObject};
 use crate::ktcu;
 use crate::platform;
-use crate::syscalls::{get_request, reply_success, send_reply};
+use crate::syscalls::{check_unused, get_request, reply_success, send_reply};
 use crate::tiles::TileMux;
 use crate::tiles::{tilemng, Activity};
 
@@ -42,9 +42,7 @@ pub fn alloc_ep_async(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<
         r.replies
     );
 
-    if !act.obj_caps().borrow().unused(r.dst) {
-        sysc_err!(Code::InvArgs, "Selector {} already in use", r.dst);
-    }
+    check_unused(&act.obj_caps().borrow(), r.dst)?;
     if r.replies > cfg::MAX_RB_SIZE {
         sysc_err!(Code::InvArgs, "Invalid reply count ({})", r.replies);
     }
@@ -186,9 +184,7 @@ pub fn get_sess(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), Ve
     );
 
     let actcap = get_kobj!(act, r.act, Activity).upgrade().unwrap();
-    if !actcap.obj_caps().borrow().unused(r.dst) {
-        sysc_err!(Code::InvArgs, "Selector {} already in use", r.dst);
-    }
+    check_unused(&actcap.obj_caps().borrow(), r.dst)?;
     if Rc::ptr_eq(act, &actcap) {
         sysc_err!(Code::InvArgs, "Cannot get session for own Activity");
     }

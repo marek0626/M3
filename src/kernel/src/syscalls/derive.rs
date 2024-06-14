@@ -28,7 +28,7 @@ use crate::cap::{Capability, KObject};
 use crate::cap::{EPQuota, KMemObject, MGateObject, ServObject, TileObject};
 use crate::com::Service;
 use crate::mem;
-use crate::syscalls::{get_request, reply_success};
+use crate::syscalls::{check_unused, get_request, reply_success};
 use crate::tiles::{tilemng, Activity, TileMux};
 
 #[inline(never)]
@@ -47,9 +47,7 @@ pub fn derive_tile_async(
         r.pts,
     );
 
-    if !act.obj_caps().borrow().unused(r.dst) {
-        sysc_err!(Code::InvArgs, "Selector {} already in use", r.dst);
-    }
+    check_unused(&act.obj_caps().borrow(), r.dst)?;
 
     let tile = get_kobj!(act, r.tile, Tile);
 
@@ -109,9 +107,7 @@ pub fn derive_kmem(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(),
         r.quota
     );
 
-    if !act.obj_caps().borrow().unused(r.dst) {
-        sysc_err!(Code::InvArgs, "Selector {} already in use", r.dst);
-    }
+    check_unused(&act.obj_caps().borrow(), r.dst)?;
 
     let kmem = get_kobj!(act, r.kmem, KMem);
     if !kmem.has_quota(r.quota) {
@@ -141,9 +137,7 @@ pub fn derive_mem(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), 
     );
 
     let tact = get_kobj!(act, r.act, Activity).upgrade().unwrap();
-    if !tact.obj_caps().borrow().unused(r.dst) {
-        sysc_err!(Code::InvArgs, "Selector {} already in use", r.dst);
-    }
+    check_unused(&tact.obj_caps().borrow(), r.dst)?;
 
     let cap = {
         let act_caps = act.obj_caps().borrow();

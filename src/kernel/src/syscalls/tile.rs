@@ -23,7 +23,7 @@ use base::rc::Rc;
 use base::tcu;
 
 use crate::cap::{Capability, KObject, MGateObject};
-use crate::syscalls::{get_request, reply_success, send_reply};
+use crate::syscalls::{check_unused, get_request, reply_success, send_reply};
 use crate::tiles::{tilemng, Activity, TileMux, INVAL_ID};
 use crate::{ktcu, platform};
 
@@ -275,9 +275,7 @@ pub fn tile_mem(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), Ve
     let r: syscalls::TileMem = get_request(msg)?;
     sysc_log!(act, "tile_mem(dst={}, tile={})", r.dst, r.tile);
 
-    if !act.obj_caps().borrow().unused(r.dst) {
-        sysc_err!(Code::InvArgs, "Selector {} already in use", r.dst);
-    }
+    check_unused(&act.obj_caps().borrow(), r.dst)?;
 
     let mut act_caps = act.obj_caps().borrow_mut();
     let tile = get_kobj_ref!(act_caps, r.tile, Tile);
