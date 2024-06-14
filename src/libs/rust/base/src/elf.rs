@@ -20,6 +20,8 @@
 
 use bitflags::bitflags;
 
+use core::fmt;
+
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::boxed::Box;
@@ -117,7 +119,7 @@ impl ElfHeaderCommon {
 }
 
 /// Access to ISA-dependent header members
-pub trait ElfHeader {
+pub trait ElfHeader: fmt::Debug {
     /// Returns the entry point of the ELF file
     fn entry(&self) -> usize;
 
@@ -242,7 +244,7 @@ impl ElfHeader for ElfHeader64 {
 }
 
 /// Access to ISA-dependent program header members
-pub trait ProgramHeader {
+pub trait ProgramHeader: fmt::Debug {
     /// Returns the program header type (see [`PHType`])
     fn ty(&self) -> u32;
 
