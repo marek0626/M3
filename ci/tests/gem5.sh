@@ -7,18 +7,21 @@ inputdir="$root/../input"
 
 source "$root/jobs.sh"
 
-args=$(getopt -o ht:i:y:b: --long help,tests:,isas:,types:,bpes: -n "$0" -- "$@")
+args=$(getopt -o ht:i:y:b: --long help,tests:,isas:,types:,bpes:,publish:,web: -n "$0" -- "$@")
 eval set -- "$args"
 
 usage() {
     echo "Usage: $0 [-t|--tests <tests>] [-i|--isas <isas>]"
-    echo "          [-y|--types <types>] [-b|--bpe <bpe>] <results>"
+    echo "          [-y|--types <types>] [-b|--bpe <bpe>]"
+    echo "          [--publish <dir>] [--web <dir>] <results>"
     echo
     echo "  --tests <tests>: the list of tests to run, space separated."
     echo "  --isas <isas>  : the list of ISAs to use, space separated."
     echo "  --types <types>: the list of tile types (a, b, sh) to use, space separated."
     echo "  --bpes <bpes>  : the list of blocks per extents to use, space separated."
     echo "                   This is used for the file system images."
+    echo "  --publish <dir>: Publish the results (on success) to <dir>."
+    echo "  --web <dir>    : Generate CI results websites in <dir>."
     echo "  <results>      : the directory to store the results in."
     exit 1
 }
@@ -27,6 +30,8 @@ isas="riscv32 riscv64 x86_64"
 types="a b sh"
 tests=""
 bpes="32 64"
+publish=""
+web=""
 while true; do
     case "$1" in
         -h | --help)
@@ -46,6 +51,14 @@ while true; do
             ;;
         -b | --bpes)
             bpes="$2"
+            shift 2
+            ;;
+        --publish)
+            publish="$2"
+            shift 2
+            ;;
+        --web)
+            web="$2"
             shift 2
             ;;
         --)
@@ -265,23 +278,28 @@ for test in "$result"/*; do
 done
 
 # publish results if we consider the run "successful"
-if [ $failed -eq 0 ] || [ "$(((100 * success) / failed))" -gt 90 ]; then
-    # garbage collect results: remove the results where the commits are no longer reachable
-    for d in /results/*; do
-        hash=${d:20}
-        if [ ${#hash} -eq 40 ] &&
-           [ "$(git branch --remotes "--contains=$hash" 2>/dev/null)" == "" ]; then
-            echo "Removing '$d' as the commit is no longer reachable."
-            rm -rf "$d"
-        fi
-    done
+if [ "$publish" != "" ]; then
+    if [ $failed -eq 0 ] || [ "$(((100 * success) / failed))" -gt 90 ]; then
+        # garbage collect results: remove the results where the commits are no longer reachable
+        for d in "$publish"/*; do
+            hash=${d:20}
+            if [ ${#hash} -eq 40 ] &&
+               [ "$(git branch --remotes "--contains=$hash" 2>/dev/null)" == "" ]; then
+                echo "Removing '$d' as the commit is no longer reachable."
+                rm -rf "$d"
+            fi
+        done
 
-    # copy all log files to result directory (don't keep gem5 logs etc.)
-    resdst="/results/$(date -I)-$(git rev-parse HEAD)"
-    mkdir "$resdst"
-    rsync -am --include='log.txt' --include='*/' --exclude='*' "$result"/* "$resdst"
-    # generate website
-    "$root/../web/generate.py" /results /reports
+        # copy all log files to result directory (don't keep gem5 logs etc.)
+        resdst="$publish/$(date -I)-$(git rev-parse HEAD)"
+        mkdir "$resdst"
+        rsync -am --include='log.txt' --include='*/' --exclude='*' "$result"/* "$resdst"
+
+        # generate website
+        if [ "$web" != "" ]; then
+            "$root/../web/generate.py" "$publish" "$web"
+        fi
+    fi
 fi
 
 # print summary
