@@ -77,7 +77,7 @@ fn send_recv(t: &mut dyn WvTester) {
     ));
 
     let mut buf = MsgBuf::borrow_def();
-    buf.set([0u8; 16]);
+    buf.set_from_slice(&[0u8; 16]);
     wv_assert_ok!(t, sgate.send(&buf, RecvGate::def()));
     wv_assert_ok!(t, sgate.send(&buf, RecvGate::def()));
     wv_assert_err!(t, sgate.send(&buf, RecvGate::def()), Code::NoCredits);
