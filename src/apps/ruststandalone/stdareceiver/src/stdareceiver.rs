@@ -23,6 +23,7 @@ mod helper;
 #[path = "../../vmtest/src/paging.rs"]
 mod paging;
 
+use base::build_vmsg;
 use base::cpu::{CPUOps, CPU};
 use base::env;
 use base::io::LogFlags;
@@ -53,7 +54,6 @@ pub extern "C" fn env_run() {
     });
 
     let mut buf = MsgBuf::new();
-    buf.set::<u64>(0);
 
     log!(LogFlags::Info, "Hello World from receiver!");
 
@@ -73,8 +73,8 @@ pub extern "C" fn env_run() {
         log!(LogFlags::Debug, "got message {}", rmsg.as_words()[0]);
 
         // send reply
+        build_vmsg!(buf, recv);
         TCU::reply(REP, &buf, TCU::msg_to_offset(rbuf_virt, rmsg)).unwrap();
-        buf.set(buf.get::<u64>() + 1);
 
         if recv % 1000 == 0 {
             log!(LogFlags::Info, "Received {} messages", recv);

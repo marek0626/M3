@@ -23,6 +23,7 @@ mod helper;
 #[path = "../../vmtest/src/paging.rs"]
 mod paging;
 
+use base::build_vmsg;
 use base::env;
 use base::io::LogFlags;
 use base::log;
@@ -61,12 +62,12 @@ pub extern "C" fn env_run() {
     });
 
     let mut msg = MsgBuf::new();
-    msg.set::<u64>(0);
 
     log!(LogFlags::Info, "Hello World from sender!");
     log!(LogFlags::Info, "Starting sends!");
 
     // initial send; wait until receiver is ready
+    build_vmsg!(&mut msg, 0);
     while let Err(e) = TCU::send(SEP, &msg, 0x2222, REP) {
         log!(LogFlags::Info, "send failed: {}", e);
         // get credits back
@@ -95,8 +96,8 @@ pub extern "C" fn env_run() {
 
         if sent < sends && TCU::credits(SEP).unwrap() > 0 {
             // send message
+            build_vmsg!(&mut msg, sent);
             TCU::send(SEP, &msg, 0x2222, REP).unwrap();
-            msg.set(msg.get::<u64>() + 1);
             sent += 1;
         }
     }

@@ -25,7 +25,6 @@ use m3::crypto::{HashAlgorithm, HashType};
 use m3::errors::{Code, Error};
 use m3::io::LogFlags;
 use m3::kif::{CapRngDesc, CapType};
-use m3::log;
 use m3::mem::{size_of, AlignedBuf, MsgBuf, MsgBufRef};
 use m3::server::{
     server_loop, CapExchange, ClientManager, ExcType, RequestHandler, RequestSession, Server,
@@ -33,6 +32,7 @@ use m3::server::{
 };
 use m3::tcu::{EpId, Message, TCU};
 use m3::time::{TimeDuration, TimeInstant};
+use m3::{build_vmsg, log};
 
 use kecacc::{KecAcc, KecAccState};
 
@@ -262,7 +262,7 @@ impl HashRequest {
     /// Reply with code to the original request.
     fn reply(self, code: Code, req_rgate: &RecvGate) {
         let mut msg = MsgBuf::borrow_def();
-        msg.set(code as u64);
+        build_vmsg!(&mut msg, code);
         self.reply_msg(msg, req_rgate)
     }
 
