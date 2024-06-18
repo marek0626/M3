@@ -679,6 +679,7 @@ case "$cmd" in
         ;;
 
     doc)
+        export RUSTDOCFLAGS="-D warnings"
         for lib in src/libs/rust/*; do
             if [ -d "$lib" ]; then
                 ( cd "$lib" && cargo doc "${rust_target_args[@]}" )
