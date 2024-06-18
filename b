@@ -655,9 +655,11 @@ case "$cmd" in
     # -- maintenance --
 
     checkboot)
+        errors=0
         while IFS= read -r -d '' f; do
-            xmllint --schema misc/boot.xsd --noout "$f" > /dev/null
+            xmllint --schema misc/boot.xsd --noout "$f" > /dev/null || errors=$((errors + 1))
         done < <(find boot -type f -print0)
+        [ $errors -eq 0 ] || exit 1
         ;;
 
     clippy)
