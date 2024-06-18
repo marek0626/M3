@@ -118,7 +118,7 @@ impl<S: RequestSession + 'static, O: Into<usize> + TryFrom<usize> + Debug> Handl
 /// The client manager holds all sessions and the connections to clients
 ///
 /// The sessions are stored via the [`SessionContainer`] and the connections are represented as a
-/// [`RecvGate`] that clients can send to and a list of [`SendGate`]s.
+/// [`RecvGate`] that clients can send to and a list of [`SendGate`](crate::com::SendGate)s.
 ///
 /// [`ClientManager`] is used internally in [`RequestHandler`] and therefore does not need to be
 /// created manually. However, some methods (e.g., capability exchange handlers) receive a reference
@@ -181,15 +181,16 @@ impl<S: RequestSession + 'static> ClientManager<S> {
         Ok((sel, sid))
     }
 
-    /// Creates a new session using `create_sess` with a newly created [`SendGate`] that allows the
-    /// session to send requests to us.
+    /// Creates a new session using `create_sess` with a newly created
+    /// [`SendGate`](crate::com::SendGate) that allows the session to send requests to us.
     ///
-    /// The `create_sess` closure receives the created [`ServerSession`] instance and is expected to
-    /// store it to keep the session alive. The closure also receives a reference to the created
-    /// [`SendGate`] in case it's required.
+    /// The `create_sess` closure receives the created [`ServerSession`] instance and is expected
+    /// to store it to keep the session alive. The closure also receives a reference to the created
+    /// [`SendGate`](crate::com::SendGate) in case it's required.
     ///
-    /// Note that it allocates two consecutive selectors for the session and the [`SendGate`]. The
-    /// first one (for the session) is returned, together with the chosen session id.
+    /// Note that it allocates two consecutive selectors for the session and the
+    /// [`SendGate`](crate::com::SendGate). The first one (for the session) is returned, together
+    /// with the chosen session id.
     ///
     /// Returns the selector and session id of the session
     pub fn add_connected<F>(
@@ -223,9 +224,9 @@ impl<S: RequestSession + 'static> ClientManager<S> {
         Ok((sels, sid))
     }
 
-    /// Adds a new connection ([`SendGate`]) for the existing session with given id.
+    /// Adds a new connection ([`SendGate`](crate::com::SendGate)) for the existing session with given id.
     ///
-    /// Returns the selector of the [`SendGate`]
+    /// Returns the selector of the [`SendGate`](crate::com::SendGate)
     pub fn add_connection_to(&mut self, sid: SessId) -> Result<Selector, Error> {
         // check if the client has already exceeded the connection limit
         let cons = self.sgates.iter().filter(|s| s.0 == sid).count();
@@ -320,17 +321,17 @@ pub type MsgHandlerFunc<S> = Option<Box<dyn Fn(&mut S, &mut GateIStream<'_>) -> 
 
 /// Handles requests from clients
 ///
-/// [`RequestHandler`] is one implementation for [`Handler`] that is suitable for the typical server:
-/// clients send requests to the server, which are handled by the server. For that reason, the
-/// server maintains a list of sessions to hold client-specific state, and uses a [`RecvGate`] to
-/// receive client requests. Clients can obtain a [`SendGate`] to the [`RecvGate`] via the operation
-/// [`Connect`](`opcodes::General::Connect`).
+/// [`RequestHandler`] is one implementation for [`Handler`] that is suitable for the typical
+/// server: clients send requests to the server, which are handled by the server. For that reason,
+/// the server maintains a list of sessions to hold client-specific state, and uses a [`RecvGate`]
+/// to receive client requests. Clients can obtain a [`SendGate`](crate::com::SendGate) to the
+/// [`RecvGate`] via the operation [`Connect`](`opcodes::General::Connect`).
 ///
 /// The actual requests are implemented by handler functions. [`RequestHandler`] supports both
 /// capability handlers and message handlers. The former are called whenever a capability exchange
 /// is desired by the client, whereas the latter are called whenever a request is sent over the
-/// clients [`SendGate`]. Capability handlers and message handlers can be registered via
-/// [`reg_cap_handler`](`RequestHandler::reg_cap_handler`) and
+/// clients [`SendGate`](crate::com::SendGate). Capability handlers and message handlers can be
+/// registered via [`reg_cap_handler`](`RequestHandler::reg_cap_handler`) and
 /// [`reg_msg_handler`](`RequestHandler::reg_msg_handler`), respectively.
 ///
 /// The sessions are managed by the [`ClientManager`], which holds the client-specific data

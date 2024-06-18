@@ -37,9 +37,7 @@
 //!
 //! The higher-level primitives are streams and channels. [`GateOStream`] allows to marshall data
 //! types into a message, whereas [`GateIStream`] allows to unmarshall a message into data types.
-//! Both work in combination with [`SendGate`]s and [`RecvGate`]s, respectively. A
-//! [`channel`](`chan::sync_channel`) provides a synchronous uni-directional communication channel
-//! based on gates.
+//! Both work in combination with [`SendGate`]s and [`RecvGate`]s, respectively.
 
 #[macro_use]
 mod stream;
