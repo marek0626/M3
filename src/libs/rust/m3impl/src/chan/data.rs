@@ -164,7 +164,7 @@ impl Sender {
         let buf = MemGate::new_bind(desc.buf)?;
 
         let mut msg = MsgBuf::new();
-        msg.set(vec![0u8; desc.reply_size]);
+        msg.set_from_slice(&vec![0u8; desc.reply_size]);
 
         log!(
             LogFlags::LibDataChan,

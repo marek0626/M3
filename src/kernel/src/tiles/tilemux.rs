@@ -588,7 +588,7 @@ impl TileMux {
         }
 
         let mut reply = MsgBuf::borrow_def();
-        reply.set(kif::DefaultReply {
+        build_vmsg!(&mut reply, kif::DefaultReply {
             error: Code::Success,
         });
         if let Err(e) = ktcu::reply(ktcu::KPEX_EP, &reply, msg) {

@@ -14,6 +14,7 @@
  * General Public License version 2 for more details.
  */
 
+use base::build_vmsg;
 use base::cfg;
 use base::errors::{Code, Error};
 use base::io::LogFlags;
@@ -49,7 +50,7 @@ fn send_pf(
 
     // build message
     let mut msg_buf = MsgBuf::borrow_def();
-    msg_buf.set(crate::PagefaultMessage {
+    build_vmsg!(&mut msg_buf, crate::PagefaultMessage {
         op: 0, // PagerOp::PAGEFAULT
         virt,
         access: perm.bits(),

@@ -401,46 +401,40 @@ impl Activity {
     }
 
     pub fn upcall_activity_wait(&self, event: u64, act_sel: CapSel, exitcode: Code) {
-        let mut msg = MsgBuf::borrow_def();
-        build_vmsg!(
-            msg,
-            kif::upcalls::Operation::ActWait,
-            kif::upcalls::ActivityWait {
-                event,
-                error: Code::Success,
-                act_sel,
-                exitcode,
-            }
-        );
+        let mut buf = MsgBuf::borrow_def();
+        let msg = kif::upcalls::ActivityWait {
+            event,
+            error: Code::Success,
+            act_sel,
+            exitcode,
+        };
+        build_vmsg!(buf, kif::upcalls::Operation::ActWait, msg);
 
-        self.send_upcall::<kif::upcalls::ActivityWait>(&msg);
+        self.send_upcall::<kif::upcalls::ActivityWait>(&buf, &msg);
     }
 
     pub fn upcall_derive_srv(&self, event: u64, result: Result<(), Error>) {
-        let mut msg = MsgBuf::borrow_def();
-        build_vmsg!(
-            msg,
-            kif::upcalls::Operation::DeriveSrv,
-            kif::upcalls::DeriveSrv {
-                event,
-                error: Code::from(result)
-            }
-        );
+        let mut buf = MsgBuf::borrow_def();
+        let msg = kif::upcalls::DeriveSrv {
+            event,
+            error: Code::from(result),
+        };
+        build_vmsg!(buf, kif::upcalls::Operation::DeriveSrv, msg);
 
-        self.send_upcall::<kif::upcalls::DeriveSrv>(&msg);
+        self.send_upcall::<kif::upcalls::DeriveSrv>(&buf, &msg);
     }
 
-    fn send_upcall<M: fmt::Debug>(&self, msg: &MsgBuf) {
+    fn send_upcall<M: fmt::Debug>(&self, buf: &MsgBuf, msg: &M) {
         log!(
             LogFlags::KernUpcalls,
             "Sending upcall {:?} to Activity {}",
-            msg.get::<M>(),
+            msg,
             self.id()
         );
 
         self.upcalls
             .borrow_mut()
-            .send(self.eps_start + UPCALL_REP_OFF, 0, msg)
+            .send(self.eps_start + UPCALL_REP_OFF, 0, buf)
             .unwrap();
     }
 

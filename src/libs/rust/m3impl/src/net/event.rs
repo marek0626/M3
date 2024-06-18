@@ -16,7 +16,9 @@
 
 use core::fmt;
 
+use base::build_vmsg;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use serde::{Deserialize, Serialize};
 
 use crate::cap::{CapFlags, Selector};
 use crate::cell::RefCell;
@@ -43,7 +45,10 @@ const REPLY_BUF_SIZE: usize = REPLY_SIZE * MSG_CREDITS;
 pub const MTU: usize = MSG_SIZE - (mem::size_of::<Header>() + 4 * mem::size_of::<u64>());
 
 /// The different network event types
-#[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive, TryFromPrimitive)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive, TryFromPrimitive, Serialize, Deserialize,
+)]
+#[serde(crate = "base::serde")]
 #[repr(u64)]
 pub enum NetEventType {
     /// A data event for network packet (both directions)
@@ -66,6 +71,8 @@ pub struct DataMessage {
     pub data: [u8; MTU],
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "base::serde")]
 #[doc(hidden)]
 #[repr(C)]
 pub struct ConnectedMessage {
@@ -94,6 +101,8 @@ impl fmt::Debug for ConnectedMessage {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "base::serde")]
 #[doc(hidden)]
 #[repr(C)]
 pub struct ClosedMessage {
@@ -114,6 +123,8 @@ impl fmt::Debug for ClosedMessage {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "base::serde")]
 #[doc(hidden)]
 #[repr(C)]
 pub struct CloseReqMessage {
@@ -247,9 +258,9 @@ impl NetEventChannel {
     }
 
     /// Sends the given event to the other side
-    pub fn send_event<E>(&self, event: E) -> Result<(), Error> {
+    pub fn send_event<E: Serialize>(&self, event: E) -> Result<(), Error> {
         let mut msg_buf = MsgBuf::borrow_def();
-        msg_buf.set(event);
+        build_vmsg!(&mut msg_buf, event);
         self.sgate
             .borrow_mut()
             .get()?

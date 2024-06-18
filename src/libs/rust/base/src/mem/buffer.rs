@@ -18,7 +18,6 @@ use core::ops::{Deref, DerefMut};
 
 use crate::cell::StaticUnsafeCell;
 use crate::mem;
-use crate::util;
 
 pub const MAX_MSG_SIZE: usize = 512;
 
@@ -129,38 +128,6 @@ impl MsgBuf {
     /// The caller has to guarantee that the bytes from 0 to `pos` are initialized
     pub unsafe fn set_size(&mut self, pos: usize) {
         self.pos = pos;
-    }
-
-    /// Casts the message bytes to the given type and returns a reference to it.
-    pub fn get<T>(&self) -> &T {
-        assert!(mem::align_of::<Self>() >= mem::align_of::<T>());
-        assert!(mem::size_of::<Self>() >= mem::size_of::<T>());
-        assert!(self.pos >= mem::size_of::<T>());
-
-        // safety: the checks above make sure that the size and alignment is sufficient
-        unsafe {
-            let bytes: &[u8; MAX_MSG_SIZE] = intrinsics::transmute(&self.bytes);
-            let slice = &*(bytes as *const [u8] as *const [T]);
-            &slice[0]
-        }
-    }
-
-    /// Sets the message content to `msg`
-    pub fn set<T>(&mut self, msg: T) -> &mut T {
-        assert!(mem::align_of::<Self>() >= mem::align_of::<T>());
-        assert!(mem::size_of::<Self>() >= mem::size_of::<T>());
-
-        let slice = util::object_to_bytes(&msg);
-        mem::MaybeUninit::write_slice(&mut self.bytes[0..slice.len()], slice);
-        self.pos = mem::size_of::<T>();
-
-        // safety: we just initialized these bytes and the checks above make sure that the size and
-        // alignment is sufficient
-        unsafe {
-            let bytes: &mut [u8; MAX_MSG_SIZE] = intrinsics::transmute(&mut self.bytes);
-            let slice = &mut *(bytes as *mut [u8] as *mut [T]);
-            &mut slice[0]
-        }
     }
 
     /// Sets the message to the given slice

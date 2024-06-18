@@ -40,6 +40,7 @@ use base::libc;
 use base::log;
 use base::machine;
 use base::mem;
+use base::serialize::{Deserialize, Serialize};
 use base::tcu;
 
 use core::ptr;
@@ -79,6 +80,8 @@ pub fn app_env() -> &'static mut env::BaseEnv {
     unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "base::serde")]
 pub struct PagefaultMessage {
     pub op: u64,
     pub virt: mem::VirtAddr,

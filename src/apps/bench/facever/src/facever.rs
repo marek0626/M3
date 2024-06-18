@@ -47,7 +47,7 @@ struct Node {
 impl Node {
     fn new(name: String, ctrl_msg_size: usize, data_size: usize) -> Self {
         let mut ctrl_msg = MsgBuf::new();
-        ctrl_msg.set(vec![0u8; ctrl_msg_size]);
+        ctrl_msg.set_from_slice(&vec![0u8; ctrl_msg_size]);
         let data_buf = vec![0u8; data_size];
         Self {
             name,

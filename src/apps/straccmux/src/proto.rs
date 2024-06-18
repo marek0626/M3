@@ -13,6 +13,7 @@
  * General Public License version 2 for more details.
  */
 
+use base::build_vmsg;
 use base::errors::{Code, Error};
 use base::io::LogFlags;
 use base::log;
@@ -81,7 +82,7 @@ impl Executor {
 
     fn send<M: Serialize>(&self, ep: tcu::EpId, msg: M) -> Result<(), Error> {
         let mut msg_buf = MsgBuf::borrow_def();
-        msg_buf.set(msg);
+        build_vmsg!(&mut msg_buf, msg);
         tcu::TCU::send(self.ep_off + ep, &msg_buf, 0, self.ep_off + EP_RECV)
     }
 
