@@ -36,10 +36,8 @@ COPY $GITLAB_USER /root/.gitlab/user
 ARG GITLAB_PW
 COPY $GITLAB_PW /root/.gitlab/pw
 
-# use submodules from gitlab, not github (except linux-bench)
+# use submodules from gitlab, not github
 RUN ( \
-        echo '[url "https://github.com/Barkhausen-Institut/linux-bench.git"]' && \
-        echo '	insteadOf = https://github.com/Barkhausen-Institut/linux-bench.git' && \
         echo -n '[url "https://'$(cat /root/.gitlab/user)':'$(cat /root/.gitlab/pw) && \
         echo '@gitlab.barkhauseninstitut.org/os/code/M3/"]' && \
         echo '	insteadOf = https://github.com/Barkhausen-Institut/' \
