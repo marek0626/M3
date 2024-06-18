@@ -357,6 +357,7 @@ run_clippy() {
     fi
     echo "Running clippy for $(dirname "$1")..."
     ( cd "$(dirname "$1")" && cargo clippy "${target[@]}" -- \
+        -D warnings \
         -A clippy::identity_op \
         -A clippy::manual_range_contains \
         -A clippy::assertions_on_constants \
@@ -660,17 +661,19 @@ case "$cmd" in
         ;;
 
     clippy)
+        errors=0
         while IFS= read -r -d '' f; do
             # vmtest only works on RISC-V
             if [ "$M3_ISA" != "riscv64" ] && [[ "$f" =~ "vmtest" ]]; then
                 continue
             fi
-            run_clippy "$f"
+            run_clippy "$f" || errors=$((errors + 1))
         done < <(find src tools -mindepth 2 -name Cargo.toml -print0)
+        [ $errors -eq 0 ] || exit 1
         ;;
 
     clippy=*)
-        run_clippy "${cmd#clippy=}/Cargo.toml"
+        run_clippy "${cmd#clippy=}/Cargo.toml" || exit 1
         ;;
 
     doc)
