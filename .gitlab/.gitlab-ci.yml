@@ -12,6 +12,7 @@ workflow:
 stages:
   - prepare
   - build
+  - check
   - test
   - cleanup
 
@@ -31,6 +32,26 @@ build:
   script:
     - kubectl exec -n os -t m3-ci --
         ./bootstrap.sh $CI_COMMIT_SHA
+  resource_group: pod
+
+check:
+  stage: check
+  script:
+    - kubectl exec -n os -t m3-ci -- sh -c "
+        ./bootstrap.sh $CI_COMMIT_SHA
+          && cd M3
+          && nix develop path:. -c ./b checkboot -n
+        "
+    - kubectl exec -n os -t m3-ci -- sh -c "
+        ./bootstrap.sh $CI_COMMIT_SHA
+          && cd M3
+          && nix develop path:. -c ./b fmt-check -n
+        "
+    - kubectl exec -n os -t m3-ci -- sh -c "
+        ./bootstrap.sh $CI_COMMIT_SHA
+          && cd M3
+          && nix develop path:. -c ./b clippy -n
+        "
   resource_group: pod
 
 test:
