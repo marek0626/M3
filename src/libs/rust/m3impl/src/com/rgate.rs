@@ -355,8 +355,11 @@ impl RecvGate {
         }
     }
 
-    /// Creates a new `RecvGate` with a `2^order` bytes receive buffer and `2^msg_order` bytes
+    /// Creates a new `RecvGate` with a `2^order` bytes receive buffer and `2^msg_order`-byte
     /// message slots.
+    ///
+    /// `msg_order` must be large enough to fit the standard [`tcu::Header`]
+    /// plus any of the intended payloads.
     pub fn new(order: u32, msg_order: u32) -> Result<Self, Error> {
         Self::new_with(RGateArgs::default().order(order).msg_order(msg_order))
     }
