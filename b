@@ -151,6 +151,7 @@ help() {
     echo "    clippy=<prog>:           run clippy for Rust code in given directory."
     echo "    doc:                     generate Rust documentation."
     echo "    fmt:                     run formatters for all C++, Rust, and Python code."
+    echo "    fmt-check:               run formatters, but in check mode."
     echo ""
     echo "  M³Linux (RISC-V only):"
     echo "    mklx ...:                (re)build Linux including bbl via buildroot. The"
@@ -356,6 +357,7 @@ run_clippy() {
     fi
     echo "Running clippy for $(dirname "$1")..."
     ( cd "$(dirname "$1")" && cargo clippy "${target[@]}" -- \
+        -D warnings \
         -A clippy::identity_op \
         -A clippy::manual_range_contains \
         -A clippy::assertions_on_constants \
@@ -653,26 +655,31 @@ case "$cmd" in
     # -- maintenance --
 
     checkboot)
+        errors=0
         while IFS= read -r -d '' f; do
-            xmllint --schema misc/boot.xsd --noout "$f" > /dev/null
+            xmllint --schema misc/boot.xsd --noout "$f" > /dev/null || errors=$((errors + 1))
         done < <(find boot -type f -print0)
+        [ $errors -eq 0 ] || exit 1
         ;;
 
     clippy)
+        errors=0
         while IFS= read -r -d '' f; do
             # vmtest only works on RISC-V
             if [ "$M3_ISA" != "riscv64" ] && [[ "$f" =~ "vmtest" ]]; then
                 continue
             fi
-            run_clippy "$f"
+            run_clippy "$f" || errors=$((errors + 1))
         done < <(find src tools -mindepth 2 -name Cargo.toml -print0)
+        [ $errors -eq 0 ] || exit 1
         ;;
 
     clippy=*)
-        run_clippy "${cmd#clippy=}/Cargo.toml"
+        run_clippy "${cmd#clippy=}/Cargo.toml" || exit 1
         ;;
 
     doc)
+        export RUSTDOCFLAGS="-D warnings"
         for lib in src/libs/rust/*; do
             if [ -d "$lib" ]; then
                 ( cd "$lib" && cargo doc "${rust_target_args[@]}" )
@@ -681,7 +688,17 @@ case "$cmd" in
         echo "Documentation generated at file://$root/$build/rust/$RUST_TARGET/doc/m3/index.html"
         ;;
 
-    fmt)
+    fmt|fmt-check)
+        if [ "$cmd" = "fmt-check" ]; then
+            clangargs=(--dry-run --Werror)
+            cargoargs=(--check)
+            pythonargs=(--diff --exit-code)
+        else
+            clangargs=(-i)
+            cargoargs=()
+            pythonargs=(-i)
+        fi
+        errors=0
         while IFS= read -r -d '' f; do
             if [[ "$f" =~ "src/m3lx" ]]; then
                 continue
@@ -699,19 +716,25 @@ case "$cmd" in
             echo "Formatting $f..."
             case "$f" in
                 *.cc|*.h)
-                    clang-format -i "$f"
+                    clang-format "${clangargs[@]}" "$f" || errors=$((errors + 1))
                     ;;
                 */Cargo.toml)
-                    find "$(dirname "$f")/src" -name "*.rs" -print0 | xargs -0 rustfmt
+                    if [ -d "$(dirname "$f")/src" ]; then
+                        find "$(dirname "$f")/src" -name "*.rs" -print0 | \
+                            xargs -0 rustfmt "${cargoargs[@]}" \
+                            || errors=$((errors + 1))
+                    fi
                     ;;
                 *.py)
-                    autopep8 --global-config .python-format -i "$f"
+                    autopep8 --global-config .python-format "${pythonargs[@]}" "$f" \
+                        || errors=$((errors + 1))
                     ;;
             esac
-        done < <(find src tools -mindepth 2 \( -name Cargo.toml -or \
+        done < <(find src tools -mindepth 1 \( -name Cargo.toml -or \
                                                -name "*.py" -or \
                                                -name "*.cc" -or \
                                                -name "*.h" \) -print0)
+        [ $errors -eq 0 ] || exit 1
         ;;
 
     # -- M³Linux --

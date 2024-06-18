@@ -6,17 +6,19 @@ workflow:
      - if: $CI_PIPELINE_SOURCE == "web"
      - if: $CI_PIPELINE_SOURCE == "merge_request_event"
      - if: $CI_MERGE_REQUEST_ID && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /dev|master/
-       when: always
-     - when: never
 
 stages:
   - prepare
   - build
+  - check
   - test
   - cleanup
+  - dummy
 
 prepare:
   stage: prepare
+  rules:
+    - if: '$CI_MERGE_REQUEST_LABELS !~ /:no-ci:/'
   script:
     # ensure that no m3-ci pod is still around
     - kubectl delete -n os pod/m3-ci --now || true
@@ -28,14 +30,34 @@ prepare:
 
 build:
   stage: build
+  rules:
+    - if: '$CI_MERGE_REQUEST_LABELS !~ /:no-ci:/'
   script:
     - kubectl exec -n os -t m3-ci --
         ./bootstrap.sh $CI_COMMIT_SHA
   resource_group: pod
 
+check:
+  stage: check
+  rules:
+    - if: '$CI_MERGE_REQUEST_LABELS !~ /:no-ci:/'
+  script:
+    - kubectl exec -n os -t m3-ci -- sh -c "./bootstrap.sh $CI_COMMIT_SHA"
+    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:. -c ./b checkboot -n'
+    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:. -c ./b fmt-check -n'
+    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:. -c ./b clippy -n'
+    - kubectl exec -n os -t m3-ci -- sh -c '
+        cd M3
+          && nix develop path:. -c ./b doc -n 2>&1 | tee log.txt
+          && [ "$(grep error log.txt)" = "" ]
+        '
+  resource_group: pod
+
 test:
   stage: test
   allow_failure: true
+  rules:
+    - if: '$CI_MERGE_REQUEST_LABELS !~ /:no-ci:|:no-ci-tests:/'
   script:
     - kubectl exec -n os -t m3-ci -- sh -c "
         ./bootstrap.sh $CI_COMMIT_SHA
@@ -51,8 +73,18 @@ test:
 
 cleanup:
   stage: cleanup
+  rules:
+    - if: '$CI_MERGE_REQUEST_LABELS !~ /:no-ci:/'
   script:
     - kubectl delete -n os pod/m3-ci --now || true
     - kubectl wait -n os --for=delete --timeout=5m pod/m3-ci
   when: always
+  resource_group: pod
+
+dummy:
+  stage: dummy
+  rules:
+    - if: '$CI_MERGE_REQUEST_LABELS =~ /:no-ci:/'
+  script:
+    - echo "success"
   resource_group: pod

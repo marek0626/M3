@@ -241,7 +241,7 @@ impl NetEventChannel {
         self.rgate.has_msgs()
     }
 
-    /// Returns true if our [`SendGate`] has full credits
+    /// Returns true if our [`SendGate`](crate::com::SendGate) has full credits
     ///
     /// This is the case if the server has replied to all previously send messages.
     pub fn has_all_credits(&self) -> bool {

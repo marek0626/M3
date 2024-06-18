@@ -152,7 +152,8 @@ impl MemCap {
         })
     }
 
-    /// Activates this capability on given endpoint and returns the resulting [`SendGate`]
+    /// Activates this capability on given endpoint and returns the resulting
+    /// [`SendGate`](crate::com::SendGate)
     pub fn activate_on(self, ep: EP) -> Result<MemGate, Error> {
         self.do_activate_on(Some(ep))
     }

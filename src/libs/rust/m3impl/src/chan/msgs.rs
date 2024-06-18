@@ -21,10 +21,9 @@
 //! receiver. These messages are not buffered, but delivered synchronously to the receiver.
 //! Therefore, this channel is comparable to a `std::sync::mpsc::sync_channel` with a bound of 0.
 //!
-//! This channel is simpler than a manual usage of [`SendGate`](crate::com::SendGate) and
-//! [`RecvGate`](crate::com::RecvGate), but also more limited, because all communication is
-//! synchronous, happens between exactly one sender and one receiver, and each transfer only
-//! delivers a single data type.
+//! This channel is simpler than a manual usage of [`SendGate`] and [`RecvGate`], but also more
+//! limited, because all communication is synchronous, happens between exactly one sender and one
+//! receiver, and each transfer only delivers a single data type.
 
 use crate::cap::Selector;
 use crate::com::{
@@ -47,15 +46,14 @@ impl SenderCap {
         Ok(Self { scap })
     }
 
-    /// Returns the selector of the underlying [`SendCap`](crate::com::SendCap).
+    /// Returns the selector of the underlying [`SendCap`].
     ///
     /// This method is used to delegate the sending part of the channel to another activity.
     pub fn sel(&self) -> Selector {
         self.scap.sel()
     }
 
-    /// Activates the underyling [`SendCap`](crate::com::SendCap) and thereby turns this `SenderCap`
-    /// into a `Sender`.
+    /// Activates the underyling [`SendCap`] and thereby turns this `SenderCap` into a `Sender`.
     pub fn activate(self) -> Result<Sender, Error> {
         Ok(Sender {
             sgate: self.scap.activate()?,
@@ -63,7 +61,7 @@ impl SenderCap {
     }
 }
 
-/// Represents the sender part of the channel created with [`sync_channel`].
+/// Represents the sender part of the channel created with [`create`].
 pub struct Sender {
     sgate: SendGate,
 }
@@ -96,15 +94,15 @@ impl ReceiverCap {
         Ok(Self { rcap })
     }
 
-    /// Returns the selector of the underlying [`RecvCap`](crate::com::RecvCap).
+    /// Returns the selector of the underlying [`RecvCap`].
     ///
     /// This method is used to delegate the receiver part of the channel to another activity.
     pub fn sel(&self) -> Selector {
         self.rcap.sel()
     }
 
-    /// Activates the underyling [`RecvCap`](crate::com::RecvCap) and thereby turns this
-    /// `ReceiverCap` into a `Receiver`.
+    /// Activates the underyling [`RecvCap`] and thereby turns this `ReceiverCap` into a
+    /// `Receiver`.
     pub fn activate(self) -> Result<Receiver, Error> {
         Ok(Receiver {
             rgate: self.rcap.activate()?,
@@ -112,7 +110,7 @@ impl ReceiverCap {
     }
 }
 
-/// Represents the receiver part of the channel created with [`sync_channel`].
+/// Represents the receiver part of the channel created with [`create`].
 pub struct Receiver {
     rgate: RecvGate,
 }

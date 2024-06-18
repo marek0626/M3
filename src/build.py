@@ -1,12 +1,13 @@
 dirs = [
-    "toolchain", # generate linker scripts first
-    "libs",      # libs afterwards
+    "toolchain",  # generate linker scripts first
+    "libs",       # libs afterwards
     "kernel",
     "apps",
     "tilemux",
     "server",
-    "fs", # generate the file systems last
+    "fs",         # generate the file systems last
 ]
+
 
 def build(gen, env):
     for d in dirs:
