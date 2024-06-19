@@ -14,15 +14,16 @@
  */
 
 use base::build_vmsg;
-use base::errors::{Code, Error};
+use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
-use base::kif;
+use base::kif::{self, CapSel};
 use base::log;
 use base::mem;
 use base::rc::Rc;
 use base::serialize::{Deserialize, M3Deserializer};
 use base::tcu;
 
+use crate::cap::CapTable;
 use crate::ktcu;
 use crate::tiles::Activity;
 use crate::tiles::ActivityMng;
@@ -91,6 +92,13 @@ mod derive;
 mod exchange;
 mod misc;
 mod tile;
+
+fn check_unused(tbl: &CapTable, sel: CapSel) -> Result<(), VerboseError> {
+    if !tbl.unused(sel) {
+        sysc_err!(Code::InvArgs, "Selector {} already in use", sel);
+    }
+    Ok(())
+}
 
 fn send_reply(msg: &'static tcu::Message, rep: &mem::MsgBuf) {
     ktcu::reply(ktcu::KSYS_EP, rep, msg).ok();

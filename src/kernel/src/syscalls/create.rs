@@ -30,7 +30,7 @@ use crate::cap::{
 use crate::com::Service;
 use crate::mem;
 use crate::platform;
-use crate::syscalls::{get_request, reply_success, send_reply};
+use crate::syscalls::{check_unused, get_request, reply_success, send_reply};
 use crate::tiles::{tilemng, Activity, ActivityFlags, ActivityMng};
 
 #[inline(never)]
@@ -46,9 +46,7 @@ pub fn create_mgate(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<()
         r.perms,
     );
 
-    if !act.obj_caps().borrow().unused(r.dst) {
-        sysc_err!(Code::InvArgs, "Selector {} already in use", r.dst);
-    }
+    check_unused(&act.obj_caps().borrow(), r.dst)?;
     if (r.addr.as_goff() & cfg::PAGE_MASK as GlobOff) != 0
         || (r.size & cfg::PAGE_MASK as GlobOff) != 0
     {
@@ -123,9 +121,7 @@ pub fn create_rgate(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<()
 
     let mut act_caps = act.obj_caps().borrow_mut();
 
-    if !act_caps.unused(r.dst) {
-        sysc_err!(Code::InvArgs, "Selector {} already in use", r.dst);
-    }
+    check_unused(&act_caps, r.dst)?;
     if r.msg_order.checked_add(r.order).is_none()
         || r.msg_order > r.order
         || r.order - r.msg_order >= 32
@@ -157,10 +153,7 @@ pub fn create_sgate(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<()
 
     let mut act_caps = act.obj_caps().borrow_mut();
 
-    if !act_caps.unused(r.dst) {
-        sysc_err!(Code::InvArgs, "Selector {} already in use", r.dst);
-    }
-
+    check_unused(&act_caps, r.dst)?;
     let cap = {
         let rgate = get_kobj_ref!(act_caps, r.rgate, RGate);
         Capability::new(
@@ -187,9 +180,7 @@ pub fn create_srv(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), 
         r.name
     );
 
-    if !act.obj_caps().borrow().unused(r.dst) {
-        sysc_err!(Code::InvArgs, "Selector {} already in use", r.dst);
-    }
+    check_unused(&act.obj_caps().borrow(), r.dst)?;
     if r.name.is_empty() {
         sysc_err!(Code::InvArgs, "Invalid server name");
     }
@@ -226,9 +217,7 @@ pub fn create_sess(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(),
     );
 
     let mut obj_caps = act.obj_caps().borrow_mut();
-    if !obj_caps.unused(r.dst) {
-        sysc_err!(Code::InvArgs, "Selector {} already in use", r.dst);
-    }
+    check_unused(&obj_caps, r.dst)?;
 
     let serv_cap = get_cap!(obj_caps, r.srv);
     if serv_cap.has_parent() {
@@ -350,9 +339,7 @@ pub fn create_sem(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), 
     let r: syscalls::CreateSem = get_request(msg)?;
     sysc_log!(act, "create_sem(dst={}, value={})", r.dst, r.value);
 
-    if !act.obj_caps().borrow().unused(r.dst) {
-        sysc_err!(Code::InvArgs, "Selector {} already in use", r.dst);
-    }
+    check_unused(&act.obj_caps().borrow(), r.dst)?;
 
     let cap = Capability::new(r.dst, KObject::Sem(SemObject::new(r.value)));
     try_kmem_quota!(act.obj_caps().borrow_mut().insert(cap));
