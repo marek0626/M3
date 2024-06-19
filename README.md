@@ -54,6 +54,14 @@ Note that this command ensures that everything is up to date as well. For more i
 
     $ ./b -h
 
+For example, when testing your code using gem5, you might want to use the following environment variables:
+
+    M3_BUILD=release M3_GEM5_CPU=TimingSimpleCPU M3_GEM5_LOG=Tcu,TcuCmd,TcuRegWrite
+
+And you should reduce to this variable when benchmarking:
+
+    M3_BUILD=bench
+
 ### 4. Working with the hardware platform
 
 The current workflow assumes that the FPGA is connected to a machine `M_fpga` that is reachable via SSH from the machine `M_m3` that hosts M³. A couple of environment variables have to be set before starting with the FPGA:
