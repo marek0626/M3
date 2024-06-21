@@ -208,7 +208,7 @@ impl Drop for Thread {
 }
 
 struct ThreadManager {
-    current: Option<Box<Thread>>,
+    current: Box<Thread>,
     ready: BoxList<Thread>,
     block: BoxList<Thread>,
     sleep: BoxList<Thread>,
@@ -223,7 +223,7 @@ pub fn init() {
 impl ThreadManager {
     fn new() -> Self {
         ThreadManager {
-            current: Some(Thread::new_main()),
+            current: Thread::new_main(),
             ready: BoxList::new(),
             block: BoxList::new(),
             sleep: BoxList::new(),
@@ -260,7 +260,7 @@ impl ThreadManager {
 }
 
 pub fn cur() -> Ref<'static, Box<Thread>> {
-    Ref::map(TMNG.borrow(), |tmng| tmng.current.as_ref().unwrap())
+    Ref::map(TMNG.borrow(), |tmng| &tmng.current)
 }
 
 pub fn thread_count() -> usize {
@@ -281,10 +281,7 @@ pub fn sleeping_count() -> usize {
 }
 
 pub fn fetch_msg() -> Option<&'static tcu::Message> {
-    match TMNG.borrow_mut().current {
-        Some(ref mut t) => t.fetch_msg(),
-        None => None,
-    }
+    TMNG.borrow_mut().current.fetch_msg()
 }
 
 pub fn add_thread(func_addr: VirtAddr, arg: usize) {
@@ -317,19 +314,19 @@ pub fn wait_for(event: Event) {
     log!(
         LogFlags::LibThread,
         "Thread {} waits for {:#x}, switching to {}",
-        tmng.current.as_ref().unwrap().id,
+        tmng.current.id,
         event,
         next.id
     );
 
-    let mut cur = mem::replace(&mut tmng.current, Some(next)).unwrap();
+    let mut cur = mem::replace(&mut tmng.current, next);
     cur.subscribe(event);
 
     // safety: moving between two lists is fine
     unsafe {
         let old = Box::into_raw(cur);
         tmng.block.push_back(Box::from_raw(old));
-        let next_ptr = &mut tmng.current.as_mut().unwrap().regs as *mut _;
+        let next_ptr = &mut tmng.current.regs as *mut _;
         drop(tmng);
 
         thread_switch(&mut (*old).regs as *mut _, next_ptr);
@@ -348,17 +345,17 @@ pub fn try_yield() {
             log!(
                 LogFlags::LibThread,
                 "Yielding from {} to {}",
-                tmng.current.as_ref().unwrap().id,
+                tmng.current.id,
                 next.id
             );
 
-            let cur = mem::replace(&mut tmng.current, Some(next)).unwrap();
+            let cur = mem::replace(&mut tmng.current, next);
 
             // safety: moving between two lists is fine
             unsafe {
                 let old = Box::into_raw(cur);
                 tmng.sleep.push_back(Box::from_raw(old));
-                let next_ptr = &mut tmng.current.as_mut().unwrap().regs as *mut _;
+                let next_ptr = &mut tmng.current.regs as *mut _;
                 drop(tmng);
 
                 thread_switch(&mut (*old).regs as *mut _, next_ptr);
@@ -373,13 +370,13 @@ pub fn stop() {
         log!(
             LogFlags::LibThread,
             "Stopping thread {}, switching to {}",
-            tmng.current.as_ref().unwrap().id,
+            tmng.current.id,
             next.id
         );
 
-        let mut cur = mem::replace(&mut tmng.current, Some(next)).unwrap();
+        let mut cur = mem::replace(&mut tmng.current, next);
 
-        let next_ptr = &mut tmng.current.as_mut().unwrap().regs as *mut _;
+        let next_ptr = &mut tmng.current.regs as *mut _;
         drop(tmng);
 
         unsafe {
