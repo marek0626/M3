@@ -85,6 +85,7 @@ impl Requests {
         }
 
         if !thread::cur().is_main() {
+            // leaking current thread object is ok bc we are in shutdown anyway
             thread::stop();
             // just in case there is no ready thread
             OwnActivity::exit(Ok(()));
