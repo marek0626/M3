@@ -556,23 +556,31 @@ impl TileMux {
             .map(|_| ())
     }
 
-    pub fn handle_call_async(tilemux: RefMut<'_, Self>, msg: &tcu::Message) {
+    pub fn handle_call_async(tilemux: RefMut<'_, Self>, msg: tcu::OwnedMessage) {
         use base::serialize::M3Deserializer;
 
         let mut de = M3Deserializer::new(msg.as_words());
         let op: kif::tilemux::Calls = de.pop().unwrap();
 
+        // Only transfer copied position. So we can drop de.
+        // This allows to move msg.
+        let pos = de.pos();
         match op {
-            kif::tilemux::Calls::Exit => Self::handle_exit_async(tilemux, msg, &mut de).unwrap(),
+            kif::tilemux::Calls::Exit => Self::handle_exit_async(tilemux, msg, pos).unwrap(),
         }
     }
 
     fn handle_exit_async(
         tilemux: RefMut<'_, Self>,
-        msg: &tcu::Message,
-        de: &mut base::serialize::M3Deserializer<'_>,
+        mut msg: tcu::OwnedMessage,
+        pos: usize,
     ) -> Result<(), Error> {
         use crate::tiles::ActivityMng;
+        use base::serialize::M3Deserializer;
+
+        // Reconstruct deserializer from message and position.
+        let mut de = M3Deserializer::new(msg.as_words());
+        de.skip(pos);
 
         let r: kif::tilemux::Exit = de.pop()?;
 
@@ -591,7 +599,7 @@ impl TileMux {
         build_vmsg!(&mut reply, kif::DefaultReply {
             error: Code::Success,
         });
-        if let Err(e) = ktcu::reply(ktcu::KPEX_EP, &reply, msg) {
+        if let Err(e) = msg.reply(&reply) {
             log!(
                 LogFlags::Error,
                 "TileMux[{}] got {} on Exit sidecall reply",

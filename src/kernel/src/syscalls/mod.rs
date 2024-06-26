@@ -24,7 +24,6 @@ use base::serialize::{Deserialize, M3Deserializer};
 use base::tcu;
 
 use crate::cap::CapTable;
-use crate::ktcu;
 use crate::tiles::Activity;
 use crate::tiles::ActivityMng;
 
@@ -100,27 +99,28 @@ fn check_unused(tbl: &CapTable, sel: CapSel) -> Result<(), VerboseError> {
     Ok(())
 }
 
-fn send_reply(msg: &'static tcu::Message, rep: &mem::MsgBuf) {
-    ktcu::reply(ktcu::KSYS_EP, rep, msg).ok();
+fn send_reply(msg: &mut tcu::OwnedMessage, rep: &mem::MsgBuf) {
+    msg.reply(rep).unwrap();
 }
 
-fn reply_result(msg: &'static tcu::Message, error: Code) {
+fn reply_result(msg: &mut tcu::OwnedMessage, error: Code) {
     let mut rep_buf = mem::MsgBuf::borrow_def();
     build_vmsg!(rep_buf, kif::DefaultReply { error });
     send_reply(msg, &rep_buf);
 }
 
-fn reply_success(msg: &'static tcu::Message) {
+fn reply_success(msg: &mut tcu::OwnedMessage) {
     reply_result(msg, Code::Success);
 }
 
-fn get_request<R: Deserialize<'static>>(msg: &'static tcu::Message) -> Result<R, Error> {
+fn get_request<'m, R: Deserialize<'m>>(msg: &'m tcu::Message) -> Result<R, Error> {
     let mut de = M3Deserializer::new(msg.as_words());
     de.skip(1);
     de.pop()
 }
 
-pub fn handle_async(msg: &'static tcu::Message) {
+pub fn handle_async(mut msg: tcu::OwnedMessage) {
+    let msg = &mut msg;
     let act: Rc<Activity> = ActivityMng::activity(msg.header.label() as tcu::ActId).unwrap();
 
     use kif::syscalls::Operation;

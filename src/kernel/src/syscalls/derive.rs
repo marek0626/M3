@@ -34,7 +34,7 @@ use crate::tiles::{tilemng, Activity, TileMux};
 #[inline(never)]
 pub fn derive_tile_async(
     act: &Rc<Activity>,
-    msg: &'static tcu::Message,
+    msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::DeriveTile = get_request(msg)?;
     sysc_log!(
@@ -97,7 +97,7 @@ pub fn derive_tile_async(
 }
 
 #[inline(never)]
-pub fn derive_kmem(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn derive_kmem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::DeriveKMem = get_request(msg)?;
     sysc_log!(
         act,
@@ -123,7 +123,7 @@ pub fn derive_kmem(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(),
 }
 
 #[inline(never)]
-pub fn derive_mem(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn derive_mem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::DeriveMem = get_request(msg)?;
     sysc_log!(
         act,
@@ -162,7 +162,7 @@ pub fn derive_mem(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), 
 #[inline(never)]
 pub fn derive_srv_async(
     act: &Rc<Activity>,
-    msg: &'static tcu::Message,
+    msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::DeriveSrv = get_request(msg)?;
     sysc_log!(

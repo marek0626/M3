@@ -195,7 +195,7 @@ impl SendQueue {
         thread::fetch_msg().ok_or_else(|| Error::new(Code::RecvGone))
     }
 
-    pub fn received_reply(&mut self, msg: &'static tcu::Message) {
+    pub fn received_reply(&mut self, mut msg: tcu::OwnedMessage) {
         log!(
             LogFlags::KernSQueue,
             "SendQueue[{:?}]: received reply",
@@ -203,12 +203,12 @@ impl SendQueue {
         );
 
         if let Some(ev) = self.queue.sender_mut().cur_event.take() {
-            thread::notify(ev, Some(msg));
+            thread::notify(ev, Some(&msg));
             PENDING_MSGS.set(PENDING_MSGS.get() - 1);
         }
 
         // now that we've copied the message, we can mark it read
-        ktcu::ack_msg(ktcu::KSRV_EP, msg);
+        msg.ack();
 
         if !self.queue.send_pending() {
             resume_queue();

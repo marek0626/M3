@@ -27,7 +27,7 @@ use base::io::LogFlags;
 use base::libc;
 use base::log;
 use base::mem::{self, VirtAddr};
-use base::tcu::{self, Message};
+use base::tcu;
 use base::vec;
 use core::intrinsics::transmute;
 use core::ptr::NonNull;
@@ -187,7 +187,7 @@ impl Thread {
         }
     }
 
-    fn set_msg(&mut self, msg: &'static tcu::Message) {
+    fn set_msg(&mut self, msg: &tcu::Message) {
         let size = msg.header.length() + mem::size_of::<tcu::Header>();
         self.has_msg = true;
         // safety: we trust the TCU
@@ -230,7 +230,7 @@ impl ThreadManager {
         }
     }
 
-    fn notify(&mut self, event: Event, msg: Option<&'static tcu::Message>) {
+    fn notify(&mut self, event: Event, msg: Option<&tcu::Message>) {
         let mut it = self.block.iter_mut();
         while let Some(t) = it.next() {
             if t.trigger_event(event) {
@@ -333,7 +333,7 @@ pub fn wait_for(event: Event) {
     }
 }
 
-pub fn notify(event: Event, msg: Option<&'static Message>) {
+pub fn notify(event: Event, msg: Option<&tcu::Message>) {
     TMNG.borrow_mut().notify(event, msg)
 }
 

@@ -30,7 +30,7 @@ use crate::{ktcu, platform};
 #[inline(never)]
 pub fn tile_quota_async(
     act: &Rc<Activity>,
-    msg: &'static tcu::Message,
+    msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::TileQuota = get_request(msg)?;
     sysc_log!(act, "tile_quota(tile={})", r.tile);
@@ -87,7 +87,7 @@ pub fn tile_quota_async(
 #[inline(never)]
 pub fn tile_set_quota_async(
     act: &Rc<Activity>,
-    msg: &'static tcu::Message,
+    msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::TileSetQuota = get_request(msg)?;
     sysc_log!(
@@ -126,7 +126,7 @@ pub fn tile_set_quota_async(
 }
 
 #[inline(never)]
-pub fn tile_set_pmp(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn tile_set_pmp(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::TileSetPMP = get_request(msg)?;
     sysc_log!(
         act,
@@ -200,7 +200,7 @@ pub fn tile_set_pmp(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<()
 #[inline(never)]
 pub fn tile_reset_async(
     act: &Rc<Activity>,
-    msg: &'static tcu::Message,
+    msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::TileReset = get_request(msg)?;
     sysc_log!(
@@ -248,7 +248,7 @@ pub fn tile_reset_async(
 }
 
 #[inline(never)]
-pub fn tile_info(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn tile_info(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::TileInfo = get_request(msg)?;
     sysc_log!(act, "tile_info(tile={})", r.tile);
 
@@ -271,7 +271,7 @@ pub fn tile_info(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), V
 }
 
 #[inline(never)]
-pub fn tile_mem(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn tile_mem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::TileMem = get_request(msg)?;
     sysc_log!(act, "tile_mem(dst={}, tile={})", r.dst, r.tile);
 
