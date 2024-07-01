@@ -364,6 +364,10 @@ pub fn try_yield() {
     }
 }
 
+/// Stops the current thread and switches to a sleeping thread
+///
+/// Does nothing if no sleeping thread is available.
+/// The current thread object is leaked.
 pub fn stop() {
     let mut tmng = TMNG.borrow_mut();
     if let Some(next) = tmng.get_next() {
