@@ -185,7 +185,7 @@ help() {
     echo "                             by default)."
     echo "    M3_OUT:                  the output directory ('run' by default)."
     echo "    M3_LOG:                  the log flags for M³ separated by comma (the log flags"
-    echo "                             are listed in src/libs/rust/base/src/io/loglvl.rs). By"
+    echo "                             are listed in src/libs/rust/base/src/io/logflags.rs). By"
     echo "                             default, M3_LOG is set to 'Info,Error'."
     echo ""
     echo "  Variables for target gem5:"

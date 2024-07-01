@@ -34,7 +34,7 @@ use core::fmt;
 
 /// Macro for logging (includes a trailing newline)
 ///
-/// The arguments are printed if $flag is enabled (see `$crate::io::loglvl::LogFlags`).
+/// The arguments are printed if $flag is enabled (see [`LogFlags`]).
 ///
 /// # Examples
 ///
