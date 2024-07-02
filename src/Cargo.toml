@@ -24,6 +24,7 @@ members = [
     "apps/netechoserver",
     "apps/ping",
     "apps/raser",
+    "apps/rasertest",
     "apps/resmngtest",
     "apps/rusthello",
     "apps/rustnettests",

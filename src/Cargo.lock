@@ -562,6 +562,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rasertest"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "m3",
+ "rot",
+]
+
+[[package]]
 name = "resmng"
 version = "0.1.0"
 dependencies = [

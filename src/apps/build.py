@@ -22,6 +22,7 @@ dirs = [
     'ping',
     'queue',
     'raser',
+    'rasertest',
     'resmngtest',
     'rusthello',
     'rustnettests',
