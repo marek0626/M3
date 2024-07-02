@@ -22,7 +22,7 @@ TESTS = [
     "rust-algo-tests", "rust-misc-tests", "rust-vfs-tests",
     "rust-algo-benchs", "rust-misc-benchs", "rust-vfs-benchs",
     "cpp-algo-benchs", "cpp-misc-benchs", "cpp-vfs-benchs",
-    "facever",
+    "facever", "rots-raser",
     "find", "tar", "untar", "sqlite", "leveldb", "sha256sum", "sort",
     "cat_awk", "cat_wc", "grep_awk", "grep_wc",
     "disk-test", "abort-test",
