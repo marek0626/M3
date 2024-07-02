@@ -104,5 +104,11 @@ impl<'a> PayloadPubKey for M3Payload<'a> {
     }
 }
 
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(crate = "base::serde", tag = "type", rename = "challenge")]
+pub struct ChallengePayload<'a> {
+    pub challenge: &'a str,
+}
+
 pub type M3Certificate<'a> = Certificate<M3Payload<'a>, Certificate<BinaryPayload, ()>>;
 pub type M3RawCertificate = Certificate<Box<RawValue>, Certificate<BinaryPayload, ()>>;

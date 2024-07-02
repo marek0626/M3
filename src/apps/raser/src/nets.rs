@@ -14,36 +14,18 @@
 
 use crate::rotc::RoTCRawCertificate;
 use m3::client::Network;
+use m3::com::Semaphore;
 use m3::errors::{Code, Error};
 use m3::io::LogFlags;
 use m3::log;
-use m3::net::{Endpoint, Socket, StreamSocket, StreamSocketArgs, TcpSocket};
-use m3::serialize::Serialize;
-use m3::time::TimeInstant;
+use m3::net::{Socket, StreamSocket, StreamSocketArgs, TcpSocket};
 use m3::vfs::FileRef;
-use m3::{format, println};
+use rot::cert::ChallengePayload;
 use rot::ed25519::{Signer, SigningKey};
 use rot::Hex;
 
 const TCP_PORT: u16 = 4242;
 const MAX_CHALLENGE_SIZE: usize = 512;
-
-#[derive(Serialize, Debug)]
-#[serde(crate = "m3::serde", tag = "type", rename = "challenge")]
-struct ChallengePayload<'a> {
-    challenge: &'a str,
-    #[serde(serialize_with = "netep::serialize")]
-    from: Endpoint,
-}
-
-mod netep {
-    use m3::net::Endpoint;
-    use m3::serialize::Serializer;
-
-    pub fn serialize<S: Serializer>(ep: &Endpoint, s: S) -> Result<S::Ok, S::Error> {
-        s.collect_str(ep)
-    }
-}
 
 fn parse_challenge(mut c: &str) -> &str {
     c = c.trim();
@@ -66,24 +48,21 @@ fn handle_client(
     rotc_cert: &RoTCRawCertificate,
 ) -> Result<(), Error> {
     let ep = socket.accept()?;
-    log!(LogFlags::Info, "Accepted remote endpoint {}", ep);
 
-    socket.send(format!("Hello {}! I'm RASer. I like driving fast!\n", ep).as_bytes())?;
-    socket.send("State your challenge: ".as_bytes())?;
+    log!(
+        LogFlags::Info,
+        "Hello {}! I'm RASer. I like driving fast!",
+        ep
+    );
 
     let mut buffer = [0u8; MAX_CHALLENGE_SIZE];
     let size = socket.recv(&mut buffer)?;
     let challenge = parse_challenge(
         core::str::from_utf8(&buffer[..size]).map_err(|_| Error::new(Code::Utf8Error))?,
     );
-    let payload = ChallengePayload {
-        challenge,
-        from: ep,
-    };
+    let payload = ChallengePayload { challenge };
     log!(LogFlags::Info, "Signing challenge: {:?}", payload);
-    socket.send(format!("Very well. Signing challenge '{}'...\n", payload.challenge).as_bytes())?;
 
-    let start = TimeInstant::now();
     let raw_payload = rot::json::value::to_raw_value(&payload).unwrap();
     let signature = sig_key.sign(raw_payload.get().as_bytes());
     let cert = rot::cert::Certificate {
@@ -93,11 +72,9 @@ fn handle_client(
         parent: rotc_cert,
     };
     let mut json = rot::json::to_string_pretty(&cert).unwrap();
-    let elapsed = start.elapsed();
-    println!("{}", json);
     json.push('\n');
+    socket.send(&json.as_bytes().len().to_ne_bytes())?;
     socket.send(json.as_bytes())?;
-    socket.send(format!("I spent {:?} generating this. Goodbye.\n", elapsed).as_bytes())?;
     socket.close()
 }
 
@@ -110,6 +87,11 @@ pub fn serve(sig_key: &SigningKey, rotc_cert: &RoTCRawCertificate) -> Result<(),
     loop {
         tcp_socket.close().expect("close failed");
         tcp_socket.listen(TCP_PORT).expect("listen failed");
+        Semaphore::attach("net-tcp")
+            .unwrap()
+            .up()
+            .expect("net-tcp up failed");
+
         {
             let ep = tcp_socket.local_endpoint().unwrap();
             log!(
