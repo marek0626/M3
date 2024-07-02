@@ -31,7 +31,7 @@ use crate::tiles::TileMux;
 use crate::tiles::{tilemng, Activity};
 
 #[inline(never)]
-pub fn alloc_ep_async(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn alloc_ep_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::AllocEP = get_request(msg)?;
     sysc_log!(
         act,
@@ -117,7 +117,7 @@ pub fn alloc_ep_async(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<
 }
 
 #[inline(never)]
-pub fn mgate_region(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn mgate_region(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::MGateRegion = get_request(msg)?;
     sysc_log!(act, "mgate_addr(mgate={})", r.mgate);
 
@@ -135,7 +135,7 @@ pub fn mgate_region(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<()
 }
 
 #[inline(never)]
-pub fn rgate_buffer(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn rgate_buffer(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::RGateBuffer = get_request(msg)?;
     sysc_log!(act, "rgate_buffer(rgate={})", r.rgate);
 
@@ -153,7 +153,7 @@ pub fn rgate_buffer(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<()
 }
 
 #[inline(never)]
-pub fn kmem_quota(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn kmem_quota(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::KMemQuota = get_request(msg)?;
     sysc_log!(act, "kmem_quota(kmem={})", r.kmem);
 
@@ -172,7 +172,7 @@ pub fn kmem_quota(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), 
 }
 
 #[inline(never)]
-pub fn get_sess(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn get_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::GetSess = get_request(msg)?;
     sysc_log!(
         act,
@@ -221,7 +221,7 @@ pub fn get_sess(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), Ve
 }
 
 #[inline(never)]
-pub fn activate_async(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn activate_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::Activate = get_request(msg)?;
     sysc_log!(
         act,
@@ -390,7 +390,7 @@ pub fn activate_async(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<
 }
 
 #[inline(never)]
-pub fn sem_ctrl_async(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn sem_ctrl_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::SemCtrl = get_request(msg)?;
     sysc_log!(act, "sem_ctrl(sem={}, op={:?})", r.sem, r.op);
 
@@ -417,7 +417,7 @@ pub fn sem_ctrl_async(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<
 #[inline(never)]
 pub fn activity_ctrl_async(
     act: &Rc<Activity>,
-    msg: &'static tcu::Message,
+    msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::ActivityCtrl = get_request(msg)?;
     sysc_log!(
@@ -445,7 +445,7 @@ pub fn activity_ctrl_async(
             let is_self = r.act == kif::SEL_ACT;
             actcap.stop_app_async(Code::from(r.arg as u32), is_self, act.id());
             if is_self {
-                ktcu::ack_msg(ktcu::KSYS_EP, msg);
+                msg.ack();
                 return Ok(());
             }
         },
@@ -458,7 +458,7 @@ pub fn activity_ctrl_async(
 #[inline(never)]
 pub fn activity_wait_async(
     act: &Rc<Activity>,
-    msg: &'static tcu::Message,
+    msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::ActivityWait = get_request(msg)?;
     sysc_log!(
@@ -489,7 +489,7 @@ pub fn activity_wait_async(
     Ok(())
 }
 
-pub fn reset_stats(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn reset_stats(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     sysc_log!(act, "reset_stats()",);
 
     for tile in platform::user_tiles() {
@@ -501,7 +501,7 @@ pub fn reset_stats(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(),
     Ok(())
 }
 
-pub fn noop(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn noop(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     sysc_log!(act, "noop()",);
 
     reply_success(msg);

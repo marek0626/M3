@@ -34,7 +34,7 @@ use crate::syscalls::{check_unused, get_request, reply_success, send_reply};
 use crate::tiles::{tilemng, Activity, ActivityFlags, ActivityMng};
 
 #[inline(never)]
-pub fn create_mgate(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn create_mgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::CreateMGate = get_request(msg)?;
     sysc_log!(
         act,
@@ -109,7 +109,7 @@ pub fn create_mgate(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<()
 }
 
 #[inline(never)]
-pub fn create_rgate(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn create_rgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::CreateRGate = get_request(msg)?;
     sysc_log!(
         act,
@@ -140,7 +140,7 @@ pub fn create_rgate(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<()
 }
 
 #[inline(never)]
-pub fn create_sgate(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn create_sgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::CreateSGate = get_request(msg)?;
     sysc_log!(
         act,
@@ -169,7 +169,7 @@ pub fn create_sgate(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<()
 }
 
 #[inline(never)]
-pub fn create_srv(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn create_srv(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::CreateSrv<'_> = get_request(msg)?;
     sysc_log!(
         act,
@@ -204,7 +204,7 @@ pub fn create_srv(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), 
 }
 
 #[inline(never)]
-pub fn create_sess(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn create_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::CreateSess = get_request(msg)?;
     sysc_log!(
         act,
@@ -239,7 +239,7 @@ pub fn create_sess(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(),
 #[inline(never)]
 pub fn create_activity_async(
     act: &Rc<Activity>,
-    msg: &'static tcu::Message,
+    msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::CreateActivity<'_> = get_request(msg)?;
     sysc_log!(
@@ -335,7 +335,7 @@ pub fn create_activity_async(
 }
 
 #[inline(never)]
-pub fn create_sem(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn create_sem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::CreateSem = get_request(msg)?;
     sysc_log!(act, "create_sem(dst={}, value={})", r.dst, r.value);
 
@@ -351,7 +351,7 @@ pub fn create_sem(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), 
 #[inline(never)]
 pub fn create_map_async(
     act: &Rc<Activity>,
-    msg: &'static tcu::Message,
+    msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::CreateMap = get_request(msg)?;
     sysc_log!(

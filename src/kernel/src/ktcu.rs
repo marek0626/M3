@@ -22,8 +22,8 @@ use base::kif;
 use base::log;
 use base::mem::{self, GlobAddr, GlobOff, PhysAddr, PhysAddrRaw, VirtAddr};
 use base::tcu::{
-    ActId, EpId, ExtCmdOpCode, ExtReg, Header, Label, Message, Reg, TileId, EP_REGS, MMIO_ADDR,
-    PMEM_PROT_EPS, TCU, UNLIM_CREDITS,
+    ActId, EpId, ExtCmdOpCode, ExtReg, Header, Label, OwnedMessage, Reg, TileId, EP_REGS,
+    MMIO_ADDR, PMEM_PROT_EPS, TCU, UNLIM_CREDITS,
 };
 
 use crate::platform;
@@ -182,13 +182,12 @@ pub fn drop_msgs(rep: EpId, label: Label) {
     TCU::drop_msgs_with(RBUFS.borrow()[rep as usize], rep, label);
 }
 
-pub fn fetch_msg(rep: EpId) -> Option<&'static Message> {
-    TCU::fetch_msg(rep).map(|off| TCU::offset_to_msg(RBUFS.borrow()[rep as usize], off))
-}
-
-pub fn ack_msg(rep: EpId, msg: &Message) {
-    let off = TCU::msg_to_offset(RBUFS.borrow()[rep as usize], msg);
-    TCU::ack_msg(rep, off).unwrap();
+pub fn fetch_msg(rep: EpId) -> Option<OwnedMessage> {
+    // TODO: Avoid construction of a &'static reference.
+    let off = TCU::fetch_msg(rep)?;
+    // SAFETY: The message is inside the receive buffer of the receive endpoint
+    // and will not be modified while not acknowledged.
+    unsafe { Some(OwnedMessage::new(rep, RBUFS.borrow()[rep as usize], off)) }
 }
 
 pub fn send_to(
@@ -214,11 +213,6 @@ pub fn send_to(
         ep
     );
     TCU::send(KTMP_EP, msg, rpl_lbl, rpl_ep)
-}
-
-pub fn reply(ep: EpId, reply: &mem::MsgBuf, msg: &Message) -> Result<(), Error> {
-    let msg_off = TCU::msg_to_offset(RBUFS.borrow()[ep as usize], msg);
-    TCU::reply(ep, reply, msg_off)
 }
 
 pub fn read_obj<T: Default>(tile: TileId, addr: GlobOff) -> T {

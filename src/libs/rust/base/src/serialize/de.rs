@@ -42,6 +42,11 @@ impl<'de> M3Deserializer<'de> {
     }
 
     #[inline(always)]
+    pub fn pos(&self) -> usize {
+        self.pos
+    }
+
+    #[inline(always)]
     pub fn skip(&mut self, words: usize) {
         self.pos += words;
     }

@@ -83,7 +83,7 @@ fn do_exchange(
 }
 
 #[inline(never)]
-pub fn exchange(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn exchange(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::Exchange = get_request(msg)?;
     let other_crd = CapRngDesc::new(r.own.cap_type(), r.other, r.own.count());
 
@@ -106,7 +106,7 @@ pub fn exchange(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), Ve
 #[inline(never)]
 pub fn exchange_over_sess_async(
     act: &Rc<Activity>,
-    msg: &'static tcu::Message,
+    msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::ExchangeSess = get_request(msg)?;
     let name = if r.obtain { "obtain" } else { "delegate" };
@@ -196,7 +196,7 @@ pub fn exchange_over_sess_async(
 }
 
 #[inline(never)]
-pub fn revoke_async(act: &Rc<Activity>, msg: &'static tcu::Message) -> Result<(), VerboseError> {
+pub fn revoke_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::Revoke = get_request(msg)?;
     sysc_log!(act, "revoke(act={}, crd={}, own={})", r.act, r.crd, r.own);
 

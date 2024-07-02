@@ -25,6 +25,9 @@ use cfg_if::cfg_if;
 use core::cmp;
 use core::fmt;
 use core::intrinsics;
+use core::marker::PhantomData;
+use core::ops::Deref;
+use core::ptr::NonNull;
 use core::slice;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -493,6 +496,91 @@ impl Message {
         unsafe {
             let ptr = self.data.as_ptr() as *const u64;
             slice::from_raw_parts(ptr, self.header.length() / 8)
+        }
+    }
+}
+
+/// Received message that owns a message slot
+///
+/// The message is read-only.
+/// [`Self`] owns the slot to prevent answering the message while a reference to
+/// the contents are held.
+/// This avoids data races between the Rust code and the TCU (would be UB).
+pub struct OwnedMessage {
+    rep: EpId,
+    msg: Option<NonNull<()>>,
+    off: usize,
+    /// Signal the compiler that we own a message
+    _phantom: PhantomData<Message>,
+}
+
+impl OwnedMessage {
+    const GONE: &'static str = "message already gone";
+
+    /// # Safety
+    /// Safe if rep, base, and off describe a valid message for as long as
+    /// `Self::msg` is [`Some`], i.e., the message is not answered.
+    pub unsafe fn new(rep: EpId, base: VirtAddr, off: usize) -> Self {
+        Self {
+            rep,
+            msg: Some(NonNull::new((base.as_local() + off) as *mut ()).unwrap()),
+            off,
+            _phantom: Default::default(),
+        }
+    }
+
+    /// Acknowledge the message
+    ///
+    /// Afterwards, `self` should not be interacted with anymore.
+    pub fn ack(&mut self) {
+        self.take();
+        // SAFETY: If there is some message in self, it is valid.
+        TCU::ack_msg(self.rep, self.off).unwrap();
+    }
+
+    /// Send a reply
+    ///
+    /// Afterwards, `self` should not be interacted with anymore.
+    pub fn reply(&mut self, reply: &mem::MsgBuf) -> Result<(), Error> {
+        self.take();
+        // SAFETY: If there is some message in self, it is valid.
+        TCU::reply(self.rep, reply, self.off)
+        // Self is dropped and the user cannot access the message anymore.
+    }
+
+    /// Take message **before invalidating** it
+    ///
+    /// This leaves no dangling pointer behind.
+    fn take(&mut self) {
+        self.msg.take().expect(Self::GONE);
+    }
+}
+
+impl Deref for OwnedMessage {
+    type Target = Message;
+
+    fn deref(&self) -> &Self::Target {
+        let msg = self.msg.expect(Self::GONE);
+        // SAFETY: If there is some message in self, it is valid.
+        unsafe {
+            let header = msg.cast::<Header>();
+            let length = header.as_ref().length();
+            // Add length information to pointer.
+            let msg: *const [()] = slice::from_raw_parts(msg.as_ptr(), length);
+            &*(msg as *const Self::Target)
+        }
+        // TODO: Prevent the user from (safely) acknowledging the returned
+        // message.
+    }
+}
+
+impl Drop for OwnedMessage {
+    /// # Panics
+    /// Panics if the message is not answered yet.
+    /// This catches errors of unhandled messages.
+    fn drop(&mut self) {
+        if self.msg.is_some() {
+            panic!("unanswered message dropped");
         }
     }
 }
