@@ -533,9 +533,7 @@ impl OwnedMessage {
     ///
     /// Afterwards, `self` should not be interacted with anymore.
     pub fn ack(&mut self) {
-        // Take message before invalidating it.
-        // This leaves no dangling pointer behind.
-        self.msg.take().expect(Self::GONE);
+        self.take();
         // SAFETY: If there is some message in self, it is valid.
         TCU::ack_msg(self.rep, self.off).unwrap();
     }
@@ -544,12 +542,17 @@ impl OwnedMessage {
     ///
     /// Afterwards, `self` should not be interacted with anymore.
     pub fn reply(&mut self, reply: &mem::MsgBuf) -> Result<(), Error> {
-        // Take message before invalidating it.
-        // This leaves no dangling pointer behind.
-        self.msg.take().expect(Self::GONE);
+        self.take();
         // SAFETY: If there is some message in self, it is valid.
         TCU::reply(self.rep, reply, self.off)
         // Self is dropped and the user cannot access the message anymore.
+    }
+
+    /// Take message **before invalidating** it
+    ///
+    /// This leaves no dangling pointer behind.
+    fn take(&mut self) {
+        self.msg.take().expect(Self::GONE);
     }
 }
 
