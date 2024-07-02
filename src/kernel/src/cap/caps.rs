@@ -227,7 +227,7 @@ impl CapTable {
                     }
 
                     let len = cap.len();
-                    if Capability::revoke_single(cap, own, revoker) {
+                    if Capability::revoke_single_async(cap, own, revoker) {
                         sel += len;
                     }
                 },
@@ -245,7 +245,7 @@ impl CapTable {
             let tbl_ref = tbl.borrow_mut();
             match RefMut::filter_map(tbl_ref, |t| t.caps.get_root_mut()) {
                 Ok(cap) => {
-                    Capability::revoke_single(cap, true, revoker);
+                    Capability::revoke_single_async(cap, true, revoker);
                 },
                 Err(_tbl) => break,
             }
@@ -360,7 +360,7 @@ impl Capability {
     /// Revoke a single leaf capability in the derivation tree of `self`.
     ///
     /// Returns `true` when no more capabilities are found.
-    fn revoke_single(mut cap: RefMut<'_, Self>, self_included: bool, revoker: ActId) -> bool {
+    fn revoke_single_async(mut cap: RefMut<'_, Self>, self_included: bool, revoker: ActId) -> bool {
         let mut is_child = false;
         // Loop to the first child.
         loop {
