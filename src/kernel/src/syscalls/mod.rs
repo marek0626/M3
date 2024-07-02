@@ -100,7 +100,8 @@ fn check_unused(tbl: &CapTable, sel: CapSel) -> Result<(), VerboseError> {
 }
 
 fn send_reply(msg: &mut tcu::OwnedMessage, rep: &mem::MsgBuf) {
-    msg.reply(rep).unwrap();
+    // Ignore errors as they should not occur with well-behaved applications.
+    msg.reply(rep).ok();
 }
 
 fn reply_result(msg: &mut tcu::OwnedMessage, error: Code) {
