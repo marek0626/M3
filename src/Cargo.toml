@@ -23,6 +23,8 @@ members = [
     "apps/msgchan/msgchansnd",
     "apps/netechoserver",
     "apps/ping",
+    "apps/raser",
+    "apps/rasertest",
     "apps/resmngtest",
     "apps/rusthello",
     "apps/rustnettests",
@@ -36,6 +38,7 @@ members = [
     "apps/spammer",
     "kernel",
     "server/crypto/hashmux",
+    "server/crypto/rots",
     "server/disk",
     "server/m3fs",
     "server/net",
@@ -46,6 +49,7 @@ members = [
 ]
 exclude = [
     "apps/straccmux",
+    "rot",
     "tilemux",
 ]
 resolver = "2"

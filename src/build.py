@@ -3,6 +3,7 @@ dirs = [
     "libs",       # libs afterwards
     "kernel",
     "apps",
+    "rot",
     "tilemux",
     "server",
     "fs",         # generate the file systems last

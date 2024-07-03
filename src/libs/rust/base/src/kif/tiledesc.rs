@@ -61,6 +61,8 @@ pub enum TileISA {
     NICDev,
     /// Dummy ISA to represent the serial input device
     SerialDev,
+    /// Dummy ISA to represent a flash with the Common Flash Interface (CFI)
+    CFIDev,
 }
 
 bitflags! {
@@ -86,6 +88,8 @@ bitflags! {
         const KECACC        = 1 << 6;
         /// Contains an accelerator with co-processor
         const COREACC       = 1 << 7;
+        /// Root of Trust
+        const ROT           = 1 << 8;
     }
 }
 
@@ -182,6 +186,7 @@ impl TileDesc {
         self.isa() == TileISA::NICDev
             || self.isa() == TileISA::IDEDev
             || self.isa() == TileISA::SerialDev
+            || self.isa() == TileISA::CFIDev
     }
 
     /// Return if the tile supports activities
@@ -259,6 +264,14 @@ impl TileDesc {
                         res.attr() | TileAttr::KECACC | TileAttr::IMEM,
                     )
                 },
+                "rot" => {
+                    res = TileDesc::new_with_attr(
+                        res.tile_type(),
+                        res.isa(),
+                        0,
+                        res.attr() | TileAttr::ROT | TileAttr::IMEM,
+                    )
+                },
 
                 "indir" => {
                     res = TileDesc::new_with_attr(
@@ -304,6 +317,14 @@ impl TileDesc {
                     res = TileDesc::new_with_attr(
                         TileType::Comp,
                         TileISA::SerialDev,
+                        0,
+                        TileAttr::empty(),
+                    )
+                },
+                "cfidev" => {
+                    res = TileDesc::new_with_attr(
+                        TileType::Comp,
+                        TileISA::CFIDev,
                         0,
                         TileAttr::empty(),
                     )

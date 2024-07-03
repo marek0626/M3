@@ -48,6 +48,8 @@ static TileDesc desc_with_properties(TileDesc desc, const char *props) {
             res = TileDesc(res.type(), res.isa(), 0, res.attr() | TileAttr::SERIAL);
         else if(strcmp(prop, "kecacc") == 0)
             res = TileDesc(res.type(), res.isa(), 0, res.attr() | TileAttr::KECACC);
+        else if(strcmp(prop, "rot") == 0)
+            res = TileDesc(res.type(), res.isa(), 0, res.attr() | TileAttr::ROT);
         else if(strcmp(prop, "indir") == 0)
             res = TileDesc(TileType::COMP, TileISA::ACCEL_INDIR, 0, TileAttr::IMEM);
         else if(strcmp(prop, "copy") == 0)
@@ -60,6 +62,8 @@ static TileDesc desc_with_properties(TileDesc desc, const char *props) {
             res = TileDesc(TileType::COMP, TileISA::NIC_DEV, 0, TileAttr::IMEM);
         else if(strcmp(prop, "serdev") == 0)
             res = TileDesc(TileType::COMP, TileISA::SERIAL_DEV, 0, TileAttr::IMEM);
+        else if(strcmp(prop, "cfidev") == 0)
+            res = TileDesc(TileType::COMP, TileISA::CFI_DEV, 0, TileAttr::IMEM);
         prop = strtok(NULL, "+");
     }
     return res;

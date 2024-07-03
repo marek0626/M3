@@ -1,0 +1,13 @@
+[package]
+name = "rasertest"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/rasertest.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+m3 = { path = "../../libs/rust/m3" }
+rot = { path = "../../libs/crypto/rot" }
+ed25519-dalek = { version = "2.1.0", default-features = false }

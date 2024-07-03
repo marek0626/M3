@@ -126,6 +126,10 @@ run_bench() {
         fi
     elif [[ "$bench" == lx* ]]; then
         cp "boot/linux/${bench#lx}.xml" "$M3_OUT/boot.gen.xml"
+    elif [ "$bench" = "rots-raser" ]; then
+        export M3_GEM5_HDD=build/$M3_TARGET-$M3_ISA-$M3_BUILD/fsimgs-$bpe/default.img
+        unset M3_GEM5_CFG
+        cp "boot/$bench.xml" "$M3_OUT/boot.gen.xml"
     elif [ "$bench" = "disk-test" ]; then
         export M3_GEM5_HDD=$inputdir/test-hdd.img
         cp "boot/${bootprefix}$bench.xml" "$M3_OUT/boot.gen.xml"
@@ -217,7 +221,7 @@ all+=" rust-net-tests cpp-net-tests rust-net-benchs cpp-net-benchs"
 all+=" rust-algo-tests rust-misc-tests rust-vfs-tests"
 all+=" rust-algo-benchs rust-misc-benchs rust-vfs-benchs"
 all+=" cpp-algo-benchs cpp-misc-benchs cpp-vfs-benchs"
-all+=" facever"
+all+=" facever rots-raser"
 all+=" find tar untar sqlite leveldb sha256sum sort"
 all+=" cat_awk cat_wc grep_awk grep_wc"
 all+=" disk-test abort-test"
@@ -247,6 +251,10 @@ for test in $tests; do
 
                 # standalone works only with SPM
                 if [ "$test" = "standalone" ] && [ "$type" != "a" ]; then
+                    continue;
+                fi
+                # rots-raser only works on riscv64
+                if [ "$test" = "rots-raser" ] && [ "$isa" != "riscv64" ]; then
                     continue;
                 fi
                 # rust-sndrcv and vmtest don't run with SPM

@@ -56,10 +56,13 @@ pub const MEM_CAP_END: VirtAddr = RBUF_STD_ADDR;
 
 #[cfg(target_arch = "riscv32")]
 pub const ENV_START: VirtAddr = VirtAddr::new(0x1_0000);
-#[cfg(target_arch = "riscv64")]
+#[cfg(all(target_arch = "riscv64", not(feature = "rot")))]
 pub const ENV_START: VirtAddr = VirtAddr::new(0x1000_1000);
+#[cfg(all(target_arch = "riscv64", feature = "rot"))]
+pub const ENV_START: VirtAddr = VirtAddr::new(0x0b00_1000);
 #[cfg(target_arch = "x86_64")]
 pub const ENV_START: VirtAddr = VirtAddr::new(0x1F_E000);
+
 pub const ENV_SIZE: usize = PAGE_SIZE;
 
 pub const STACK_SIZE: usize = 0x20000;

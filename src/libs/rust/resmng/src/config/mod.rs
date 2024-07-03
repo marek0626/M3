@@ -285,6 +285,7 @@ impl TileType {
                 "kecacc" => desc.attr().contains(kif::TileAttr::KECACC),
                 "serial" => desc.attr().contains(kif::TileAttr::SERIAL),
                 "imem" => desc.attr().contains(kif::TileAttr::IMEM),
+                "rot" => desc.attr().contains(kif::TileAttr::ROT),
 
                 "indir" => desc.isa() == kif::TileISA::AccelIndir,
                 "copy" => desc.isa() == kif::TileISA::AccelCopy,
@@ -293,6 +294,7 @@ impl TileType {
                 "idedev" => desc.isa() == kif::TileISA::IDEDev,
                 "nicdev" => desc.isa() == kif::TileISA::NICDev,
                 "serdev" => desc.isa() == kif::TileISA::SerialDev,
+                "cfidev" => desc.isa() == kif::TileISA::CFIDev,
                 _ => false,
             };
             if !matches {
