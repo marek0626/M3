@@ -78,32 +78,18 @@ impl CPUOps for RISCVCPU {
     unsafe fn write8b(addr: *mut u64, val: u64) {
         // ensure that we write the upper half first as the lower half might trigger an action
         // (e.g., the command register)
-        unsafe {
-            asm!(
-                "sw {0}, 4({2})",
-                "fence",
-                "sw {1}, 0({2})",
-                in(reg) (val >> 32) as u32,
-                in(reg) (val & 0xFFFF_FFFF) as u32,
-                in(reg) addr,
-                options(nostack),
-            )
-        }
+        let addr = addr as *mut u32;
+        addr.add(1).write_volatile((val >> 32) as u32);
+        core::sync::atomic::fence(core::sync::atomic::Ordering::Release);
+        addr.write_volatile((val & 0xFFFF_FFFF) as u32);
     }
 
     #[cfg(all(target_arch = "riscv32", not(feature = "gem5")))]
     unsafe fn write8b(addr: *mut u64, val: u64) {
-        unsafe {
-            asm!(
-                "sw {0}, 4({2})",
-                // no fence here as the PicoRV32 does not support it
-                "sw {1}, 0({2})",
-                in(reg) (val >> 32) as u32,
-                in(reg) (val & 0xFFFF_FFFF) as u32,
-                in(reg) addr,
-                options(nostack),
-            )
-        }
+        // same as above, but no fence here as the PicoRV32 does not support it
+        let addr = addr as *mut u32;
+        addr.add(1).write_volatile((val >> 32) as u32);
+        addr.write_volatile((val & 0xFFFF_FFFF) as u32);
     }
 
     #[cfg(target_arch = "riscv64")]
