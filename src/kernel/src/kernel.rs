@@ -148,6 +148,7 @@ fn extend_heap() {
 }
 
 #[no_mangle]
+#[allow(m3_async::async_call)]
 pub extern "C" fn env_run() {
     unsafe { __m3_init_libc(0, ptr::null(), ptr::null(), false) };
     create_heap();
@@ -179,14 +180,14 @@ pub extern "C" fn env_run() {
 
     log!(LogFlags::Info, "Kernel is ready!");
 
-    workloop();
+    workloop_async();
 }
 
-pub fn thread_startup() {
-    workloop();
+pub fn thread_startup_async() {
+    workloop_async();
 }
 
-fn workloop() -> ! {
+fn workloop_async() -> ! {
     if thread::cur().is_main() {
         ActivityMng::start_root_async().expect("starting root failed");
     }
@@ -220,7 +221,7 @@ fn workloop() -> ! {
         // with all activities gone, we should only have the main thread left; add another thread for
         // the asynchronous tile reset
         assert_eq!(thread::thread_count(), 0);
-        thread::add_thread(VirtAddr::from(thread_startup as *const ()), 0);
+        thread::add_thread(VirtAddr::from(thread_startup_async as *const ()), 0);
 
         // trigger the shutdown of tiles
         tiles::deinit_async();

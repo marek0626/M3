@@ -13,6 +13,8 @@
  * General Public License version 2 for more details.
  */
 
+#![feature(register_tool)]
+#![register_tool(m3_async)]
 #![no_std]
 
 mod loader;
@@ -266,7 +268,7 @@ struct WorkloopArgs<'s, 'c, 'd, 'q, 'r> {
     res: &'r mut Resources,
 }
 
-fn workloop(args: &mut WorkloopArgs<'_, '_, '_, '_, '_>) {
+fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_>) {
     let WorkloopArgs {
         starter,
         childmng,
@@ -280,6 +282,7 @@ fn workloop(args: &mut WorkloopArgs<'_, '_, '_, '_, '_>) {
 }
 
 #[no_mangle]
+#[allow(m3_async::async_call)]
 pub fn main() -> Result<(), Error> {
     let (sub, mut res) = subsys::Subsystem::new().expect("Unable to read subsystem info");
     let args = sub.parse_args();
@@ -350,14 +353,14 @@ pub fn main() -> Result<(), Error> {
     thread::init();
     for _ in 0..args.max_clients {
         thread::add_thread(
-            VirtAddr::from(workloop as *const ()),
+            VirtAddr::from(workloop_async as *const ()),
             &mut wargs as *mut _ as usize,
         );
     }
 
     wargs.childmng.start_waiting(1);
 
-    workloop(&mut wargs);
+    workloop_async(&mut wargs);
 
     log!(LogFlags::Info, "All childs gone. Exiting.");
 

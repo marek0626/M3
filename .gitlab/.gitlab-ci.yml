@@ -48,6 +48,13 @@ check:
     - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:. -c ./b clippy -n'
     - kubectl exec -n os -t m3-ci -- sh -c '
         cd M3
+          && nix develop path:. -c ./tools/async-check.py src/kernel
+          && nix develop path:. -c ./tools/async-check.py src/libs/rust/resmng
+          && nix develop path:. -c ./tools/async-check.py src/server/root
+          && nix develop path:. -c ./tools/async-check.py src/server/pager
+        '
+    - kubectl exec -n os -t m3-ci -- sh -c '
+        cd M3
           && nix develop path:. -c ./b doc -n 2>&1 | tee log.txt
           && [ "$(grep error log.txt)" = "" ]
         '
@@ -87,4 +94,3 @@ dummy:
     - if: '$CI_MERGE_REQUEST_LABELS =~ /:no-ci:/'
   script:
     - echo "success"
-  resource_group: pod

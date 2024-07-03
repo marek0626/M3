@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from enum import Flag
 from fnmatch import fnmatch
 import os
 import re
@@ -38,15 +39,21 @@ class FuncCall:
         return self.name + " at " + str(self.loc)
 
 
+class FuncFlags(Flag):
+    NONE = 0
+    ALLOW_ASYNC = 1
+    ALLOW_NO_ASYNC = 2
+
+
 class FuncDef:
-    def __init__(self, name, loc, allow_no_async):
+    def __init__(self, name, loc, flags):
         self.name = name
         self.loc = loc
-        self.allow_no_async = allow_no_async
+        self.flags = flags
         self.calls = []
 
     def __str__(self):
-        return self.name + " at " + str(self.loc)
+        return self.name + " at " + str(self.loc) + " with " + str(self.flags)
 
 
 def parse_file(file):
@@ -66,14 +73,19 @@ def parse_file(file):
             pos += 1
         elif not in_func:
             m = re.search(
-                r'(#\[allow\(m3_async::no_async_call\)\])?\s*(?:pub\(crate\)?)?\s*fn\s+([a-zA-Z0-9_]+)\s*(?:<.*?>\s*)?\(',
+                r'(#\[allow\(m3_async::(.*?)\)\])?\s*(pub(\(crate\))?)?\s*(extern\s+".")?\s*fn\s+([a-zA-Z0-9_]+)\s*(?:<.*?>\s*)?\(',
                 bytes[pos:],
             )
             if m:
-                allow_no_async = m.group(1) is not None
+                flags = FuncFlags.NONE
+                if m.group(1) is not None:
+                    if m.group(2) == "async_call":
+                        flags |= FuncFlags.ALLOW_ASYNC
+                    elif m.group(2) == "no_async_call":
+                        flags |= FuncFlags.ALLOW_NO_ASYNC
                 line += bytes[pos:pos + m.span()[1]].count('\n')
                 pos += m.span()[1]
-                func = FuncDef(m.group(2), Location(file, line), allow_no_async)
+                func = FuncDef(m.group(6), Location(file, line), flags)
                 braces = 0
                 in_func = True
             else:
@@ -98,14 +110,22 @@ def parse_file(file):
     return funcs
 
 
+exitcode = 0
+
+
 def check_funcs(funcs):
+    global exitcode
     for func in funcs:
         has_async = any([f.name.endswith("_async") for f in func.calls])
         has_wait = any([f.name == "wait_for" for f in func.calls])
         if (has_async or has_wait) and not func.name.endswith("_async"):
-            print("Function %s calls an asynchronous function, but doesn't end with _async" % func)
-        elif not (has_async or has_wait) and func.name.endswith("_async") and not func.allow_no_async:
-            print("Function %s calls no asynchronous function, but ends with _async" % func)
+            if FuncFlags.ALLOW_ASYNC not in func.flags:
+                print("Function %s calls an asynchronous function, but doesn't end with _async" % func)
+                exitcode = 1
+        elif not (has_async or has_wait) and func.name.endswith("_async"):
+            if FuncFlags.ALLOW_NO_ASYNC not in func.flags:
+                print("Function %s calls no asynchronous function, but ends with _async" % func)
+                exitcode = 1
 
 
 def print_funcs(funcs):
@@ -122,3 +142,5 @@ if len(sys.argv) < 2:
 for f in find_files(sys.argv[1], "*.rs"):
     funcs = parse_file(f)
     check_funcs(funcs)
+
+exit(exitcode)
