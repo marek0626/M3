@@ -334,7 +334,8 @@ struct KIF {
         } PACKED;
 
         struct DeriveSrv : public DefaultRequest {
-            xfer_t dst_sel;
+            xfer_t dst_srv;
+            xfer_t dst_sgate;
             xfer_t srv_sel;
             xfer_t sessions;
             xfer_t event;

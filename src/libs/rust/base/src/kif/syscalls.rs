@@ -227,7 +227,8 @@ pub struct DeriveTile {
 #[repr(C)]
 pub struct DeriveSrv {
     pub srv: CapSel,
-    pub dst: CapRngDesc,
+    pub dst_srv: CapSel,
+    pub dst_sgate: CapSel,
     pub sessions: u32,
     pub event: u64,
 }
