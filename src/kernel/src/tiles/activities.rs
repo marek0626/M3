@@ -32,7 +32,7 @@ use crate::cap::{CapTable, Capability, EPObject, KMemObject, KObject, TileObject
 use crate::com::{QueueId, SendQueue};
 use crate::ktcu;
 use crate::platform;
-use crate::thread_startup;
+use crate::thread_startup_async;
 use crate::tiles::{loader, tilemng, ActivityMng};
 
 bitflags! {
@@ -138,7 +138,7 @@ impl Activity {
 
         // some system calls are blocking, leading to a thread switch in the kernel. there is just
         // one syscall per activity at a time, thus at most one additional thread per activity is required.
-        thread::add_thread(VirtAddr::from(thread_startup as *const ()), 0);
+        thread::add_thread(VirtAddr::from(thread_startup_async as *const ()), 0);
 
         Ok(act)
     }
