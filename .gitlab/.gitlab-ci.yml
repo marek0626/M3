@@ -94,4 +94,3 @@ dummy:
     - if: '$CI_MERGE_REQUEST_LABELS =~ /:no-ci:/'
   script:
     - echo "success"
-  resource_group: pod
