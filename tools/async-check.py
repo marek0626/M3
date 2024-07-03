@@ -110,16 +110,22 @@ def parse_file(file):
     return funcs
 
 
+exitcode = 0
+
+
 def check_funcs(funcs):
+    global exitcode
     for func in funcs:
         has_async = any([f.name.endswith("_async") for f in func.calls])
         has_wait = any([f.name == "wait_for" for f in func.calls])
         if (has_async or has_wait) and not func.name.endswith("_async"):
             if FuncFlags.ALLOW_ASYNC not in func.flags:
                 print("Function %s calls an asynchronous function, but doesn't end with _async" % func)
+                exitcode = 1
         elif not (has_async or has_wait) and func.name.endswith("_async"):
             if FuncFlags.ALLOW_NO_ASYNC not in func.flags:
                 print("Function %s calls no asynchronous function, but ends with _async" % func)
+                exitcode = 1
 
 
 def print_funcs(funcs):
@@ -136,3 +142,5 @@ if len(sys.argv) < 2:
 for f in find_files(sys.argv[1], "*.rs"):
     funcs = parse_file(f)
     check_funcs(funcs)
+
+exit(exitcode)
