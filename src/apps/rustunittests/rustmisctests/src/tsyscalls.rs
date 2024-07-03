@@ -842,27 +842,36 @@ impl Handler<()> for DummyHandler {
 }
 
 fn derive_srv(t: &mut dyn WvTester) {
-    let crd = CapRngDesc::new(CapType::Object, SelSpace::get().alloc_sels(2), 2);
+    let serv_sel = SelSpace::get().alloc_sels(2);
+    let sgate_sel = serv_sel + 1;
     let mut hdl = DummyHandler {
         sessions: SessionContainer::new(16),
     };
     let srv = wv_require_ok!(Server::new_private("test", &mut hdl));
 
     // invalid service selector
-    wv_assert_err!(t, syscalls::derive_srv(SEL_KMEM, crd, 1, 0), Code::InvArgs);
+    wv_assert_err!(
+        t,
+        syscalls::derive_srv(SEL_KMEM, serv_sel, sgate_sel, 1, 0),
+        Code::InvArgs
+    );
     // invalid dest selector
     wv_assert_err!(
         t,
-        syscalls::derive_srv(
-            srv.sel(),
-            CapRngDesc::new(CapType::Object, SEL_KMEM, 2),
-            1,
-            0
-        ),
+        syscalls::derive_srv(srv.sel(), SEL_KMEM, sgate_sel, 1, 0),
+        Code::InvArgs
+    );
+    wv_assert_err!(
+        t,
+        syscalls::derive_srv(srv.sel(), serv_sel, SEL_KMEM, 1, 0),
         Code::InvArgs
     );
     // invalid session count
-    wv_assert_err!(t, syscalls::derive_srv(srv.sel(), crd, 0, 0), Code::InvArgs);
+    wv_assert_err!(
+        t,
+        syscalls::derive_srv(srv.sel(), serv_sel, sgate_sel, 0, 0),
+        Code::InvArgs
+    );
 }
 
 fn get_sess(t: &mut dyn WvTester) {

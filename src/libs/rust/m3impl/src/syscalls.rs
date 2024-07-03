@@ -327,14 +327,21 @@ pub fn derive_tile(
     send_receive_result(&buf)
 }
 
-/// Derives a new service object at `dst` + 0 and a send gate to create sessions at `dst` + 1 from
-/// existing service `srv`, transferring `sessions` sessions to the new service object.
-/// A non-error reply just acknowledges that the request has been sent to the service. Upon the
+/// Derives a new service object at `dst_srv` and a send gate to create sessions at `dst_sgate`
+/// from existing service `srv`, transferring `sessions` sessions to the new service object. A
+/// non-error reply just acknowledges that the request has been sent to the service. Upon the
 /// completion of the request, you will receive an upcall containing `event`.
-pub fn derive_srv(srv: Selector, dst: CapRngDesc, sessions: u32, event: u64) -> Result<(), Error> {
+pub fn derive_srv(
+    srv: Selector,
+    dst_srv: Selector,
+    dst_sgate: Selector,
+    sessions: u32,
+    event: u64,
+) -> Result<(), Error> {
     let mut buf = SYSC_BUF.borrow_mut();
     build_vmsg!(buf, syscalls::Operation::DeriveSrv, syscalls::DeriveSrv {
-        dst,
+        dst_srv,
+        dst_sgate,
         srv,
         sessions,
         event,

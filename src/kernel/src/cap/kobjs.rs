@@ -25,7 +25,6 @@ use base::rc::{Rc, SRc, Weak};
 use base::tcu::{ActId, EpId, Label, TileId};
 
 use core::fmt;
-use core::ptr;
 
 use crate::com::Service;
 use crate::ktcu;
@@ -501,11 +500,11 @@ impl SemObject {
     }
 
     pub fn down_async(sem: &SRc<Self>) -> Result<(), Error> {
-        while unsafe { ptr::read_volatile(sem.counter.as_ptr()) } == 0 {
+        while sem.counter.get() == 0 {
             sem.waiters.set(sem.waiters.get() + 1);
             let event = sem.get_event();
             thread::wait_for(event);
-            if unsafe { ptr::read_volatile(sem.waiters.as_ptr()) } == -1 {
+            if sem.waiters.get() == -1 {
                 return Err(Error::new(Code::RecvGone));
             }
             sem.waiters.set(sem.waiters.get() - 1);

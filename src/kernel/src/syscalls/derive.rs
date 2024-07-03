@@ -167,16 +167,17 @@ pub fn derive_srv_async(
     let r: syscalls::DeriveSrv = get_request(msg)?;
     sysc_log!(
         act,
-        "derive_srv(dst={}, srv={}, sessions={}, event={})",
-        r.dst,
+        "derive_srv(dst_srv={}, dst_sgate={}, srv={}, sessions={}, event={})",
+        r.dst_srv,
+        r.dst_sgate,
         r.srv,
         r.sessions,
         r.event
     );
 
-    if !act.obj_caps().borrow().range_unused(&r.dst) {
-        sysc_err!(Code::InvArgs, "Selectors {} already in use", r.dst);
-    }
+    check_unused(&act.obj_caps().borrow(), r.dst_srv)?;
+    check_unused(&act.obj_caps().borrow(), r.dst_sgate)?;
+
     if r.sessions == 0 {
         sysc_err!(Code::InvArgs, "Invalid session count");
     }
@@ -230,7 +231,7 @@ pub fn derive_srv_async(
                             sysc_log!(act, "Service gave invalid SendGate cap {}", reply.sgate_sel)
                         },
                         Some(c) => try_kmem_quota!(act.obj_caps().borrow_mut().obtain(
-                            r.dst.start() + 1,
+                            r.dst_sgate,
                             c,
                             true
                         )),
@@ -238,7 +239,7 @@ pub fn derive_srv_async(
 
                     // derive new service object
                     let cap = Capability::new(
-                        r.dst.start() + 0,
+                        r.dst_srv,
                         KObject::Serv(ServObject::new(
                             srvcap.service().clone(),
                             false,

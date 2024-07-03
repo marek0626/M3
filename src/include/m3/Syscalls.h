@@ -76,7 +76,8 @@ public:
     static void derive_kmem(capsel_t kmem, capsel_t dst, size_t quota);
     static void derive_tile(capsel_t tile, capsel_t dst, Option<uint> eps,
                             Option<TimeDuration> time, Option<size_t> pts);
-    static void derive_srv(capsel_t srv, const KIF::CapRngDesc &dst, uint sessions, event_t event);
+    static void derive_srv(capsel_t srv, capsel_t dst_srv, capsel_t dst_sgate, uint sessions,
+                           event_t event);
     static void get_sess(capsel_t srv, capsel_t act, capsel_t dst, word_t sid);
     static std::pair<GlobAddr, size_t> mgate_region(capsel_t mgate);
     static std::pair<uint, uint> rgate_buffer(capsel_t rgate);
