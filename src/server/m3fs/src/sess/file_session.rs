@@ -27,7 +27,7 @@ use m3::{
     com::GateIStream,
     errors::{Code, Error},
     io::LogFlags,
-    kif::{CapRngDesc, CapType, Perm, INVALID_SEL},
+    kif::{CapRngDesc, CapType, Perm},
     rc::Rc,
     server::{CapExchange, ServerSession, SessId},
     syscalls,
@@ -345,7 +345,7 @@ impl FileSession {
         // to start is the offset within the first of these blocks
         let mut capoff = self.next_pos.off % crate::superblock().block_size as usize;
         if len > 0 {
-            syscalls::activate(self.epcap, sel, INVALID_SEL, 0)?;
+            syscalls::activate_mgate(self.epcap, sel)?;
 
             // move forward
             self.cur_pos = self.next_pos;

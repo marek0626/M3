@@ -146,7 +146,10 @@ pub fn handle_async(mut msg: tcu::OwnedMessage) {
         o if o == Operation::Revoke.into() => exchange::revoke_async(&act, msg),
 
         o if o == Operation::AllocEP.into() => misc::alloc_ep_async(&act, msg),
-        o if o == Operation::Activate.into() => misc::activate_async(&act, msg),
+        o if o == Operation::ActivateMGate.into() => misc::activate_mgate(&act, msg),
+        o if o == Operation::ActivateRGate.into() => misc::activate_rgate(&act, msg),
+        o if o == Operation::ActivateSGate.into() => misc::activate_sgate_async(&act, msg),
+        o if o == Operation::Invalidate.into() => misc::invalidate(&act, msg),
         o if o == Operation::MGateRegion.into() => misc::mgate_region(&act, msg),
         o if o == Operation::RGateBuffer.into() => misc::rgate_buffer(&act, msg),
         o if o == Operation::KMemQuota.into() => misc::kmem_quota(&act, msg),

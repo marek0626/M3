@@ -94,12 +94,17 @@ impl Gate {
     ///
     /// If ep is `None`, a new endpoint will be allocated, otherwise the given endpoint will be
     /// used. In either case, the gate will be activated on the endpoint.
-    pub fn new(sel: Selector, flags: CapFlags, ep: Option<EP>) -> Result<Self, Error> {
+    pub fn new(sel: Selector, flags: CapFlags, ep: Option<EP>, mem: bool) -> Result<Self, Error> {
         let ep = match ep {
             Some(ep) => ep,
-            None => EpMng::get().activate(sel)?,
+            None => EpMng::get().acquire(0)?,
         };
-        syscalls::activate(ep.sel(), sel, kif::INVALID_SEL, 0)?;
+        if mem {
+            syscalls::activate_mgate(ep.sel(), sel)?;
+        }
+        else {
+            syscalls::activate_sgate(ep.sel(), sel)?;
+        }
         Ok(Self::new_with_ep(sel, flags, ep))
     }
 
@@ -112,7 +117,7 @@ impl Gate {
         addr: GlobOff,
         ep: EP,
     ) -> Result<Self, Error> {
-        syscalls::activate(ep.sel(), sel, mem.unwrap_or(kif::INVALID_SEL), addr)?;
+        syscalls::activate_rgate(ep.sel(), sel, mem.unwrap_or(kif::INVALID_SEL), addr)?;
         Ok(Self::new_with_ep(sel, flags, ep))
     }
 

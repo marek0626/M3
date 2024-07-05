@@ -106,7 +106,7 @@ fn hash_mapped_mem(t: &mut dyn WvTester) {
 
     // Prepare hash session
     let hash = wv_require_ok!(HashSession::new("hash", &HashAlgorithm::SHA3_256));
-    wv_assert_ok!(t, hash.ep().configure(mcap.sel()));
+    wv_assert_ok!(t, hash.ep().configure_mgate(mcap.sel()));
 
     // Map memory
     wv_assert_ok!(
@@ -359,7 +359,7 @@ fn shake_and_hash(t: &mut dyn WvTester) {
     let mut hash = wv_require_ok!(HashSession::new("hash", &HashAlgorithm::SHAKE128));
     let mgate = wv_require_ok!(MemGate::new(SHAKE_SIZE as GlobOff, Perm::RW));
     let mgate_derived = wv_require_ok!(mgate.derive_cap(0, SHAKE_SIZE as GlobOff, Perm::RW));
-    wv_assert_ok!(t, hash.ep().configure(mgate_derived.sel()));
+    wv_assert_ok!(t, hash.ep().configure_mgate(mgate_derived.sel()));
 
     _shake_and_hash(
         t,
@@ -952,7 +952,7 @@ fn cshake_nist(t: &mut dyn WvTester) {
     };
     let mgate = wv_require_ok!(MemGate::new(256, Perm::RW));
     let mgate_derived = wv_require_ok!(mgate.derive_cap(0, 256, Perm::RW));
-    wv_assert_ok!(t, hash.ep().configure(mgate_derived.sel()));
+    wv_assert_ok!(t, hash.ep().configure_mgate(mgate_derived.sel()));
     let mut buf = [0u8; CSHAKE_BUF_LEN];
 
     for test in &CSHAKE_NIST_SAMPLES {
@@ -981,7 +981,7 @@ fn kmac_nist(t: &mut dyn WvTester) {
     };
     let mgate = wv_require_ok!(MemGate::new(512, Perm::RW));
     let mgate_derived = wv_require_ok!(mgate.derive_cap(0, 512, Perm::RW));
-    wv_assert_ok!(t, hash.ep().configure(mgate_derived.sel()));
+    wv_assert_ok!(t, hash.ep().configure_mgate(mgate_derived.sel()));
     let mut buf = [0u8; CSHAKE_BUF_LEN * 2]; // KMAC header and key, separately padded
 
     for test in &KMAC_NIST_SAMPLES {

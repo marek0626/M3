@@ -159,7 +159,7 @@ impl MemCap {
     }
 
     fn do_activate_on(mut self, ep: Option<EP>) -> Result<MemGate, Error> {
-        let gate = Gate::new(self.sel(), self.cap.flags(), ep)?;
+        let gate = Gate::new(self.sel(), self.cap.flags(), ep, true)?;
 
         // prevent that we revoke the cap
         self.cap.set_flags(CapFlags::KEEP_CAP);

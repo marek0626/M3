@@ -71,7 +71,7 @@ RecvGate RecvCap::activate() {
     size_t buf_addr = buf->addr();
 
     auto rep = EPMng::get().acquire(TCU::INVALID_EP, slots());
-    Gate::activate_on(sel(), *rep, buf->mem(), buf->off());
+    Gate::activate_rgate_on(sel(), *rep, buf->mem(), buf->off());
 
     // prevent that we revoke the cap
     auto cap_flags = flags();
@@ -81,7 +81,7 @@ RecvGate RecvCap::activate() {
 }
 
 void RecvCap::activate_on(const EP &ep, MemCap *mem, size_t off) {
-    Gate::activate_on(sel(), ep, mem ? mem->sel() : KIF::INV_SEL, off);
+    Gate::activate_rgate_on(sel(), ep, mem ? mem->sel() : KIF::INV_SEL, off);
 }
 
 INIT_PRIO_RECVGATE RecvGate

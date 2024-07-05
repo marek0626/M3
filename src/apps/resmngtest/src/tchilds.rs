@@ -15,7 +15,7 @@
 
 use m3::cap::SelSpace;
 use m3::col::ToString;
-use m3::com::{RecvGate, SendCap, SendGate};
+use m3::com::{RecvGate, SendCap};
 use m3::errors::Code;
 use m3::kif::{Perm, TileDesc, TileISA, TileType};
 use m3::mem::GlobOff;

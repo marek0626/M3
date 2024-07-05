@@ -117,8 +117,8 @@ impl Pager {
     /// Initializes this pager session by delegating the activity cap to the server.
     pub(crate) fn init(&mut self, act: &ChildActivity) -> Result<(), Error> {
         // activate send and receive gate for page faults
-        syscalls::activate(act.sel() + 1, self.pf_sgate, kif::INVALID_SEL, 0)?;
-        syscalls::activate(
+        syscalls::activate_sgate(act.sel() + 1, self.pf_sgate)?;
+        syscalls::activate_rgate(
             act.sel() + 2,
             self.pf_rgate.as_ref().unwrap().sel(),
             kif::INVALID_SEL,

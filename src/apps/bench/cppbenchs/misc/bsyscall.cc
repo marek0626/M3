@@ -45,7 +45,7 @@ NOINLINE static void activate() {
 
     Profile pr;
     WVPERF(__func__, pr.run<CycleInstant>([ep, &mgate] {
-        Syscalls::activate(ep->sel(), mgate.sel(), KIF::INV_SEL, 0);
+        Syscalls::activate_mgate(ep->sel(), mgate.sel());
     }));
 }
 

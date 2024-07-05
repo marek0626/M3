@@ -22,6 +22,7 @@ use base::mem::{GlobOff, MsgBuf, PhysAddr, PhysAddrRaw};
 use base::rc::Rc;
 use base::tcu;
 
+use crate::cap::GateObject;
 use crate::cap::{Capability, KObject};
 use crate::cap::{EPCategory, EPObject, SemObject};
 use crate::ktcu;
@@ -221,11 +222,52 @@ pub fn get_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), V
 }
 
 #[inline(never)]
-pub fn activate_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
-    let r: syscalls::Activate = get_request(msg)?;
+pub fn activate_mgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+    let r: syscalls::ActivateMGate = get_request(msg)?;
+    sysc_log!(act, "activate_mgate(ep={}, gate={})", r.ep, r.gate,);
+
+    let ep = get_kobj!(act, r.ep, EP);
+    if ep.replies() != 0 {
+        sysc_err!(Code::InvArgs, "Only rgates use EP caps with reply slots");
+    }
+
+    if let Err(e) = ep.deconfigure(false) {
+        sysc_err!(
+            e.code(),
+            "Invalidation of EP {}:{} failed",
+            ep.tile_id(),
+            ep.ep()
+        );
+    }
+
+    let mg = get_kobj!(act, r.gate, MGate);
+
+    if mg.gate_ep().get_ep().is_some() {
+        sysc_err!(Code::Exists, "MemGate is already activated");
+    }
+
+    let tile_id = mg.tile_id();
+    if let Err(e) = tilemng::tilemux(ep.tile_id()).config_mem_ep(
+        ep.ep(),
+        ep.activity().unwrap().id(),
+        &mg,
+        tile_id,
+    ) {
+        sysc_err!(e.code(), "Unable to configure mem EP");
+    }
+
+    mg.set_ep(&ep, GateObject::Mem(mg.clone()));
+
+    reply_success(msg);
+    Ok(())
+}
+
+#[inline(never)]
+pub fn activate_rgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+    let r: syscalls::ActivateRGate = get_request(msg)?;
     sysc_log!(
         act,
-        "activate(ep={}, gate={}, rbuf_mem={}, rbuf_off={:#x})",
+        "activate_rgate(ep={}, gate={}, rbuf_mem={}, rbuf_off={:#x})",
         r.ep,
         r.gate,
         r.rbuf_mem,
@@ -240,149 +282,147 @@ pub fn activate_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
     let epid = ep.ep();
     let dst_tile = ep.tile_id();
 
-    let invalidated = match ep.deconfigure(false) {
-        Ok(inv) => inv,
-        Err(e) => sysc_err!(e.code(), "Invalidation of EP {}:{} failed", dst_tile, epid),
+    if let Err(e) = ep.deconfigure(false) {
+        sysc_err!(e.code(), "Invalidation of EP {}:{} failed", dst_tile, epid);
+    }
+
+    let rg = get_kobj!(act, r.gate, RGate);
+    if rg.activated() {
+        sysc_err!(Code::Exists, "RecvGate is already activated");
+    }
+
+    // determine receive buffer address
+    let dst_desc = platform::tile_desc(dst_tile);
+    let rbuf_addr = if dst_desc.has_virtmem() && epid == ep_act.eps_start() + tcu::PG_REP_OFF {
+        // special case for activating the pager reply rgate: there is no way to get a
+        // memory capability to the standard receive buffer. thus, we just determine the
+        // physical address here and remove the choice for the user.
+        ep_act.rbuf_addr()
+            + cfg::SYSC_RBUF_SIZE as PhysAddrRaw
+            + cfg::UPCALL_RBUF_SIZE as PhysAddrRaw
+            + cfg::DEF_RBUF_SIZE as PhysAddrRaw
+    }
+    else if dst_desc.has_virtmem() {
+        let rbuf = get_kobj!(act, r.rbuf_mem, MGate);
+        if r.rbuf_off >= rbuf.size() || r.rbuf_off + rg.size() as GlobOff > rbuf.size() {
+            sysc_err!(Code::InvArgs, "Invalid receive buffer memory");
+        }
+        if platform::tile_desc(rbuf.tile_id()).tile_type() != kif::TileType::Mem {
+            sysc_err!(Code::InvArgs, "rbuffer not in physical memory");
+        }
+        let rbuf_phys = ktcu::glob_to_phys_remote(dst_tile, rbuf.addr(), kif::PageFlags::RW)
+            .map_err(|e| {
+                VerboseError::new(
+                    e.code(),
+                    base::format!("Receive buffer at {} not accessible via PMP", rbuf.addr()),
+                )
+            })?;
+        rbuf_phys + r.rbuf_off as PhysAddrRaw
+    }
+    else {
+        if r.rbuf_mem != kif::INVALID_SEL {
+            sysc_err!(Code::InvArgs, "rbuffer mem cap given for SPM tile");
+        }
+        PhysAddr::new_raw(dst_desc, r.rbuf_off as PhysAddrRaw)
     };
 
-    let maybe_kobj = act
-        .obj_caps()
-        .borrow()
-        .get(r.gate)
-        .map(|cap| cap.get().clone());
-
-    if let Some(kobj) = maybe_kobj {
-        match kobj {
-            KObject::MGate(_) | KObject::SGate(_) => {
-                if ep.replies() != 0 {
-                    sysc_err!(Code::InvArgs, "Only rgates use EP caps with reply slots");
-                }
-                if r.rbuf_off != 0 || r.rbuf_mem != kif::INVALID_SEL {
-                    sysc_err!(Code::InvArgs, "Only rgates specify receive buffers");
-                }
-            },
-            _ => {},
+    let replies = if ep.replies() > 0 {
+        let slots = 1 << (rg.order() - rg.msg_order());
+        if ep.replies() != slots {
+            sysc_err!(
+                Code::InvArgs,
+                "EP cap has {} reply slots, need {}",
+                ep.replies(),
+                slots
+            );
         }
-
-        match kobj {
-            KObject::MGate(ref mg) => {
-                if mg.gate_ep().get_ep().is_some() {
-                    sysc_err!(Code::Exists, "MemGate is already activated");
-                }
-
-                let tile_id = mg.tile_id();
-                if let Err(e) =
-                    tilemng::tilemux(dst_tile).config_mem_ep(epid, ep_act.id(), mg, tile_id)
-                {
-                    sysc_err!(e.code(), "Unable to configure mem EP");
-                }
-            },
-
-            KObject::SGate(ref sg) => {
-                if sg.gate_ep().get_ep().is_some() {
-                    sysc_err!(Code::Exists, "SendGate is already activated");
-                }
-
-                let rgate = sg.rgate().clone();
-
-                if !rgate.activated() {
-                    sysc_log!(act, "activate: waiting for rgate {:?}", rgate);
-
-                    let event = rgate.get_event();
-                    thread::wait_for(event);
-
-                    sysc_log!(act, "activate: rgate {:?} is activated", rgate);
-                }
-
-                if let Err(e) = tilemng::tilemux(dst_tile).config_snd_ep(epid, ep_act.id(), sg) {
-                    sysc_err!(e.code(), "Unable to configure send EP");
-                }
-            },
-
-            KObject::RGate(ref rg) => {
-                if rg.activated() {
-                    sysc_err!(Code::Exists, "RecvGate is already activated");
-                }
-
-                // determine receive buffer address
-                let dst_desc = platform::tile_desc(dst_tile);
-                let rbuf_addr = if dst_desc.has_virtmem()
-                    && epid == ep_act.eps_start() + tcu::PG_REP_OFF
-                {
-                    // special case for activating the pager reply rgate: there is no way to get a
-                    // memory capability to the standard receive buffer. thus, we just determine the
-                    // physical address here and remove the choice for the user.
-                    ep_act.rbuf_addr()
-                        + cfg::SYSC_RBUF_SIZE as PhysAddrRaw
-                        + cfg::UPCALL_RBUF_SIZE as PhysAddrRaw
-                        + cfg::DEF_RBUF_SIZE as PhysAddrRaw
-                }
-                else if dst_desc.has_virtmem() {
-                    let rbuf = get_kobj!(act, r.rbuf_mem, MGate);
-                    if r.rbuf_off >= rbuf.size() || r.rbuf_off + rg.size() as GlobOff > rbuf.size()
-                    {
-                        sysc_err!(Code::InvArgs, "Invalid receive buffer memory");
-                    }
-                    if platform::tile_desc(rbuf.tile_id()).tile_type() != kif::TileType::Mem {
-                        sysc_err!(Code::InvArgs, "rbuffer not in physical memory");
-                    }
-                    let rbuf_phys =
-                        ktcu::glob_to_phys_remote(dst_tile, rbuf.addr(), kif::PageFlags::RW)
-                            .map_err(|e| {
-                                VerboseError::new(
-                                    e.code(),
-                                    base::format!(
-                                        "Receive buffer at {} not accessible via PMP",
-                                        rbuf.addr()
-                                    ),
-                                )
-                            })?;
-                    rbuf_phys + r.rbuf_off as PhysAddrRaw
-                }
-                else {
-                    if r.rbuf_mem != kif::INVALID_SEL {
-                        sysc_err!(Code::InvArgs, "rbuffer mem cap given for SPM tile");
-                    }
-                    PhysAddr::new_raw(dst_desc, r.rbuf_off as PhysAddrRaw)
-                };
-
-                let replies = if ep.replies() > 0 {
-                    let slots = 1 << (rg.order() - rg.msg_order());
-                    if ep.replies() != slots {
-                        sysc_err!(
-                            Code::InvArgs,
-                            "EP cap has {} reply slots, need {}",
-                            ep.replies(),
-                            slots
-                        );
-                    }
-                    Some(epid + 1)
-                }
-                else {
-                    None
-                };
-
-                rg.activate(ep_act.tile_id(), epid, rbuf_addr);
-
-                if let Err(e) =
-                    tilemng::tilemux(dst_tile).config_rcv_ep(epid, ep_act.id(), replies, rg)
-                {
-                    rg.deactivate();
-                    sysc_err!(e.code(), "Unable to configure recv EP");
-                }
-            },
-
-            _ => sysc_err!(Code::InvArgs, "Invalid capability"),
-        };
-
-        EPObject::configure(&ep, &kobj);
+        Some(epid + 1)
     }
-    else if !invalidated {
-        if let Err(e) =
-            tilemng::tilemux(dst_tile).invalidate_ep(ep_act.id(), epid, !ep.is_rgate(), true)
-        {
-            sysc_err!(e.code(), "Invalidation of EP {}:{} failed", dst_tile, epid);
-        }
+    else {
+        None
+    };
+
+    rg.activate(ep_act.tile_id(), epid, rbuf_addr);
+
+    if let Err(e) = tilemng::tilemux(dst_tile).config_rcv_ep(epid, ep_act.id(), replies, &rg) {
+        rg.deactivate();
+        sysc_err!(e.code(), "Unable to configure recv EP");
+    }
+
+    rg.set_ep(&ep, GateObject::Recv(rg.clone()));
+
+    reply_success(msg);
+    Ok(())
+}
+
+#[inline(never)]
+pub fn activate_sgate_async(
+    act: &Rc<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
+    let r: syscalls::ActivateSGate = get_request(msg)?;
+    sysc_log!(act, "activate_sgate(ep={}, gate={})", r.ep, r.gate,);
+
+    let ep = get_kobj!(act, r.ep, EP);
+    if ep.replies() != 0 {
+        sysc_err!(Code::InvArgs, "Only rgates use EP caps with reply slots");
+    }
+
+    // activity that is currently active on the endpoint
+    let ep_act = ep.activity().unwrap();
+
+    let epid = ep.ep();
+    let dst_tile = ep.tile_id();
+
+    if let Err(e) = ep.deconfigure(false) {
+        sysc_err!(e.code(), "Invalidation of EP {}:{} failed", dst_tile, epid);
+    }
+
+    let sg = get_kobj!(act, r.gate, SGate);
+    if sg.gate_ep().get_ep().is_some() {
+        sysc_err!(Code::Exists, "SendGate is already activated");
+    }
+
+    let rgate = sg.rgate().clone();
+
+    if !rgate.activated() {
+        sysc_log!(act, "activate: waiting for rgate {:?}", rgate);
+
+        let event = rgate.get_event();
+        thread::wait_for(event);
+
+        sysc_log!(act, "activate: rgate {:?} is activated", rgate);
+    }
+
+    if let Err(e) = tilemng::tilemux(dst_tile).config_snd_ep(epid, ep_act.id(), &sg) {
+        sysc_err!(e.code(), "Unable to configure send EP");
+    }
+
+    sg.set_ep(&ep, GateObject::Send(sg.clone()));
+
+    reply_success(msg);
+    Ok(())
+}
+
+#[inline(never)]
+pub fn invalidate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+    let r: syscalls::Invalidate = get_request(msg)?;
+    sysc_log!(act, "invalidate(ep={})", r.ep);
+
+    let ep = get_kobj!(act, r.ep, EP);
+
+    if let Err(e) = tilemng::tilemux(ep.tile_id()).invalidate_ep(
+        ep.activity().unwrap().id(),
+        ep.ep(),
+        !ep.is_rgate(),
+        true,
+    ) {
+        sysc_err!(
+            e.code(),
+            "Invalidation of EP {}:{} failed",
+            ep.tile_id(),
+            ep.ep()
+        );
     }
 
     reply_success(msg);

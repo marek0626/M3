@@ -69,7 +69,7 @@ fn _start_background_client(num: usize, mgate: &MemGate, sem: &Semaphore, size: 
 
             let sem = Semaphore::bind(sem_sel);
             let hash = wv_require_ok!(HashSession::new(&format!("hash-client{}", num), SLOW_ALGO));
-            wv_assert_ok!(t, hash.ep().configure(mgate_sel));
+            wv_assert_ok!(t, hash.ep().configure_mgate(mgate_sel));
 
             // Notify main Tile that client is ready
             wv_assert_ok!(t, sem.up());
@@ -94,7 +94,7 @@ fn _bench_latency(mgate: &MemGate, size: usize) -> Results<CycleDuration> {
 
     let hash = wv_require_ok!(HashSession::new("hash-latency", TEST_ALGO));
     let mgated = wv_require_ok!(mgate.derive_cap(0, size as GlobOff, Perm::R));
-    wv_assert_ok!(t, hash.ep().configure(mgated.sel()));
+    wv_assert_ok!(t, hash.ep().configure_mgate(mgated.sel()));
 
     // Read pseudo random memory from the memory region filled with SHAKE earlier
     let mut waits: [u64; TOTAL] = wv_require_ok!(mgate.read_obj(0));

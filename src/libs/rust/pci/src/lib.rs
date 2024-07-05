@@ -267,7 +267,7 @@ impl Device {
         let mep = EpMng::acquire_for(act_sel, EP_DMA, 0)?;
         let rgate = RecvGate::new(math::next_log2(BUF_SIZE), math::next_log2(MSG_SIZE))?;
         let scap = SendCap::new(&rgate)?;
-        sep.configure(scap.sel())?;
+        sep.configure_sgate(scap.sel())?;
 
         Ok(Self {
             _activity: act.start()?,
@@ -280,7 +280,7 @@ impl Device {
     }
 
     pub fn set_dma_buffer(&self, buf: &MemCap) -> Result<(), Error> {
-        self.mep.configure(buf.sel())
+        self.mep.configure_mgate(buf.sel())
     }
 
     pub fn check_for_irq(&self) -> bool {

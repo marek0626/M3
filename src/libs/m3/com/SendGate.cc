@@ -42,7 +42,7 @@ SendCap SendCap::create_named(const char *name, RecvGate *reply_gate) {
 SendGate SendCap::activate() {
     auto org_flags = flags();
 
-    EP *ep = Gate::activate(sel());
+    EP *ep = Gate::activate(sel(), false);
 
     // don't revoke the cap
     flags(KEEP_CAP);
@@ -51,7 +51,7 @@ SendGate SendCap::activate() {
 }
 
 void SendCap::activate_on(const EP &ep) {
-    Gate::activate_on(sel(), ep);
+    Gate::activate_on(sel(), ep, false);
 }
 
 uint SendGate::credits() {

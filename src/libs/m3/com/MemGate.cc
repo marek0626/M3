@@ -70,7 +70,7 @@ MemCap MemCap::derive_for(capsel_t act, capsel_t cap, goff_t offset, size_t size
 MemGate MemCap::activate() {
     auto org_flags = flags();
 
-    EP *ep = Gate::activate(sel());
+    EP *ep = Gate::activate(sel(), true);
 
     // don't revoke the cap
     flags(KEEP_CAP);
@@ -79,7 +79,7 @@ MemGate MemCap::activate() {
 }
 
 void MemCap::activate_on(const EP &ep) {
-    Gate::activate_on(sel(), ep);
+    Gate::activate_on(sel(), ep, true);
 }
 
 MemCap::~MemCap() {

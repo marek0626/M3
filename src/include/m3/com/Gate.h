@@ -128,9 +128,9 @@ public:
     }
 
 protected:
-    static EP *activate(capsel_t sel, capsel_t rbuf_mem = KIF::INV_SEL, goff_t rbuf_off = 0);
-    static void activate_on(capsel_t sel, const EP &ep, capsel_t rbuf_mem = KIF::INV_SEL,
-                            goff_t rbuf_off = 0);
+    static EP *activate(capsel_t sel, bool mem);
+    static void activate_on(capsel_t sel, const EP &ep, bool mem);
+    static void activate_rgate_on(capsel_t sel, const EP &ep, capsel_t rbuf_mem, goff_t rbuf_off);
 
     void release_ep(bool force_inval = false) noexcept;
 

@@ -67,7 +67,10 @@ public:
     static void create_sem(capsel_t dst, uint value);
     static epid_t alloc_ep(capsel_t dst, capsel_t act, epid_t ep, uint replies);
 
-    static void activate(capsel_t ep, capsel_t gate, capsel_t rbuf_mem, goff_t rbuf_off);
+    static void activate_mgate(capsel_t ep, capsel_t gate);
+    static void activate_sgate(capsel_t ep, capsel_t gate);
+    static void activate_rgate(capsel_t ep, capsel_t gate, capsel_t rbuf_mem, goff_t rbuf_off);
+    static void invalidate(capsel_t ep);
     static void activity_ctrl(capsel_t act, KIF::Syscall::ActivityOp op, xfer_t arg);
     static std::pair<Errors::Code, capsel_t> activity_wait(const capsel_t *acts, size_t count,
                                                            event_t event);

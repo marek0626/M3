@@ -181,16 +181,8 @@ pub fn tile_set_pmp(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
     }
 
     if r.mgate != kif::INVALID_SEL {
-        let kobj = act_caps
-            .get(r.mgate)
-            .ok_or_else(|| Error::new(Code::InvArgs))?
-            .get();
-        tilemux.configure_pmp_ep(
-            r.ep,
-            kobj.to_gate().ok_or_else(|| {
-                VerboseError::new(Code::InvArgs, "Expected a MemGate".to_string())
-            })?,
-        )?;
+        let mgate = get_kobj_ref!(act_caps, r.mgate, MGate);
+        tilemux.configure_pmp_ep(r.ep, mgate)?;
     }
 
     reply_success(msg);
@@ -228,16 +220,7 @@ pub fn tile_reset_async(
             sysc_err!(Code::InvArgs, "Tile-internal EPs vs. external EP range");
         }
 
-        Some(
-            act_caps
-                .get(r.mux_mem)
-                .ok_or_else(|| Error::new(Code::InvArgs))?
-                .get()
-                .to_gate()
-                .ok_or_else(|| {
-                    VerboseError::new(Code::InvArgs, "Expected a MemGate".to_string())
-                })?,
-        )
+        Some(get_kobj_ref!(act_caps, r.mux_mem, MGate).clone())
     };
     drop(act_caps);
 

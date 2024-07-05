@@ -239,7 +239,7 @@ impl State {
                 ep,
                 cmem.sel()
             );
-            EP::new_bind(0, ep).configure(cmem.sel())?;
+            EP::new_bind(0, ep).configure_mgate(cmem.sel())?;
             Ok(cmem)
         }
         else {

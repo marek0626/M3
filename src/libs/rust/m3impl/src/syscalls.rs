@@ -675,22 +675,56 @@ where
     Ok(())
 }
 
-/// Activates the given gate on given endpoint.
+/// Activates the given memory gate on given endpoint.
+pub fn activate_mgate(ep: Selector, gate: Selector) -> Result<(), Error> {
+    let mut buf = SYSC_BUF.borrow_mut();
+    build_vmsg!(
+        buf,
+        syscalls::Operation::ActivateMGate,
+        syscalls::ActivateMGate { ep, gate }
+    );
+    send_receive_result(&buf)
+}
+
+/// Activates the given receive gate on given endpoint.
 ///
-/// When activating a receive gate, the physical memory of the receive buffer and its offset needs
-/// to be specified via `rbuf_mem` and `rbuf_off`.
-pub fn activate(
+/// `rbuf_mem` and `rbuf_off` specify the physical memory for the receive buffer and offset.
+pub fn activate_rgate(
     ep: Selector,
     gate: Selector,
     rbuf_mem: Selector,
     rbuf_off: GlobOff,
 ) -> Result<(), Error> {
     let mut buf = SYSC_BUF.borrow_mut();
-    build_vmsg!(buf, syscalls::Operation::Activate, syscalls::Activate {
-        ep,
-        gate,
-        rbuf_mem,
-        rbuf_off,
+    build_vmsg!(
+        buf,
+        syscalls::Operation::ActivateRGate,
+        syscalls::ActivateRGate {
+            ep,
+            gate,
+            rbuf_mem,
+            rbuf_off,
+        }
+    );
+    send_receive_result(&buf)
+}
+
+/// Activates the given send gate on given endpoint.
+pub fn activate_sgate(ep: Selector, gate: Selector) -> Result<(), Error> {
+    let mut buf = SYSC_BUF.borrow_mut();
+    build_vmsg!(
+        buf,
+        syscalls::Operation::ActivateSGate,
+        syscalls::ActivateSGate { ep, gate }
+    );
+    send_receive_result(&buf)
+}
+
+/// Invalidates the given endpoint.
+pub fn invalidate(ep: Selector) -> Result<(), Error> {
+    let mut buf = SYSC_BUF.borrow_mut();
+    build_vmsg!(buf, syscalls::Operation::Invalidate, syscalls::Invalidate {
+        ep
     });
     send_receive_result(&buf)
 }
