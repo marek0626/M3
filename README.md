@@ -36,6 +36,10 @@ Without Nix, you need to install the packages manually and hope that all version
 
 Note: If you have `pyenv` installed and therefore `/usr/bin/python` does not exist, you might need to install the package `python-dev-is-python3`.
 
+Additionally, these packages are required for gem5 on Debian-based distributions:
+
+    $ sudo apt install file cpio unzip bc python3-config
+
 ### 2. Bootstrap
 
 To pull in all required submodules and build them (cross compiler, gem5, etc.), you can use the `tools/bootstrap` script (independent of whether you are using Nix or not). If you only work with a subset of targets, ISAs or build types, you can specify that via the `--target`, `--isa`, and `--build` arguments. For example:
