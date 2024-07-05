@@ -18,7 +18,7 @@ use base::cell::RefCell;
 use base::col::String;
 use base::errors::Error;
 use base::mem::{MsgBuf, MsgBufRef};
-use base::rc::{Rc, SRc, Weak};
+use base::rc::{Rc, Weak};
 use base::tcu;
 use core::fmt;
 
@@ -29,13 +29,13 @@ use crate::tiles::Activity;
 pub struct Service {
     act: Weak<Activity>,
     name: String,
-    rgate: SRc<RGateObject>,
+    rgate: Rc<RGateObject>,
     queue: RefCell<Box<SendQueue>>,
 }
 
 impl Service {
-    pub fn new(act: &Rc<Activity>, name: String, rgate: SRc<RGateObject>) -> SRc<Self> {
-        SRc::new(Service {
+    pub fn new(act: &Rc<Activity>, name: String, rgate: Rc<RGateObject>) -> Rc<Self> {
+        Rc::new(Service {
             act: Rc::downgrade(act),
             name,
             rgate,

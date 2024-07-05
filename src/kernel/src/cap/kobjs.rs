@@ -20,7 +20,7 @@ use base::io::LogFlags;
 use base::kif::{self, service, tilemux::QuotaId};
 use base::log;
 use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, PhysAddr, VirtAddr};
-use base::rc::{Rc, SRc, Weak};
+use base::rc::{Rc, Weak};
 use base::tcu::{ActId, EpId, Label, TileId};
 use base::{backtrace, build_vmsg};
 use thread::Event;
@@ -201,16 +201,16 @@ impl Drop for KObjectGenRef {
 
 #[derive(Clone)]
 pub enum KObject {
-    RGate(SRc<RGateObject>),
-    SGate(SRc<SGateObject>),
-    MGate(SRc<MGateObject>),
-    Map(SRc<MapObject>),
-    Serv(SRc<ServObject>),
-    Sess(SRc<SessObject>),
-    Sem(SRc<SemObject>),
+    RGate(Rc<RGateObject>),
+    SGate(Rc<SGateObject>),
+    MGate(Rc<MGateObject>),
+    Map(Rc<MapObject>),
+    Serv(Rc<ServObject>),
+    Sess(Rc<SessObject>),
+    Sem(Rc<SemObject>),
     Activity(Rc<Activity>),
-    KMem(SRc<KMemObject>),
-    Tile(SRc<TileObject>),
+    KMem(Rc<KMemObject>),
+    Tile(Rc<TileObject>),
     EP(Rc<EPObject>),
 }
 
@@ -294,9 +294,9 @@ impl GateEP {
 }
 
 pub enum GateObject {
-    Recv(SRc<RGateObject>),
-    Send(SRc<SGateObject>),
-    Mem(SRc<MGateObject>),
+    Recv(Rc<RGateObject>),
+    Send(Rc<SGateObject>),
+    Mem(Rc<MGateObject>),
 }
 
 pub struct BaseGate {
@@ -336,8 +336,8 @@ pub struct RGateObject {
 }
 
 impl RGateObject {
-    pub fn new(order: u32, msg_order: u32, serial: bool) -> SRc<Self> {
-        SRc::new(Self {
+    pub fn new(order: u32, msg_order: u32, serial: bool) -> Rc<Self> {
+        Rc::new(Self {
             base: BaseGate::default(),
             loc: Cell::from(None),
             addr: Cell::from(PhysAddr::default()),
@@ -427,14 +427,14 @@ impl fmt::Debug for RGateObject {
 
 pub struct SGateObject {
     base: BaseGate,
-    rgate: SRc<RGateObject>,
+    rgate: Rc<RGateObject>,
     label: Label,
     credits: u32,
 }
 
 impl SGateObject {
-    pub fn new(rgate: &SRc<RGateObject>, label: Label, credits: u32) -> SRc<Self> {
-        SRc::new(Self {
+    pub fn new(rgate: &Rc<RGateObject>, label: Label, credits: u32) -> Rc<Self> {
+        Rc::new(Self {
             base: BaseGate::default(),
             rgate: rgate.clone(),
             label,
@@ -442,7 +442,7 @@ impl SGateObject {
         })
     }
 
-    pub fn rgate(&self) -> &SRc<RGateObject> {
+    pub fn rgate(&self) -> &Rc<RGateObject> {
         &self.rgate
     }
 
@@ -492,8 +492,8 @@ pub struct MGateObject {
 }
 
 impl MGateObject {
-    pub fn new(mem: mem::Allocation, perms: kif::Perm, derived: bool) -> SRc<Self> {
-        SRc::new(Self {
+    pub fn new(mem: mem::Allocation, perms: kif::Perm, derived: bool) -> Rc<Self> {
+        Rc::new(Self {
             base: BaseGate::default(),
             mem,
             perms,
@@ -554,21 +554,21 @@ impl fmt::Debug for MGateObject {
 }
 
 pub struct ServObject {
-    serv: SRc<Service>,
+    serv: Rc<Service>,
     owner: bool,
     creator: usize,
 }
 
 impl ServObject {
-    pub fn new(serv: SRc<Service>, owner: bool, creator: usize) -> SRc<Self> {
-        SRc::new(Self {
+    pub fn new(serv: Rc<Service>, owner: bool, creator: usize) -> Rc<Self> {
+        Rc::new(Self {
             serv,
             owner,
             creator,
         })
     }
 
-    pub fn service(&self) -> &SRc<Service> {
+    pub fn service(&self) -> &Rc<Service> {
         &self.serv
     }
 
@@ -588,15 +588,15 @@ impl fmt::Debug for ServObject {
 }
 
 pub struct SessObject {
-    srv: SRc<ServObject>,
+    srv: Rc<ServObject>,
     creator: usize,
     ident: u64,
     pub auto_close: bool,
 }
 
 impl SessObject {
-    pub fn new(srv: &SRc<ServObject>, creator: usize, ident: u64, auto_close: bool) -> SRc<Self> {
-        SRc::new(Self {
+    pub fn new(srv: &Rc<ServObject>, creator: usize, ident: u64, auto_close: bool) -> Rc<Self> {
+        Rc::new(Self {
             srv: srv.clone(),
             creator,
             ident,
@@ -604,7 +604,7 @@ impl SessObject {
         })
     }
 
-    pub fn service(&self) -> &SRc<ServObject> {
+    pub fn service(&self) -> &Rc<ServObject> {
         &self.srv
     }
 
@@ -663,8 +663,8 @@ pub struct SemObject {
 }
 
 impl SemObject {
-    pub fn new(counter: u32) -> SRc<Self> {
-        SRc::new(Self {
+    pub fn new(counter: u32) -> Rc<Self> {
+        Rc::new(Self {
             counter: Cell::from(counter),
             waiters: Cell::from(0),
         })
@@ -776,8 +776,8 @@ impl TileObject {
         time_quota: QuotaId,
         pt_quota: QuotaId,
         derived: bool,
-    ) -> SRc<Self> {
-        let res = SRc::new(Self {
+    ) -> Rc<Self> {
+        let res = Rc::new(Self {
             tile,
             cur_acts: Cell::from(0),
             ep_quota: ep_quota.clone(),
@@ -957,7 +957,7 @@ pub struct EPObject {
     act: Weak<Activity>,
     ep: EpId,
     replies: usize,
-    tile: SRc<TileObject>,
+    tile: Rc<TileObject>,
 }
 
 impl EPObject {
@@ -966,7 +966,7 @@ impl EPObject {
         act: Weak<Activity>,
         ep: EpId,
         replies: usize,
-        tile: &SRc<TileObject>,
+        tile: &Rc<TileObject>,
     ) -> Rc<Self> {
         let maybe_act = act.upgrade();
         let ep = Rc::new(Self {
@@ -1086,12 +1086,12 @@ pub struct KMemObject {
 }
 
 impl KMemObject {
-    pub fn new(quota: usize) -> SRc<Self> {
+    pub fn new(quota: usize) -> Rc<Self> {
         static NEXT_ID: StaticCell<QuotaId> = StaticCell::new(0);
         let id = NEXT_ID.get();
         NEXT_ID.set(id + 1);
 
-        let kmem = SRc::new(Self {
+        let kmem = Rc::new(Self {
             id,
             quota,
             left: Cell::from(quota),
@@ -1184,8 +1184,8 @@ pub struct MapObject {
 }
 
 impl MapObject {
-    pub fn new(glob: GlobAddr, flags: kif::PageFlags) -> SRc<Self> {
-        SRc::new(Self {
+    pub fn new(glob: GlobAddr, flags: kif::PageFlags) -> Rc<Self> {
+        Rc::new(Self {
             glob: Cell::from(glob),
             flags: Cell::from(flags),
             mapped: Cell::from(false),

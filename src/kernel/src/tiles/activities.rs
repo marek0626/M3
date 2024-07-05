@@ -22,7 +22,7 @@ use base::io::LogFlags;
 use base::kif::{self, CapRngDesc, CapSel, CapType, TileDesc};
 use base::log;
 use base::mem::{MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
-use base::rc::{Rc, SRc};
+use base::rc::Rc;
 use base::tcu::Label;
 use base::tcu::{ActId, EpId, TileId, STD_EPS_COUNT, UPCALL_REP_OFF};
 use bitflags::bitflags;
@@ -70,8 +70,8 @@ pub struct Activity {
     flags: ActivityFlags,
     eps_start: EpId,
 
-    tile: SRc<TileObject>,
-    kmem: SRc<KMemObject>,
+    tile: Rc<TileObject>,
+    kmem: Rc<KMemObject>,
 
     state: Cell<State>,
     exit_code: Cell<Option<Code>>,
@@ -263,7 +263,7 @@ impl Activity {
         self.id
     }
 
-    pub fn tile(&self) -> &SRc<TileObject> {
+    pub fn tile(&self) -> &Rc<TileObject> {
         &self.tile
     }
 
@@ -275,7 +275,7 @@ impl Activity {
         platform::tile_desc(self.tile_id())
     }
 
-    pub fn kmem(&self) -> &SRc<KMemObject> {
+    pub fn kmem(&self) -> &Rc<KMemObject> {
         &self.kmem
     }
 

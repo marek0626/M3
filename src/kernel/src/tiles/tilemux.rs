@@ -24,7 +24,7 @@ use base::kif::{self, TileAttr, TileISA};
 use base::log;
 use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, VirtAddr};
 use base::quota;
-use base::rc::{Rc, SRc, Weak};
+use base::rc::{Rc, Weak};
 use base::tcu::{self, ActId, EpId, TileId};
 
 use core::cmp;
@@ -45,7 +45,7 @@ struct TileState {
 }
 
 impl TileState {
-    fn new(tile: &SRc<TileObject>, ep_count: Option<usize>) -> Result<Self, Error> {
+    fn new(tile: &Rc<TileObject>, ep_count: Option<usize>) -> Result<Self, Error> {
         // create PMP EPObjects for this Tile
         let mut pmp = Vec::new();
         for ep in 0..tcu::PMEM_PROT_EPS as EpId {
@@ -138,7 +138,7 @@ impl Drop for TileState {
 }
 
 pub struct TileMux {
-    tile: SRc<TileObject>,
+    tile: Rc<TileObject>,
     acts: Vec<ActId>,
     queue: base::boxed::Box<crate::com::SendQueue>,
     state: Option<TileState>,
@@ -345,7 +345,7 @@ impl TileMux {
         Ok(())
     }
 
-    pub fn tile(&self) -> &SRc<TileObject> {
+    pub fn tile(&self) -> &Rc<TileObject> {
         &self.tile
     }
 
@@ -365,7 +365,7 @@ impl TileMux {
         self.state.as_ref().map(|state| &state.pmp[ep as usize])
     }
 
-    pub fn configure_pmp_ep(&mut self, ep: tcu::EpId, mg: &SRc<MGateObject>) -> Result<(), Error> {
+    pub fn configure_pmp_ep(&mut self, ep: tcu::EpId, mg: &Rc<MGateObject>) -> Result<(), Error> {
         self.config_mem_ep(ep, INVAL_ID, mg, mg.tile_id())?;
 
         // remember that the MemGate is activated on this EP for the case that the MemGate gets
@@ -428,7 +428,7 @@ impl TileMux {
         &mut self,
         ep: EpId,
         act: ActId,
-        obj: &SRc<SGateObject>,
+        obj: &Rc<SGateObject>,
     ) -> Result<(), Error> {
         let rgate = obj.rgate();
         assert!(rgate.activated());
@@ -454,7 +454,7 @@ impl TileMux {
         ep: EpId,
         act: ActId,
         reply_eps: Option<EpId>,
-        obj: &SRc<RGateObject>,
+        obj: &Rc<RGateObject>,
     ) -> Result<(), Error> {
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {
             let act = self.ep_activity_id(act);
@@ -477,7 +477,7 @@ impl TileMux {
         &mut self,
         ep: EpId,
         act: ActId,
-        obj: &SRc<MGateObject>,
+        obj: &Rc<MGateObject>,
         tile_id: TileId,
     ) -> Result<(), Error> {
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {
