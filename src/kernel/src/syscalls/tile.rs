@@ -23,7 +23,7 @@ use base::rc::Rc;
 use base::tcu;
 
 use crate::cap::{Capability, KObject, MGateObject};
-use crate::syscalls::{check_unused, get_request, reply_success, send_reply};
+use crate::syscalls::{check_unused, get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::{tilemng, Activity, TileMux, INVAL_ID};
 use crate::{ktcu, platform};
 
@@ -37,26 +37,28 @@ pub fn tile_quota_async(
 
     let tile = {
         let act_caps = act.obj_caps().borrow();
-        get_kobj_ref!(act_caps, r.tile, Tile).clone()
+        get_kobj_ref!(act_caps, r.tile, Tile)
     };
 
-    let (time, pts) = if platform::tile_desc(tile.tile()).supports_tilemux() {
-        if tilemng::tilemux(tile.tile()).is_initialized() {
-            TileMux::get_quota_async(
-                tilemng::tilemux(tile.tile()),
-                tile.time_quota_id(),
-                tile.pt_quota_id(),
-            )
-            .map_err(|e| {
-                VerboseError::new(
-                    e.code(),
-                    base::format!(
-                        "Unable to get quota for time={}, pts={}",
-                        tile.time_quota_id(),
-                        tile.pt_quota_id()
-                    ),
-                )
-            })?
+    let tile_weak = tile.clone().downgrade();
+    let tile_id = tile.tile();
+    let time_quota_id = tile.time_quota_id();
+    let pt_quota_id = tile.pt_quota_id();
+    drop(tile);
+
+    let (time, pts) = if platform::tile_desc(tile_id).supports_tilemux() {
+        if tilemng::tilemux(tile_id).is_initialized() {
+            TileMux::get_quota_async(tilemng::tilemux(tile_id), time_quota_id, pt_quota_id)
+                .map_err(|e| {
+                    VerboseError::new(
+                        e.code(),
+                        base::format!(
+                            "Unable to get quota for time={}, pts={}",
+                            time_quota_id,
+                            pt_quota_id
+                        ),
+                    )
+                })?
         }
         else {
             // fall back to defaults if TileMux isn't available
@@ -66,6 +68,8 @@ pub fn tile_quota_async(
     else {
         (Quota::default(), Quota::default())
     };
+
+    let tile = try_upgrade_kobj(tile_weak, r.tile)?;
 
     let mut kreply = MsgBuf::borrow_def();
     build_vmsg!(kreply, Code::Success, kif::syscalls::TileQuotaReply {
@@ -100,7 +104,7 @@ pub fn tile_set_quota_async(
 
     let tile = {
         let act_caps = act.obj_caps().borrow();
-        get_kobj_ref!(act_caps, r.tile, Tile).clone()
+        get_kobj_ref!(act_caps, r.tile, Tile)
     };
 
     if tile.derived() {
@@ -117,9 +121,11 @@ pub fn tile_set_quota_async(
     }
 
     let tilemux = tilemng::tilemux(tile.tile());
+    let quota_id = tile.time_quota_id();
+    drop(tile);
 
     // the root tile object has always the same id for the time quota and the pts quota
-    TileMux::set_quota_async(tilemux, tile.time_quota_id(), r.time, r.pts)?;
+    TileMux::set_quota_async(tilemux, quota_id, r.time, r.pts)?;
 
     reply_success(msg);
     Ok(())
@@ -182,7 +188,7 @@ pub fn tile_set_pmp(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
 
     if r.mgate != kif::INVALID_SEL {
         let mgate = get_kobj_ref!(act_caps, r.mgate, MGate);
-        tilemux.configure_pmp_ep(r.ep, mgate)?;
+        tilemux.configure_pmp_ep(r.ep, mgate.inner())?;
     }
 
     reply_success(msg);
@@ -222,6 +228,7 @@ pub fn tile_reset_async(
 
         Some(get_kobj_ref!(act_caps, r.mux_mem, MGate).clone())
     };
+    drop(tile);
     drop(act_caps);
 
     TileMux::reset_async(tile_id, mux_mem, r.ep_count, false)?;

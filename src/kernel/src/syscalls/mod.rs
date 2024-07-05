@@ -13,7 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use base::build_vmsg;
 use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{self, CapSel};
@@ -22,8 +21,9 @@ use base::mem;
 use base::rc::Rc;
 use base::serialize::{Deserialize, M3Deserializer};
 use base::tcu;
+use base::{build_vmsg, format};
 
-use crate::cap::CapTable;
+use crate::cap::{CapTable, KObjectOwnedRef, KObjectWeakRef};
 use crate::tiles::Activity;
 use crate::tiles::ActivityMng;
 
@@ -56,14 +56,6 @@ macro_rules! try_kmem_quota {
     };
 }
 
-macro_rules! as_obj {
-    ($kobj:expr, $ty:ident) => {
-        match $kobj {
-            KObject::$ty(k) => k,
-            _ => sysc_err!(Code::InvArgs, "Expected {:?} cap", stringify!($ty)),
-        }
-    };
-}
 macro_rules! get_cap {
     ($table:expr, $sel:expr) => {{
         // note that we deliberately use match here, because ok_or_else(...)? results in worse code
@@ -73,9 +65,17 @@ macro_rules! get_cap {
         }
     }};
 }
+macro_rules! as_obj {
+    ($kobj:expr, $ty:ident) => {
+        match $kobj.get() {
+            KObject::$ty(k) => crate::cap::KObjectOwnedRef::new(k.clone()),
+            _ => sysc_err!(Code::InvArgs, "Expected {:?} cap", stringify!($ty)),
+        }
+    };
+}
 macro_rules! get_kobj {
     ($act:expr, $sel:expr, $ty:ident) => {{
-        let kobj = get_cap!($act.obj_caps().borrow(), $sel).get().clone();
+        let kobj: crate::cap::KObjectGenRef = get_cap!($act.obj_caps().borrow(), $sel).get();
         as_obj!(kobj, $ty)
     }};
 }
@@ -97,6 +97,22 @@ fn check_unused(tbl: &CapTable, sel: CapSel) -> Result<(), VerboseError> {
         sysc_err!(Code::InvArgs, "Selector {} already in use", sel);
     }
     Ok(())
+}
+
+fn try_upgrade_kobj<T>(
+    weak: KObjectWeakRef<T>,
+    sel: CapSel,
+) -> Result<KObjectOwnedRef<T>, VerboseError> {
+    weak.upgrade().ok_or_else(|| {
+        VerboseError::new(
+            // TODO new error code
+            Code::NotFound,
+            format!(
+                "Kernel object (Selector {}) was revoked during async call",
+                sel
+            ),
+        )
+    })
 }
 
 fn send_reply(msg: &mut tcu::OwnedMessage, rep: &mem::MsgBuf) {

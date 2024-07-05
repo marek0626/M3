@@ -30,12 +30,13 @@ use base::tcu::{self, ActId, EpId, TileId};
 use core::cmp;
 
 use crate::cap::{
-    EPCategory, EPObject, EPQuota, GateObject, MGateObject, RGateObject, SGateObject, TileObject,
+    EPCategory, EPObject, EPQuota, GateObject, KObjectOwnedRef, MGateObject, RGateObject,
+    SGateObject, TileObject,
 };
 use crate::ktcu;
 use crate::mem;
 use crate::platform;
-use crate::tiles::{tilemng, INVAL_ID};
+use crate::tiles::{tilemng, Activity, INVAL_ID};
 
 struct TileState {
     pmp: Vec<Rc<EPObject>>,
@@ -250,7 +251,7 @@ impl TileMux {
 
     pub fn reset_async(
         tile: TileId,
-        mux_mem: Option<SRc<MGateObject>>,
+        mux_mem: Option<KObjectOwnedRef<MGateObject>>,
         ep_count: Option<usize>,
         root: bool,
     ) -> Result<(), Error> {
@@ -285,7 +286,7 @@ impl TileMux {
 
                     // use the given memory gate for the first PMP EP (for the multiplexer)
                     if platform::tile_desc(tile).has_virtmem() {
-                        tilemux.configure_pmp_ep(0, &mux_mem)?;
+                        tilemux.configure_pmp_ep(0, mux_mem.inner())?;
                     }
 
                     if env::boot().platform == env::Platform::Hw {
@@ -320,7 +321,7 @@ impl TileMux {
             start
         };
 
-        // reset the tile; start it if mux_mem is some; stop it otherwise
+        // reset the tile and start/stop it
         ktcu::reset_tile(tile, start)?;
 
         let mut tilemux = tilemng::tilemux(tile);
@@ -582,8 +583,8 @@ impl TileMux {
         drop(tilemux);
 
         if has_act {
-            let act = ActivityMng::activity(r.act_id).unwrap();
-            act.stop_app_async(r.status, true, INVAL_ID);
+            let act = KObjectOwnedRef::new(ActivityMng::activity(r.act_id).unwrap());
+            Activity::stop_app_async(act, r.status, true, INVAL_ID);
         }
 
         let mut reply = MsgBuf::borrow_def();

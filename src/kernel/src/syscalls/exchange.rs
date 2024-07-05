@@ -18,16 +18,16 @@ use base::col::ToString;
 use base::errors::{Code, VerboseError};
 use base::format;
 use base::io::LogFlags;
-use base::kif::{service, syscalls, CapRngDesc, CapType, SEL_ACT};
+use base::kif::{service, syscalls, CapRngDesc, CapType, INVALID_SEL, SEL_ACT};
 use base::log;
 use base::mem::MsgBuf;
 use base::rc::Rc;
 use base::serialize::M3Deserializer;
 use base::tcu;
 
-use crate::cap::KObject;
+use crate::cap::{KObject, KObjectOwnedRef};
 use crate::com::Service;
-use crate::syscalls::{get_request, reply_success, send_reply};
+use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::Activity;
 
 fn do_exchange(
@@ -96,8 +96,8 @@ pub fn exchange(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), V
         r.obtain
     );
 
-    let actcap = get_kobj!(act, r.act, Activity).upgrade().unwrap();
-    do_exchange(act, &actcap, &r.own, &other_crd, r.obtain)?;
+    let actcap = get_kobj!(act, r.act, Activity);
+    do_exchange(act, actcap.inner(), &r.own, &other_crd, r.obtain)?;
 
     reply_success(msg);
     Ok(())
@@ -119,7 +119,6 @@ pub fn exchange_over_sess_async(
         r.crd
     );
 
-    let actcap = get_kobj!(act, r.act, Activity).upgrade().unwrap();
     let sess = get_kobj!(act, r.sess, Sess);
 
     let mut smsg = MsgBuf::borrow_def();
@@ -143,7 +142,7 @@ pub fn exchange_over_sess_async(
         }
     );
 
-    let serv = sess.service().clone();
+    let serv = KObjectOwnedRef::new(sess.service().clone());
     let label = sess.creator() as tcu::Label;
 
     log!(
@@ -156,7 +155,13 @@ pub fn exchange_over_sess_async(
         serv.service().name(),
         label,
     );
-    let rmsg = match Service::send_receive_async(serv.service(), label, smsg) {
+    drop(sess);
+
+    let serv_weak = serv.clone().downgrade();
+    let res = Service::send_receive_async(serv, label, smsg);
+    let serv = try_upgrade_kobj(serv_weak, INVALID_SEL)?;
+
+    let rmsg = match res {
         Ok(rmsg) => rmsg,
         Err(e) => sysc_err!(e.code(), "Service {} unreachable", serv.service().name()),
     };
@@ -178,8 +183,9 @@ pub fn exchange_over_sess_async(
         reply.data.caps
     );
 
+    let actcap = get_kobj!(act, r.act, Activity);
     do_exchange(
-        &actcap,
+        actcap.inner(),
         &serv.service().activity(),
         &r.crd,
         &reply.data.caps,
@@ -204,7 +210,9 @@ pub fn revoke_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
         sysc_err!(Code::InvArgs, "Cap 0, 1, and 2 are not revokeable");
     }
 
-    let actcap = get_kobj!(act, r.act, Activity).upgrade().unwrap();
+    // XXX this does not work; we probably need to do the revoke in two phases: 1. remove all links
+    // and collect the objects to destroy (sync) and 2. destroy the objects (async)
+    let actcap = get_kobj!(act, r.act, Activity).inner().clone();
     if let Err(e) = actcap.revoke_async(r.crd, r.own, act.id()) {
         sysc_err!(
             e.code(),

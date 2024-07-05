@@ -21,13 +21,15 @@ use base::io::LogFlags;
 use base::kif::{self, Perm};
 use base::log;
 use base::mem::{GlobAddr, GlobOff};
-use base::rc::{Rc, SRc};
-use base::tcu;
+use base::rc::Rc;
+use base::tcu::{self, ActId, TileId};
 use base::util::math;
 use base::vec;
 
 use crate::args;
-use crate::cap::{Capability, KMemObject, KObject, MGateObject, RGateObject, TileObject};
+use crate::cap::{
+    Capability, KMemObject, KObject, KObjectOwnedRef, MGateObject, RGateObject, TileObject,
+};
 use crate::mem::{self, Allocation};
 use crate::platform;
 use crate::tiles::{loader, tilemng, Activity, ActivityFlags, State, TileMux};
@@ -79,15 +81,15 @@ impl ActivityMng {
 
     pub fn create_activity_async(
         name: &str,
-        tile: SRc<TileObject>,
+        tile: KObjectOwnedRef<TileObject>,
         eps_start: tcu::EpId,
-        kmem: SRc<KMemObject>,
+        kmem: KObjectOwnedRef<KMemObject>,
         flags: ActivityFlags,
     ) -> Result<Rc<Activity>, Error> {
         let id: tcu::ActId = Self::get_id()?;
         let tile_id = tile.tile();
 
-        let act = Activity::new(name, id, tile, eps_start, kmem, flags)?;
+        let act = KObjectOwnedRef::new(Activity::new(name, id, tile, eps_start, kmem, flags)?);
 
         log!(
             LogFlags::KernActs,
@@ -97,40 +99,58 @@ impl ActivityMng {
             tile_id
         );
 
-        let clone = act.clone();
         {
             let mut actmng = INST.borrow_mut();
-            actmng.acts[id as usize] = Some(act);
+            actmng.acts[id as usize] = Some(act.inner().clone());
             actmng.count += 1;
         }
 
         tilemng::tilemux(tile_id).add_activity(id);
-        if flags.is_empty() {
-            Self::init_activity_async(&clone).unwrap();
+        let act = if flags.is_empty() {
+            let act_weak = act.clone().downgrade();
+            Self::init_activity_async(act).unwrap();
+            act_weak.upgrade().unwrap()
         }
+        else {
+            act
+        };
 
-        Ok(clone)
+        Ok(act.inner().clone())
     }
 
-    fn init_activity_async(act: &Activity) -> Result<(), Error> {
+    fn init_activity_async(act: KObjectOwnedRef<Activity>) -> Result<(), Error> {
+        let act_weak = act.clone().downgrade();
+
         if platform::tile_desc(act.tile_id()).supports_tilemux() {
+            let id = act.id();
+            let tile_id = act.tile_id();
+            let time_quota_id = act.tile().time_quota_id();
+            let pt_quota_id = act.tile().pt_quota_id();
+            let eps_start = act.eps_start();
+            drop(act);
+
             TileMux::activity_init_async(
-                tilemng::tilemux(act.tile_id()),
-                act.id(),
-                act.tile().time_quota_id(),
-                act.tile().pt_quota_id(),
-                act.eps_start(),
+                tilemng::tilemux(tile_id),
+                id,
+                time_quota_id,
+                pt_quota_id,
+                eps_start,
             )?;
         }
 
-        act.init_async()
+        if let Some(act) = act_weak.upgrade() {
+            Activity::init_async(act)
+        }
+        else {
+            Err(Error::new(Code::NotFound))
+        }
     }
 
-    pub fn start_activity_async(act: &Activity) -> Result<(), Error> {
-        if platform::tile_desc(act.tile_id()).supports_tilemux() {
+    pub fn start_activity_async(act_id: ActId, tile_id: TileId) -> Result<(), Error> {
+        if platform::tile_desc(tile_id).supports_tilemux() {
             TileMux::activity_ctrl_async(
-                tilemng::tilemux(act.tile_id()),
-                act.id(),
+                tilemng::tilemux(tile_id),
+                act_id,
                 kif::tilemux::ActivityOp::Start,
             )
         }
@@ -139,11 +159,15 @@ impl ActivityMng {
         }
     }
 
-    pub fn stop_activity_async(act: &Activity, stop: bool) -> Result<(), Error> {
+    pub fn stop_activity_async(act: KObjectOwnedRef<Activity>, stop: bool) -> Result<(), Error> {
         if stop && platform::tile_desc(act.tile_id()).supports_tilemux() {
+            let id = act.id();
+            let tile_id = act.tile_id();
+            drop(act);
+
             TileMux::activity_ctrl_async(
-                tilemng::tilemux(act.tile_id()),
-                act.id(),
+                tilemng::tilemux(tile_id),
+                id,
                 kif::tilemux::ActivityOp::Stop,
             )?;
         }
@@ -159,7 +183,7 @@ impl ActivityMng {
 
         let tile_id = tilemng::find_tile(&tile_emem)
             .unwrap_or_else(|| tilemng::find_tile(&tile_imem).unwrap());
-        let tile = tilemng::tilemux(tile_id).tile().clone();
+        let tile = KObjectOwnedRef::new(tilemng::tilemux(tile_id).tile().clone());
         let tile_desc = platform::tile_desc(tile_id);
 
         // allocate memory for tilemux itself
@@ -185,22 +209,24 @@ impl ActivityMng {
 
         // load and start tilemux
         loader::load_mux_async(tile_id, &mux_mem).expect("Unable to load TileMux");
-        let mux_mgate = MGateObject::new(mux_mem, Perm::RWX, false);
+        let mux_mgate = KObjectOwnedRef::new(MGateObject::new(mux_mem, Perm::RWX, false));
         // note that we provide access to the entire ROOT memory pool via PMP down below and
         // therefore provide access to parts of this pool twice. that's currently required, because
         // TileMux reads PMP EP0 to discover the available memory.
         TileMux::reset_async(tile_id, Some(mux_mgate), ep_count, true).expect("Tile reset failed");
 
         // create root activity
-        let kmem = KMemObject::new(args::get().kmem - cfg::FIXED_KMEM);
-        let act = Self::create_activity_async(
-            "root",
-            tile,
-            tcu::FIRST_USER_EP,
-            kmem,
-            ActivityFlags::IS_ROOT,
-        )
-        .expect("Unable to create Activity for root");
+        let kmem = KObjectOwnedRef::new(KMemObject::new(args::get().kmem - cfg::FIXED_KMEM));
+        let act = KObjectOwnedRef::new(
+            Self::create_activity_async(
+                "root",
+                tile,
+                tcu::FIRST_USER_EP,
+                kmem,
+                ActivityFlags::IS_ROOT,
+            )
+            .expect("Unable to create Activity for root"),
+        );
 
         let mut sel = kif::FIRST_FREE_SEL;
 
@@ -288,8 +314,9 @@ impl ActivityMng {
         act.set_first_sel(sel);
 
         // go!
-        Self::init_activity_async(&act)?;
-        act.start_app_async()
+        let act_weak = act.clone().downgrade();
+        Self::init_activity_async(act)?;
+        Activity::start_app_async(act_weak.upgrade().unwrap())
     }
 
     pub fn remove_activity_async(id: tcu::ActId, revoker: tcu::ActId) {
@@ -301,7 +328,8 @@ impl ActivityMng {
                 actmng.count -= 1;
                 drop(actmng);
                 tilemng::tilemux(v.tile_id()).rem_activity(v.id());
-                v.force_stop_async(v.state() != State::DEAD, revoker);
+                let act_ref = KObjectOwnedRef::new(v.clone());
+                Activity::force_stop_async(act_ref, v.state() != State::DEAD, revoker);
             },
             None => panic!("Removing nonexisting Activity with id {}", id),
         };

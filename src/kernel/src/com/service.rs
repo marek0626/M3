@@ -22,7 +22,7 @@ use base::rc::{Rc, SRc, Weak};
 use base::tcu;
 use core::fmt;
 
-use crate::cap::RGateObject;
+use crate::cap::{KObjectOwnedRef, RGateObject, ServObject};
 use crate::com::{QueueId, SendQueue};
 use crate::tiles::Activity;
 
@@ -57,11 +57,12 @@ impl Service {
     }
 
     pub fn send_receive_async(
-        &self,
+        srv: KObjectOwnedRef<ServObject>,
         lbl: tcu::Label,
         msg: MsgBufRef<'_>,
     ) -> Result<&'static tcu::Message, Error> {
-        let event = self.send(lbl, &msg)?;
+        let event = srv.service().send(lbl, &msg)?;
+        drop(srv);
         drop(msg);
         SendQueue::receive_async(event)
     }

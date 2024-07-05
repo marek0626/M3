@@ -22,14 +22,14 @@ use base::mem::{GlobOff, MsgBuf, PhysAddr, PhysAddrRaw};
 use base::rc::Rc;
 use base::tcu;
 
-use crate::cap::GateObject;
-use crate::cap::{Capability, KObject};
-use crate::cap::{EPCategory, EPObject, SemObject};
+use crate::cap::{
+    wait_for_async, Capability, EPCategory, EPObject, GateObject, KObject, KObjectOwnedRef,
+    SemObject,
+};
 use crate::ktcu;
 use crate::platform;
-use crate::syscalls::{check_unused, get_request, reply_success, send_reply};
-use crate::tiles::TileMux;
-use crate::tiles::{tilemng, Activity};
+use crate::syscalls::{check_unused, get_request, reply_success, send_reply, try_upgrade_kobj};
+use crate::tiles::{tilemng, Activity, TileMux};
 
 #[inline(never)]
 pub fn alloc_ep_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
@@ -49,7 +49,7 @@ pub fn alloc_ep_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
     }
 
     let ep_count = 1 + r.replies as usize;
-    let dst_act = get_kobj!(act, r.act, Activity).upgrade().unwrap();
+    let dst_act = get_kobj!(act, r.act, Activity);
     if !dst_act.tile().has_quota(ep_count) {
         sysc_err!(
             Code::NoSpace,
@@ -61,14 +61,19 @@ pub fn alloc_ep_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
 
     let mut tilemux = tilemng::tilemux(dst_act.tile_id());
 
-    let epid = if tilemux.mux_type() == kif::syscalls::MuxType::Accel {
-        let epid = TileMux::request_ep_async(tilemux, dst_act.id(), r.epid, r.replies)?;
+    let (dst_act, epid) = if tilemux.mux_type() == kif::syscalls::MuxType::Accel {
+        let act_id = dst_act.id();
+        let dst_act_weak = dst_act.downgrade();
+
+        let epid = TileMux::request_ep_async(tilemux, act_id, r.epid, r.replies)?;
+
+        let dst_act = try_upgrade_kobj(dst_act_weak, r.act)?;
         tilemux = tilemng::tilemux(dst_act.tile_id());
-        epid
+        (dst_act, epid)
     }
     else if r.epid == tcu::INVALID_EP {
         match tilemux.find_eps(ep_count) {
-            Ok(epid) => epid,
+            Ok(epid) => (dst_act, epid),
             Err(e) => sysc_err!(e.code(), "No free EP range for {} EPs", ep_count),
         }
     }
@@ -90,14 +95,14 @@ pub fn alloc_ep_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
                 r.epid as usize + ep_count - 1
             );
         }
-        r.epid
+        (dst_act, r.epid)
     };
 
     let cap = Capability::new(
         r.dst,
         KObject::EP(EPObject::new(
             EPCategory::Custom,
-            Rc::downgrade(&dst_act),
+            Rc::downgrade(dst_act.inner()),
             epid,
             r.replies,
             dst_act.tile(),
@@ -184,9 +189,9 @@ pub fn get_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), V
         r.sid
     );
 
-    let actcap = get_kobj!(act, r.act, Activity).upgrade().unwrap();
+    let actcap = get_kobj!(act, r.act, Activity);
     check_unused(&actcap.obj_caps().borrow(), r.dst)?;
-    if Rc::ptr_eq(act, &actcap) {
+    if Rc::ptr_eq(act, actcap.inner()) {
         sysc_err!(Code::InvArgs, "Cannot get session for own Activity");
     }
 
@@ -201,9 +206,11 @@ pub fn get_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), V
     let srv_root = srvcap.get_root();
 
     // walk through the childs to find the session with given id (only root cap can create sessions)
+    // TODO get().get() okay?
     let mut csess =
-        srv_root.find_child(|c| matches!(c.get(), KObject::Sess(s) if s.ident() == r.sid));
-    if let Some(KObject::Sess(s)) = csess.as_mut().map(|c| c.get()) {
+        srv_root.find_child(|c| matches!(c.get().get(), KObject::Sess(s) if s.ident() == r.sid));
+    // TODO get().get() okay?
+    if let Some(KObject::Sess(s)) = csess.as_mut().map(|c| c.get().get().clone()) {
         if s.creator() != creator {
             sysc_err!(Code::NoPerm, "Cannot get access to foreign session");
         }
@@ -250,13 +257,13 @@ pub fn activate_mgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
     if let Err(e) = tilemng::tilemux(ep.tile_id()).config_mem_ep(
         ep.ep(),
         ep.activity().unwrap().id(),
-        &mg,
+        mg.inner(),
         tile_id,
     ) {
         sysc_err!(e.code(), "Unable to configure mem EP");
     }
 
-    mg.set_ep(&ep, GateObject::Mem(mg.clone()));
+    mg.set_ep(ep.inner(), GateObject::Mem(mg.inner().clone()));
 
     reply_success(msg);
     Ok(())
@@ -277,7 +284,7 @@ pub fn activate_rgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
     let ep = get_kobj!(act, r.ep, EP);
 
     // activity that is currently active on the endpoint
-    let ep_act = ep.activity().unwrap();
+    let ep_act = KObjectOwnedRef::new(ep.activity().unwrap());
 
     let epid = ep.ep();
     let dst_tile = ep.tile_id();
@@ -344,12 +351,13 @@ pub fn activate_rgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
 
     rg.activate(ep_act.tile_id(), epid, rbuf_addr);
 
-    if let Err(e) = tilemng::tilemux(dst_tile).config_rcv_ep(epid, ep_act.id(), replies, &rg) {
+    if let Err(e) = tilemng::tilemux(dst_tile).config_rcv_ep(epid, ep_act.id(), replies, rg.inner())
+    {
         rg.deactivate();
         sysc_err!(e.code(), "Unable to configure recv EP");
     }
 
-    rg.set_ep(&ep, GateObject::Recv(rg.clone()));
+    rg.set_ep(ep.inner(), GateObject::Recv(rg.inner().clone()));
 
     reply_success(msg);
     Ok(())
@@ -368,9 +376,6 @@ pub fn activate_sgate_async(
         sysc_err!(Code::InvArgs, "Only rgates use EP caps with reply slots");
     }
 
-    // activity that is currently active on the endpoint
-    let ep_act = ep.activity().unwrap();
-
     let epid = ep.ep();
     let dst_tile = ep.tile_id();
 
@@ -385,20 +390,31 @@ pub fn activate_sgate_async(
 
     let rgate = sg.rgate().clone();
 
-    if !rgate.activated() {
+    let (ep, sg) = if !rgate.activated() {
         sysc_log!(act, "activate: waiting for rgate {:?}", rgate);
+        let ep_weak = ep.downgrade();
+        let sg_weak = sg.downgrade();
 
         let event = rgate.get_event();
-        thread::wait_for(event);
+        wait_for_async(event);
 
         sysc_log!(act, "activate: rgate {:?} is activated", rgate);
-    }
 
-    if let Err(e) = tilemng::tilemux(dst_tile).config_snd_ep(epid, ep_act.id(), &sg) {
+        let ep = try_upgrade_kobj(ep_weak, r.ep)?;
+        let sg = try_upgrade_kobj(sg_weak, r.gate)?;
+        (ep, sg)
+    }
+    else {
+        (ep, sg)
+    };
+
+    if let Err(e) =
+        tilemng::tilemux(dst_tile).config_snd_ep(epid, ep.activity().unwrap().id(), sg.inner())
+    {
         sysc_err!(e.code(), "Unable to configure send EP");
     }
 
-    sg.set_ep(&ep, GateObject::Send(sg.clone()));
+    sg.set_ep(ep.inner(), GateObject::Send(sg.inner().clone()));
 
     reply_success(msg);
     Ok(())
@@ -442,7 +458,7 @@ pub fn sem_ctrl_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
         },
 
         kif::syscalls::SemOp::Down => {
-            let res = SemObject::down_async(&sem);
+            let res = SemObject::down_async(sem);
             sysc_log!(act, "sem_ctrl-cont(res={:?})", res);
             if let Err(e) = res {
                 sysc_err!(e.code(), "Semaphore operation failed");
@@ -468,22 +484,22 @@ pub fn activity_ctrl_async(
         r.arg
     );
 
-    let actcap = get_kobj!(act, r.act, Activity).upgrade().unwrap();
+    let actcap = get_kobj!(act, r.act, Activity);
 
     match r.op {
         kif::syscalls::ActivityOp::Start => {
-            if Rc::ptr_eq(act, &actcap) {
+            if Rc::ptr_eq(act, actcap.inner()) {
                 sysc_err!(Code::InvArgs, "Activity can't start itself");
             }
 
-            if let Err(e) = actcap.start_app_async() {
+            if let Err(e) = Activity::start_app_async(actcap) {
                 sysc_err!(e.code(), "Unable to start Activity");
             }
         },
 
         kif::syscalls::ActivityOp::Stop => {
             let is_self = r.act == kif::SEL_ACT;
-            actcap.stop_app_async(Code::from(r.arg as u32), is_self, act.id());
+            Activity::stop_app_async(actcap, Code::from(r.arg as u32), is_self, act.id());
             if is_self {
                 msg.ack();
                 return Ok(());

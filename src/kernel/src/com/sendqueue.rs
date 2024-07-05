@@ -23,6 +23,7 @@ use base::mem::MsgBuf;
 use base::msgqueue::{MsgQueue, MsgSender};
 use base::tcu::{self, ActId, TileId};
 
+use crate::cap::wait_for_async;
 use crate::ktcu;
 
 pub const MAX_PENDING_MSGS: usize = 4;
@@ -191,7 +192,7 @@ impl SendQueue {
     }
 
     pub fn receive_async(event: thread::Event) -> Result<&'static tcu::Message, Error> {
-        thread::wait_for(event);
+        wait_for_async(event);
         thread::fetch_msg().ok_or_else(|| Error::new(Code::RecvGone))
     }
 

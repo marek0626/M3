@@ -26,7 +26,7 @@ use base::mem::{size_of, GlobAddr, GlobOff, PhysAddr, VirtAddr};
 use base::tcu;
 use base::util::math;
 
-use crate::cap::{Capability, KObject, MapObject, SelRange};
+use crate::cap::{Capability, KObject, KObjectOwnedRef, KObjectWeakRef, MapObject, SelRange};
 use crate::ktcu;
 use crate::mem;
 use crate::tiles::{tilemng, Activity, TileMux};
@@ -63,30 +63,43 @@ trait ELFLoader {
     }
 }
 
-pub fn init_activity_async(act: &Activity) -> Result<i32, Error> {
-    let mut loader = ActivityELFLoader(act);
+pub fn init_activity_async(act: KObjectOwnedRef<Activity>) -> Result<i32, Error> {
+    let mut loader = ActivityELFLoader(act.clone().downgrade());
 
+    let root = act.is_root();
     let desc = platform::tile_desc(act.tile_id());
 
     // put mapping for env into cap table (so that we can access it in create_mgate later)
     let env_phys = if desc.has_virtmem() {
+        let id = act.id();
+        let tile_id = act.tile_id();
+        let act_weak = act.downgrade();
+
         let env_addr = TileMux::translate_async(
-            tilemng::tilemux(act.tile_id()),
-            act.id(),
+            tilemng::tilemux(tile_id),
+            id,
             desc.env_space().0,
             kif::PageFlags::RW,
         )?;
 
+        if !act_weak.can_upgrade() {
+            return Err(Error::new(Code::NotFound));
+        }
+
         let flags = PageFlags::from(kif::Perm::RW);
         loader.load_segment_async(desc.env_space().0, env_addr, PAGE_SIZE, flags, false)?;
 
-        ktcu::glob_to_phys_remote(act.tile_id(), env_addr, flags)?
+        if !act_weak.can_upgrade() {
+            return Err(Error::new(Code::NotFound));
+        }
+
+        ktcu::glob_to_phys_remote(tile_id, env_addr, flags)?
     }
     else {
         desc.env_space().0.as_phys(desc)
     };
 
-    if act.is_root() {
+    if root {
         load_root_async(loader, env_phys)?;
     }
     Ok(0)
@@ -134,14 +147,14 @@ pub fn load_mux_async(tile: tcu::TileId, mem: &mem::Allocation) -> Result<(), Er
     Ok(())
 }
 
-fn load_root_async(mut loader: ActivityELFLoader<'_>, env_phys: PhysAddr) -> Result<(), Error> {
+fn load_root_async(mut loader: ActivityELFLoader, env_phys: PhysAddr) -> Result<(), Error> {
     let entry = {
         let app = get_mod("root").ok_or_else(|| Error::new(Code::NoSuchFile))?;
         log!(LogFlags::KernActs, "Loading boot module '{}'", app.name());
         load_mod_async(&mut loader, app)?
     };
 
-    let act = loader.0;
+    let act = loader.0.upgrade().unwrap();
     let mut env_off = size_of::<env::BaseEnv>();
     let argv_addr = write_arguments(
         &["root"],
@@ -325,9 +338,9 @@ impl ELFLoader for MetalELFLoader {
     }
 }
 
-struct ActivityELFLoader<'a>(&'a Activity);
+struct ActivityELFLoader(KObjectWeakRef<Activity>);
 
-impl ELFLoader for ActivityELFLoader<'_> {
+impl ELFLoader for ActivityELFLoader {
     fn load_segment_async(
         &mut self,
         virt: VirtAddr,
@@ -336,29 +349,50 @@ impl ELFLoader for ActivityELFLoader<'_> {
         flags: PageFlags,
         map: bool,
     ) -> Result<(), Error> {
-        if self.0.tile_desc().has_virtmem() {
+        let act = self.0.upgrade().ok_or_else(|| Error::new(Code::NotFound))?;
+        let tile_id = act.tile_id();
+
+        if act.tile_desc().has_virtmem() {
             let dst_sel = (virt >> PAGE_BITS).as_raw() as kif::CapSel;
             let pages = math::round_up(size, PAGE_SIZE) >> PAGE_BITS;
 
             let phys_align = GlobAddr::new_with(phys.tile(), phys.offset() & !PAGE_MASK as GlobOff);
-            let map_obj = MapObject::new(phys_align, flags);
-            if map {
-                map_obj.map_async(
-                    self.0,
+            // keep one original to ensure that it's not removed during the async call
+            let map_obj_org = MapObject::new(phys_align, flags);
+            let map_obj = KObjectOwnedRef::new(map_obj_org.clone());
+            let id = act.id();
+            drop(act);
+
+            let map_obj = if map {
+                let map_obj_weak = map_obj.clone().downgrade();
+
+                MapObject::map_async(
+                    map_obj,
+                    id,
+                    tile_id,
                     virt & VirtAddr::from(!PAGE_MASK),
                     phys_align,
                     pages,
                     flags,
                 )?;
-            }
 
-            self.0.map_caps().borrow_mut().insert(Capability::new_range(
+                map_obj_weak
+                    .upgrade()
+                    .ok_or_else(|| Error::new(Code::NotFound))?
+            }
+            else {
+                map_obj
+            };
+
+            let act = self.0.upgrade().ok_or_else(|| Error::new(Code::NotFound))?;
+            let res = act.map_caps().borrow_mut().insert(Capability::new_range(
                 SelRange::new_range(dst_sel as kif::CapSel, pages as kif::CapSel),
-                KObject::Map(map_obj),
-            ))
+                KObject::Map(map_obj.inner().clone()),
+            ));
+            res
         }
         else {
-            MetalELFLoader::new(GlobAddr::new_with(self.0.tile_id(), 0), 0)
+            MetalELFLoader::new(GlobAddr::new_with(tile_id, 0), 0)
                 .load_segment_async(virt, phys, size, flags, map)
         }
     }
@@ -369,7 +403,12 @@ impl ELFLoader for ActivityELFLoader<'_> {
         size: usize,
         flags: PageFlags,
     ) -> Result<(), Error> {
-        let phys = if self.0.tile_desc().has_virtmem() {
+        let act = self.0.upgrade().ok_or_else(|| Error::new(Code::NotFound))?;
+        let tile_id = act.tile_id();
+        let tile_desc = act.tile_desc();
+        drop(act);
+
+        let phys = if tile_desc.has_virtmem() {
             let mem = mem::borrow_mut().allocate(
                 mem::MemType::ROOT,
                 size as GlobOff,
@@ -377,42 +416,56 @@ impl ELFLoader for ActivityELFLoader<'_> {
             )?;
             self.load_segment_async(virt, mem.global(), size, flags, true)?;
 
-            ktcu::glob_to_phys_remote(self.0.tile_id(), mem.global(), flags)?
+            if !self.0.can_upgrade() {
+                return Err(Error::new(Code::NotFound));
+            }
+
+            ktcu::glob_to_phys_remote(tile_id, mem.global(), flags)?
         }
         else {
-            virt.as_phys(self.0.tile_desc())
+            virt.as_phys(tile_desc)
         };
 
-        ktcu::clear(self.0.tile_id(), phys.as_goff(), size)
+        ktcu::clear(tile_id, phys.as_goff(), size)
     }
 
     fn map_heap_async(&mut self, virt: VirtAddr) -> Result<(), Error> {
-        if self.0.tile_desc().has_virtmem() {
+        let act = self.0.upgrade().ok_or_else(|| Error::new(Code::NotFound))?;
+        let tile_desc = act.tile_desc();
+        drop(act);
+
+        if tile_desc.has_virtmem() {
             let phys = mem::borrow_mut().allocate(
                 mem::MemType::ROOT,
                 MOD_HEAP_SIZE as GlobOff,
                 PAGE_SIZE as GlobOff,
             )?;
-            self.load_segment_async(virt, phys.global(), MOD_HEAP_SIZE, PageFlags::RW, true)
+            self.load_segment_async(virt, phys.global(), MOD_HEAP_SIZE, PageFlags::RW, true)?;
+            if !self.0.can_upgrade() {
+                return Err(Error::new(Code::NotFound));
+            }
         }
-        else {
-            Ok(())
-        }
+        Ok(())
     }
 
     fn map_stack_async(&mut self) -> Result<(), Error> {
-        if self.0.tile_desc().has_virtmem() {
-            let (virt, size) = self.0.tile_desc().stack_space();
+        let act = self.0.upgrade().ok_or_else(|| Error::new(Code::NotFound))?;
+        let tile_desc = act.tile_desc();
+        drop(act);
+
+        if tile_desc.has_virtmem() {
+            let (virt, size) = tile_desc.stack_space();
             let phys = mem::borrow_mut().allocate(
                 mem::MemType::ROOT,
                 size as GlobOff,
                 PAGE_SIZE as GlobOff,
             )?;
-            self.load_segment_async(virt, phys.global(), size, PageFlags::RW, true)
+            self.load_segment_async(virt, phys.global(), size, PageFlags::RW, true)?;
+            if !self.0.can_upgrade() {
+                return Err(Error::new(Code::NotFound));
+            }
         }
-        else {
-            Ok(())
-        }
+        Ok(())
     }
 }
 

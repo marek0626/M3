@@ -13,8 +13,7 @@
  * General Public License version 2 for more details.
  */
 
-use base::build_vmsg;
-use base::cell::{Cell, Ref, RefCell, RefMut, StaticCell};
+use base::cell::{Cell, Ref, RefCell, RefMut, StaticCell, StaticRefCell};
 use base::env;
 use base::errors::{Code, Error};
 use base::io::LogFlags;
@@ -23,6 +22,8 @@ use base::log;
 use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, PhysAddr, VirtAddr};
 use base::rc::{Rc, SRc, Weak};
 use base::tcu::{ActId, EpId, Label, TileId};
+use base::{backtrace, build_vmsg};
+use thread::Event;
 
 use core::fmt;
 use core::ops::Deref;
@@ -33,6 +34,171 @@ use crate::mem;
 use crate::platform;
 use crate::tiles::{tilemng, Activity, State, TileMux};
 
+const MAX_TRACE_LEN: usize = 8;
+const MAX_TRACES: usize = 8;
+
+#[derive(Copy, Clone)]
+struct Trace {
+    addrs: [VirtAddr; MAX_TRACE_LEN],
+}
+
+struct Traces {
+    traces: [Trace; MAX_TRACES],
+    pos: usize,
+}
+
+impl Traces {
+    const fn new() -> Self {
+        Self {
+            traces: [Trace {
+                addrs: [VirtAddr::null(); MAX_TRACE_LEN],
+            }; MAX_TRACES],
+            pos: 0,
+        }
+    }
+
+    fn push(&mut self) {
+        if self.pos < self.traces.len() {
+            let n = backtrace::collect(&mut self.traces[self.pos].addrs);
+            for i in n..MAX_TRACE_LEN {
+                self.traces[self.pos].addrs[i] = VirtAddr::null();
+            }
+        }
+        self.pos += 1;
+    }
+
+    fn pop(&mut self) {
+        self.pos -= 1;
+    }
+}
+
+static OWNED_REFS: StaticCell<u64> = StaticCell::new(0);
+static REF_TRACES: StaticRefCell<Traces> = StaticRefCell::new(Traces::new());
+const DEBUG_TRACES: bool = true;
+
+fn inc_owned_refs() {
+    OWNED_REFS.set(OWNED_REFS.get() + 1);
+    if DEBUG_TRACES {
+        REF_TRACES.borrow_mut().push();
+    }
+}
+
+fn dec_owned_refs() {
+    assert!(OWNED_REFS.get() > 0);
+    OWNED_REFS.set(OWNED_REFS.get() - 1);
+    if DEBUG_TRACES {
+        REF_TRACES.borrow_mut().pop();
+    }
+}
+
+pub fn wait_for_async(event: Event) {
+    if OWNED_REFS.get() != 0 {
+        log!(
+            LogFlags::Error,
+            "Async call with {} owned reference(s)",
+            OWNED_REFS.get()
+        );
+        if DEBUG_TRACES {
+            let traces = REF_TRACES.borrow();
+            log!(LogFlags::Error, "  acquired at these points:");
+            for i in 0..traces.pos.min(MAX_TRACES) {
+                for j in 0..MAX_TRACE_LEN {
+                    if traces.traces[i].addrs[j] == VirtAddr::null() {
+                        break;
+                    }
+                    log!(
+                        LogFlags::Error,
+                        "    {:#x}",
+                        traces.traces[i].addrs[j].as_local()
+                    );
+                }
+                log!(LogFlags::Error, "");
+            }
+        }
+        panic!("Stopping here");
+    }
+
+    thread::wait_for(event);
+}
+
+pub struct KObjectWeakRef<T> {
+    obj: Weak<T>,
+}
+
+impl<T> KObjectWeakRef<T> {
+    pub fn can_upgrade(&self) -> bool {
+        self.obj.strong_count() > 0
+    }
+
+    pub fn upgrade(&self) -> Option<KObjectOwnedRef<T>> {
+        self.obj.upgrade().map(|o| KObjectOwnedRef::new(o))
+    }
+}
+
+pub struct KObjectOwnedRef<T> {
+    obj: Rc<T>,
+}
+
+impl<T> KObjectOwnedRef<T> {
+    pub fn new(obj: Rc<T>) -> Self {
+        inc_owned_refs();
+        Self { obj }
+    }
+
+    // TODO maybe this should take "self" or so?
+    pub fn inner(&self) -> &Rc<T> {
+        &self.obj
+    }
+
+    pub fn downgrade(self) -> KObjectWeakRef<T> {
+        // count will be decreased in drop of self
+        KObjectWeakRef {
+            obj: Rc::downgrade(&self.obj),
+        }
+    }
+}
+
+impl<T> Clone for KObjectOwnedRef<T> {
+    fn clone(&self) -> Self {
+        Self::new(self.obj.clone())
+    }
+}
+
+impl<T> Drop for KObjectOwnedRef<T> {
+    fn drop(&mut self) {
+        dec_owned_refs();
+    }
+}
+
+impl<T> Deref for KObjectOwnedRef<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.obj.deref()
+    }
+}
+
+pub struct KObjectGenRef {
+    obj: KObject,
+}
+
+impl KObjectGenRef {
+    pub fn new(obj: KObject) -> Self {
+        inc_owned_refs();
+        Self { obj }
+    }
+
+    pub fn get(&self) -> &KObject {
+        &self.obj
+    }
+}
+
+impl Drop for KObjectGenRef {
+    fn drop(&mut self) {
+        dec_owned_refs();
+    }
+}
+
 #[derive(Clone)]
 pub enum KObject {
     RGate(SRc<RGateObject>),
@@ -42,8 +208,7 @@ pub enum KObject {
     Serv(SRc<ServObject>),
     Sess(SRc<SessObject>),
     Sem(SRc<SemObject>),
-    // Only ActivityMng owns a activity (Rc<Activity>). Break cycle here by using Weak
-    Activity(Weak<Activity>),
+    Activity(Rc<Activity>),
     KMem(SRc<KMemObject>),
     Tile(SRc<TileObject>),
     EP(Rc<EPObject>),
@@ -451,30 +616,31 @@ impl SessObject {
         self.ident
     }
 
-    pub fn close_async(&self, revoker: ActId) {
-        if self.auto_close {
+    pub fn close_async(sess: KObjectOwnedRef<Self>, revoker: ActId) {
+        if sess.auto_close {
             // don't send the close, if the server is the revoker
-            if self.srv.service().activity().id() == revoker {
+            if sess.srv.service().activity().id() == revoker {
                 return;
             }
 
             log!(
                 LogFlags::KernServ,
                 "Sending close(sess={:#x}) to service {} with creator {}",
-                self.ident(),
-                self.srv.service().name(),
-                self.creator,
+                sess.ident(),
+                sess.srv.service().name(),
+                sess.creator,
             );
 
             let mut smsg = MsgBuf::borrow_def();
-            build_vmsg!(smsg, service::Request::Close { sid: self.ident });
+            build_vmsg!(smsg, service::Request::Close { sid: sess.ident });
 
             // this should never fail, because the close request fails only if the creator does not
             // own the session. but we know here that the creator owns this session.
-            self.srv
-                .service()
-                .send_receive_async(self.creator as Label, smsg)
-                .unwrap();
+            let srv = KObjectOwnedRef::new(sess.srv.clone());
+            let creator = sess.creator as Label;
+            drop(sess);
+
+            Service::send_receive_async(srv, creator, smsg).unwrap();
         }
     }
 }
@@ -504,17 +670,31 @@ impl SemObject {
         })
     }
 
-    pub fn down_async(sem: &SRc<Self>) -> Result<(), Error> {
-        while sem.counter.get() == 0 {
+    pub fn down_async(s: KObjectOwnedRef<Self>) -> Result<(), Error> {
+        let sem_weak = s.downgrade();
+        loop {
+            let sem = sem_weak
+                .upgrade()
+                .ok_or_else(|| Error::new(Code::NotFound))?;
+            if sem.counter.get() != 0 {
+                sem.counter.set(sem.counter.get() - 1);
+                break;
+            }
+
             sem.waiters.set(sem.waiters.get() + 1);
             let event = sem.get_event();
-            thread::wait_for(event);
+            let tmp_weak = sem.downgrade();
+
+            wait_for_async(event);
+
+            let sem = tmp_weak
+                .upgrade()
+                .ok_or_else(|| Error::new(Code::NotFound))?;
             if sem.waiters.get() == -1 {
                 return Err(Error::new(Code::RecvGone));
             }
             sem.waiters.set(sem.waiters.get() - 1);
         }
-        sem.counter.set(sem.counter.get() - 1);
         Ok(())
     }
 
@@ -720,30 +900,33 @@ impl TileObject {
         self.ep_quota.left.set(total_eps);
     }
 
-    pub fn revoke_async(&self, parent: &TileObject) {
+    pub fn revoke_async(tile: KObjectOwnedRef<Self>, parent: &TileObject) {
         // we free the EP quota if it's different from our parent's quota (only our own childs can
         // have the same EP quota, but they are already gone).
-        if !Rc::ptr_eq(&self.ep_quota, &parent.ep_quota) {
+        if !Rc::ptr_eq(&tile.ep_quota, &parent.ep_quota) {
             // grant the EPs back to our parent
-            parent.free(self.ep_quota.left());
-            assert!(self.ep_quota.left() == self.ep_quota.total());
+            parent.free(tile.ep_quota.left());
+            assert!(tile.ep_quota.left() == tile.ep_quota.total());
         }
 
         // same for time and pts: free the ones that are different
-        let time = if self.time_quota != parent.time_quota {
-            Some(self.time_quota)
+        let time = if tile.time_quota != parent.time_quota {
+            Some(tile.time_quota)
         }
         else {
             None
         };
-        let pts = if self.pt_quota != parent.pt_quota {
-            Some(self.pt_quota)
+        let pts = if tile.pt_quota != parent.pt_quota {
+            Some(tile.pt_quota)
         }
         else {
             None
         };
         if time.is_some() || pts.is_some() {
-            TileMux::remove_quotas_async(tilemng::tilemux(self.tile), time, pts).ok();
+            let tile_id = tile.tile();
+            drop(tile);
+
+            TileMux::remove_quotas_async(tilemng::tilemux(tile_id), time, pts).ok();
         }
     }
 }
@@ -804,6 +987,7 @@ impl EPObject {
         self.tile.tile()
     }
 
+    // TODO don't hand out Rc<Activity>, but KObjectOwnedRef<...>
     pub fn activity(&self) -> Option<Rc<Activity>> {
         self.act.upgrade()
     }
@@ -1021,29 +1205,25 @@ impl MapObject {
     }
 
     pub fn map_async(
-        &self,
-        act: &Activity,
+        map: KObjectOwnedRef<Self>,
+        act_id: ActId,
+        act_tile: TileId,
         virt: VirtAddr,
         glob: GlobAddr,
         pages: usize,
         flags: kif::PageFlags,
     ) -> Result<(), Error> {
-        TileMux::map_async(
-            tilemng::tilemux(act.tile_id()),
-            act.id(),
-            virt,
-            glob,
-            pages,
-            flags,
-        )
-        .map(|_| {
-            self.glob.replace(glob);
-            self.flags.replace(flags);
-            self.mapped.set(true);
+        let map_weak = map.downgrade();
+        TileMux::map_async(tilemng::tilemux(act_tile), act_id, virt, glob, pages, flags).map(|_| {
+            if let Some(map) = map_weak.upgrade() {
+                map.glob.replace(glob);
+                map.flags.replace(flags);
+                map.mapped.set(true);
+            }
         })
     }
 
-    pub fn unmap_async(&self, act: &Activity, virt: VirtAddr, pages: usize) {
+    pub fn unmap_async(act: &Activity, virt: VirtAddr, pages: usize) {
         // TODO currently, it can happen that we've already stopped the activity, but still
         // accept/continue a syscall that inserts something into the activity's table.
         if act.state() != State::DEAD {
