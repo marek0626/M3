@@ -188,7 +188,7 @@ pub fn tile_set_pmp(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
 
     if r.mgate != kif::INVALID_SEL {
         let mgate = get_kobj_ref!(act_caps, r.mgate, MGate);
-        tilemux.configure_pmp_ep(r.ep, mgate.inner())?;
+        tilemux.configure_pmp_ep(r.ep, &mgate)?;
     }
 
     reply_success(msg);

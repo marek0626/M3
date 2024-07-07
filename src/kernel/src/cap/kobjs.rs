@@ -312,9 +312,9 @@ impl GateEP {
 }
 
 pub enum GateObject {
-    Recv(Rc<RGateObject>),
-    Send(Rc<SGateObject>),
-    Mem(Rc<MGateObject>),
+    Recv(KObjectWeakRef<RGateObject>),
+    Send(KObjectWeakRef<SGateObject>),
+    Mem(KObjectWeakRef<MGateObject>),
 }
 
 pub struct BaseGate {
@@ -1152,18 +1152,26 @@ impl EPObject {
             }
 
             match gate {
-                // invalidate reply EPs
-                GateObject::Send(s) => s.invalidate_reply_eps(),
-                // deactivate receive gate
-                GateObject::Recv(r) => r.deactivate(),
-                _ => {},
-            }
-
-            // we tell the gate that it's ep is no longer valid
-            match gate {
-                GateObject::Recv(g) => g.gep.borrow_mut().remove_ep(),
-                GateObject::Send(g) => g.gep.borrow_mut().remove_ep(),
-                GateObject::Mem(g) => g.gep.borrow_mut().remove_ep(),
+                GateObject::Send(s) => {
+                    if let Some(s) = s.upgrade() {
+                        // invalidate reply EPs
+                        s.invalidate_reply_eps();
+                        // tell the gate that it's no longer valid
+                        s.gep.borrow_mut().remove_ep();
+                    }
+                },
+                GateObject::Recv(r) => {
+                    if let Some(r) = r.upgrade() {
+                        // deactivate receive gate
+                        r.deactivate();
+                        r.gep.borrow_mut().remove_ep();
+                    }
+                },
+                GateObject::Mem(m) => {
+                    if let Some(m) = m.upgrade() {
+                        m.gep.borrow_mut().remove_ep();
+                    }
+                },
             }
         }
         Ok(invalidated)

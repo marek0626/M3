@@ -297,7 +297,7 @@ impl ActivityMng {
                     .config_mem_ep(
                         mem_ep,
                         kif::tilemux::ACT_ID as tcu::ActId,
-                        &mgate_obj,
+                        &KObjectOwnedRef::new(mgate_obj.clone()),
                         m.addr().tile(),
                     )
                     .unwrap();

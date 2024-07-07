@@ -257,13 +257,13 @@ pub fn activate_mgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
     if let Err(e) = tilemng::tilemux(ep.tile_id()).config_mem_ep(
         ep.ep(),
         ep.activity().unwrap().id(),
-        mg.inner(),
+        &mg,
         tile_id,
     ) {
         sysc_err!(e.code(), "Unable to configure mem EP");
     }
 
-    mg.set_ep(&ep, GateObject::Mem(mg.inner().clone()));
+    mg.set_ep(&ep, GateObject::Mem(mg.clone().downgrade()));
 
     reply_success(msg);
     Ok(())
@@ -351,13 +351,12 @@ pub fn activate_rgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
 
     rg.activate(ep_act.tile_id(), epid, rbuf_addr);
 
-    if let Err(e) = tilemng::tilemux(dst_tile).config_rcv_ep(epid, ep_act.id(), replies, rg.inner())
-    {
+    if let Err(e) = tilemng::tilemux(dst_tile).config_rcv_ep(epid, ep_act.id(), replies, &rg) {
         rg.deactivate();
         sysc_err!(e.code(), "Unable to configure recv EP");
     }
 
-    rg.set_ep(&ep, GateObject::Recv(rg.inner().clone()));
+    rg.set_ep(&ep, GateObject::Recv(rg.clone().downgrade()));
 
     reply_success(msg);
     Ok(())
@@ -408,13 +407,12 @@ pub fn activate_sgate_async(
         (ep, sg)
     };
 
-    if let Err(e) =
-        tilemng::tilemux(dst_tile).config_snd_ep(epid, ep.activity().unwrap().id(), sg.inner())
+    if let Err(e) = tilemng::tilemux(dst_tile).config_snd_ep(epid, ep.activity().unwrap().id(), &sg)
     {
         sysc_err!(e.code(), "Unable to configure send EP");
     }
 
-    sg.set_ep(&ep, GateObject::Send(sg.inner().clone()));
+    sg.set_ep(&ep, GateObject::Send(sg.clone().downgrade()));
 
     reply_success(msg);
     Ok(())

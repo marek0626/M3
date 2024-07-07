@@ -227,14 +227,22 @@ impl Activity {
                 PhysAddr::new_raw(platform::tile_desc(self.tile_id()), 0xDEADBEEF),
             );
             let _rg_clone = rgate.clone(); // keep one strong reference
-            let sgate = SGateObject::new(rgate.downgrade(), self.id() as tcu::Label, 1);
+            let sgate = KObjectOwnedRef::new(SGateObject::new(
+                rgate.downgrade(),
+                self.id() as tcu::Label,
+                1,
+            ));
             tilemux.config_snd_ep(self.eps_start + tcu::SYSC_SEP_OFF, act, &sgate)?;
         }
 
         // attach syscall receive endpoint
         let mut rbuf_addr = self.rbuf_phys.get();
         {
-            let rgate = RGateObject::new(cfg::SYSC_RBUF_ORD, cfg::SYSC_RBUF_ORD, false);
+            let rgate = KObjectOwnedRef::new(RGateObject::new(
+                cfg::SYSC_RBUF_ORD,
+                cfg::SYSC_RBUF_ORD,
+                false,
+            ));
             rgate.activate(
                 self.tile_id(),
                 self.eps_start + tcu::SYSC_REP_OFF,
@@ -246,7 +254,11 @@ impl Activity {
 
         // attach upcall receive endpoint
         {
-            let rgate = RGateObject::new(cfg::UPCALL_RBUF_ORD, cfg::UPCALL_RBUF_ORD, false);
+            let rgate = KObjectOwnedRef::new(RGateObject::new(
+                cfg::UPCALL_RBUF_ORD,
+                cfg::UPCALL_RBUF_ORD,
+                false,
+            ));
             rgate.activate(
                 self.tile_id(),
                 self.eps_start + tcu::UPCALL_REP_OFF,
@@ -263,7 +275,11 @@ impl Activity {
 
         // attach default receive endpoint
         {
-            let rgate = RGateObject::new(cfg::DEF_RBUF_ORD, cfg::DEF_RBUF_ORD, false);
+            let rgate = KObjectOwnedRef::new(RGateObject::new(
+                cfg::DEF_RBUF_ORD,
+                cfg::DEF_RBUF_ORD,
+                false,
+            ));
             rgate.activate(self.tile_id(), self.eps_start + tcu::DEF_REP_OFF, rbuf_addr);
             tilemux.config_rcv_ep(self.eps_start + tcu::DEF_REP_OFF, act, None, &rgate)?;
         }

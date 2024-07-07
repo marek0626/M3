@@ -292,7 +292,7 @@ impl TileMux {
 
                     // use the given memory gate for the first PMP EP (for the multiplexer)
                     if platform::tile_desc(tile).has_virtmem() {
-                        tilemux.configure_pmp_ep(0, mux_mem.inner())?;
+                        tilemux.configure_pmp_ep(0, &mux_mem)?;
                     }
 
                     if env::boot().platform == env::Platform::Hw {
@@ -373,13 +373,17 @@ impl TileMux {
             .map(|state| KObjectOwnedRef::new(state.pmp[ep as usize].clone()))
     }
 
-    pub fn configure_pmp_ep(&mut self, ep: tcu::EpId, mg: &Rc<MGateObject>) -> Result<(), Error> {
+    pub fn configure_pmp_ep(
+        &mut self,
+        ep: tcu::EpId,
+        mg: &KObjectOwnedRef<MGateObject>,
+    ) -> Result<(), Error> {
         self.config_mem_ep(ep, INVAL_ID, mg, mg.tile_id())?;
 
         // remember that the MemGate is activated on this EP for the case that the MemGate gets
         // revoked. If so, the EP is automatically invalidated.
         let ep_obj = self.pmp_ep(ep).ok_or_else(|| Error::new(Code::InvState))?;
-        mg.set_ep(&ep_obj, GateObject::Mem(mg.clone()));
+        mg.set_ep(&ep_obj, GateObject::Mem(mg.clone().downgrade()));
         Ok(())
     }
 
@@ -436,7 +440,7 @@ impl TileMux {
         &mut self,
         ep: EpId,
         act: ActId,
-        obj: &Rc<SGateObject>,
+        obj: &KObjectOwnedRef<SGateObject>,
     ) -> Result<(), Error> {
         let rgate = obj.rgate().ok_or_else(|| Error::new(Code::NotFound))?;
         assert!(rgate.activated());
@@ -462,7 +466,7 @@ impl TileMux {
         ep: EpId,
         act: ActId,
         reply_eps: Option<EpId>,
-        obj: &Rc<RGateObject>,
+        obj: &KObjectOwnedRef<RGateObject>,
     ) -> Result<(), Error> {
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {
             let act = self.ep_activity_id(act);
@@ -485,7 +489,7 @@ impl TileMux {
         &mut self,
         ep: EpId,
         act: ActId,
-        obj: &Rc<MGateObject>,
+        obj: &KObjectOwnedRef<MGateObject>,
         tile_id: TileId,
     ) -> Result<(), Error> {
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {
