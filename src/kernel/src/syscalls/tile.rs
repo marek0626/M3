@@ -277,10 +277,8 @@ pub fn tile_mem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), V
     }
 
     let mem = tile.memory();
-    let cap = Capability::new(
-        r.dst,
-        KObject::MGate(MGateObject::new(mem, kif::Perm::RWX, true)),
-    );
+    let mgate = MGateObject::new(mem, kif::Perm::RWX, true);
+    let cap = Capability::new(r.dst, to_kobj!(mgate, MGate));
     try_kmem_quota!(act_caps.insert_as_child(cap, r.tile));
 
     reply_success(msg);

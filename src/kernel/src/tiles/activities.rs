@@ -33,10 +33,10 @@ use crate::cap::{
     KObjectWeakRef, TileObject,
 };
 use crate::com::{QueueId, SendQueue};
-use crate::ktcu;
 use crate::platform;
 use crate::thread_startup_async;
 use crate::tiles::{loader, tilemng, ActivityMng};
+use crate::{ktcu, to_kobj};
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -97,8 +97,8 @@ impl Activity {
         eps_start: EpId,
         kmem: KObjectOwnedRef<KMemObject>,
         flags: ActivityFlags,
-    ) -> Result<Rc<Self>, Error> {
-        let act = Rc::new(Activity {
+    ) -> Result<KObjectOwnedRef<Self>, Error> {
+        let act = KObjectOwnedRef::new(Rc::new(Activity {
             id,
             name: name.to_string(),
             flags,
@@ -114,7 +114,7 @@ impl Activity {
             rbuf_phys: Cell::from(PhysAddr::default()),
             upcalls: RefCell::from(SendQueue::new(QueueId::Activity(id), tile.tile())),
             tile: tile.downgrade(),
-        });
+        }));
 
         {
             act.obj_caps.borrow_mut().set_activity(&act);
@@ -128,15 +128,13 @@ impl Activity {
                 KObject::KMem(act.kmem.clone()),
             ))?;
             // tile cap
-            act.obj_caps().borrow_mut().insert(Capability::new(
-                kif::SEL_TILE,
-                KObject::Tile(tile.inner().clone()),
-            ))?;
+            act.obj_caps()
+                .borrow_mut()
+                .insert(Capability::new(kif::SEL_TILE, to_kobj!(tile, Tile)))?;
             // cap for own activity
-            act.obj_caps().borrow_mut().insert(Capability::new(
-                kif::SEL_ACT,
-                KObject::Activity(act.clone()),
-            ))?;
+            act.obj_caps()
+                .borrow_mut()
+                .insert(Capability::new(kif::SEL_ACT, to_kobj!(act, Activity)))?;
 
             // alloc standard EPs
             tilemng::tilemux(act.tile_id()).alloc_eps(eps_start, STD_EPS_COUNT);
@@ -216,33 +214,21 @@ impl Activity {
 
         // attach syscall send endpoint
         {
-            let rgate = KObjectOwnedRef::new(RGateObject::new(
-                cfg::SYSC_RBUF_ORD,
-                cfg::SYSC_RBUF_ORD,
-                false,
-            ));
+            let rgate = RGateObject::new(cfg::SYSC_RBUF_ORD, cfg::SYSC_RBUF_ORD, false);
             rgate.activate(
                 platform::kernel_tile(),
                 ktcu::KSYS_EP,
                 PhysAddr::new_raw(platform::tile_desc(self.tile_id()), 0xDEADBEEF),
             );
             let _rg_clone = rgate.clone(); // keep one strong reference
-            let sgate = KObjectOwnedRef::new(SGateObject::new(
-                rgate.downgrade(),
-                self.id() as tcu::Label,
-                1,
-            ));
+            let sgate = SGateObject::new(rgate.downgrade(), self.id() as tcu::Label, 1);
             tilemux.config_snd_ep(self.eps_start + tcu::SYSC_SEP_OFF, act, &sgate)?;
         }
 
         // attach syscall receive endpoint
         let mut rbuf_addr = self.rbuf_phys.get();
         {
-            let rgate = KObjectOwnedRef::new(RGateObject::new(
-                cfg::SYSC_RBUF_ORD,
-                cfg::SYSC_RBUF_ORD,
-                false,
-            ));
+            let rgate = RGateObject::new(cfg::SYSC_RBUF_ORD, cfg::SYSC_RBUF_ORD, false);
             rgate.activate(
                 self.tile_id(),
                 self.eps_start + tcu::SYSC_REP_OFF,
@@ -254,11 +240,7 @@ impl Activity {
 
         // attach upcall receive endpoint
         {
-            let rgate = KObjectOwnedRef::new(RGateObject::new(
-                cfg::UPCALL_RBUF_ORD,
-                cfg::UPCALL_RBUF_ORD,
-                false,
-            ));
+            let rgate = RGateObject::new(cfg::UPCALL_RBUF_ORD, cfg::UPCALL_RBUF_ORD, false);
             rgate.activate(
                 self.tile_id(),
                 self.eps_start + tcu::UPCALL_REP_OFF,
@@ -275,11 +257,7 @@ impl Activity {
 
         // attach default receive endpoint
         {
-            let rgate = KObjectOwnedRef::new(RGateObject::new(
-                cfg::DEF_RBUF_ORD,
-                cfg::DEF_RBUF_ORD,
-                false,
-            ));
+            let rgate = RGateObject::new(cfg::DEF_RBUF_ORD, cfg::DEF_RBUF_ORD, false);
             rgate.activate(self.tile_id(), self.eps_start + tcu::DEF_REP_OFF, rbuf_addr);
             tilemux.config_rcv_ep(self.eps_start + tcu::DEF_REP_OFF, act, None, &rgate)?;
         }

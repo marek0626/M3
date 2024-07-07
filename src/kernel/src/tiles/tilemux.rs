@@ -49,13 +49,14 @@ impl TileState {
         // create PMP EPObjects for this Tile
         let mut pmp = Vec::new();
         for ep in 0..tcu::PMEM_PROT_EPS as EpId {
-            pmp.push(EPObject::new(
+            let epobj = EPObject::new(
                 EPCategory::PMP,
                 KObjectWeakRef::new(),
                 ep,
                 0,
                 KObjectOwnedRef::new(tile.clone()).downgrade(),
-            ));
+            );
+            pmp.push(epobj.inner().clone());
         }
 
         assert!(platform::tile_desc(tile.tile()).has_internal_eps() == ep_count.is_none());
@@ -164,7 +165,7 @@ impl TileMux {
         );
 
         TileMux {
-            tile,
+            tile: tile.inner().clone(),
             acts: Vec::new(),
             queue: crate::com::SendQueue::new(crate::com::QueueId::TileMux(tile_id), tile_id),
             state: None,

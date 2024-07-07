@@ -26,13 +26,13 @@ use base::tcu::{self, ActId, TileId};
 use base::util::math;
 use base::vec;
 
-use crate::args;
 use crate::cap::{
     Capability, KMemObject, KObject, KObjectOwnedRef, MGateObject, RGateObject, TileObject,
 };
 use crate::mem::{self, Allocation};
 use crate::platform;
 use crate::tiles::{loader, tilemng, Activity, ActivityFlags, State, TileMux};
+use crate::{args, to_kobj};
 
 pub struct ActivityMng {
     acts: Vec<Option<Rc<Activity>>>,
@@ -56,6 +56,7 @@ impl ActivityMng {
     }
 
     #[inline(always)]
+    // TODO KObjectOwnedRef?
     pub fn activity(id: tcu::ActId) -> Option<Rc<Activity>> {
         INST.borrow().acts[id as usize].as_ref().cloned()
     }
@@ -85,11 +86,11 @@ impl ActivityMng {
         eps_start: tcu::EpId,
         kmem: KObjectOwnedRef<KMemObject>,
         flags: ActivityFlags,
-    ) -> Result<Rc<Activity>, Error> {
+    ) -> Result<KObjectOwnedRef<Activity>, Error> {
         let id: tcu::ActId = Self::get_id()?;
         let tile_id = tile.tile();
 
-        let act = KObjectOwnedRef::new(Activity::new(name, id, tile, eps_start, kmem, flags)?);
+        let act = Activity::new(name, id, tile, eps_start, kmem, flags)?;
 
         log!(
             LogFlags::KernActs,
@@ -115,7 +116,7 @@ impl ActivityMng {
             act
         };
 
-        Ok(act.inner().clone())
+        Ok(act)
     }
 
     fn init_activity_async(act: KObjectOwnedRef<Activity>) -> Result<(), Error> {
@@ -211,34 +212,30 @@ impl ActivityMng {
 
         // load and start tilemux
         loader::load_mux_async(tile_id, &mux_mem).expect("Unable to load TileMux");
-        let mux_mgate = KObjectOwnedRef::new(MGateObject::new(mux_mem, Perm::RWX, false));
+        let mux_mgate = MGateObject::new(mux_mem, Perm::RWX, false);
         // note that we provide access to the entire ROOT memory pool via PMP down below and
         // therefore provide access to parts of this pool twice. that's currently required, because
         // TileMux reads PMP EP0 to discover the available memory.
         TileMux::reset_async(tile_id, Some(mux_mgate), ep_count, true).expect("Tile reset failed");
 
         // create root activity
-        let kmem = KObjectOwnedRef::new(KMemObject::new(args::get().kmem - cfg::FIXED_KMEM));
-        let act = KObjectOwnedRef::new(
-            Self::create_activity_async(
-                "root",
-                tile,
-                tcu::FIRST_USER_EP,
-                kmem,
-                ActivityFlags::IS_ROOT,
-            )
-            .expect("Unable to create Activity for root"),
-        );
+        let kmem = KMemObject::new(args::get().kmem - cfg::FIXED_KMEM);
+        let act = Self::create_activity_async(
+            "root",
+            tile,
+            tcu::FIRST_USER_EP,
+            kmem,
+            ActivityFlags::IS_ROOT,
+        )
+        .expect("Unable to create Activity for root");
 
         let mut sel = kif::FIRST_FREE_SEL;
 
         // boot info
         {
             let alloc = Allocation::new(platform::info_addr(), platform::info_size() as GlobOff);
-            let cap = Capability::new(
-                sel,
-                KObject::MGate(MGateObject::new(alloc, kif::Perm::RWX, false)),
-            );
+            let mgate = MGateObject::new(alloc, kif::Perm::RWX, false);
+            let cap = Capability::new(sel, to_kobj!(mgate, MGate));
 
             act.obj_caps().borrow_mut().insert(cap).unwrap();
             sel += 1;
@@ -246,14 +243,8 @@ impl ActivityMng {
 
         // serial rgate
         {
-            let cap = Capability::new(
-                sel,
-                KObject::RGate(RGateObject::new(
-                    cfg::SERIAL_BUF_ORD,
-                    cfg::SERIAL_BUF_ORD,
-                    true,
-                )),
-            );
+            let rgate = RGateObject::new(cfg::SERIAL_BUF_ORD, cfg::SERIAL_BUF_ORD, true);
+            let cap = Capability::new(sel, to_kobj!(rgate, RGate));
             act.obj_caps().borrow_mut().insert(cap).unwrap();
             sel += 1;
         }
@@ -262,10 +253,8 @@ impl ActivityMng {
         for m in platform::mods() {
             let size = math::round_up(m.size as usize, cfg::PAGE_SIZE);
             let alloc = Allocation::new(GlobAddr::new(m.addr), size as GlobOff);
-            let cap = Capability::new(
-                sel,
-                KObject::MGate(MGateObject::new(alloc, kif::Perm::RWX, false)),
-            );
+            let mgate = MGateObject::new(alloc, kif::Perm::RWX, false);
+            let cap = Capability::new(sel, to_kobj!(mgate, MGate));
 
             act.obj_caps().borrow_mut().insert(cap).unwrap();
             sel += 1;
@@ -297,7 +286,7 @@ impl ActivityMng {
                     .config_mem_ep(
                         mem_ep,
                         kif::tilemux::ACT_ID as tcu::ActId,
-                        &KObjectOwnedRef::new(mgate_obj.clone()),
+                        &mgate_obj,
                         m.addr().tile(),
                     )
                     .unwrap();
@@ -305,7 +294,7 @@ impl ActivityMng {
 
                 if m.mem_type() != mem::MemType::ROOT {
                     // insert capability
-                    let cap = Capability::new(sel, KObject::MGate(mgate_obj));
+                    let cap = Capability::new(sel, to_kobj!(mgate_obj, MGate));
                     act.obj_caps().borrow_mut().insert(cap).unwrap();
                     sel += 1;
                 }

@@ -65,8 +65,16 @@ macro_rules! get_cap {
         }
     }};
 }
+#[macro_export]
+macro_rules! to_kobj {
+    ($kref:expr, $ty:ident) => {
+        KObject::$ty($kref.inner().clone())
+    };
+}
 macro_rules! as_obj {
     ($kobj:expr, $ty:ident) => {
+        // TODO maybe we should do the .get() that happens on as_obj! invocation sites in this
+        // macro and add an "internal"/unsafe function that is only used here?
         match $kobj.get() {
             KObject::$ty(k) => crate::cap::KObjectOwnedRef::new(k.clone()),
             _ => sysc_err!(Code::InvArgs, "Expected {:?} cap", stringify!($ty)),

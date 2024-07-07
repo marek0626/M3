@@ -27,9 +27,9 @@ use base::tcu;
 use base::util::math;
 
 use crate::cap::{Capability, KObject, KObjectOwnedRef, KObjectWeakRef, MapObject, SelRange};
-use crate::ktcu;
 use crate::mem;
 use crate::tiles::{tilemng, Activity, TileMux};
+use crate::{ktcu, to_kobj};
 
 use crate::platform;
 
@@ -357,9 +357,9 @@ impl ELFLoader for ActivityELFLoader {
             let pages = math::round_up(size, PAGE_SIZE) >> PAGE_BITS;
 
             let phys_align = GlobAddr::new_with(phys.tile(), phys.offset() & !PAGE_MASK as GlobOff);
+            let map_obj = MapObject::new(phys_align, flags);
             // keep one original to ensure that it's not removed during the async call
-            let map_obj_org = MapObject::new(phys_align, flags);
-            let map_obj = KObjectOwnedRef::new(map_obj_org.clone());
+            let _map_obj_clone = map_obj.inner().clone();
             let id = act.id();
             drop(act);
 
@@ -387,7 +387,7 @@ impl ELFLoader for ActivityELFLoader {
             let act = self.0.upgrade().ok_or_else(|| Error::new(Code::NotFound))?;
             let res = act.map_caps().borrow_mut().insert(Capability::new_range(
                 SelRange::new_range(dst_sel as kif::CapSel, pages as kif::CapSel),
-                KObject::Map(map_obj.inner().clone()),
+                to_kobj!(map_obj, Map),
             ));
             res
         }

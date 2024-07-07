@@ -354,15 +354,15 @@ pub struct RGateObject {
 }
 
 impl RGateObject {
-    pub fn new(order: u32, msg_order: u32, serial: bool) -> Rc<Self> {
-        Rc::new(Self {
+    pub fn new(order: u32, msg_order: u32, serial: bool) -> KObjectOwnedRef<Self> {
+        KObjectOwnedRef::new(Rc::new(Self {
             base: BaseGate::default(),
             loc: Cell::from(None),
             addr: Cell::from(PhysAddr::default()),
             order,
             msg_order,
             serial,
-        })
+        }))
     }
 
     pub fn location(&self) -> Option<(TileId, EpId)> {
@@ -451,13 +451,17 @@ pub struct SGateObject {
 }
 
 impl SGateObject {
-    pub fn new(rgate: KObjectWeakRef<RGateObject>, label: Label, credits: u32) -> Rc<Self> {
-        Rc::new(Self {
+    pub fn new(
+        rgate: KObjectWeakRef<RGateObject>,
+        label: Label,
+        credits: u32,
+    ) -> KObjectOwnedRef<Self> {
+        KObjectOwnedRef::new(Rc::new(Self {
             base: BaseGate::default(),
             rgate,
             label,
             credits,
-        })
+        }))
     }
 
     pub fn rgate(&self) -> Option<KObjectOwnedRef<RGateObject>> {
@@ -513,13 +517,13 @@ pub struct MGateObject {
 }
 
 impl MGateObject {
-    pub fn new(mem: mem::Allocation, perms: kif::Perm, derived: bool) -> Rc<Self> {
-        Rc::new(Self {
+    pub fn new(mem: mem::Allocation, perms: kif::Perm, derived: bool) -> KObjectOwnedRef<Self> {
+        KObjectOwnedRef::new(Rc::new(Self {
             base: BaseGate::default(),
             mem,
             perms,
             derived,
-        })
+        }))
     }
 
     pub fn tile_id(&self) -> TileId {
@@ -583,12 +587,12 @@ pub struct ServObject {
 }
 
 impl ServObject {
-    pub fn new(serv: Rc<Service>, owner: bool, creator: usize) -> Rc<Self> {
-        Rc::new(Self {
+    pub fn new(serv: Rc<Service>, owner: bool, creator: usize) -> KObjectOwnedRef<Self> {
+        KObjectOwnedRef::new(Rc::new(Self {
             serv,
             owner,
             creator,
-        })
+        }))
     }
 
     pub fn name(&self) -> &str {
@@ -603,7 +607,7 @@ impl ServObject {
         self.creator
     }
 
-    pub fn derive(&self, creator: usize) -> Rc<Self> {
+    pub fn derive(&self, creator: usize) -> KObjectOwnedRef<Self> {
         Self::new(self.serv.clone(), false, creator)
     }
 
@@ -648,13 +652,13 @@ impl SessObject {
         creator: usize,
         ident: u64,
         auto_close: bool,
-    ) -> Rc<Self> {
-        Rc::new(Self {
+    ) -> KObjectOwnedRef<Self> {
+        KObjectOwnedRef::new(Rc::new(Self {
             srv,
             creator,
             ident,
             auto_close,
-        })
+        }))
     }
 
     pub fn service(&self) -> Option<KObjectOwnedRef<ServObject>> {
@@ -720,11 +724,11 @@ pub struct SemObject {
 }
 
 impl SemObject {
-    pub fn new(counter: u32) -> Rc<Self> {
-        Rc::new(Self {
+    pub fn new(counter: u32) -> KObjectOwnedRef<Self> {
+        KObjectOwnedRef::new(Rc::new(Self {
             counter: Cell::from(counter),
             waiters: Cell::from(0),
-        })
+        }))
     }
 
     pub fn down_async(s: KObjectOwnedRef<Self>) -> Result<(), Error> {
@@ -833,15 +837,15 @@ impl TileObject {
         time_quota: QuotaId,
         pt_quota: QuotaId,
         derived: bool,
-    ) -> Rc<Self> {
-        let res = Rc::new(Self {
+    ) -> KObjectOwnedRef<Self> {
+        let res = KObjectOwnedRef::new(Rc::new(Self {
             tile,
             cur_acts: Cell::from(0),
             ep_quota: ep_quota.clone(),
             time_quota,
             pt_quota,
             derived,
-        });
+        }));
         log!(
             LogFlags::KernTiles,
             "Tile[{}, {:#x}]: {} new TileObject with EPs={}, time={}, pts={}",
@@ -860,7 +864,7 @@ impl TileObject {
         eps: Option<usize>,
         time: Option<u64>,
         pts: Option<usize>,
-    ) -> Result<Rc<Self>, VerboseError> {
+    ) -> Result<KObjectOwnedRef<Self>, VerboseError> {
         // only allocate it from the tile here, but don't keep an Rc to the EPQuota
         if let Some(num) = eps {
             if !tile.has_quota(num) {
@@ -1081,9 +1085,9 @@ impl EPObject {
         ep: EpId,
         replies: usize,
         tile: KObjectWeakRef<TileObject>,
-    ) -> Rc<Self> {
+    ) -> KObjectOwnedRef<Self> {
         let maybe_act = act.upgrade();
-        let ep = Rc::new(Self {
+        let ep = KObjectOwnedRef::new(Rc::new(Self {
             cat,
             gate: RefCell::from(None),
             act,
@@ -1091,9 +1095,9 @@ impl EPObject {
             replies,
             tile_id: tile.upgrade().unwrap().tile(),
             tile,
-        });
+        }));
         if let Some(v) = maybe_act {
-            v.add_ep(KObjectOwnedRef::new(ep.clone()));
+            v.add_ep(ep.clone());
         }
         ep
     }
@@ -1210,17 +1214,17 @@ pub struct KMemObject {
 }
 
 impl KMemObject {
-    pub fn new(quota: usize) -> Rc<Self> {
+    pub fn new(quota: usize) -> KObjectOwnedRef<Self> {
         static NEXT_ID: StaticCell<QuotaId> = StaticCell::new(0);
         let id = NEXT_ID.get();
         NEXT_ID.set(id + 1);
 
-        let kmem = Rc::new(Self {
+        let kmem = KObjectOwnedRef::new(Rc::new(Self {
             id,
             quota,
             left: Cell::from(quota),
-        });
-        log!(LogFlags::KernKMem, "{:?} created", kmem);
+        }));
+        log!(LogFlags::KernKMem, "{:?} created", *kmem);
         kmem
     }
 
@@ -1308,12 +1312,12 @@ pub struct MapObject {
 }
 
 impl MapObject {
-    pub fn new(glob: GlobAddr, flags: kif::PageFlags) -> Rc<Self> {
-        Rc::new(Self {
+    pub fn new(glob: GlobAddr, flags: kif::PageFlags) -> KObjectOwnedRef<Self> {
+        KObjectOwnedRef::new(Rc::new(Self {
             glob: Cell::from(glob),
             flags: Cell::from(flags),
             mapped: Cell::from(false),
-        })
+        }))
     }
 
     pub fn mapped(&self) -> bool {

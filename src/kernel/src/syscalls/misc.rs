@@ -98,16 +98,14 @@ pub fn alloc_ep_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
         (dst_act, r.epid)
     };
 
-    let cap = Capability::new(
-        r.dst,
-        KObject::EP(EPObject::new(
-            EPCategory::Custom,
-            dst_act.clone().downgrade(),
-            epid,
-            r.replies,
-            dst_act.tile_weak().clone(),
-        )),
+    let ep = EPObject::new(
+        EPCategory::Custom,
+        dst_act.clone().downgrade(),
+        epid,
+        r.replies,
+        dst_act.tile_weak().clone(),
     );
+    let cap = Capability::new(r.dst, to_kobj!(ep, EP));
     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.act));
 
     dst_act.tile().alloc(ep_count);

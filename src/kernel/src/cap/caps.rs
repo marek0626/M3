@@ -21,7 +21,6 @@ use base::io::LogFlags;
 use base::kif::{CapRngDesc, CapSel, SEL_ACT, SEL_KMEM, SEL_TILE};
 use base::log;
 use base::mem::{size_of, GlobOff, VirtAddr};
-use base::rc::Rc;
 use base::tcu::ActId;
 use core::cmp;
 use core::fmt;
@@ -98,8 +97,8 @@ impl CapTable {
         unsafe { &(*self.act.unwrap().as_ptr()) }
     }
 
-    pub fn set_activity(&mut self, act: &Rc<Activity>) {
-        let act_ptr = unsafe { NonNull::new_unchecked(Rc::as_ptr(act) as *mut _) };
+    pub fn set_activity(&mut self, act: &Activity) {
+        let act_ptr = unsafe { NonNull::new_unchecked(act as *const _ as *mut _) };
         self.act = Some(act_ptr);
     }
 

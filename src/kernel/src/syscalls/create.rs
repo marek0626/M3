@@ -94,7 +94,8 @@ pub fn create_mgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
     };
 
     let mem = mem::Allocation::new(glob, r.size);
-    let cap = Capability::new(r.dst, KObject::MGate(MGateObject::new(mem, r.perms, true)));
+    let mgate = MGateObject::new(mem, r.perms, true);
+    let cap = Capability::new(r.dst, to_kobj!(mgate, MGate));
 
     if platform::tile_desc(tgt_act.tile_id()).has_virtmem() {
         let map_caps = tgt_act.map_caps().borrow_mut();
@@ -133,10 +134,8 @@ pub fn create_rgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
         sysc_err!(Code::InvArgs, "Invalid size");
     }
 
-    try_kmem_quota!(act_caps.insert(Capability::new(
-        r.dst,
-        KObject::RGate(RGateObject::new(r.order, r.msg_order, false)),
-    )));
+    let rgate = RGateObject::new(r.order, r.msg_order, false);
+    try_kmem_quota!(act_caps.insert(Capability::new(r.dst, to_kobj!(rgate, RGate),)));
 
     reply_success(msg);
     Ok(())
@@ -157,12 +156,11 @@ pub fn create_sgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
     let mut act_caps = act.obj_caps().borrow_mut();
 
     check_unused(&act_caps, r.dst)?;
+
     let cap = {
         let rgate = get_kobj_ref!(act_caps, r.rgate, RGate);
-        Capability::new(
-            r.dst,
-            KObject::SGate(SGateObject::new(rgate.downgrade(), r.label, r.credits)),
-        )
+        let sgate = SGateObject::new(rgate.downgrade(), r.label, r.credits);
+        Capability::new(r.dst, to_kobj!(sgate, SGate))
     };
 
     try_kmem_quota!(act_caps.insert_as_child(cap, r.rgate));
@@ -197,7 +195,8 @@ pub fn create_srv(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(),
         }
 
         let serv = Service::new(KObjectOwnedRef::new(act.clone()), r.name.to_string(), rgate);
-        Capability::new(r.dst, KObject::Serv(ServObject::new(serv, true, r.creator)))
+        let serv_obj = ServObject::new(serv, true, r.creator);
+        Capability::new(r.dst, to_kobj!(serv_obj, Serv))
     };
 
     try_kmem_quota!(act_caps.insert(cap));
@@ -229,15 +228,8 @@ pub fn create_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<()
     }
 
     let serv = as_obj!(serv_cap.get(), Serv);
-    let cap = Capability::new(
-        r.dst,
-        KObject::Sess(SessObject::new(
-            serv.downgrade(),
-            r.creator,
-            r.ident,
-            r.auto_close,
-        )),
-    );
+    let sess = SessObject::new(serv.downgrade(), r.creator, r.ident, r.auto_close);
+    let cap = Capability::new(r.dst, to_kobj!(sess, Sess));
 
     try_kmem_quota!(obj_caps.insert_as_child(cap, r.srv));
 
@@ -309,26 +301,24 @@ pub fn create_activity_async(
         };
 
     // give activity cap to the parent
-    let cap = Capability::new(r.dst, KObject::Activity(nact.clone()));
+    let cap = Capability::new(r.dst, to_kobj!(nact.clone(), Activity));
     try_kmem_quota!(act.obj_caps().borrow_mut().insert(cap));
 
     // create EP caps for the pager EPs
     if nact.tile_desc().has_virtmem() {
-        let nact_weak = KObjectOwnedRef::new(nact.clone()).downgrade();
+        let nact_weak = nact.clone().downgrade();
         for (i, ep) in [eps + tcu::PG_SEP_OFF, eps + tcu::PG_REP_OFF]
             .iter()
             .enumerate()
         {
-            let scap = Capability::new(
-                r.dst + 1 + i as CapSel,
-                KObject::EP(EPObject::new(
-                    EPCategory::Std,
-                    nact_weak.clone(),
-                    *ep,
-                    0,
-                    nact.tile_weak().clone(),
-                )),
+            let ep = EPObject::new(
+                EPCategory::Std,
+                nact_weak.clone(),
+                *ep,
+                0,
+                nact.tile_weak().clone(),
             );
+            let scap = Capability::new(r.dst + 1 + i as CapSel, to_kobj!(ep, EP));
             try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(scap, r.dst));
         }
     }
@@ -350,7 +340,8 @@ pub fn create_sem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(),
 
     check_unused(&act.obj_caps().borrow(), r.dst)?;
 
-    let cap = Capability::new(r.dst, KObject::Sem(SemObject::new(r.value)));
+    let sem = SemObject::new(r.value);
+    let cap = Capability::new(r.dst, to_kobj!(sem, Sem));
     try_kmem_quota!(act.obj_caps().borrow_mut().insert(cap));
 
     reply_success(msg);
@@ -430,8 +421,8 @@ pub fn create_map_async(
 
                 // ensure that we keep a copy to not lose it during the async call
                 let map_obj = MapObject::new(phys, PageFlags::from(r.perms));
-                let kobj = KObjectOwnedRef::new(map_obj.clone());
-                (kobj, Some(map_obj), false)
+                let map_clone = map_obj.inner().clone();
+                (map_obj, Some(map_clone), false)
             },
         }
     };
@@ -460,10 +451,8 @@ pub fn create_map_async(
     if !exists {
         let dst_act = try_upgrade_kobj(dst_act_weak, r.act)?;
         let map_obj = try_upgrade_kobj(map_obj_weak, INVALID_SEL)?;
-        let cap = Capability::new_range(
-            SelRange::new_range(r.dst, r.pages),
-            KObject::Map(map_obj.inner().clone()),
-        );
+        let cap =
+            Capability::new_range(SelRange::new_range(r.dst, r.pages), to_kobj!(map_obj, Map));
         try_kmem_quota!(dst_act.map_caps().borrow_mut().insert_as_child_from(
             cap,
             act.obj_caps().borrow_mut(),
