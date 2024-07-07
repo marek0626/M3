@@ -571,6 +571,10 @@ impl ServObject {
         })
     }
 
+    pub fn is_owner(&self) -> bool {
+        self.owner
+    }
+
     pub fn service(&self) -> &Rc<Service> {
         &self.serv
     }
