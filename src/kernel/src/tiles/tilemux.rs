@@ -430,7 +430,7 @@ impl TileMux {
         act: ActId,
         obj: &Rc<SGateObject>,
     ) -> Result<(), Error> {
-        let rgate = obj.rgate();
+        let rgate = obj.rgate().ok_or_else(|| Error::new(Code::NotFound))?;
         assert!(rgate.activated());
 
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {

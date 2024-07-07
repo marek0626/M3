@@ -16,6 +16,7 @@
 use base::build_vmsg;
 use base::cfg;
 use base::col::ToString;
+use base::errors::Error;
 use base::errors::{Code, VerboseError};
 use base::kif::{self, syscalls};
 use base::mem::{GlobOff, MsgBuf, PhysAddr, PhysAddrRaw};
@@ -388,18 +389,18 @@ pub fn activate_sgate_async(
         sysc_err!(Code::Exists, "SendGate is already activated");
     }
 
-    let rgate = sg.rgate().clone();
+    let rgate = sg.rgate().ok_or_else(|| Error::new(Code::NotFound))?;
 
     let (ep, sg) = if !rgate.activated() {
-        sysc_log!(act, "activate: waiting for rgate {:?}", rgate);
+        sysc_log!(act, "activate: waiting for rgate {:?}", *rgate);
         let ep_weak = ep.downgrade();
         let sg_weak = sg.downgrade();
-
         let event = rgate.get_event();
+        let rg_weak = rgate.downgrade();
         wait_for_async(event);
 
-        sysc_log!(act, "activate: rgate {:?} is activated", rgate);
-
+        let rgate = try_upgrade_kobj(rg_weak, kif::INVALID_SEL)?;
+        sysc_log!(act, "activate: rgate {:?} is activated", *rgate);
         let ep = try_upgrade_kobj(ep_weak, r.ep)?;
         let sg = try_upgrade_kobj(sg_weak, r.gate)?;
         (ep, sg)

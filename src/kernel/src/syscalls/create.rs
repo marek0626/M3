@@ -161,7 +161,7 @@ pub fn create_sgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
         let rgate = get_kobj_ref!(act_caps, r.rgate, RGate);
         Capability::new(
             r.dst,
-            KObject::SGate(SGateObject::new(rgate.inner(), r.label, r.credits)),
+            KObject::SGate(SGateObject::new(rgate.downgrade(), r.label, r.credits)),
         )
     };
 

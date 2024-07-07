@@ -430,23 +430,23 @@ impl fmt::Debug for RGateObject {
 
 pub struct SGateObject {
     base: BaseGate,
-    rgate: Rc<RGateObject>,
+    rgate: KObjectWeakRef<RGateObject>,
     label: Label,
     credits: u32,
 }
 
 impl SGateObject {
-    pub fn new(rgate: &Rc<RGateObject>, label: Label, credits: u32) -> Rc<Self> {
+    pub fn new(rgate: KObjectWeakRef<RGateObject>, label: Label, credits: u32) -> Rc<Self> {
         Rc::new(Self {
             base: BaseGate::default(),
-            rgate: rgate.clone(),
+            rgate,
             label,
             credits,
         })
     }
 
-    pub fn rgate(&self) -> &Rc<RGateObject> {
-        &self.rgate
+    pub fn rgate(&self) -> Option<KObjectOwnedRef<RGateObject>> {
+        self.rgate.upgrade()
     }
 
     pub fn label(&self) -> Label {
@@ -461,7 +461,7 @@ impl SGateObject {
         // is the send gate activated?
         if let Some(sep) = self.gate_ep().get_ep() {
             // is the associated receive gate activated?
-            if let Some((recv_tile, recv_ep)) = self.rgate().location() {
+            if let Some((recv_tile, recv_ep)) = self.rgate().and_then(|rg| rg.location()) {
                 let tilemux = tilemng::tilemux(sep.tile_id());
                 tilemux
                     .invalidate_reply_eps(recv_tile, recv_ep, sep.ep())
@@ -482,7 +482,10 @@ impl Deref for SGateObject {
 impl fmt::Debug for SGateObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "SGate[rgate=")?;
-        self.rgate.print_loc(f)?;
+        match self.rgate() {
+            Some(rg) => rg.print_loc(f)?,
+            None => write!(f, "?")?,
+        }
         write!(f, ", lbl={:#x}, crd={}]", self.label, self.credits)
     }
 }
