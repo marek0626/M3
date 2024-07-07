@@ -16,34 +16,38 @@
 use base::boxed::Box;
 use base::cell::RefCell;
 use base::col::String;
-use base::errors::Error;
+use base::errors::{Code, Error};
 use base::mem::MsgBuf;
-use base::rc::{Rc, Weak};
+use base::rc::Rc;
 use base::tcu;
 use core::fmt;
 
-use crate::cap::RGateObject;
+use crate::cap::{KObjectOwnedRef, KObjectWeakRef, RGateObject};
 use crate::com::{QueueId, SendQueue};
 use crate::tiles::Activity;
 
 pub struct Service {
-    act: Weak<Activity>,
+    act: KObjectWeakRef<Activity>,
     name: String,
-    rgate: Rc<RGateObject>,
+    rgate: KObjectWeakRef<RGateObject>,
     queue: RefCell<Box<SendQueue>>,
 }
 
 impl Service {
-    pub fn new(act: &Rc<Activity>, name: String, rgate: Rc<RGateObject>) -> Rc<Self> {
+    pub fn new(
+        act: KObjectOwnedRef<Activity>,
+        name: String,
+        rgate: KObjectOwnedRef<RGateObject>,
+    ) -> Rc<Self> {
         Rc::new(Service {
-            act: Rc::downgrade(act),
             name,
-            rgate,
+            rgate: rgate.downgrade(),
             queue: RefCell::from(SendQueue::new(QueueId::Serv(act.id()), act.tile_id())),
+            act: act.downgrade(),
         })
     }
 
-    pub fn activity(&self) -> Rc<Activity> {
+    pub fn activity(&self) -> KObjectOwnedRef<Activity> {
         self.act.upgrade().unwrap()
     }
 
@@ -52,7 +56,11 @@ impl Service {
     }
 
     pub fn send(&self, lbl: tcu::Label, msg: &MsgBuf) -> Result<thread::Event, Error> {
-        let (_, rep) = self.rgate.location().unwrap();
+        let rg = self
+            .rgate
+            .upgrade()
+            .ok_or_else(|| Error::new(Code::NotFound))?;
+        let (_, rep) = rg.location().unwrap();
         self.queue.borrow_mut().send(rep, lbl, msg)
     }
 
@@ -64,7 +72,12 @@ impl Service {
 impl fmt::Debug for Service {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Service[name={}, rgate=", self.name)?;
-        self.rgate.print_loc(f)?;
+        if let Some(rg) = self.rgate.upgrade() {
+            rg.print_loc(f)?;
+        }
+        else {
+            write!(f, "?")?;
+        }
         write!(f, "]")
     }
 }

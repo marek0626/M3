@@ -594,7 +594,7 @@ impl ServObject {
     }
 
     pub fn server_act(&self) -> KObjectOwnedRef<Activity> {
-        KObjectOwnedRef::new(self.serv.activity())
+        self.serv.activity()
     }
 
     pub fn creator(&self) -> usize {

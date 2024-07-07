@@ -196,7 +196,7 @@ pub fn create_srv(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(),
             sysc_err!(Code::InvArgs, "RGate is not activated");
         }
 
-        let serv = Service::new(act, r.name.to_string(), rgate.inner().clone());
+        let serv = Service::new(KObjectOwnedRef::new(act.clone()), r.name.to_string(), rgate);
         Capability::new(r.dst, KObject::Serv(ServObject::new(serv, true, r.creator)))
     };
 
