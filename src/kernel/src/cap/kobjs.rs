@@ -178,6 +178,9 @@ impl<T> Deref for KObjectOwnedRef<T> {
     }
 }
 
+// TODO maybe we should remove that, hand out a normal reference in Capability::get(), but make
+// that function unsafe and only call it from the macros, which directly convert it into the
+// corresponding KObjectOwnedRef?
 pub struct KObjectGenRef {
     obj: KObject,
 }

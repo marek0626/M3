@@ -223,6 +223,7 @@ pub fn create_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<()
     check_unused(&obj_caps, r.dst)?;
 
     let serv_cap = get_cap!(obj_caps, r.srv);
+    // TODO maybe we should store that rather in the ServObject?
     if serv_cap.has_parent() {
         sysc_err!(Code::InvArgs, "Only the service owner can create sessions");
     }
