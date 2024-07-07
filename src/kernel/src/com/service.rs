@@ -17,12 +17,12 @@ use base::boxed::Box;
 use base::cell::RefCell;
 use base::col::String;
 use base::errors::Error;
-use base::mem::{MsgBuf, MsgBufRef};
+use base::mem::MsgBuf;
 use base::rc::{Rc, Weak};
 use base::tcu;
 use core::fmt;
 
-use crate::cap::{KObjectOwnedRef, RGateObject, ServObject};
+use crate::cap::RGateObject;
 use crate::com::{QueueId, SendQueue};
 use crate::tiles::Activity;
 
@@ -54,17 +54,6 @@ impl Service {
     pub fn send(&self, lbl: tcu::Label, msg: &MsgBuf) -> Result<thread::Event, Error> {
         let (_, rep) = self.rgate.location().unwrap();
         self.queue.borrow_mut().send(rep, lbl, msg)
-    }
-
-    pub fn send_receive_async(
-        srv: KObjectOwnedRef<ServObject>,
-        lbl: tcu::Label,
-        msg: MsgBufRef<'_>,
-    ) -> Result<&'static tcu::Message, Error> {
-        let event = srv.service().send(lbl, &msg)?;
-        drop(srv);
-        drop(msg);
-        SendQueue::receive_async(event)
     }
 
     pub fn abort(&self) {

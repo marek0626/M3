@@ -14,21 +14,21 @@
  */
 
 use base::cell::{Cell, Ref, RefCell, RefMut, StaticCell, StaticRefCell};
-use base::env;
 use base::errors::{Code, Error};
 use base::io::LogFlags;
 use base::kif::{self, service, tilemux::QuotaId};
 use base::log;
-use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, PhysAddr, VirtAddr};
+use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, MsgBufRef, PhysAddr, VirtAddr};
 use base::rc::{Rc, Weak};
 use base::tcu::{ActId, EpId, Label, TileId};
 use base::{backtrace, build_vmsg};
+use base::{env, tcu};
 use thread::Event;
 
 use core::fmt;
 use core::ops::Deref;
 
-use crate::com::Service;
+use crate::com::{SendQueue, Service};
 use crate::ktcu;
 use crate::mem;
 use crate::platform;
@@ -560,6 +560,8 @@ impl fmt::Debug for MGateObject {
 }
 
 pub struct ServObject {
+    // note: this Rc should not leak outside of this object to prevent that anyone accidentally
+    // keeps a reference across an async call
     serv: Rc<Service>,
     owner: bool,
     creator: usize,
@@ -574,16 +576,37 @@ impl ServObject {
         })
     }
 
-    pub fn is_owner(&self) -> bool {
-        self.owner
+    pub fn name(&self) -> &str {
+        self.serv.name()
     }
 
-    pub fn service(&self) -> &Rc<Service> {
-        &self.serv
+    pub fn server_act(&self) -> KObjectOwnedRef<Activity> {
+        KObjectOwnedRef::new(self.serv.activity())
     }
 
     pub fn creator(&self) -> usize {
         self.creator
+    }
+
+    pub fn derive(&self, creator: usize) -> Rc<Self> {
+        Self::new(self.serv.clone(), false, creator)
+    }
+
+    pub fn send_receive_async(
+        srv: KObjectOwnedRef<Self>,
+        lbl: Label,
+        msg: MsgBufRef<'_>,
+    ) -> Result<&'static tcu::Message, Error> {
+        let event = srv.serv.send(lbl, &msg)?;
+        drop(srv);
+        drop(msg);
+        SendQueue::receive_async(event)
+    }
+
+    pub fn abort(&self) {
+        if self.owner {
+            self.serv.abort();
+        }
     }
 }
 
@@ -629,7 +652,7 @@ impl SessObject {
     pub fn close_async(sess: KObjectOwnedRef<Self>, revoker: ActId) {
         if sess.auto_close {
             // don't send the close, if the server is the revoker
-            if sess.srv.service().activity().id() == revoker {
+            if sess.srv.server_act().id() == revoker {
                 return;
             }
 
@@ -637,7 +660,7 @@ impl SessObject {
                 LogFlags::KernServ,
                 "Sending close(sess={:#x}) to service {} with creator {}",
                 sess.ident(),
-                sess.srv.service().name(),
+                sess.srv.name(),
                 sess.creator,
             );
 
@@ -650,7 +673,7 @@ impl SessObject {
             let creator = sess.creator as Label;
             drop(sess);
 
-            Service::send_receive_async(srv, creator, smsg).unwrap();
+            ServObject::send_receive_async(srv, creator, smsg).unwrap();
         }
     }
 }
@@ -660,7 +683,7 @@ impl fmt::Debug for SessObject {
         write!(
             f,
             "Sess[service={}, creator={}, ident={:#x}]",
-            self.service().service().name(),
+            self.service().name(),
             self.creator,
             self.ident,
         )

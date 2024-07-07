@@ -25,8 +25,7 @@ use base::rc::Rc;
 use base::serialize::M3Deserializer;
 use base::tcu;
 
-use crate::cap::{KObject, KObjectOwnedRef};
-use crate::com::Service;
+use crate::cap::{KObject, KObjectOwnedRef, ServObject};
 use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::Activity;
 
@@ -152,25 +151,25 @@ pub fn exchange_over_sess_async(
         sess.ident(),
         r.crd.count(),
         r.args.bytes,
-        serv.service().name(),
+        serv.name(),
         label,
     );
     drop(sess);
 
     let serv_weak = serv.clone().downgrade();
-    let res = Service::send_receive_async(serv, label, smsg);
+    let res = ServObject::send_receive_async(serv, label, smsg);
     let serv = try_upgrade_kobj(serv_weak, INVALID_SEL)?;
 
     let rmsg = match res {
         Ok(rmsg) => rmsg,
-        Err(e) => sysc_err!(e.code(), "Service {} unreachable", serv.service().name()),
+        Err(e) => sysc_err!(e.code(), "Service {} unreachable", serv.name()),
     };
 
     let mut de = M3Deserializer::new(rmsg.as_words());
     let err: Code = de.pop()?;
     match err {
         Code::Success => {},
-        err => sysc_err!(err, "Server {} denied cap exchange", serv.service().name()),
+        err => sysc_err!(err, "Server {} denied cap exchange", serv.name()),
     }
 
     let reply: service::ExchangeReply = de.pop()?;
@@ -186,7 +185,7 @@ pub fn exchange_over_sess_async(
     let actcap = get_kobj!(act, r.act, Activity);
     do_exchange(
         actcap.inner(),
-        &serv.service().activity(),
+        serv.server_act().inner(),
         &r.crd,
         &reply.data.caps,
         r.obtain,

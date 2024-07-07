@@ -26,7 +26,6 @@ use base::tcu;
 
 use crate::cap::{Capability, KObject};
 use crate::cap::{EPQuota, KMemObject, MGateObject, ServObject, TileObject};
-use crate::com::Service;
 use crate::mem;
 use crate::syscalls::{check_unused, get_request, reply_success, try_upgrade_kobj};
 use crate::tiles::{tilemng, Activity, TileMux};
@@ -200,22 +199,17 @@ pub fn derive_srv_async(
         LogFlags::KernServ,
         "Sending derive_crt(sessions={}) to service {} with creator {}",
         r.sessions,
-        srv.service().name(),
+        srv.name(),
         label,
     );
 
     let srv_weak = srv.clone().downgrade();
-    let res = Service::send_receive_async(srv, label, smsg);
+    let res = ServObject::send_receive_async(srv, label, smsg);
 
     let srv = try_upgrade_kobj(srv_weak, r.srv)?;
     let res = match res {
         Err(e) => {
-            sysc_log!(
-                act,
-                "Service {} unreachable: {:?}",
-                srv.service().name(),
-                e.code()
-            );
+            sysc_log!(act, "Service {} unreachable: {:?}", srv.name(), e.code());
             Err(e)
         },
 
@@ -229,7 +223,7 @@ pub fn derive_srv_async(
                     sysc_log!(act, "derive_srv continue with creator={}", reply.creator);
 
                     // obtain SendGate from server (do that first because it can fail)
-                    let serv_act = srv.service().activity();
+                    let serv_act = srv.server_act();
                     let mut serv_caps = serv_act.obj_caps().borrow_mut();
                     let src_cap = serv_caps.get_mut(reply.sgate_sel);
                     match src_cap {
@@ -244,20 +238,12 @@ pub fn derive_srv_async(
                     }
 
                     // derive new service object
-                    let cap = Capability::new(
-                        r.dst_srv,
-                        KObject::Serv(ServObject::new(srv.service().clone(), false, reply.creator)),
-                    );
+                    let cap = Capability::new(r.dst_srv, KObject::Serv(srv.derive(reply.creator)));
                     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.srv));
                     Ok(())
                 },
                 err => {
-                    sysc_log!(
-                        act,
-                        "Server {} denied derive: {:?}",
-                        srv.service().name(),
-                        err
-                    );
+                    sysc_log!(act, "Server {} denied derive: {:?}", srv.name(), err);
                     Err(Error::new(err))
                 },
             }

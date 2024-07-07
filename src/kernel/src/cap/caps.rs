@@ -540,9 +540,7 @@ impl Capability {
             },
 
             KObject::Serv(ref s) => {
-                if s.is_owner() {
-                    s.service().abort();
-                }
+                s.abort();
             },
 
             KObject::Sess(ref s) => {
