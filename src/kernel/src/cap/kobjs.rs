@@ -621,24 +621,29 @@ impl fmt::Debug for ServObject {
 }
 
 pub struct SessObject {
-    srv: Rc<ServObject>,
+    srv: KObjectWeakRef<ServObject>,
     creator: usize,
     ident: u64,
     pub auto_close: bool,
 }
 
 impl SessObject {
-    pub fn new(srv: &Rc<ServObject>, creator: usize, ident: u64, auto_close: bool) -> Rc<Self> {
+    pub fn new(
+        srv: KObjectWeakRef<ServObject>,
+        creator: usize,
+        ident: u64,
+        auto_close: bool,
+    ) -> Rc<Self> {
         Rc::new(Self {
-            srv: srv.clone(),
+            srv,
             creator,
             ident,
             auto_close,
         })
     }
 
-    pub fn service(&self) -> &Rc<ServObject> {
-        &self.srv
+    pub fn service(&self) -> Option<KObjectOwnedRef<ServObject>> {
+        self.srv.upgrade()
     }
 
     pub fn creator(&self) -> usize {
@@ -651,29 +656,30 @@ impl SessObject {
 
     pub fn close_async(sess: KObjectOwnedRef<Self>, revoker: ActId) {
         if sess.auto_close {
-            // don't send the close, if the server is the revoker
-            if sess.srv.server_act().id() == revoker {
-                return;
+            if let Some(serv) = sess.service() {
+                // don't send the close, if the server is the revoker
+                if serv.server_act().id() == revoker {
+                    return;
+                }
+
+                log!(
+                    LogFlags::KernServ,
+                    "Sending close(sess={:#x}) to service {} with creator {}",
+                    sess.ident(),
+                    serv.name(),
+                    sess.creator,
+                );
+
+                let mut smsg = MsgBuf::borrow_def();
+                build_vmsg!(smsg, service::Request::Close { sid: sess.ident });
+
+                let creator = sess.creator as Label;
+                drop(sess);
+
+                // this should never fail, because the close request fails only if the creator does not
+                // own the session. but we know here that the creator owns this session.
+                ServObject::send_receive_async(serv, creator, smsg).unwrap();
             }
-
-            log!(
-                LogFlags::KernServ,
-                "Sending close(sess={:#x}) to service {} with creator {}",
-                sess.ident(),
-                sess.srv.name(),
-                sess.creator,
-            );
-
-            let mut smsg = MsgBuf::borrow_def();
-            build_vmsg!(smsg, service::Request::Close { sid: sess.ident });
-
-            // this should never fail, because the close request fails only if the creator does not
-            // own the session. but we know here that the creator owns this session.
-            let srv = KObjectOwnedRef::new(sess.srv.clone());
-            let creator = sess.creator as Label;
-            drop(sess);
-
-            ServObject::send_receive_async(srv, creator, smsg).unwrap();
         }
     }
 }
@@ -683,7 +689,10 @@ impl fmt::Debug for SessObject {
         write!(
             f,
             "Sess[service={}, creator={}, ident={:#x}]",
-            self.service().name(),
+            match self.service().as_ref() {
+                Some(s) => s.name(),
+                None => "?",
+            },
             self.creator,
             self.ident,
         )

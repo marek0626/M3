@@ -232,7 +232,7 @@ pub fn create_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<()
     let cap = Capability::new(
         r.dst,
         KObject::Sess(SessObject::new(
-            serv.inner(),
+            serv.downgrade(),
             r.creator,
             r.ident,
             r.auto_close,

@@ -15,7 +15,7 @@
 
 use base::build_vmsg;
 use base::col::ToString;
-use base::errors::{Code, VerboseError};
+use base::errors::{Code, Error, VerboseError};
 use base::format;
 use base::io::LogFlags;
 use base::kif::{service, syscalls, CapRngDesc, CapType, INVALID_SEL, SEL_ACT};
@@ -25,7 +25,7 @@ use base::rc::Rc;
 use base::serialize::M3Deserializer;
 use base::tcu;
 
-use crate::cap::{KObject, KObjectOwnedRef, ServObject};
+use crate::cap::{KObject, ServObject};
 use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::Activity;
 
@@ -141,7 +141,7 @@ pub fn exchange_over_sess_async(
         }
     );
 
-    let serv = KObjectOwnedRef::new(sess.service().clone());
+    let serv = sess.service().ok_or_else(|| Error::new(Code::NotFound))?;
     let label = sess.creator() as tcu::Label;
 
     log!(
