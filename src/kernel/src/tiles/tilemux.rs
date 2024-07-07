@@ -367,8 +367,10 @@ impl TileMux {
         self.state.as_ref().map(|state| state.eps.size())
     }
 
-    pub fn pmp_ep(&self, ep: EpId) -> Option<&Rc<EPObject>> {
-        self.state.as_ref().map(|state| &state.pmp[ep as usize])
+    pub fn pmp_ep(&self, ep: EpId) -> Option<KObjectOwnedRef<EPObject>> {
+        self.state
+            .as_ref()
+            .map(|state| KObjectOwnedRef::new(state.pmp[ep as usize].clone()))
     }
 
     pub fn configure_pmp_ep(&mut self, ep: tcu::EpId, mg: &Rc<MGateObject>) -> Result<(), Error> {
@@ -377,7 +379,7 @@ impl TileMux {
         // remember that the MemGate is activated on this EP for the case that the MemGate gets
         // revoked. If so, the EP is automatically invalidated.
         let ep_obj = self.pmp_ep(ep).ok_or_else(|| Error::new(Code::InvState))?;
-        mg.set_ep(ep_obj, GateObject::Mem(mg.clone()));
+        mg.set_ep(&ep_obj, GateObject::Mem(mg.clone()));
         Ok(())
     }
 

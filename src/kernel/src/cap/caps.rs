@@ -455,7 +455,7 @@ impl Capability {
                 ktcu::invalidate_ep_remote(ep.tile_id(), ep.ep(), true).ok();
             }
 
-            EPObject::revoke(&ep);
+            EPObject::revoke(ep);
 
             cgp.remove_ep();
         }
@@ -493,7 +493,7 @@ impl Capability {
             },
 
             KObject::EP(ref mut e) => {
-                EPObject::revoke(e);
+                EPObject::revoke(KObjectOwnedRef::new(e.clone()));
             },
 
             KObject::Tile(ref mut tile) => {

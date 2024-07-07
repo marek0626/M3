@@ -288,24 +288,26 @@ impl fmt::Debug for KObject {
 }
 
 pub struct GateEP {
-    ep: Weak<EPObject>,
+    ep: KObjectWeakRef<EPObject>,
 }
 
 impl GateEP {
     fn new() -> Self {
-        Self { ep: Weak::new() }
+        Self {
+            ep: KObjectWeakRef::new(),
+        }
     }
 
-    pub fn get_ep(&self) -> Option<Rc<EPObject>> {
+    pub fn get_ep(&self) -> Option<KObjectOwnedRef<EPObject>> {
         self.ep.upgrade()
     }
 
-    pub fn set_ep(&mut self, o: &Rc<EPObject>) {
-        self.ep = Rc::downgrade(o);
+    pub fn set_ep(&mut self, o: KObjectOwnedRef<EPObject>) {
+        self.ep = o.downgrade();
     }
 
     pub fn remove_ep(&mut self) {
-        self.ep = Weak::new()
+        self.ep = KObjectWeakRef::new()
     }
 }
 
@@ -320,8 +322,8 @@ pub struct BaseGate {
 }
 
 impl BaseGate {
-    pub fn set_ep(&self, ep: &Rc<EPObject>, gobj: GateObject) {
-        self.gep.borrow_mut().set_ep(ep);
+    pub fn set_ep(&self, ep: &KObjectOwnedRef<EPObject>, gobj: GateObject) {
+        self.gep.borrow_mut().set_ep(ep.clone());
         ep.set_gate(gobj);
     }
 
@@ -1091,7 +1093,7 @@ impl EPObject {
             tile,
         });
         if let Some(v) = maybe_act {
-            v.add_ep(ep.clone());
+            v.add_ep(KObjectOwnedRef::new(ep.clone()));
         }
         ep
     }
@@ -1120,9 +1122,9 @@ impl EPObject {
         self.gate.replace(Some(g));
     }
 
-    pub fn revoke(ep: &Rc<Self>) {
+    pub fn revoke(ep: KObjectOwnedRef<Self>) {
         if let Some(v) = ep.act.upgrade() {
-            v.rem_ep(ep);
+            v.rem_ep(&ep);
         }
     }
 

@@ -263,7 +263,7 @@ pub fn activate_mgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
         sysc_err!(e.code(), "Unable to configure mem EP");
     }
 
-    mg.set_ep(ep.inner(), GateObject::Mem(mg.inner().clone()));
+    mg.set_ep(&ep, GateObject::Mem(mg.inner().clone()));
 
     reply_success(msg);
     Ok(())
@@ -357,7 +357,7 @@ pub fn activate_rgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
         sysc_err!(e.code(), "Unable to configure recv EP");
     }
 
-    rg.set_ep(ep.inner(), GateObject::Recv(rg.inner().clone()));
+    rg.set_ep(&ep, GateObject::Recv(rg.inner().clone()));
 
     reply_success(msg);
     Ok(())
@@ -414,7 +414,7 @@ pub fn activate_sgate_async(
         sysc_err!(e.code(), "Unable to configure send EP");
     }
 
-    sg.set_ep(ep.inner(), GateObject::Send(sg.inner().clone()));
+    sg.set_ep(&ep, GateObject::Send(sg.inner().clone()));
 
     reply_success(msg);
     Ok(())

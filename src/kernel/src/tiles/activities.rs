@@ -84,7 +84,7 @@ pub struct Activity {
     obj_caps: RefCell<CapTable>,
     map_caps: RefCell<CapTable>,
 
-    eps: RefCell<Vec<Rc<EPObject>>>,
+    eps: RefCell<Vec<KObjectWeakRef<EPObject>>>,
     rbuf_phys: Cell<PhysAddr>,
     upcalls: RefCell<Box<SendQueue>>,
 }
@@ -335,12 +335,14 @@ impl Activity {
         self.exit_code.replace(None)
     }
 
-    pub fn add_ep(&self, ep: Rc<EPObject>) {
-        self.eps.borrow_mut().push(ep);
+    pub fn add_ep(&self, ep: KObjectOwnedRef<EPObject>) {
+        self.eps.borrow_mut().push(ep.downgrade());
     }
 
-    pub fn rem_ep(&self, ep: &Rc<EPObject>) {
-        self.eps.borrow_mut().retain(|e| e.ep() != ep.ep());
+    pub fn rem_ep(&self, ep: &KObjectOwnedRef<EPObject>) {
+        self.eps
+            .borrow_mut()
+            .retain(|e| e.upgrade().unwrap().ep() != ep.ep());
     }
 
     fn fetch_exit(&self, sels: &[u64]) -> Option<(CapSel, Code)> {
@@ -540,8 +542,10 @@ impl Activity {
 
         // force-invalidate all other EPs of this activity
         for ep in &*act.eps.borrow_mut() {
-            // ignore failures here
-            ep.deconfigure(true).ok();
+            if let Some(ep) = ep.upgrade() {
+                // ignore failures here
+                ep.deconfigure(true).ok();
+            }
         }
 
         // make sure that we don't get further syscalls by this activity
