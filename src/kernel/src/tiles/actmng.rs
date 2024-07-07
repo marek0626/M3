@@ -123,10 +123,12 @@ impl ActivityMng {
 
         if platform::tile_desc(act.tile_id()).supports_tilemux() {
             let id = act.id();
-            let tile_id = act.tile_id();
-            let time_quota_id = act.tile().time_quota_id();
-            let pt_quota_id = act.tile().pt_quota_id();
+            let tile = act.tile();
+            let tile_id = tile.tile();
+            let time_quota_id = tile.time_quota_id();
+            let pt_quota_id = tile.pt_quota_id();
             let eps_start = act.eps_start();
+            drop(tile);
             drop(act);
 
             TileMux::activity_init_async(

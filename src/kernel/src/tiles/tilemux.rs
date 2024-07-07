@@ -24,14 +24,14 @@ use base::kif::{self, TileAttr, TileISA};
 use base::log;
 use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, VirtAddr};
 use base::quota;
-use base::rc::{Rc, Weak};
+use base::rc::Rc;
 use base::tcu::{self, ActId, EpId, TileId};
 
 use core::cmp;
 
 use crate::cap::{
-    EPCategory, EPObject, EPQuota, GateObject, KObjectOwnedRef, MGateObject, RGateObject,
-    SGateObject, TileObject,
+    EPCategory, EPObject, EPQuota, GateObject, KObjectOwnedRef, KObjectWeakRef, MGateObject,
+    RGateObject, SGateObject, TileObject,
 };
 use crate::ktcu;
 use crate::mem;
@@ -49,7 +49,13 @@ impl TileState {
         // create PMP EPObjects for this Tile
         let mut pmp = Vec::new();
         for ep in 0..tcu::PMEM_PROT_EPS as EpId {
-            pmp.push(EPObject::new(EPCategory::PMP, Weak::new(), ep, 0, tile));
+            pmp.push(EPObject::new(
+                EPCategory::PMP,
+                KObjectWeakRef::new(),
+                ep,
+                0,
+                KObjectOwnedRef::new(tile.clone()).downgrade(),
+            ));
         }
 
         assert!(platform::tile_desc(tile.tile()).has_internal_eps() == ep_count.is_none());

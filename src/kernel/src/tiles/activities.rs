@@ -30,7 +30,7 @@ use core::fmt;
 
 use crate::cap::{
     wait_for_async, CapTable, Capability, EPObject, KMemObject, KObject, KObjectOwnedRef,
-    TileObject,
+    KObjectWeakRef, TileObject,
 };
 use crate::com::{QueueId, SendQueue};
 use crate::ktcu;
@@ -69,8 +69,12 @@ pub struct Activity {
     name: String,
     flags: ActivityFlags,
     eps_start: EpId,
+    // keep a copy of the tile id for performance reasons (does never change)
+    tile_id: TileId,
 
-    tile: Rc<TileObject>,
+    tile: KObjectWeakRef<TileObject>,
+    // we currently have to store a strong reference here, because the activity needs access to it
+    // until it is fully destructed to give back all the kmem quota it uses for its capabilities
     kmem: Rc<KMemObject>,
 
     state: Cell<State>,
@@ -99,6 +103,7 @@ impl Activity {
             name: name.to_string(),
             flags,
             eps_start,
+            tile_id: tile.tile(),
             kmem: kmem.inner().clone(),
             state: Cell::from(State::INIT),
             exit_code: Cell::from(None),
@@ -108,12 +113,14 @@ impl Activity {
             eps: RefCell::from(Vec::new()),
             rbuf_phys: Cell::from(PhysAddr::default()),
             upcalls: RefCell::from(SendQueue::new(QueueId::Activity(id), tile.tile())),
-            tile: tile.inner().clone(),
+            tile: tile.downgrade(),
         });
 
         {
             act.obj_caps.borrow_mut().set_activity(&act);
             act.map_caps.borrow_mut().set_activity(&act);
+
+            let tile = act.tile.upgrade().unwrap();
 
             // kmem cap
             act.obj_caps().borrow_mut().insert(Capability::new(
@@ -123,7 +130,7 @@ impl Activity {
             // tile cap
             act.obj_caps().borrow_mut().insert(Capability::new(
                 kif::SEL_TILE,
-                KObject::Tile(act.tile.clone()),
+                KObject::Tile(tile.inner().clone()),
             ))?;
             // cap for own activity
             act.obj_caps().borrow_mut().insert(Capability::new(
@@ -133,10 +140,10 @@ impl Activity {
 
             // alloc standard EPs
             tilemng::tilemux(act.tile_id()).alloc_eps(eps_start, STD_EPS_COUNT);
-            act.tile.alloc(STD_EPS_COUNT);
+            tile.alloc(STD_EPS_COUNT);
 
             // add us to tile
-            act.tile.add_activity();
+            tile.add_activity();
         }
 
         // some system calls are blocking, leading to a thread switch in the kernel. there is just
@@ -268,12 +275,16 @@ impl Activity {
         self.id
     }
 
-    pub fn tile(&self) -> &Rc<TileObject> {
+    pub fn tile(&self) -> KObjectOwnedRef<TileObject> {
+        self.tile.upgrade().unwrap()
+    }
+
+    pub fn tile_weak(&self) -> &KObjectWeakRef<TileObject> {
         &self.tile
     }
 
     pub fn tile_id(&self) -> TileId {
-        self.tile.tile()
+        self.tile_id
     }
 
     pub fn tile_desc(&self) -> TileDesc {
@@ -590,10 +601,11 @@ impl Drop for Activity {
 
         // free standard EPs
         tilemng::tilemux(self.tile_id()).free_eps(self.eps_start, STD_EPS_COUNT);
-        self.tile.free(STD_EPS_COUNT);
+        let tile = self.tile();
+        tile.free(STD_EPS_COUNT);
 
         // remove us from tile
-        self.tile.rem_activity();
+        tile.rem_activity();
 
         assert!(self.obj_caps.borrow().is_empty());
         assert!(self.map_caps.borrow().is_empty());

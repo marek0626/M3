@@ -314,7 +314,7 @@ pub fn create_activity_async(
 
     // create EP caps for the pager EPs
     if nact.tile_desc().has_virtmem() {
-        let nact_rc = Rc::downgrade(&nact);
+        let nact_weak = KObjectOwnedRef::new(nact.clone()).downgrade();
         for (i, ep) in [eps + tcu::PG_SEP_OFF, eps + tcu::PG_REP_OFF]
             .iter()
             .enumerate()
@@ -323,10 +323,10 @@ pub fn create_activity_async(
                 r.dst + 1 + i as CapSel,
                 KObject::EP(EPObject::new(
                     EPCategory::Std,
-                    nact_rc.clone(),
+                    nact_weak.clone(),
                     *ep,
                     0,
-                    nact.tile(),
+                    nact.tile_weak().clone(),
                 )),
             );
             try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(scap, r.dst));

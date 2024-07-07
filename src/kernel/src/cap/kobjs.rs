@@ -126,7 +126,19 @@ pub struct KObjectWeakRef<T> {
     obj: Weak<T>,
 }
 
+impl<T> Clone for KObjectWeakRef<T> {
+    fn clone(&self) -> Self {
+        Self {
+            obj: self.obj.clone(),
+        }
+    }
+}
+
 impl<T> KObjectWeakRef<T> {
+    pub fn new() -> Self {
+        Self { obj: Weak::new() }
+    }
+
     pub fn can_upgrade(&self) -> bool {
         self.obj.strong_count() > 0
     }
@@ -1051,19 +1063,22 @@ pub enum EPCategory {
 pub struct EPObject {
     cat: EPCategory,
     gate: RefCell<Option<GateObject>>,
-    act: Weak<Activity>,
+    act: KObjectWeakRef<Activity>,
     ep: EpId,
     replies: usize,
-    tile: Rc<TileObject>,
+    // keep a separate copy of the TileId, because this does never change and if we have a valid
+    // reference to an EPObject, the TileObject is always valid as well.
+    tile_id: TileId,
+    tile: KObjectWeakRef<TileObject>,
 }
 
 impl EPObject {
     pub fn new(
         cat: EPCategory,
-        act: Weak<Activity>,
+        act: KObjectWeakRef<Activity>,
         ep: EpId,
         replies: usize,
-        tile: &Rc<TileObject>,
+        tile: KObjectWeakRef<TileObject>,
     ) -> Rc<Self> {
         let maybe_act = act.upgrade();
         let ep = Rc::new(Self {
@@ -1072,7 +1087,8 @@ impl EPObject {
             act,
             ep,
             replies,
-            tile: tile.clone(),
+            tile_id: tile.upgrade().unwrap().tile(),
+            tile,
         });
         if let Some(v) = maybe_act {
             v.add_ep(ep.clone());
@@ -1081,11 +1097,10 @@ impl EPObject {
     }
 
     pub fn tile_id(&self) -> TileId {
-        self.tile.tile()
+        self.tile_id
     }
 
-    // TODO don't hand out Rc<Activity>, but KObjectOwnedRef<...>
-    pub fn activity(&self) -> Option<Rc<Activity>> {
+    pub fn activity(&self) -> Option<KObjectOwnedRef<Activity>> {
         self.act.upgrade()
     }
 
@@ -1156,9 +1171,11 @@ impl EPObject {
 impl Drop for EPObject {
     fn drop(&mut self) {
         if self.cat == EPCategory::Custom {
-            tilemng::tilemux(self.tile.tile).free_eps(self.ep, 1 + self.replies);
+            if let Some(tile) = self.tile.upgrade() {
+                tilemng::tilemux(tile.tile).free_eps(self.ep, 1 + self.replies);
 
-            self.tile.free(1 + self.replies);
+                tile.free(1 + self.replies);
+            }
         }
     }
 }
@@ -1171,7 +1188,7 @@ impl fmt::Debug for EPObject {
             self.activity().unwrap().id(),
             self.ep,
             self.replies,
-            self.tile
+            *self.tile.upgrade().unwrap()
         )
     }
 }

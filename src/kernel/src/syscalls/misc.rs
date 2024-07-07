@@ -24,8 +24,7 @@ use base::rc::Rc;
 use base::tcu;
 
 use crate::cap::{
-    wait_for_async, Capability, EPCategory, EPObject, GateObject, KObject, KObjectOwnedRef,
-    SemObject,
+    wait_for_async, Capability, EPCategory, EPObject, GateObject, KObject, SemObject,
 };
 use crate::ktcu;
 use crate::platform;
@@ -103,10 +102,10 @@ pub fn alloc_ep_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
         r.dst,
         KObject::EP(EPObject::new(
             EPCategory::Custom,
-            Rc::downgrade(dst_act.inner()),
+            dst_act.clone().downgrade(),
             epid,
             r.replies,
-            dst_act.tile(),
+            dst_act.tile_weak().clone(),
         )),
     );
     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.act));
@@ -285,7 +284,7 @@ pub fn activate_rgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
     let ep = get_kobj!(act, r.ep, EP);
 
     // activity that is currently active on the endpoint
-    let ep_act = KObjectOwnedRef::new(ep.activity().unwrap());
+    let ep_act = ep.activity().unwrap();
 
     let epid = ep.ep();
     let dst_tile = ep.tile_id();
