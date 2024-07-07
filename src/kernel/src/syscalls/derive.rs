@@ -25,10 +25,10 @@ use base::serialize::M3Deserializer;
 use base::tcu;
 
 use crate::cap::{Capability, KObject};
-use crate::cap::{EPQuota, KMemObject, MGateObject, ServObject, TileObject};
+use crate::cap::{KMemObject, MGateObject, ServObject, TileObject};
 use crate::mem;
 use crate::syscalls::{check_unused, get_request, reply_success, try_upgrade_kobj};
-use crate::tiles::{tilemng, Activity, TileMux};
+use crate::tiles::Activity;
 
 #[inline(never)]
 pub fn derive_tile_async(
@@ -49,48 +49,10 @@ pub fn derive_tile_async(
     check_unused(&act.obj_caps().borrow(), r.dst)?;
 
     let tile = get_kobj!(act, r.tile, Tile);
-    let tile_id = tile.tile();
 
-    let ep_quota = if let Some(eps) = r.eps {
-        if !tile.has_quota(eps) {
-            sysc_err!(Code::NoSpace, "Insufficient EPs");
-        }
-        tile.alloc(eps);
+    let tile_new = TileObject::derive_async(tile, r.eps, r.time, r.pts)?;
+    let cap = Capability::new(r.dst, KObject::Tile(tile_new));
 
-        EPQuota::new(eps)
-    }
-    else {
-        tile.ep_quota().clone()
-    };
-
-    let (time_id, pt_id) = if r.time.is_some() || r.pts.is_some() {
-        let tilemux = tilemng::tilemux(tile_id);
-        let time_quota_id = tile.time_quota_id();
-        let pt_quota_id = tile.pt_quota_id();
-        let tile_weak = tile.downgrade();
-
-        let res = TileMux::derive_quota_async(tilemux, time_quota_id, pt_quota_id, r.time, r.pts);
-
-        let tile = try_upgrade_kobj(tile_weak, r.tile)?;
-
-        match res {
-            Err(e) => {
-                if let Some(eps) = r.eps {
-                    tile.free(eps);
-                }
-                return Err(VerboseError::from(e));
-            },
-            Ok(v) => v,
-        }
-    }
-    else {
-        (tile.time_quota_id(), tile.pt_quota_id())
-    };
-
-    let cap = Capability::new(
-        r.dst,
-        KObject::Tile(TileObject::new(tile_id, ep_quota, time_id, pt_id, true)),
-    );
     // TODO we will leak the quota object in TileMux if this fails
     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.tile));
 

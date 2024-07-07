@@ -14,7 +14,8 @@
  */
 
 use base::cell::{Cell, Ref, RefCell, RefMut, StaticCell, StaticRefCell};
-use base::errors::{Code, Error};
+use base::col::ToString;
+use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{self, service, tilemux::QuotaId};
 use base::log;
@@ -840,6 +841,60 @@ impl TileObject {
         res
     }
 
+    pub fn derive_async(
+        tile: KObjectOwnedRef<Self>,
+        eps: Option<usize>,
+        time: Option<u64>,
+        pts: Option<usize>,
+    ) -> Result<Rc<Self>, VerboseError> {
+        // only allocate it from the tile here, but don't keep an Rc to the EPQuota
+        if let Some(num) = eps {
+            if !tile.has_quota(num) {
+                return Err(VerboseError::new(
+                    Code::NoSpace,
+                    "Insufficient EPs".to_string(),
+                ));
+            }
+            tile.alloc(num);
+        }
+
+        let tile_id = tile.tile();
+        let (time_id, pt_id, tile) = if time.is_some() || pts.is_some() {
+            let tilemux = tilemng::tilemux(tile_id);
+            let time_quota_id = tile.time_quota_id();
+            let pt_quota_id = tile.pt_quota_id();
+            let tile_weak = tile.downgrade();
+
+            let res = TileMux::derive_quota_async(tilemux, time_quota_id, pt_quota_id, time, pts);
+
+            let tile = tile_weak
+                .upgrade()
+                .ok_or_else(|| Error::new(Code::NotFound))?;
+
+            match res {
+                Err(e) => {
+                    if let Some(num) = eps {
+                        tile.free(num);
+                    }
+                    return Err(VerboseError::from(e));
+                },
+                Ok(v) => (v.0, v.1, tile),
+            }
+        }
+        else {
+            (tile.time_quota_id(), tile.pt_quota_id(), tile)
+        };
+
+        // now that the async call is done, create the EPQuota
+        let ep_quota = if let Some(num) = eps {
+            EPQuota::new(num)
+        }
+        else {
+            tile.ep_quota.clone()
+        };
+        Ok(Self::new(tile_id, ep_quota, time_id, pt_id, true))
+    }
+
     pub fn tile(&self) -> TileId {
         self.tile
     }
@@ -852,8 +907,8 @@ impl TileObject {
         self.cur_acts.get()
     }
 
-    pub fn ep_quota(&self) -> &Rc<EPQuota> {
-        &self.ep_quota
+    pub fn ep_quota(&self) -> &EPQuota {
+        self.ep_quota.as_ref()
     }
 
     pub fn time_quota_id(&self) -> QuotaId {
