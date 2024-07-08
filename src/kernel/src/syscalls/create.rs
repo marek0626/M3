@@ -67,6 +67,11 @@ pub fn create_mgate(
 
     let sel = (r.addr.as_goff() / cfg::PAGE_SIZE as GlobOff) as CapSel;
     let glob = if platform::tile_desc(tgt_act.tile_id()).has_virtmem() {
+        let pages = (r.size / cfg::PAGE_SIZE as GlobOff) as CapSel;
+        if pages == 0 {
+            sysc_err!(Code::InvArgs, "Region is empty");
+        }
+
         let map_caps = tgt_act.map_caps().borrow();
         let map_cap = map_caps
             .get(sel)
@@ -81,7 +86,7 @@ pub fn create_mgate(
 
         let pages = (r.size / cfg::PAGE_SIZE as GlobOff) as CapSel;
         let off = sel - map_cap.sel();
-        if pages == 0 || off + pages > map_cap.len() {
+        if off + pages > map_cap.len() {
             sysc_err!(Code::InvArgs, "Invalid length");
         }
 
@@ -90,8 +95,13 @@ pub fn create_mgate(
         GlobAddr::new_with(tgt_act.tile_id(), phys.as_goff())
     }
     else {
-        if r.size == 0 || r.addr + r.size >= cfg::MEM_CAP_END {
-            sysc_err!(Code::InvArgs, "Region empty or out of bounds");
+        if r.size == 0 {
+            sysc_err!(Code::InvArgs, "Region is empty");
+        }
+        // use the same error code here as above where we fail with InvCap for non-existing mapping
+        // capabilities (unmapped regions)
+        if r.addr + r.size >= cfg::MEM_CAP_END {
+            sysc_err!(Code::InvCap, "Region is out of bounds");
         }
 
         GlobAddr::new_with(tgt_act.tile_id(), r.addr.as_goff())
