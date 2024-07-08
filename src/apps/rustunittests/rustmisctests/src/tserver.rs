@@ -112,7 +112,7 @@ fn testnoresp(t: &mut dyn WvTester) {
             wv_assert_err!(
                 t,
                 sess.obtain(1, |is| is.push(0), |_| Ok(())),
-                Code::RecvGone
+                Code::ObjectGone
             );
             Ok(())
         }));
