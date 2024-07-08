@@ -163,6 +163,10 @@ impl<T> KObjectOwnedRef<T> {
         &self.obj
     }
 
+    pub fn ptr_eq(&self, other: &KObjectOwnedRef<T>) -> bool {
+        Rc::ptr_eq(&self.obj, &other.obj)
+    }
+
     pub fn downgrade(self) -> KObjectWeakRef<T> {
         // count will be decreased in drop of self
         KObjectWeakRef {

@@ -20,7 +20,6 @@ use base::errors::Error;
 use base::errors::{Code, VerboseError};
 use base::kif::{self, syscalls};
 use base::mem::{GlobOff, MsgBuf, PhysAddr, PhysAddrRaw};
-use base::rc::Rc;
 use base::tcu;
 
 use crate::cap::KObjectOwnedRef;
@@ -207,7 +206,7 @@ pub fn get_sess(
 
     let actcap = get_kobj!(act, r.act, Activity);
     check_unused(&actcap.obj_caps().borrow(), r.dst)?;
-    if Rc::ptr_eq(act.inner(), actcap.inner()) {
+    if act.ptr_eq(&actcap) {
         sysc_err!(Code::InvArgs, "Cannot get session for own Activity");
     }
 
@@ -520,7 +519,7 @@ pub fn activity_ctrl_async(
 
     match r.op {
         kif::syscalls::ActivityOp::Start => {
-            if Rc::ptr_eq(act.inner(), actcap.inner()) {
+            if act.ptr_eq(&actcap) {
                 sysc_err!(Code::InvArgs, "Activity can't start itself");
             }
             drop(act);
