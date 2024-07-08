@@ -54,19 +54,19 @@ pub trait BoxItem {
 macro_rules! impl_boxitem {
     ($t:ty) => {
         impl $crate::col::BoxItem for $t {
-            fn next(&self) -> Option<$crate::col::BoxRef<$t>> {
+            fn next(&self) -> Option<$crate::col::BoxRef<Self>> {
                 self.next
             }
 
-            fn set_next(&mut self, next: Option<$crate::col::BoxRef<$t>>) {
+            fn set_next(&mut self, next: Option<$crate::col::BoxRef<Self>>) {
                 self.next = next;
             }
 
-            fn prev(&self) -> Option<$crate::col::BoxRef<$t>> {
+            fn prev(&self) -> Option<$crate::col::BoxRef<Self>> {
                 self.prev
             }
 
-            fn set_prev(&mut self, prev: Option<$crate::col::BoxRef<$t>>) {
+            fn set_prev(&mut self, prev: Option<$crate::col::BoxRef<Self>>) {
                 self.prev = prev;
             }
         }
