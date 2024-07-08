@@ -23,8 +23,10 @@ use base::tcu;
 
 use thread::AsyncRc;
 
-use crate::cap::{Capability, KObject, MGateObject};
-use crate::syscalls::{check_unused, get_request, reply_success, send_reply, try_upgrade_kobj};
+use crate::cap::{Capability, MGateObject, TileObject};
+use crate::syscalls::{
+    check_unused, get_kobj, get_kobj_ref, get_request, reply_success, send_reply, try_upgrade_kobj,
+};
 use crate::tiles::{tilemng, Activity, TileMux, INVAL_ID};
 use crate::{ktcu, platform};
 
@@ -36,10 +38,7 @@ pub fn tile_quota_async(
     let r: syscalls::TileQuota = get_request(msg)?;
     sysc_log!(act, "tile_quota(tile={})", r.tile);
 
-    let tile = {
-        let act_caps = act.obj_caps().borrow();
-        get_kobj_ref!(act_caps, r.tile, Tile)
-    };
+    let tile: AsyncRc<TileObject> = get_kobj(&act, r.tile)?;
 
     let tile_weak = tile.clone().downgrade();
     let tile_id = tile.tile();
@@ -104,10 +103,7 @@ pub fn tile_set_quota_async(
         r.pts
     );
 
-    let tile = {
-        let act_caps = act.obj_caps().borrow();
-        get_kobj_ref!(act_caps, r.tile, Tile)
-    };
+    let tile: AsyncRc<TileObject> = get_kobj(&act, r.tile)?;
 
     if tile.derived() {
         sysc_err!(
@@ -150,7 +146,7 @@ pub fn tile_set_pmp(
     );
 
     let act_caps = act.obj_caps().borrow();
-    let tile = get_kobj_ref!(act_caps, r.tile, Tile);
+    let tile: AsyncRc<TileObject> = get_kobj_ref(&act_caps, r.tile)?;
     if tile.derived() {
         sysc_err!(Code::NoPerm, "Cannot set PMP EPs for derived tile objects");
     }
@@ -193,7 +189,7 @@ pub fn tile_set_pmp(
     }
 
     if r.mgate != kif::INVALID_SEL {
-        let mgate = get_kobj_ref!(act_caps, r.mgate, MGate);
+        let mgate: AsyncRc<MGateObject> = get_kobj_ref(&act_caps, r.mgate)?;
         tilemux.configure_pmp_ep(r.ep, &mgate)?;
     }
 
@@ -216,7 +212,7 @@ pub fn tile_reset_async(
     );
 
     let act_caps = act.obj_caps().borrow();
-    let tile = get_kobj_ref!(act_caps, r.tile, Tile);
+    let tile: AsyncRc<TileObject> = get_kobj_ref(&act_caps, r.tile)?;
     if tile.derived() {
         sysc_err!(Code::NoPerm, "Cannot reset tiles for derived tile objects");
     }
@@ -232,7 +228,7 @@ pub fn tile_reset_async(
             sysc_err!(Code::InvArgs, "Tile-internal EPs vs. external EP range");
         }
 
-        Some(get_kobj_ref!(act_caps, r.mux_mem, MGate).clone())
+        Some(get_kobj_ref::<AsyncRc<MGateObject>>(&act_caps, r.mux_mem)?.clone())
     };
     drop(tile);
     drop(act_caps);
@@ -250,7 +246,7 @@ pub fn tile_info(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<
     sysc_log!(act, "tile_info(tile={})", r.tile);
 
     let act_caps = act.obj_caps().borrow();
-    let tile = get_kobj_ref!(act_caps, r.tile, Tile);
+    let tile: AsyncRc<TileObject> = get_kobj_ref(&act_caps, r.tile)?;
 
     let tilemux = tilemng::tilemux(tile.tile());
     let ty = tilemux.mux_type();
@@ -275,7 +271,7 @@ pub fn tile_mem(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
     check_unused(&act.obj_caps().borrow(), r.dst)?;
 
     let mut act_caps = act.obj_caps().borrow_mut();
-    let tile = get_kobj_ref!(act_caps, r.tile, Tile);
+    let tile: AsyncRc<TileObject> = get_kobj_ref(&act_caps, r.tile)?;
     if tile.derived() {
         sysc_err!(Code::NoPerm, "Cannot reset tiles for derived tile objects");
     }
@@ -285,7 +281,7 @@ pub fn tile_mem(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
 
     let mem = tile.memory();
     let mgate = MGateObject::new(mem, kif::Perm::RWX, true);
-    let cap = Capability::new(r.dst, create_kobj!(mgate, MGate));
+    let cap = Capability::new(r.dst, mgate.into());
     try_kmem_quota!(act_caps.insert_as_child(cap, r.tile));
 
     reply_success(msg);

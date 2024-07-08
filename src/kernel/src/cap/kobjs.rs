@@ -50,6 +50,32 @@ pub enum KObject {
     EP(Rc<EPObject>),
 }
 
+#[macro_export]
+macro_rules! impl_from_kobj {
+    ($ty:ty, $name:ident) => {
+        impl TryFrom<&KObject> for AsyncRc<$ty> {
+            type Error = base::errors::VerboseError;
+
+            fn try_from(kobj: &KObject) -> Result<Self, Self::Error> {
+                match kobj {
+                    KObject::$name(s) => Ok(thread::AsyncRc::new(s.clone())),
+                    _ => Err(base::errors::VerboseError::new(
+                        base::errors::Code::InvArgs,
+                        concat!("Expected ", stringify!($name)).to_string(),
+                    )),
+                }
+            }
+        }
+
+        impl From<AsyncRc<$ty>> for KObject {
+            fn from(rc: AsyncRc<$ty>) -> Self {
+                // safety: conversion to KObject is fine as this is a place where we can keep the Rc
+                KObject::$name(unsafe { rc.inner().clone() })
+            }
+        }
+    };
+}
+
 const fn kobj_size<T>() -> usize {
     let size = size_of::<T>();
     if size <= 64 {
@@ -241,6 +267,8 @@ impl RGateObject {
     }
 }
 
+impl_from_kobj!(RGateObject, RGate);
+
 impl Deref for RGateObject {
     type Target = BaseGate;
 
@@ -306,6 +334,8 @@ impl SGateObject {
     }
 }
 
+impl_from_kobj!(SGateObject, SGate);
+
 impl Deref for SGateObject {
     type Target = BaseGate;
 
@@ -362,6 +392,8 @@ impl MGateObject {
         self.perms
     }
 }
+
+impl_from_kobj!(MGateObject, MGate);
 
 impl Drop for MGateObject {
     fn drop(&mut self) {
@@ -445,6 +477,8 @@ impl ServObject {
     }
 }
 
+impl_from_kobj!(ServObject, Serv);
+
 impl fmt::Debug for ServObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -518,6 +552,8 @@ impl SessObject {
         }
     }
 }
+
+impl_from_kobj!(SessObject, Sess);
 
 impl fmt::Debug for SessObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -593,6 +629,8 @@ impl SemObject {
         self as *const Self as thread::Event
     }
 }
+
+impl_from_kobj!(SemObject, Sem);
 
 impl fmt::Debug for SemObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -875,6 +913,8 @@ impl TileObject {
     }
 }
 
+impl_from_kobj!(TileObject, Tile);
+
 impl fmt::Debug for TileObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -1011,6 +1051,8 @@ impl EPObject {
     }
 }
 
+impl_from_kobj!(EPObject, EP);
+
 impl Drop for EPObject {
     fn drop(&mut self) {
         if self.cat == EPCategory::Custom {
@@ -1115,6 +1157,8 @@ impl KMemObject {
     }
 }
 
+impl_from_kobj!(KMemObject, KMem);
+
 impl fmt::Debug for KMemObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -1189,6 +1233,8 @@ impl MapObject {
         TileMux::unmap_async(tilemng::tilemux(act_tile), act_id, virt, pages).ok();
     }
 }
+
+impl_from_kobj!(MapObject, Map);
 
 impl fmt::Debug for MapObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

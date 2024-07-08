@@ -32,10 +32,10 @@ use thread::{AsyncRc, AsyncWeak};
 
 use crate::cap::{CapTable, Capability, EPObject, KMemObject, KObject, TileObject};
 use crate::com::{QueueId, SendQueue};
-use crate::platform;
+use crate::ktcu;
 use crate::thread_startup_async;
 use crate::tiles::{loader, tilemng, ActivityMng};
-use crate::{create_kobj, ktcu};
+use crate::{impl_from_kobj, platform};
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -131,11 +131,11 @@ impl Activity {
             // tile cap
             act.obj_caps()
                 .borrow_mut()
-                .insert(Capability::new(kif::SEL_TILE, create_kobj!(tile, Tile)))?;
+                .insert(Capability::new(kif::SEL_TILE, tile.clone().into()))?;
             // cap for own activity
             act.obj_caps()
                 .borrow_mut()
-                .insert(Capability::new(kif::SEL_ACT, create_kobj!(act, Activity)))?;
+                .insert(Capability::new(kif::SEL_ACT, act.clone().into()))?;
 
             // alloc standard EPs
             tilemng::tilemux(act.tile_id()).alloc_eps(eps_start, STD_EPS_COUNT);
@@ -593,6 +593,8 @@ impl Activity {
         }
     }
 }
+
+impl_from_kobj!(Activity, Activity);
 
 impl Drop for Activity {
     fn drop(&mut self) {

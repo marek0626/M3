@@ -26,8 +26,8 @@ use base::tcu;
 
 use thread::AsyncRc;
 
-use crate::cap::{KObject, ServObject};
-use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
+use crate::cap::{ServObject, SessObject};
+use crate::syscalls::{get_kobj, get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::Activity;
 
 fn do_exchange(
@@ -96,7 +96,7 @@ pub fn exchange(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
         r.obtain
     );
 
-    let actcap = get_kobj!(act, r.act, Activity);
+    let actcap: AsyncRc<Activity> = get_kobj(&act, r.act)?;
     do_exchange(&act, &actcap, &r.own, &other_crd, r.obtain)?;
 
     reply_success(msg);
@@ -119,7 +119,7 @@ pub fn exchange_over_sess_async(
         r.crd
     );
 
-    let sess = get_kobj!(act, r.sess, Sess);
+    let sess: AsyncRc<SessObject> = get_kobj(&act, r.sess)?;
 
     let mut smsg = MsgBuf::borrow_def();
     let data = service::ExchangeData {
@@ -185,7 +185,7 @@ pub fn exchange_over_sess_async(
         reply.data.caps
     );
 
-    let actcap = get_kobj!(act, r.act, Activity);
+    let actcap: AsyncRc<Activity> = get_kobj(&act, r.act)?;
     do_exchange(
         &actcap,
         &serv.server_act(),
@@ -216,7 +216,7 @@ pub fn revoke_async(
     }
 
     let actcap = {
-        let actcap = get_kobj!(act, r.act, Activity);
+        let actcap: AsyncRc<Activity> = get_kobj(&act, r.act)?;
         // TODO this does not work; we probably need to do the revoke in two phases: 1. remove all
         // links and collect the objects to destroy (sync) and 2. destroy the objects (async)
         unsafe { actcap.inner().clone() }
