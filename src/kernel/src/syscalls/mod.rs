@@ -25,8 +25,8 @@ use base::{build_vmsg, format};
 
 use thread::{AsyncRc, AsyncWeak};
 
-use crate::cap::{CapTable, Capability, KObject};
-use crate::tiles::{Activity, ActivityMng};
+use crate::cap::CapTable;
+use crate::tiles::ActivityMng;
 
 #[macro_export]
 macro_rules! sysc_log {
@@ -68,37 +68,6 @@ fn check_unused(tbl: &CapTable, sel: CapSel) -> Result<(), VerboseError> {
         sysc_err!(Code::InvArgs, "Selector {} already in use", sel);
     }
     Ok(())
-}
-
-fn get_kobj<T>(act: &AsyncRc<Activity>, sel: kif::CapSel) -> Result<T, VerboseError>
-where
-    T: for<'a> TryFrom<&'a KObject, Error = VerboseError>,
-{
-    let table = act.obj_caps().borrow();
-    get_kobj_ref(&table, sel)
-}
-
-fn get_cap(table: &CapTable, sel: kif::CapSel) -> Result<&Capability, VerboseError> {
-    match table.get(sel) {
-        Some(c) => Ok(c),
-        None => sysc_err!(Code::InvArgs, "Invalid capability"),
-    }
-}
-
-fn get_kobj_ref<T>(table: &CapTable, sel: kif::CapSel) -> Result<T, VerboseError>
-where
-    T: for<'a> TryFrom<&'a KObject, Error = VerboseError>,
-{
-    let cap = get_cap(table, sel)?;
-    cap_to_kobj(cap)
-}
-
-fn cap_to_kobj<T>(cap: &Capability) -> Result<T, VerboseError>
-where
-    T: for<'a> TryFrom<&'a KObject, Error = VerboseError>,
-{
-    // safety: we directly turn it into a KObjectOwnedRef here, so that it's okay
-    unsafe { cap.get() }.try_into()
 }
 
 fn try_upgrade_kobj<T>(weak: AsyncWeak<T>, sel: CapSel) -> Result<AsyncRc<T>, VerboseError> {

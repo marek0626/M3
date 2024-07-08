@@ -161,7 +161,7 @@ fn create_mgate(t: &mut dyn WvTester) {
         wv_assert_err!(
             t,
             syscalls::create_mgate(sel, SEL_ACT, virt, PAGE_SIZE as GlobOff, Perm::R),
-            Code::InvArgs
+            Code::InvCap
         );
         // and respect the permissions
         let addr = CPU::stack_pointer();
@@ -209,7 +209,7 @@ fn create_mgate(t: &mut dyn WvTester) {
             PAGE_SIZE as GlobOff,
             Perm::R
         ),
-        Code::InvArgs
+        Code::InvCap
     );
 }
 
@@ -373,7 +373,7 @@ fn create_activity(t: &mut dyn WvTester) {
     wv_assert_err!(
         t,
         syscalls::create_activity(sels, "test", tile.sel(), INVALID_SEL),
-        Code::InvArgs
+        Code::InvCap
     );
     wv_assert_err!(
         t,
@@ -424,7 +424,7 @@ fn alloc_ep(t: &mut dyn WvTester) {
         }
 
         let mgate = wv_require_ok!(MemGate::new(0x1000, Perm::RW));
-        wv_assert_err!(t, syscalls::activate_mgate(sel, mgate.sel()), Code::InvArgs);
+        wv_assert_err!(t, syscalls::activate_mgate(sel, mgate.sel()), Code::InvCap);
     }
 
     // invalid dest selector
@@ -532,7 +532,7 @@ fn activate_mgate(t: &mut dyn WvTester) {
         syscalls::activate_mgate(SEL_ACT, mgate.sel()),
         Code::InvArgs
     );
-    wv_assert_err!(t, syscalls::activate_mgate(sel, mgate.sel()), Code::InvArgs);
+    wv_assert_err!(t, syscalls::activate_mgate(sel, mgate.sel()), Code::InvCap);
     // invalid mgate sel
     wv_assert_err!(
         t,
@@ -570,7 +570,7 @@ fn activate_sgate(t: &mut dyn WvTester) {
         syscalls::activate_sgate(SEL_ACT, sgate.sel()),
         Code::InvArgs
     );
-    wv_assert_err!(t, syscalls::activate_sgate(sel, sgate.sel()), Code::InvArgs);
+    wv_assert_err!(t, syscalls::activate_sgate(sel, sgate.sel()), Code::InvCap);
     // invalid sgate sel
     wv_assert_err!(
         t,
@@ -602,22 +602,28 @@ fn activate_rgate(t: &mut dyn WvTester) {
     let sel = SelSpace::get().alloc_sel();
     let mgate = wv_require_ok!(MemCap::new(0x1000, Perm::RW));
     let rgate = wv_require_ok!(RecvCap::new(5, 5));
+    let mgate_sel = if Activity::own().tile_desc().has_virtmem() {
+        mgate.sel()
+    }
+    else {
+        INVALID_SEL
+    };
 
     // invalid EP sel
     wv_assert_err!(
         t,
-        syscalls::activate_rgate(SEL_ACT, mgate.sel(), INVALID_SEL, 0),
+        syscalls::activate_rgate(SEL_ACT, mgate.sel(), mgate_sel, 0),
         Code::InvArgs
     );
     wv_assert_err!(
         t,
-        syscalls::activate_rgate(sel, mgate.sel(), INVALID_SEL, 0),
-        Code::InvArgs
+        syscalls::activate_rgate(sel, mgate.sel(), mgate_sel, 0),
+        Code::InvCap
     );
     // invalid rgate sel
     wv_assert_err!(
         t,
-        syscalls::activate_rgate(ep1.sel(), SEL_ACT, INVALID_SEL, 0),
+        syscalls::activate_rgate(ep1.sel(), SEL_ACT, mgate_sel, 0),
         Code::InvArgs
     );
     // can't specify memory cap for rgate without VM
@@ -631,14 +637,14 @@ fn activate_rgate(t: &mut dyn WvTester) {
     // wrong number of reply slots
     wv_assert_err!(
         t,
-        syscalls::activate_rgate(ep3.sel(), rgate.sel(), INVALID_SEL, 0),
+        syscalls::activate_rgate(ep3.sel(), rgate.sel(), mgate_sel, 0),
         Code::InvArgs
     );
     // already activated
     let rgate = wv_require_ok!(rgate.activate());
     wv_assert_err!(
         t,
-        syscalls::activate_rgate(ep2.sel(), rgate.sel(), INVALID_SEL, 0),
+        syscalls::activate_rgate(ep2.sel(), rgate.sel(), mgate_sel, 0),
         Code::Exists
     );
 
@@ -918,7 +924,7 @@ fn get_sess(t: &mut dyn WvTester) {
     wv_assert_err!(
         t,
         syscalls::get_sess(sel, act.sel(), sel, 0xDEAD_BEEF),
-        Code::InvArgs
+        Code::InvCap
     );
     wv_assert_err!(
         t,
@@ -969,7 +975,7 @@ fn mgate_region(t: &mut dyn WvTester) {
     wv_assert_err!(
         t,
         syscalls::mgate_region(SelSpace::get().alloc_sel()),
-        Code::InvArgs
+        Code::InvCap
     );
 
     let mgate = wv_require_ok!(MemGate::new(0x2000, Perm::RW));
@@ -983,7 +989,7 @@ fn kmem_quota(t: &mut dyn WvTester) {
     wv_assert_err!(
         t,
         syscalls::kmem_quota(SelSpace::get().alloc_sel()),
-        Code::InvArgs
+        Code::InvCap
     );
 }
 
@@ -993,7 +999,7 @@ fn tile_quota(t: &mut dyn WvTester) {
     wv_assert_err!(
         t,
         syscalls::tile_quota(SelSpace::get().alloc_sel()),
-        Code::InvArgs
+        Code::InvCap
     );
 }
 
@@ -1020,7 +1026,7 @@ fn sem_ctrl(t: &mut dyn WvTester) {
     wv_assert_err!(
         t,
         syscalls::sem_ctrl(SelSpace::get().alloc_sel(), SemOp::Down),
-        Code::InvArgs
+        Code::InvCap
     );
 }
 
@@ -1033,7 +1039,7 @@ fn activity_ctrl(t: &mut dyn WvTester) {
     wv_assert_err!(
         t,
         syscalls::activity_ctrl(INVALID_SEL, ActivityOp::Start, 0),
-        Code::InvArgs
+        Code::InvCap
     );
     // can't start ourself
     wv_assert_err!(

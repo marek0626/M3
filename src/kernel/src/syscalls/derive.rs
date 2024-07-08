@@ -27,9 +27,7 @@ use thread::AsyncRc;
 
 use crate::cap::{Capability, KMemObject, MGateObject, ServObject, TileObject};
 use crate::mem;
-use crate::syscalls::{
-    check_unused, get_kobj, get_kobj_ref, get_request, reply_success, try_upgrade_kobj,
-};
+use crate::syscalls::{check_unused, get_request, reply_success, try_upgrade_kobj};
 use crate::tiles::Activity;
 
 #[inline(never)]
@@ -50,7 +48,7 @@ pub fn derive_tile_async(
 
     check_unused(&act.obj_caps().borrow(), r.dst)?;
 
-    let tile: AsyncRc<TileObject> = get_kobj(&act, r.tile)?;
+    let tile: AsyncRc<TileObject> = act.get_kobj(r.tile)?;
     let act_weak = act.downgrade();
 
     let tile_new = TileObject::derive_async(tile, r.eps, r.time, r.pts)?;
@@ -80,7 +78,7 @@ pub fn derive_kmem(
 
     check_unused(&act.obj_caps().borrow(), r.dst)?;
 
-    let kmem: AsyncRc<KMemObject> = get_kobj(&act, r.kmem)?;
+    let kmem: AsyncRc<KMemObject> = act.get_kobj(r.kmem)?;
     if !kmem.has_quota(r.quota) {
         sysc_err!(Code::NoSpace, "Insufficient quota");
     }
@@ -107,12 +105,12 @@ pub fn derive_mem(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
         r.perms
     );
 
-    let tact: AsyncRc<Activity> = get_kobj(&act, r.act)?;
+    let tact: AsyncRc<Activity> = act.get_kobj(r.act)?;
     check_unused(&tact.obj_caps().borrow(), r.dst)?;
 
     let cap = {
         let act_caps = act.obj_caps().borrow();
-        let mgate: AsyncRc<MGateObject> = get_kobj_ref(&act_caps, r.src)?;
+        let mgate: AsyncRc<MGateObject> = act_caps.get_kobj(r.src)?;
         if r.offset.checked_add(r.size).is_none() || r.offset + r.size > mgate.size() || r.size == 0
         {
             sysc_err!(Code::InvArgs, "Size or offset invalid");
@@ -153,7 +151,7 @@ pub fn derive_srv_async(
         sysc_err!(Code::InvArgs, "Invalid session count");
     }
 
-    let srv: AsyncRc<ServObject> = get_kobj(&act, r.srv)?;
+    let srv: AsyncRc<ServObject> = act.get_kobj(r.srv)?;
 
     // everything worked, send the reply
     reply_success(msg);
@@ -198,10 +196,10 @@ pub fn derive_srv_async(
                     let mut serv_caps = serv_act.obj_caps().borrow_mut();
                     let src_cap = serv_caps.get_mut(reply.sgate_sel);
                     match src_cap {
-                        None => {
+                        Err(_) => {
                             sysc_log!(act, "Service gave invalid SendGate cap {}", reply.sgate_sel)
                         },
-                        Some(c) => try_kmem_quota!(act.obj_caps().borrow_mut().obtain(
+                        Ok(c) => try_kmem_quota!(act.obj_caps().borrow_mut().obtain(
                             r.dst_sgate,
                             c,
                             true

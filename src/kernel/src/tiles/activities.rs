@@ -17,7 +17,7 @@ use base::boxed::Box;
 use base::build_vmsg;
 use base::cell::{Cell, RefCell, StaticRefCell};
 use base::col::{String, ToString, Vec};
-use base::errors::{Code, Error};
+use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{self, CapRngDesc, CapSel, CapType, TileDesc};
 use base::log;
@@ -310,6 +310,14 @@ impl Activity {
         &self.map_caps
     }
 
+    pub fn get_kobj<T>(&self, sel: kif::CapSel) -> Result<T, VerboseError>
+    where
+        T: for<'a> TryFrom<&'a KObject, Error = VerboseError>,
+    {
+        let table = self.obj_caps().borrow();
+        table.get_kobj(sel)
+    }
+
     pub fn state(&self) -> State {
         self.state.get()
     }
@@ -347,9 +355,9 @@ impl Activity {
                 .borrow()
                 .get(*sel as CapSel)
                 // safety: we don't keep the reference here across an async call
-                .map(|c| unsafe { c.get().clone() });
+                .map(|c| unsafe { c.get_unchecked().clone() });
             match wact {
-                Some(KObject::Activity(wv)) => {
+                Ok(KObject::Activity(wv)) => {
                     if wv.id() == self.id() {
                         continue;
                     }
