@@ -216,9 +216,10 @@ pub fn revoke_async(
         sysc_err!(Code::InvArgs, "Cap 0, 1, and 2 are not revokeable");
     }
 
+    let actcap = get_kobj!(act, r.act, Activity);
     // XXX this does not work; we probably need to do the revoke in two phases: 1. remove all links
     // and collect the objects to destroy (sync) and 2. destroy the objects (async)
-    let actcap = unsafe { get_kobj!(act, r.act, Activity).inner().clone() };
+    let actcap = unsafe { actcap.inner().clone() };
     let act_id = act.id();
     drop(act);
 

@@ -51,7 +51,7 @@ pub fn derive_tile_async(
     let act_weak = act.downgrade();
 
     let tile_new = TileObject::derive_async(tile, r.eps, r.time, r.pts)?;
-    let cap = Capability::new(r.dst, to_kobj!(tile_new, Tile));
+    let cap = Capability::new(r.dst, create_kobj!(tile_new, Tile));
 
     // TODO we will leak the quota object in TileMux if this fails
     let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
@@ -82,7 +82,7 @@ pub fn derive_kmem(
         sysc_err!(Code::NoSpace, "Insufficient quota");
     }
 
-    let cap = Capability::new(r.dst, to_kobj!(KMemObject::new(r.quota), KMem));
+    let cap = Capability::new(r.dst, create_kobj!(KMemObject::new(r.quota), KMem));
     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.kmem));
     assert!(kmem.alloc(&act, r.kmem, r.quota));
 
@@ -121,7 +121,7 @@ pub fn derive_mem(
         let addr = mgate.addr().raw() + r.offset;
         let new_mem = mem::Allocation::new(GlobAddr::new(addr), r.size);
         let mgate_obj = MGateObject::new(new_mem, r.perms & mgate.perms(), true);
-        Capability::new(r.dst, to_kobj!(mgate_obj, MGate))
+        Capability::new(r.dst, create_kobj!(mgate_obj, MGate))
     };
 
     try_kmem_quota!(tact.obj_caps().borrow_mut().insert_as_child(cap, r.src));
@@ -210,7 +210,7 @@ pub fn derive_srv_async(
 
                     // derive new service object
                     let derived_srv = srv.derive(reply.creator);
-                    let cap = Capability::new(r.dst_srv, to_kobj!(derived_srv, Serv));
+                    let cap = Capability::new(r.dst_srv, create_kobj!(derived_srv, Serv));
                     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.srv));
                     Ok(())
                 },

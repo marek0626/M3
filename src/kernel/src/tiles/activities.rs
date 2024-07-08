@@ -36,7 +36,7 @@ use crate::com::{QueueId, SendQueue};
 use crate::platform;
 use crate::thread_startup_async;
 use crate::tiles::{loader, tilemng, ActivityMng};
-use crate::{ktcu, to_kobj};
+use crate::{create_kobj, ktcu};
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -132,11 +132,11 @@ impl Activity {
             // tile cap
             act.obj_caps()
                 .borrow_mut()
-                .insert(Capability::new(kif::SEL_TILE, to_kobj!(tile, Tile)))?;
+                .insert(Capability::new(kif::SEL_TILE, create_kobj!(tile, Tile)))?;
             // cap for own activity
             act.obj_caps()
                 .borrow_mut()
-                .insert(Capability::new(kif::SEL_ACT, to_kobj!(act, Activity)))?;
+                .insert(Capability::new(kif::SEL_ACT, create_kobj!(act, Activity)))?;
 
             // alloc standard EPs
             tilemng::tilemux(act.tile_id()).alloc_eps(eps_start, STD_EPS_COUNT);
@@ -347,8 +347,8 @@ impl Activity {
                 .obj_caps()
                 .borrow()
                 .get(*sel as CapSel)
-                // XXX
-                .map(|c| c.get().get().clone());
+                // safety: we don't keep the reference here across an async call
+                .map(|c| unsafe { c.get().clone() });
             match wact {
                 Some(KObject::Activity(wv)) => {
                     if wv.id() == self.id() {

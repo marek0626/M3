@@ -29,7 +29,7 @@ use base::util::math;
 use crate::cap::{Capability, KObject, KObjectOwnedRef, KObjectWeakRef, MapObject, SelRange};
 use crate::mem;
 use crate::tiles::{tilemng, Activity, TileMux};
-use crate::{ktcu, to_kobj};
+use crate::{create_kobj, ktcu};
 
 use crate::platform;
 
@@ -389,7 +389,7 @@ impl ELFLoader for ActivityELFLoader {
             let act = self.0.upgrade().ok_or_else(|| Error::new(Code::NotFound))?;
             let res = act.map_caps().borrow_mut().insert(Capability::new_range(
                 SelRange::new_range(dst_sel as kif::CapSel, pages as kif::CapSel),
-                to_kobj!(map_obj, Map),
+                create_kobj!(map_obj, Map),
             ));
             res
         }

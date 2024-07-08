@@ -110,7 +110,7 @@ pub fn alloc_ep_async(
         r.replies,
         dst_act.tile_weak().clone(),
     );
-    let cap = Capability::new(r.dst, to_kobj!(ep, EP));
+    let cap = Capability::new(r.dst, create_kobj!(ep, EP));
     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.act));
 
     dst_act.tile().alloc(ep_count);
@@ -215,17 +215,16 @@ pub fn get_sess(
     let srvcap = act_caps
         .get_mut(r.srv)
         .ok_or_else(|| VerboseError::new(Code::InvArgs, "Invalid capability".to_string()))?;
-    let creator = as_obj!(srvcap.get(), Serv).creator();
+    let creator = cap_to_kobj!(srvcap, Serv).creator();
 
     // find root service cap
     let srv_root = srvcap.get_root();
 
     // walk through the childs to find the session with given id (only root cap can create sessions)
-    // TODO get().get() okay?
-    let mut csess =
-        srv_root.find_child(|c| matches!(c.get().get(), KObject::Sess(s) if s.ident() == r.sid));
-    // TODO get().get() okay?
-    if let Some(KObject::Sess(s)) = csess.as_mut().map(|c| c.get().get().clone()) {
+    // safety: we don't keep the reference across an async call here
+    let mut csess = srv_root
+        .find_child(|c| matches!(unsafe { c.get() }, KObject::Sess(s) if s.ident() == r.sid));
+    if let Some(KObject::Sess(s)) = csess.as_mut().map(|c| unsafe { c.get().clone() }) {
         if s.creator() != creator {
             sysc_err!(Code::NoPerm, "Cannot get access to foreign session");
         }

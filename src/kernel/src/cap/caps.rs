@@ -30,8 +30,6 @@ use crate::cap::{EPObject, GateEP, KObject, KObjectOwnedRef, MapObject, SessObje
 use crate::ktcu;
 use crate::tiles::{tilemng, Activity, ActivityMng, INVAL_ID};
 
-use super::KObjectGenRef;
-
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct SelRange {
     start: CapSel,
@@ -307,8 +305,12 @@ impl Capability {
         self.sels.count
     }
 
-    pub fn get(&self) -> KObjectGenRef {
-        KObjectGenRef::new(self.obj.clone())
+    //
+    // # Safety
+    //
+    // The caller cannot keep the KObject across async calls.
+    pub unsafe fn get(&self) -> &KObject {
+        &self.obj
     }
 
     pub fn has_parent(&self) -> bool {
@@ -502,7 +504,7 @@ impl Capability {
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
                         // XXX
-                        let tileobj = parent.get().get().clone();
+                        let tileobj = unsafe { parent.get().clone() };
                         if let KObject::Tile(p) = tileobj {
                             let tile = KObjectOwnedRef::new(tile.clone());
                             TileObject::revoke_async(tile, &p);
@@ -517,7 +519,7 @@ impl Capability {
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
                         // XXX
-                        let kmemobj = parent.get().get().clone();
+                        let kmemobj = unsafe { parent.get().clone() };
                         if let KObject::KMem(p) = kmemobj {
                             k.revoke(parent.activity(), parent.sel(), &p);
                         }

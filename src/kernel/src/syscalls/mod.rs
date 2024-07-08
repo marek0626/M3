@@ -64,19 +64,16 @@ macro_rules! get_cap {
     }};
 }
 #[macro_export]
-macro_rules! to_kobj {
+macro_rules! create_kobj {
     ($kref:expr, $ty:ident) => {
         // safety: conversion to KObject is fine as this is a place where we can keep the Rc
         KObject::$ty(unsafe { $kref.inner().clone() })
     };
 }
-// TODO replace with trait impl From/TryFrom for every kobject variant and then have a function
-// that takes this trait and turns a KObject into a given variant
-macro_rules! as_obj {
+macro_rules! cap_to_kobj {
     ($kobj:expr, $ty:ident) => {
-        // TODO maybe we should do the .get() that happens on as_obj! invocation sites in this
-        // macro and add an "internal"/unsafe function that is only used here?
-        match $kobj.get() {
+        // safety: we directly turn it into a KObjectOwnedRef here, so that it's okay
+        match unsafe { $kobj.get() } {
             KObject::$ty(k) => crate::cap::KObjectOwnedRef::new(k.clone()),
             _ => sysc_err!(Code::InvArgs, "Expected {:?} cap", stringify!($ty)),
         }
@@ -84,14 +81,15 @@ macro_rules! as_obj {
 }
 macro_rules! get_kobj {
     ($act:expr, $sel:expr, $ty:ident) => {{
-        let kobj: crate::cap::KObjectGenRef = get_cap!($act.obj_caps().borrow(), $sel).get();
-        as_obj!(kobj, $ty)
+        let caps = $act.obj_caps().borrow();
+        let cap = get_cap!(caps, $sel);
+        cap_to_kobj!(cap, $ty)
     }};
 }
 macro_rules! get_kobj_ref {
     ($table:expr, $sel:expr, $ty:ident) => {{
         let cap = get_cap!($table, $sel);
-        as_obj!(cap.get(), $ty)
+        cap_to_kobj!(cap, $ty)
     }};
 }
 
