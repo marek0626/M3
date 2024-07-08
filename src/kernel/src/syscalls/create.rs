@@ -442,7 +442,9 @@ pub fn create_map_async(
 
                 // ensure that we keep a copy to not lose it during the async call
                 let map_obj = MapObject::new(phys, PageFlags::from(r.perms));
-                let map_clone = map_obj.inner().clone();
+                // safety: it's okay to keep the Rc here across the async call, because the object
+                // was not inserted into the capability space yet and thus cannot be revoked
+                let map_clone = unsafe { map_obj.inner().clone() };
                 (map_obj, Some(map_clone), false)
             },
         }

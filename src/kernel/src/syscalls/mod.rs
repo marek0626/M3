@@ -66,7 +66,8 @@ macro_rules! get_cap {
 #[macro_export]
 macro_rules! to_kobj {
     ($kref:expr, $ty:ident) => {
-        KObject::$ty($kref.inner().clone())
+        // safety: conversion to KObject is fine as this is a place where we can keep the Rc
+        KObject::$ty(unsafe { $kref.inner().clone() })
     };
 }
 // TODO replace with trait impl From/TryFrom for every kobject variant and then have a function

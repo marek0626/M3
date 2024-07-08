@@ -158,8 +158,11 @@ impl<T> KObjectOwnedRef<T> {
         Self { obj }
     }
 
-    // TODO maybe this should take "self" or so?
-    pub fn inner(&self) -> &Rc<T> {
+    //
+    // # Safety
+    //
+    // If the inner T can be destroyed, the caller cannot keep the Rc across async calls.
+    pub unsafe fn inner(&self) -> &Rc<T> {
         &self.obj
     }
 

@@ -56,7 +56,8 @@ impl TileState {
                 0,
                 KObjectOwnedRef::new(tile.clone()).downgrade(),
             );
-            pmp.push(epobj.inner().clone());
+            // safety: this is okay, because these EPObjects are never destructed
+            pmp.push(unsafe { epobj.inner().clone() });
         }
 
         assert!(platform::tile_desc(tile.tile()).has_internal_eps() == ep_count.is_none());
@@ -165,7 +166,8 @@ impl TileMux {
         );
 
         TileMux {
-            tile: tile.inner().clone(),
+            // safety: this is okay, because the TileObject is never destructed
+            tile: unsafe { tile.inner().clone() },
             acts: Vec::new(),
             queue: crate::com::SendQueue::new(crate::com::QueueId::TileMux(tile_id), tile_id),
             state: None,

@@ -103,7 +103,9 @@ impl ActivityMng {
 
         {
             let mut actmng = INST.borrow_mut();
-            actmng.acts[id as usize] = Some(act.inner().clone());
+            // safety: we need to keep another reference here to ensure that we decrement the
+            // activity count on activity removal.
+            actmng.acts[id as usize] = Some(unsafe { act.inner().clone() });
             actmng.count += 1;
         }
 

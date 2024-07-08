@@ -359,7 +359,9 @@ impl ELFLoader for ActivityELFLoader {
             let phys_align = GlobAddr::new_with(phys.tile(), phys.offset() & !PAGE_MASK as GlobOff);
             let map_obj = MapObject::new(phys_align, flags);
             // keep one original to ensure that it's not removed during the async call
-            let _map_obj_clone = map_obj.inner().clone();
+            // safety: it's okay to keep the Rc here across the async call, because the object
+            // was not inserted into the capability space yet and thus cannot be revoked
+            let _map_obj_clone = unsafe { map_obj.inner().clone() };
             let id = act.id();
             drop(act);
 

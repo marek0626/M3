@@ -104,7 +104,9 @@ impl Activity {
             flags,
             eps_start,
             tile_id: tile.tile(),
-            kmem: kmem.inner().clone(),
+            // TODO this is not completely okay as it might delay the destruction of the kmem
+            // object beyond it's revocation.
+            kmem: unsafe { kmem.inner().clone() },
             state: Cell::from(State::INIT),
             exit_code: Cell::from(None),
             first_sel: Cell::from(kif::FIRST_FREE_SEL),
@@ -595,7 +597,7 @@ impl Activity {
 
         if let Some(act_ref) = act_weak.upgrade() {
             // TODO that's broken
-            let act = act_ref.inner().clone();
+            let act = unsafe { act_ref.inner().clone() };
             drop(act_ref);
             act.revoke_caps_async(revoker);
         }
