@@ -21,17 +21,16 @@ use base::io::LogFlags;
 use base::kif::{service, syscalls, CapRngDesc, CapType, INVALID_SEL, SEL_ACT};
 use base::log;
 use base::mem::MsgBuf;
-use base::rc::Rc;
 use base::serialize::M3Deserializer;
 use base::tcu;
 
-use crate::cap::{KObject, ServObject};
+use crate::cap::{KObject, KObjectOwnedRef, ServObject};
 use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::Activity;
 
 fn do_exchange(
-    act1: &Rc<Activity>,
-    act2: &Rc<Activity>,
+    act1: &KObjectOwnedRef<Activity>,
+    act2: &KObjectOwnedRef<Activity>,
     c1: &CapRngDesc,
     c2: &CapRngDesc,
     obtain: bool,
@@ -82,7 +81,10 @@ fn do_exchange(
 }
 
 #[inline(never)]
-pub fn exchange(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn exchange(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::Exchange = get_request(msg)?;
     let other_crd = CapRngDesc::new(r.own.cap_type(), r.other, r.own.count());
 
@@ -96,7 +98,7 @@ pub fn exchange(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), V
     );
 
     let actcap = get_kobj!(act, r.act, Activity);
-    do_exchange(act, actcap.inner(), &r.own, &other_crd, r.obtain)?;
+    do_exchange(&act, &actcap, &r.own, &other_crd, r.obtain)?;
 
     reply_success(msg);
     Ok(())
@@ -104,7 +106,7 @@ pub fn exchange(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), V
 
 #[inline(never)]
 pub fn exchange_over_sess_async(
-    act: &Rc<Activity>,
+    act: KObjectOwnedRef<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::ExchangeSess = get_request(msg)?;
@@ -157,7 +159,9 @@ pub fn exchange_over_sess_async(
     drop(sess);
 
     let serv_weak = serv.clone().downgrade();
+    let act_weak = act.downgrade();
     let res = ServObject::send_receive_async(serv, label, smsg);
+    let act = try_upgrade_kobj(act_weak, INVALID_SEL)?;
     let serv = try_upgrade_kobj(serv_weak, INVALID_SEL)?;
 
     let rmsg = match res {
@@ -184,8 +188,8 @@ pub fn exchange_over_sess_async(
 
     let actcap = get_kobj!(act, r.act, Activity);
     do_exchange(
-        actcap.inner(),
-        serv.server_act().inner(),
+        &actcap,
+        &serv.server_act(),
         &r.crd,
         &reply.data.caps,
         r.obtain,
@@ -201,7 +205,10 @@ pub fn exchange_over_sess_async(
 }
 
 #[inline(never)]
-pub fn revoke_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn revoke_async(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::Revoke = get_request(msg)?;
     sysc_log!(act, "revoke(act={}, crd={}, own={})", r.act, r.crd, r.own);
 
@@ -212,12 +219,15 @@ pub fn revoke_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
     // XXX this does not work; we probably need to do the revoke in two phases: 1. remove all links
     // and collect the objects to destroy (sync) and 2. destroy the objects (async)
     let actcap = get_kobj!(act, r.act, Activity).inner().clone();
-    if let Err(e) = actcap.revoke_async(r.crd, r.own, act.id()) {
+    let act_id = act.id();
+    drop(act);
+
+    if let Err(e) = actcap.revoke_async(r.crd, r.own, act_id) {
         sysc_err!(
             e.code(),
             "Revoke of {} with Activity {} failed",
             r.crd,
-            act.id()
+            act_id
         );
     }
 

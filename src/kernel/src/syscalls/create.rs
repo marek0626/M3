@@ -20,7 +20,6 @@ use base::errors::{Code, VerboseError};
 use base::kif::INVALID_SEL;
 use base::kif::{syscalls, CapRngDesc, CapSel, CapType, PageFlags, Perm};
 use base::mem::{GlobAddr, GlobOff, MsgBuf, VirtAddr, VirtAddrRaw};
-use base::rc::Rc;
 use base::tcu;
 
 use crate::cap::KObjectOwnedRef;
@@ -37,7 +36,10 @@ use crate::syscalls::{check_unused, get_request, reply_success, send_reply};
 use crate::tiles::{tilemng, Activity, ActivityFlags, ActivityMng};
 
 #[inline(never)]
-pub fn create_mgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn create_mgate(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::CreateMGate = get_request(msg)?;
     sysc_log!(
         act,
@@ -113,7 +115,10 @@ pub fn create_mgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
 }
 
 #[inline(never)]
-pub fn create_rgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn create_rgate(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::CreateRGate = get_request(msg)?;
     sysc_log!(
         act,
@@ -142,7 +147,10 @@ pub fn create_rgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
 }
 
 #[inline(never)]
-pub fn create_sgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn create_sgate(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::CreateSGate = get_request(msg)?;
     sysc_log!(
         act,
@@ -170,7 +178,10 @@ pub fn create_sgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
 }
 
 #[inline(never)]
-pub fn create_srv(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn create_srv(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::CreateSrv<'_> = get_request(msg)?;
     sysc_log!(
         act,
@@ -194,7 +205,7 @@ pub fn create_srv(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(),
             sysc_err!(Code::InvArgs, "RGate is not activated");
         }
 
-        let serv = Service::new(KObjectOwnedRef::new(act.clone()), r.name.to_string(), rgate);
+        let serv = Service::new(act.clone(), r.name.to_string(), rgate);
         let serv_obj = ServObject::new(serv, true, r.creator);
         Capability::new(r.dst, to_kobj!(serv_obj, Serv))
     };
@@ -206,7 +217,10 @@ pub fn create_srv(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(),
 }
 
 #[inline(never)]
-pub fn create_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn create_sess(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::CreateSess = get_request(msg)?;
     sysc_log!(
         act,
@@ -239,7 +253,7 @@ pub fn create_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<()
 
 #[inline(never)]
 pub fn create_activity_async(
-    act: &Rc<Activity>,
+    act: KObjectOwnedRef<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::CreateActivity<'_> = get_request(msg)?;
@@ -293,12 +307,16 @@ pub fn create_activity_async(
     }
     drop(tilemux);
 
+    let act_weak = act.downgrade();
+
     // create activity
     let nact =
         match ActivityMng::create_activity_async(r.name, tile, eps, kmem, ActivityFlags::empty()) {
             Ok(nact) => nact,
             Err(e) => sysc_err!(e.code(), "Unable to create Activity"),
         };
+
+    let act = try_upgrade_kobj(act_weak, INVALID_SEL)?;
 
     // give activity cap to the parent
     let cap = Capability::new(r.dst, to_kobj!(nact.clone(), Activity));
@@ -334,7 +352,10 @@ pub fn create_activity_async(
 }
 
 #[inline(never)]
-pub fn create_sem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn create_sem(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::CreateSem = get_request(msg)?;
     sysc_log!(act, "create_sem(dst={}, value={})", r.dst, r.value);
 
@@ -350,7 +371,7 @@ pub fn create_sem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(),
 
 #[inline(never)]
 pub fn create_map_async(
-    act: &Rc<Activity>,
+    act: KObjectOwnedRef<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::CreateMap = get_request(msg)?;
@@ -431,6 +452,7 @@ pub fn create_map_async(
 
     // drop before async call
     let (act_id, act_tile) = (dst_act.id(), dst_act.tile_id());
+    let act_weak = act.downgrade();
     let map_obj_weak = map_obj.clone().downgrade();
     drop(dst_act);
 
@@ -451,6 +473,7 @@ pub fn create_map_async(
     if !exists {
         let dst_act = try_upgrade_kobj(dst_act_weak, r.act)?;
         let map_obj = try_upgrade_kobj(map_obj_weak, INVALID_SEL)?;
+        let act = try_upgrade_kobj(act_weak, INVALID_SEL)?;
         let cap =
             Capability::new_range(SelRange::new_range(r.dst, r.pages), to_kobj!(map_obj, Map));
         try_kmem_quota!(dst_act.map_caps().borrow_mut().insert_as_child_from(

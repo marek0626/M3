@@ -56,9 +56,10 @@ impl ActivityMng {
     }
 
     #[inline(always)]
-    // TODO KObjectOwnedRef?
-    pub fn activity(id: tcu::ActId) -> Option<Rc<Activity>> {
-        INST.borrow().acts[id as usize].as_ref().cloned()
+    pub fn activity(id: tcu::ActId) -> Option<KObjectOwnedRef<Activity>> {
+        INST.borrow().acts[id as usize]
+            .as_ref()
+            .map(|a| KObjectOwnedRef::new(a.clone()))
     }
 
     fn get_id() -> Result<tcu::ActId, Error> {

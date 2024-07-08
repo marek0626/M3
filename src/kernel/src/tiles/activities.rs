@@ -364,15 +364,23 @@ impl Activity {
         None
     }
 
-    // TODO
-    pub fn wait_exit_async(&self, event: u64, sels: &[u64]) -> Option<(CapSel, Code)> {
+    pub fn wait_exit_async(
+        act: KObjectOwnedRef<Self>,
+        event: u64,
+        sels: &[u64],
+    ) -> Option<(CapSel, Code)> {
+        let act_id = act.id();
+        let act_weak = act.downgrade();
+
         let res = loop {
+            let act = act_weak.upgrade()?;
+
             // independent of how we notify the activity, check for exits in case the activity we wait for
             // already exited.
-            if let Some((sel, code)) = self.fetch_exit(sels) {
+            if let Some((sel, code)) = act.fetch_exit(sels) {
                 // if we want to be notified by upcall, do that
                 if event != 0 {
-                    self.upcall_activity_wait(event, sel, code);
+                    act.upcall_activity_wait(event, sel, code);
                     // we never report the result via syscall reply, but we need Some for below.
                     break Some((kif::INVALID_SEL, Code::Success));
                 }
@@ -382,18 +390,19 @@ impl Activity {
             }
 
             // if we want to be notified by upcall, don't wait, just stop here
-            if event != 0 || self.state() != State::RUNNING {
+            if event != 0 || act.state() != State::RUNNING {
                 break None;
             }
 
             // wait until someone exits
             let event = &EXIT_EVENT as *const _ as thread::Event;
+            drop(act);
             wait_for_async(event);
         };
 
         // ensure that we are removed from the list in any case. we might have started to wait
         // earlier and are now waiting again with a different selector list.
-        EXIT_LISTENERS.borrow_mut().retain(|l| l.id != self.id());
+        EXIT_LISTENERS.borrow_mut().retain(|l| l.id != act_id);
         match event {
             // sync wait
             0 => res,
@@ -402,7 +411,7 @@ impl Activity {
                 // if no one exited yet, remember us
                 if !sels.is_empty() && res.is_none() {
                     EXIT_LISTENERS.borrow_mut().push(ExitWait {
-                        id: self.id(),
+                        id: act_id,
                         event,
                         sels: sels.to_vec(),
                     });

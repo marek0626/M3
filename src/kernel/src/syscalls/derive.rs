@@ -20,11 +20,10 @@ use base::io::LogFlags;
 use base::kif::{self, syscalls};
 use base::log;
 use base::mem::{GlobAddr, MsgBuf};
-use base::rc::Rc;
 use base::serialize::M3Deserializer;
 use base::tcu;
 
-use crate::cap::{Capability, KObject};
+use crate::cap::{Capability, KObject, KObjectOwnedRef};
 use crate::cap::{KMemObject, MGateObject, ServObject, TileObject};
 use crate::mem;
 use crate::syscalls::{check_unused, get_request, reply_success, try_upgrade_kobj};
@@ -32,7 +31,7 @@ use crate::tiles::Activity;
 
 #[inline(never)]
 pub fn derive_tile_async(
-    act: &Rc<Activity>,
+    act: KObjectOwnedRef<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::DeriveTile = get_request(msg)?;
@@ -49,11 +48,13 @@ pub fn derive_tile_async(
     check_unused(&act.obj_caps().borrow(), r.dst)?;
 
     let tile = get_kobj!(act, r.tile, Tile);
+    let act_weak = act.downgrade();
 
     let tile_new = TileObject::derive_async(tile, r.eps, r.time, r.pts)?;
     let cap = Capability::new(r.dst, to_kobj!(tile_new, Tile));
 
     // TODO we will leak the quota object in TileMux if this fails
+    let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.tile));
 
     reply_success(msg);
@@ -61,7 +62,10 @@ pub fn derive_tile_async(
 }
 
 #[inline(never)]
-pub fn derive_kmem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn derive_kmem(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::DeriveKMem = get_request(msg)?;
     sysc_log!(
         act,
@@ -80,14 +84,17 @@ pub fn derive_kmem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<()
 
     let cap = Capability::new(r.dst, to_kobj!(KMemObject::new(r.quota), KMem));
     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.kmem));
-    assert!(kmem.alloc(act, r.kmem, r.quota));
+    assert!(kmem.alloc(&act, r.kmem, r.quota));
 
     reply_success(msg);
     Ok(())
 }
 
 #[inline(never)]
-pub fn derive_mem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn derive_mem(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::DeriveMem = get_request(msg)?;
     sysc_log!(
         act,
@@ -125,7 +132,7 @@ pub fn derive_mem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(),
 
 #[inline(never)]
 pub fn derive_srv_async(
-    act: &Rc<Activity>,
+    act: KObjectOwnedRef<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::DeriveSrv = get_request(msg)?;
@@ -166,8 +173,10 @@ pub fn derive_srv_async(
     );
 
     let srv_weak = srv.clone().downgrade();
+    let act_weak = act.downgrade();
     let res = ServObject::send_receive_async(srv, label, smsg);
 
+    let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
     let srv = try_upgrade_kobj(srv_weak, r.srv)?;
     let res = match res {
         Err(e) => {

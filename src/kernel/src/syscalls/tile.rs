@@ -19,17 +19,16 @@ use base::errors::{Code, Error, VerboseError};
 use base::kif::{self, syscalls};
 use base::mem::MsgBuf;
 use base::quota::Quota;
-use base::rc::Rc;
 use base::tcu;
 
-use crate::cap::{Capability, KObject, MGateObject};
+use crate::cap::{Capability, KObject, KObjectOwnedRef, MGateObject};
 use crate::syscalls::{check_unused, get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::{tilemng, Activity, TileMux, INVAL_ID};
 use crate::{ktcu, platform};
 
 #[inline(never)]
 pub fn tile_quota_async(
-    act: &Rc<Activity>,
+    act: KObjectOwnedRef<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::TileQuota = get_request(msg)?;
@@ -45,6 +44,7 @@ pub fn tile_quota_async(
     let time_quota_id = tile.time_quota_id();
     let pt_quota_id = tile.pt_quota_id();
     drop(tile);
+    drop(act);
 
     let (time, pts) = if platform::tile_desc(tile_id).supports_tilemux() {
         if tilemng::tilemux(tile_id).is_initialized() {
@@ -90,7 +90,7 @@ pub fn tile_quota_async(
 
 #[inline(never)]
 pub fn tile_set_quota_async(
-    act: &Rc<Activity>,
+    act: KObjectOwnedRef<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::TileSetQuota = get_request(msg)?;
@@ -123,6 +123,7 @@ pub fn tile_set_quota_async(
     let tilemux = tilemng::tilemux(tile.tile());
     let quota_id = tile.time_quota_id();
     drop(tile);
+    drop(act);
 
     // the root tile object has always the same id for the time quota and the pts quota
     TileMux::set_quota_async(tilemux, quota_id, r.time, r.pts)?;
@@ -132,7 +133,10 @@ pub fn tile_set_quota_async(
 }
 
 #[inline(never)]
-pub fn tile_set_pmp(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn tile_set_pmp(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::TileSetPMP = get_request(msg)?;
     sysc_log!(
         act,
@@ -197,7 +201,7 @@ pub fn tile_set_pmp(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
 
 #[inline(never)]
 pub fn tile_reset_async(
-    act: &Rc<Activity>,
+    act: KObjectOwnedRef<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::TileReset = get_request(msg)?;
@@ -230,6 +234,7 @@ pub fn tile_reset_async(
     };
     drop(tile);
     drop(act_caps);
+    drop(act);
 
     TileMux::reset_async(tile_id, mux_mem, r.ep_count, false)?;
 
@@ -238,7 +243,10 @@ pub fn tile_reset_async(
 }
 
 #[inline(never)]
-pub fn tile_info(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn tile_info(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::TileInfo = get_request(msg)?;
     sysc_log!(act, "tile_info(tile={})", r.tile);
 
@@ -261,7 +269,10 @@ pub fn tile_info(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), 
 }
 
 #[inline(never)]
-pub fn tile_mem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn tile_mem(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::TileMem = get_request(msg)?;
     sysc_log!(act, "tile_mem(dst={}, tile={})", r.dst, r.tile);
 

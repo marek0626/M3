@@ -596,7 +596,7 @@ impl TileMux {
         drop(tilemux);
 
         if has_act {
-            let act = KObjectOwnedRef::new(ActivityMng::activity(r.act_id).unwrap());
+            let act = ActivityMng::activity(r.act_id).unwrap();
             Activity::stop_app_async(act, r.status, true, INVAL_ID);
         }
 

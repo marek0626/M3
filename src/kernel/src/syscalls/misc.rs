@@ -23,6 +23,7 @@ use base::mem::{GlobOff, MsgBuf, PhysAddr, PhysAddrRaw};
 use base::rc::Rc;
 use base::tcu;
 
+use crate::cap::KObjectOwnedRef;
 use crate::cap::{
     wait_for_async, Capability, EPCategory, EPObject, GateObject, KObject, SemObject,
 };
@@ -32,7 +33,10 @@ use crate::syscalls::{check_unused, get_request, reply_success, send_reply, try_
 use crate::tiles::{tilemng, Activity, TileMux};
 
 #[inline(never)]
-pub fn alloc_ep_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn alloc_ep_async(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::AllocEP = get_request(msg)?;
     sysc_log!(
         act,
@@ -61,19 +65,21 @@ pub fn alloc_ep_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
 
     let mut tilemux = tilemng::tilemux(dst_act.tile_id());
 
-    let (dst_act, epid) = if tilemux.mux_type() == kif::syscalls::MuxType::Accel {
-        let act_id = dst_act.id();
+    let (act, dst_act, epid) = if tilemux.mux_type() == kif::syscalls::MuxType::Accel {
+        let dst_act_id = dst_act.id();
         let dst_act_weak = dst_act.downgrade();
+        let act_weak = act.downgrade();
 
-        let epid = TileMux::request_ep_async(tilemux, act_id, r.epid, r.replies)?;
+        let epid = TileMux::request_ep_async(tilemux, dst_act_id, r.epid, r.replies)?;
 
+        let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
         let dst_act = try_upgrade_kobj(dst_act_weak, r.act)?;
         tilemux = tilemng::tilemux(dst_act.tile_id());
-        (dst_act, epid)
+        (act, dst_act, epid)
     }
     else if r.epid == tcu::INVALID_EP {
         match tilemux.find_eps(ep_count) {
-            Ok(epid) => (dst_act, epid),
+            Ok(epid) => (act, dst_act, epid),
             Err(e) => sysc_err!(e.code(), "No free EP range for {} EPs", ep_count),
         }
     }
@@ -95,7 +101,7 @@ pub fn alloc_ep_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
                 r.epid as usize + ep_count - 1
             );
         }
-        (dst_act, r.epid)
+        (act, dst_act, r.epid)
     };
 
     let ep = EPObject::new(
@@ -121,7 +127,10 @@ pub fn alloc_ep_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
 }
 
 #[inline(never)]
-pub fn mgate_region(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn mgate_region(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::MGateRegion = get_request(msg)?;
     sysc_log!(act, "mgate_addr(mgate={})", r.mgate);
 
@@ -139,7 +148,10 @@ pub fn mgate_region(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
 }
 
 #[inline(never)]
-pub fn rgate_buffer(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn rgate_buffer(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::RGateBuffer = get_request(msg)?;
     sysc_log!(act, "rgate_buffer(rgate={})", r.rgate);
 
@@ -157,7 +169,10 @@ pub fn rgate_buffer(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
 }
 
 #[inline(never)]
-pub fn kmem_quota(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn kmem_quota(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::KMemQuota = get_request(msg)?;
     sysc_log!(act, "kmem_quota(kmem={})", r.kmem);
 
@@ -176,7 +191,10 @@ pub fn kmem_quota(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(),
 }
 
 #[inline(never)]
-pub fn get_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn get_sess(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::GetSess = get_request(msg)?;
     sysc_log!(
         act,
@@ -189,7 +207,7 @@ pub fn get_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), V
 
     let actcap = get_kobj!(act, r.act, Activity);
     check_unused(&actcap.obj_caps().borrow(), r.dst)?;
-    if Rc::ptr_eq(act, actcap.inner()) {
+    if Rc::ptr_eq(act.inner(), actcap.inner()) {
         sysc_err!(Code::InvArgs, "Cannot get session for own Activity");
     }
 
@@ -227,7 +245,10 @@ pub fn get_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), V
 }
 
 #[inline(never)]
-pub fn activate_mgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn activate_mgate(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::ActivateMGate = get_request(msg)?;
     sysc_log!(act, "activate_mgate(ep={}, gate={})", r.ep, r.gate,);
 
@@ -268,7 +289,10 @@ pub fn activate_mgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
 }
 
 #[inline(never)]
-pub fn activate_rgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn activate_rgate(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::ActivateRGate = get_request(msg)?;
     sysc_log!(
         act,
@@ -362,7 +386,7 @@ pub fn activate_rgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
 
 #[inline(never)]
 pub fn activate_sgate_async(
-    act: &Rc<Activity>,
+    act: KObjectOwnedRef<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::ActivateSGate = get_request(msg)?;
@@ -393,8 +417,10 @@ pub fn activate_sgate_async(
         let sg_weak = sg.downgrade();
         let event = rgate.get_event();
         let rg_weak = rgate.downgrade();
+        let act_weak = act.downgrade();
         wait_for_async(event);
 
+        let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
         let rgate = try_upgrade_kobj(rg_weak, kif::INVALID_SEL)?;
         sysc_log!(act, "activate: rgate {:?} is activated", *rgate);
         let ep = try_upgrade_kobj(ep_weak, r.ep)?;
@@ -417,7 +443,10 @@ pub fn activate_sgate_async(
 }
 
 #[inline(never)]
-pub fn invalidate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn invalidate(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::Invalidate = get_request(msg)?;
     sysc_log!(act, "invalidate(ep={})", r.ep);
 
@@ -442,7 +471,10 @@ pub fn invalidate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(),
 }
 
 #[inline(never)]
-pub fn sem_ctrl_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn sem_ctrl_async(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::SemCtrl = get_request(msg)?;
     sysc_log!(act, "sem_ctrl(sem={}, op={:?})", r.sem, r.op);
 
@@ -454,7 +486,11 @@ pub fn sem_ctrl_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
         },
 
         kif::syscalls::SemOp::Down => {
+            let act_weak = act.downgrade();
+
             let res = SemObject::down_async(sem);
+
+            let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
             sysc_log!(act, "sem_ctrl-cont(res={:?})", res);
             if let Err(e) = res {
                 sysc_err!(e.code(), "Semaphore operation failed");
@@ -468,7 +504,7 @@ pub fn sem_ctrl_async(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
 
 #[inline(never)]
 pub fn activity_ctrl_async(
-    act: &Rc<Activity>,
+    act: KObjectOwnedRef<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::ActivityCtrl = get_request(msg)?;
@@ -484,9 +520,10 @@ pub fn activity_ctrl_async(
 
     match r.op {
         kif::syscalls::ActivityOp::Start => {
-            if Rc::ptr_eq(act, actcap.inner()) {
+            if Rc::ptr_eq(act.inner(), actcap.inner()) {
                 sysc_err!(Code::InvArgs, "Activity can't start itself");
             }
+            drop(act);
 
             if let Err(e) = Activity::start_app_async(actcap) {
                 sysc_err!(e.code(), "Unable to start Activity");
@@ -495,7 +532,10 @@ pub fn activity_ctrl_async(
 
         kif::syscalls::ActivityOp::Stop => {
             let is_self = r.act == kif::SEL_ACT;
-            Activity::stop_app_async(actcap, Code::from(r.arg as u32), is_self, act.id());
+            let act_id = act.id();
+            drop(act);
+
+            Activity::stop_app_async(actcap, Code::from(r.arg as u32), is_self, act_id);
             if is_self {
                 msg.ack();
                 return Ok(());
@@ -509,7 +549,7 @@ pub fn activity_ctrl_async(
 
 #[inline(never)]
 pub fn activity_wait_async(
-    act: &Rc<Activity>,
+    act: KObjectOwnedRef<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::ActivityWait = get_request(msg)?;
@@ -525,9 +565,12 @@ pub fn activity_wait_async(
         exitcode: Code::Success,
     };
 
+    let act_weak = act.clone().downgrade();
+
     // In any case, check whether a activity already exited. If event == 0, wait until that happened.
     // For event != 0, remember that we want to get notified and send an upcall on a activity's exit.
-    if let Some((sel, code)) = act.wait_exit_async(r.event, &r.acts[0..r.act_count]) {
+    if let Some((sel, code)) = Activity::wait_exit_async(act, r.event, &r.acts[0..r.act_count]) {
+        let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
         sysc_log!(act, "act_wait-cont(act={}, exitcode={:?})", sel, code);
 
         reply_msg.act_sel = sel;
@@ -541,7 +584,10 @@ pub fn activity_wait_async(
     Ok(())
 }
 
-pub fn reset_stats(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn reset_stats(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     sysc_log!(act, "reset_stats()",);
 
     for tile in platform::user_tiles() {
@@ -553,7 +599,10 @@ pub fn reset_stats(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<()
     Ok(())
 }
 
-pub fn noop(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn noop(
+    act: KObjectOwnedRef<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     sysc_log!(act, "noop()",);
 
     reply_success(msg);
