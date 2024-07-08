@@ -24,13 +24,15 @@ use base::mem::MsgBuf;
 use base::serialize::M3Deserializer;
 use base::tcu;
 
-use crate::cap::{KObject, KObjectOwnedRef, ServObject};
+use thread::AsyncRc;
+
+use crate::cap::{KObject, ServObject};
 use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::Activity;
 
 fn do_exchange(
-    act1: &KObjectOwnedRef<Activity>,
-    act2: &KObjectOwnedRef<Activity>,
+    act1: &AsyncRc<Activity>,
+    act2: &AsyncRc<Activity>,
     c1: &CapRngDesc,
     c2: &CapRngDesc,
     obtain: bool,
@@ -81,10 +83,7 @@ fn do_exchange(
 }
 
 #[inline(never)]
-pub fn exchange(
-    act: KObjectOwnedRef<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
+pub fn exchange(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::Exchange = get_request(msg)?;
     let other_crd = CapRngDesc::new(r.own.cap_type(), r.other, r.own.count());
 
@@ -106,7 +105,7 @@ pub fn exchange(
 
 #[inline(never)]
 pub fn exchange_over_sess_async(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::ExchangeSess = get_request(msg)?;
@@ -206,7 +205,7 @@ pub fn exchange_over_sess_async(
 
 #[inline(never)]
 pub fn revoke_async(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::Revoke = get_request(msg)?;

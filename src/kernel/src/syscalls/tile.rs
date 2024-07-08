@@ -21,14 +21,16 @@ use base::mem::MsgBuf;
 use base::quota::Quota;
 use base::tcu;
 
-use crate::cap::{Capability, KObject, KObjectOwnedRef, MGateObject};
+use thread::AsyncRc;
+
+use crate::cap::{Capability, KObject, MGateObject};
 use crate::syscalls::{check_unused, get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::{tilemng, Activity, TileMux, INVAL_ID};
 use crate::{ktcu, platform};
 
 #[inline(never)]
 pub fn tile_quota_async(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::TileQuota = get_request(msg)?;
@@ -90,7 +92,7 @@ pub fn tile_quota_async(
 
 #[inline(never)]
 pub fn tile_set_quota_async(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::TileSetQuota = get_request(msg)?;
@@ -134,7 +136,7 @@ pub fn tile_set_quota_async(
 
 #[inline(never)]
 pub fn tile_set_pmp(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::TileSetPMP = get_request(msg)?;
@@ -201,7 +203,7 @@ pub fn tile_set_pmp(
 
 #[inline(never)]
 pub fn tile_reset_async(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::TileReset = get_request(msg)?;
@@ -243,10 +245,7 @@ pub fn tile_reset_async(
 }
 
 #[inline(never)]
-pub fn tile_info(
-    act: KObjectOwnedRef<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
+pub fn tile_info(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::TileInfo = get_request(msg)?;
     sysc_log!(act, "tile_info(tile={})", r.tile);
 
@@ -269,10 +268,7 @@ pub fn tile_info(
 }
 
 #[inline(never)]
-pub fn tile_mem(
-    act: KObjectOwnedRef<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
+pub fn tile_mem(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::TileMem = get_request(msg)?;
     sysc_log!(act, "tile_mem(dst={}, tile={})", r.dst, r.tile);
 

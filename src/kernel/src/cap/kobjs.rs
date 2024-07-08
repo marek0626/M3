@@ -13,18 +13,18 @@
  * General Public License version 2 for more details.
  */
 
-use base::cell::{Cell, Ref, RefCell, RefMut, StaticCell, StaticRefCell};
+use base::build_vmsg;
+use base::cell::{Cell, Ref, RefCell, RefMut, StaticCell};
 use base::col::ToString;
 use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{self, service, tilemux::QuotaId};
 use base::log;
 use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, MsgBufRef, PhysAddr, VirtAddr};
-use base::rc::{Rc, Weak};
+use base::rc::Rc;
 use base::tcu::{ActId, EpId, Label, TileId};
-use base::{backtrace, build_vmsg};
 use base::{env, tcu};
-use thread::Event;
+use thread::{AsyncRc, AsyncWeak};
 
 use core::fmt;
 use core::ops::Deref;
@@ -34,169 +34,6 @@ use crate::ktcu;
 use crate::mem;
 use crate::platform;
 use crate::tiles::{tilemng, Activity, State, TileMux};
-
-const MAX_TRACE_LEN: usize = 8;
-const MAX_TRACES: usize = 8;
-
-#[derive(Copy, Clone)]
-struct Trace {
-    addrs: [VirtAddr; MAX_TRACE_LEN],
-}
-
-struct Traces {
-    traces: [Trace; MAX_TRACES],
-    pos: usize,
-}
-
-impl Traces {
-    const fn new() -> Self {
-        Self {
-            traces: [Trace {
-                addrs: [VirtAddr::null(); MAX_TRACE_LEN],
-            }; MAX_TRACES],
-            pos: 0,
-        }
-    }
-
-    fn push(&mut self) {
-        if self.pos < self.traces.len() {
-            let n = backtrace::collect(&mut self.traces[self.pos].addrs);
-            for i in n..MAX_TRACE_LEN {
-                self.traces[self.pos].addrs[i] = VirtAddr::null();
-            }
-        }
-        self.pos += 1;
-    }
-
-    fn pop(&mut self) {
-        self.pos -= 1;
-    }
-}
-
-static OWNED_REFS: StaticCell<u64> = StaticCell::new(0);
-static REF_TRACES: StaticRefCell<Traces> = StaticRefCell::new(Traces::new());
-const DEBUG_TRACES: bool = true;
-
-fn inc_owned_refs() {
-    OWNED_REFS.set(OWNED_REFS.get() + 1);
-    if DEBUG_TRACES {
-        REF_TRACES.borrow_mut().push();
-    }
-}
-
-fn dec_owned_refs() {
-    assert!(OWNED_REFS.get() > 0);
-    OWNED_REFS.set(OWNED_REFS.get() - 1);
-    if DEBUG_TRACES {
-        REF_TRACES.borrow_mut().pop();
-    }
-}
-
-pub fn wait_for_async(event: Event) {
-    if OWNED_REFS.get() != 0 {
-        log!(
-            LogFlags::Error,
-            "Async call with {} owned reference(s)",
-            OWNED_REFS.get()
-        );
-        if DEBUG_TRACES {
-            let traces = REF_TRACES.borrow();
-            log!(LogFlags::Error, "  acquired at these points:");
-            for i in 0..traces.pos.min(MAX_TRACES) {
-                for j in 0..MAX_TRACE_LEN {
-                    if traces.traces[i].addrs[j] == VirtAddr::null() {
-                        break;
-                    }
-                    log!(
-                        LogFlags::Error,
-                        "    {:#x}",
-                        traces.traces[i].addrs[j].as_local()
-                    );
-                }
-                log!(LogFlags::Error, "");
-            }
-        }
-        panic!("Stopping here");
-    }
-
-    thread::wait_for(event);
-}
-
-pub struct KObjectWeakRef<T> {
-    obj: Weak<T>,
-}
-
-impl<T> Clone for KObjectWeakRef<T> {
-    fn clone(&self) -> Self {
-        Self {
-            obj: self.obj.clone(),
-        }
-    }
-}
-
-impl<T> KObjectWeakRef<T> {
-    pub fn new() -> Self {
-        Self { obj: Weak::new() }
-    }
-
-    pub fn can_upgrade(&self) -> bool {
-        self.obj.strong_count() > 0
-    }
-
-    pub fn upgrade(&self) -> Option<KObjectOwnedRef<T>> {
-        self.obj.upgrade().map(|o| KObjectOwnedRef::new(o))
-    }
-}
-
-pub struct KObjectOwnedRef<T> {
-    obj: Rc<T>,
-}
-
-impl<T> KObjectOwnedRef<T> {
-    pub fn new(obj: Rc<T>) -> Self {
-        inc_owned_refs();
-        Self { obj }
-    }
-
-    //
-    // # Safety
-    //
-    // If the inner T can be destroyed, the caller cannot keep the Rc across async calls.
-    pub unsafe fn inner(&self) -> &Rc<T> {
-        &self.obj
-    }
-
-    pub fn ptr_eq(&self, other: &KObjectOwnedRef<T>) -> bool {
-        Rc::ptr_eq(&self.obj, &other.obj)
-    }
-
-    pub fn downgrade(self) -> KObjectWeakRef<T> {
-        // count will be decreased in drop of self
-        KObjectWeakRef {
-            obj: Rc::downgrade(&self.obj),
-        }
-    }
-}
-
-impl<T> Clone for KObjectOwnedRef<T> {
-    fn clone(&self) -> Self {
-        Self::new(self.obj.clone())
-    }
-}
-
-impl<T> Drop for KObjectOwnedRef<T> {
-    fn drop(&mut self) {
-        dec_owned_refs();
-    }
-}
-
-impl<T> Deref for KObjectOwnedRef<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        self.obj.deref()
-    }
-}
 
 #[derive(Clone)]
 pub enum KObject {
@@ -271,33 +108,33 @@ impl fmt::Debug for KObject {
 }
 
 pub struct GateEP {
-    ep: KObjectWeakRef<EPObject>,
+    ep: AsyncWeak<EPObject>,
 }
 
 impl GateEP {
     fn new() -> Self {
         Self {
-            ep: KObjectWeakRef::new(),
+            ep: AsyncWeak::default(),
         }
     }
 
-    pub fn get_ep(&self) -> Option<KObjectOwnedRef<EPObject>> {
+    pub fn get_ep(&self) -> Option<AsyncRc<EPObject>> {
         self.ep.upgrade()
     }
 
-    pub fn set_ep(&mut self, o: KObjectOwnedRef<EPObject>) {
+    pub fn set_ep(&mut self, o: AsyncRc<EPObject>) {
         self.ep = o.downgrade();
     }
 
     pub fn remove_ep(&mut self) {
-        self.ep = KObjectWeakRef::new()
+        self.ep = AsyncWeak::default()
     }
 }
 
 pub enum GateObject {
-    Recv(KObjectWeakRef<RGateObject>),
-    Send(KObjectWeakRef<SGateObject>),
-    Mem(KObjectWeakRef<MGateObject>),
+    Recv(AsyncWeak<RGateObject>),
+    Send(AsyncWeak<SGateObject>),
+    Mem(AsyncWeak<MGateObject>),
 }
 
 pub struct BaseGate {
@@ -305,7 +142,7 @@ pub struct BaseGate {
 }
 
 impl BaseGate {
-    pub fn set_ep(&self, ep: &KObjectOwnedRef<EPObject>, gobj: GateObject) {
+    pub fn set_ep(&self, ep: &AsyncRc<EPObject>, gobj: GateObject) {
         self.gep.borrow_mut().set_ep(ep.clone());
         ep.set_gate(gobj);
     }
@@ -337,8 +174,8 @@ pub struct RGateObject {
 }
 
 impl RGateObject {
-    pub fn new(order: u32, msg_order: u32, serial: bool) -> KObjectOwnedRef<Self> {
-        KObjectOwnedRef::new(Rc::new(Self {
+    pub fn new(order: u32, msg_order: u32, serial: bool) -> AsyncRc<Self> {
+        AsyncRc::new(Rc::new(Self {
             base: BaseGate::default(),
             loc: Cell::from(None),
             addr: Cell::from(PhysAddr::default()),
@@ -428,18 +265,14 @@ impl fmt::Debug for RGateObject {
 
 pub struct SGateObject {
     base: BaseGate,
-    rgate: KObjectWeakRef<RGateObject>,
+    rgate: AsyncWeak<RGateObject>,
     label: Label,
     credits: u32,
 }
 
 impl SGateObject {
-    pub fn new(
-        rgate: KObjectWeakRef<RGateObject>,
-        label: Label,
-        credits: u32,
-    ) -> KObjectOwnedRef<Self> {
-        KObjectOwnedRef::new(Rc::new(Self {
+    pub fn new(rgate: AsyncWeak<RGateObject>, label: Label, credits: u32) -> AsyncRc<Self> {
+        AsyncRc::new(Rc::new(Self {
             base: BaseGate::default(),
             rgate,
             label,
@@ -447,7 +280,7 @@ impl SGateObject {
         }))
     }
 
-    pub fn rgate(&self) -> Option<KObjectOwnedRef<RGateObject>> {
+    pub fn rgate(&self) -> Option<AsyncRc<RGateObject>> {
         self.rgate.upgrade()
     }
 
@@ -500,8 +333,8 @@ pub struct MGateObject {
 }
 
 impl MGateObject {
-    pub fn new(mem: mem::Allocation, perms: kif::Perm, derived: bool) -> KObjectOwnedRef<Self> {
-        KObjectOwnedRef::new(Rc::new(Self {
+    pub fn new(mem: mem::Allocation, perms: kif::Perm, derived: bool) -> AsyncRc<Self> {
+        AsyncRc::new(Rc::new(Self {
             base: BaseGate::default(),
             mem,
             perms,
@@ -570,8 +403,8 @@ pub struct ServObject {
 }
 
 impl ServObject {
-    pub fn new(serv: Rc<Service>, owner: bool, creator: usize) -> KObjectOwnedRef<Self> {
-        KObjectOwnedRef::new(Rc::new(Self {
+    pub fn new(serv: Rc<Service>, owner: bool, creator: usize) -> AsyncRc<Self> {
+        AsyncRc::new(Rc::new(Self {
             serv,
             owner,
             creator,
@@ -582,7 +415,7 @@ impl ServObject {
         self.serv.name()
     }
 
-    pub fn server_act(&self) -> KObjectOwnedRef<Activity> {
+    pub fn server_act(&self) -> AsyncRc<Activity> {
         self.serv.activity()
     }
 
@@ -590,12 +423,12 @@ impl ServObject {
         self.creator
     }
 
-    pub fn derive(&self, creator: usize) -> KObjectOwnedRef<Self> {
+    pub fn derive(&self, creator: usize) -> AsyncRc<Self> {
         Self::new(self.serv.clone(), false, creator)
     }
 
     pub fn send_receive_async(
-        srv: KObjectOwnedRef<Self>,
+        srv: AsyncRc<Self>,
         lbl: Label,
         msg: MsgBufRef<'_>,
     ) -> Result<&'static tcu::Message, Error> {
@@ -623,7 +456,7 @@ impl fmt::Debug for ServObject {
 }
 
 pub struct SessObject {
-    srv: KObjectWeakRef<ServObject>,
+    srv: AsyncWeak<ServObject>,
     creator: usize,
     ident: u64,
     pub auto_close: bool,
@@ -631,12 +464,12 @@ pub struct SessObject {
 
 impl SessObject {
     pub fn new(
-        srv: KObjectWeakRef<ServObject>,
+        srv: AsyncWeak<ServObject>,
         creator: usize,
         ident: u64,
         auto_close: bool,
-    ) -> KObjectOwnedRef<Self> {
-        KObjectOwnedRef::new(Rc::new(Self {
+    ) -> AsyncRc<Self> {
+        AsyncRc::new(Rc::new(Self {
             srv,
             creator,
             ident,
@@ -644,7 +477,7 @@ impl SessObject {
         }))
     }
 
-    pub fn service(&self) -> Option<KObjectOwnedRef<ServObject>> {
+    pub fn service(&self) -> Option<AsyncRc<ServObject>> {
         self.srv.upgrade()
     }
 
@@ -656,7 +489,7 @@ impl SessObject {
         self.ident
     }
 
-    pub fn close_async(sess: KObjectOwnedRef<Self>, revoker: ActId) {
+    pub fn close_async(sess: AsyncRc<Self>, revoker: ActId) {
         if sess.auto_close {
             if let Some(serv) = sess.service() {
                 // don't send the close, if the server is the revoker
@@ -707,14 +540,14 @@ pub struct SemObject {
 }
 
 impl SemObject {
-    pub fn new(counter: u32) -> KObjectOwnedRef<Self> {
-        KObjectOwnedRef::new(Rc::new(Self {
+    pub fn new(counter: u32) -> AsyncRc<Self> {
+        AsyncRc::new(Rc::new(Self {
             counter: Cell::from(counter),
             waiters: Cell::from(0),
         }))
     }
 
-    pub fn down_async(s: KObjectOwnedRef<Self>) -> Result<(), Error> {
+    pub fn down_async(s: AsyncRc<Self>) -> Result<(), Error> {
         let sem_weak = s.downgrade();
         loop {
             let sem = sem_weak
@@ -729,7 +562,7 @@ impl SemObject {
             let event = sem.get_event();
             let tmp_weak = sem.downgrade();
 
-            wait_for_async(event);
+            thread::wait_for(event);
 
             let sem = tmp_weak
                 .upgrade()
@@ -820,8 +653,8 @@ impl TileObject {
         time_quota: QuotaId,
         pt_quota: QuotaId,
         derived: bool,
-    ) -> KObjectOwnedRef<Self> {
-        let res = KObjectOwnedRef::new(Rc::new(Self {
+    ) -> AsyncRc<Self> {
+        let res = AsyncRc::new(Rc::new(Self {
             tile,
             cur_acts: Cell::from(0),
             ep_quota: ep_quota.clone(),
@@ -843,11 +676,11 @@ impl TileObject {
     }
 
     pub fn derive_async(
-        tile: KObjectOwnedRef<Self>,
+        tile: AsyncRc<Self>,
         eps: Option<usize>,
         time: Option<u64>,
         pts: Option<usize>,
-    ) -> Result<KObjectOwnedRef<Self>, VerboseError> {
+    ) -> Result<AsyncRc<Self>, VerboseError> {
         // only allocate it from the tile here, but don't keep an Rc to the EPQuota
         if let Some(num) = eps {
             if !tile.has_quota(num) {
@@ -998,7 +831,7 @@ impl TileObject {
         self.ep_quota.left.set(total_eps);
     }
 
-    pub fn revoke_async(tile: KObjectOwnedRef<Self>, parent: &TileObject) {
+    pub fn revoke_async(tile: AsyncRc<Self>, parent: &TileObject) {
         // we free the EP quota if it's different from our parent's quota (only our own childs can
         // have the same EP quota, but they are already gone).
         if !Rc::ptr_eq(&tile.ep_quota, &parent.ep_quota) {
@@ -1052,25 +885,25 @@ pub enum EPCategory {
 pub struct EPObject {
     cat: EPCategory,
     gate: RefCell<Option<GateObject>>,
-    act: KObjectWeakRef<Activity>,
+    act: AsyncWeak<Activity>,
     ep: EpId,
     replies: usize,
     // keep a separate copy of the TileId, because this does never change and if we have a valid
     // reference to an EPObject, the TileObject is always valid as well.
     tile_id: TileId,
-    tile: KObjectWeakRef<TileObject>,
+    tile: AsyncWeak<TileObject>,
 }
 
 impl EPObject {
     pub fn new(
         cat: EPCategory,
-        act: KObjectWeakRef<Activity>,
+        act: AsyncWeak<Activity>,
         ep: EpId,
         replies: usize,
-        tile: KObjectWeakRef<TileObject>,
-    ) -> KObjectOwnedRef<Self> {
+        tile: AsyncWeak<TileObject>,
+    ) -> AsyncRc<Self> {
         let maybe_act = act.upgrade();
-        let ep = KObjectOwnedRef::new(Rc::new(Self {
+        let ep = AsyncRc::new(Rc::new(Self {
             cat,
             gate: RefCell::from(None),
             act,
@@ -1089,7 +922,7 @@ impl EPObject {
         self.tile_id
     }
 
-    pub fn activity(&self) -> Option<KObjectOwnedRef<Activity>> {
+    pub fn activity(&self) -> Option<AsyncRc<Activity>> {
         self.act.upgrade()
     }
 
@@ -1109,7 +942,7 @@ impl EPObject {
         self.gate.replace(Some(g));
     }
 
-    pub fn revoke(ep: KObjectOwnedRef<Self>) {
+    pub fn revoke(ep: AsyncRc<Self>) {
         if let Some(v) = ep.act.upgrade() {
             v.rem_ep(&ep);
         }
@@ -1197,12 +1030,12 @@ pub struct KMemObject {
 }
 
 impl KMemObject {
-    pub fn new(quota: usize) -> KObjectOwnedRef<Self> {
+    pub fn new(quota: usize) -> AsyncRc<Self> {
         static NEXT_ID: StaticCell<QuotaId> = StaticCell::new(0);
         let id = NEXT_ID.get();
         NEXT_ID.set(id + 1);
 
-        let kmem = KObjectOwnedRef::new(Rc::new(Self {
+        let kmem = AsyncRc::new(Rc::new(Self {
             id,
             quota,
             left: Cell::from(quota),
@@ -1295,8 +1128,8 @@ pub struct MapObject {
 }
 
 impl MapObject {
-    pub fn new(glob: GlobAddr, flags: kif::PageFlags) -> KObjectOwnedRef<Self> {
-        KObjectOwnedRef::new(Rc::new(Self {
+    pub fn new(glob: GlobAddr, flags: kif::PageFlags) -> AsyncRc<Self> {
+        AsyncRc::new(Rc::new(Self {
             glob: Cell::from(glob),
             flags: Cell::from(flags),
             mapped: Cell::from(false),
@@ -1316,7 +1149,7 @@ impl MapObject {
     }
 
     pub fn map_async(
-        map: KObjectOwnedRef<Self>,
+        map: AsyncRc<Self>,
         act_id: ActId,
         act_tile: TileId,
         virt: VirtAddr,

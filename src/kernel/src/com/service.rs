@@ -22,23 +22,21 @@ use base::rc::Rc;
 use base::tcu;
 use core::fmt;
 
-use crate::cap::{KObjectOwnedRef, KObjectWeakRef, RGateObject};
+use thread::{AsyncRc, AsyncWeak};
+
+use crate::cap::RGateObject;
 use crate::com::{QueueId, SendQueue};
 use crate::tiles::Activity;
 
 pub struct Service {
-    act: KObjectWeakRef<Activity>,
+    act: AsyncWeak<Activity>,
     name: String,
-    rgate: KObjectWeakRef<RGateObject>,
+    rgate: AsyncWeak<RGateObject>,
     queue: RefCell<Box<SendQueue>>,
 }
 
 impl Service {
-    pub fn new(
-        act: KObjectOwnedRef<Activity>,
-        name: String,
-        rgate: KObjectOwnedRef<RGateObject>,
-    ) -> Rc<Self> {
+    pub fn new(act: AsyncRc<Activity>, name: String, rgate: AsyncRc<RGateObject>) -> Rc<Self> {
         Rc::new(Service {
             name,
             rgate: rgate.downgrade(),
@@ -47,7 +45,7 @@ impl Service {
         })
     }
 
-    pub fn activity(&self) -> KObjectOwnedRef<Activity> {
+    pub fn activity(&self) -> AsyncRc<Activity> {
         self.act.upgrade().unwrap()
     }
 

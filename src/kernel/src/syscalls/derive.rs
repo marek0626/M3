@@ -23,7 +23,9 @@ use base::mem::{GlobAddr, MsgBuf};
 use base::serialize::M3Deserializer;
 use base::tcu;
 
-use crate::cap::{Capability, KObject, KObjectOwnedRef};
+use thread::AsyncRc;
+
+use crate::cap::{Capability, KObject};
 use crate::cap::{KMemObject, MGateObject, ServObject, TileObject};
 use crate::mem;
 use crate::syscalls::{check_unused, get_request, reply_success, try_upgrade_kobj};
@@ -31,7 +33,7 @@ use crate::tiles::Activity;
 
 #[inline(never)]
 pub fn derive_tile_async(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::DeriveTile = get_request(msg)?;
@@ -63,7 +65,7 @@ pub fn derive_tile_async(
 
 #[inline(never)]
 pub fn derive_kmem(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::DeriveKMem = get_request(msg)?;
@@ -91,10 +93,7 @@ pub fn derive_kmem(
 }
 
 #[inline(never)]
-pub fn derive_mem(
-    act: KObjectOwnedRef<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
+pub fn derive_mem(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::DeriveMem = get_request(msg)?;
     sysc_log!(
         act,
@@ -132,7 +131,7 @@ pub fn derive_mem(
 
 #[inline(never)]
 pub fn derive_srv_async(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::DeriveSrv = get_request(msg)?;

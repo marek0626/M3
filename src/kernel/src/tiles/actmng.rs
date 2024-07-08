@@ -26,9 +26,9 @@ use base::tcu::{self, ActId, TileId};
 use base::util::math;
 use base::vec;
 
-use crate::cap::{
-    Capability, KMemObject, KObject, KObjectOwnedRef, MGateObject, RGateObject, TileObject,
-};
+use thread::AsyncRc;
+
+use crate::cap::{Capability, KMemObject, KObject, MGateObject, RGateObject, TileObject};
 use crate::mem::{self, Allocation};
 use crate::platform;
 use crate::tiles::{loader, tilemng, Activity, ActivityFlags, State, TileMux};
@@ -56,10 +56,10 @@ impl ActivityMng {
     }
 
     #[inline(always)]
-    pub fn activity(id: tcu::ActId) -> Option<KObjectOwnedRef<Activity>> {
+    pub fn activity(id: tcu::ActId) -> Option<AsyncRc<Activity>> {
         INST.borrow().acts[id as usize]
             .as_ref()
-            .map(|a| KObjectOwnedRef::new(a.clone()))
+            .map(|a| AsyncRc::new(a.clone()))
     }
 
     fn get_id() -> Result<tcu::ActId, Error> {
@@ -83,11 +83,11 @@ impl ActivityMng {
 
     pub fn create_activity_async(
         name: &str,
-        tile: KObjectOwnedRef<TileObject>,
+        tile: AsyncRc<TileObject>,
         eps_start: tcu::EpId,
-        kmem: KObjectOwnedRef<KMemObject>,
+        kmem: AsyncRc<KMemObject>,
         flags: ActivityFlags,
-    ) -> Result<KObjectOwnedRef<Activity>, Error> {
+    ) -> Result<AsyncRc<Activity>, Error> {
         let id: tcu::ActId = Self::get_id()?;
         let tile_id = tile.tile();
 
@@ -122,7 +122,7 @@ impl ActivityMng {
         Ok(act)
     }
 
-    fn init_activity_async(act: KObjectOwnedRef<Activity>) -> Result<(), Error> {
+    fn init_activity_async(act: AsyncRc<Activity>) -> Result<(), Error> {
         let act_weak = act.clone().downgrade();
 
         if platform::tile_desc(act.tile_id()).supports_tilemux() {
@@ -163,7 +163,7 @@ impl ActivityMng {
         }
     }
 
-    pub fn stop_activity_async(act: KObjectOwnedRef<Activity>, stop: bool) -> Result<(), Error> {
+    pub fn stop_activity_async(act: AsyncRc<Activity>, stop: bool) -> Result<(), Error> {
         if stop && platform::tile_desc(act.tile_id()).supports_tilemux() {
             let id = act.id();
             let tile_id = act.tile_id();
@@ -187,7 +187,7 @@ impl ActivityMng {
 
         let tile_id = tilemng::find_tile(&tile_emem)
             .unwrap_or_else(|| tilemng::find_tile(&tile_imem).unwrap());
-        let tile = KObjectOwnedRef::new(tilemng::tilemux(tile_id).tile().clone());
+        let tile = AsyncRc::new(tilemng::tilemux(tile_id).tile().clone());
         let tile_desc = platform::tile_desc(tile_id);
 
         // allocate memory for tilemux itself
@@ -320,7 +320,7 @@ impl ActivityMng {
                 actmng.count -= 1;
                 drop(actmng);
                 tilemng::tilemux(v.tile_id()).rem_activity(v.id());
-                let act_ref = KObjectOwnedRef::new(v.clone());
+                let act_ref = AsyncRc::new(v.clone());
                 Activity::force_stop_async(act_ref, v.state() != State::DEAD, revoker);
             },
             None => panic!("Removing nonexisting Activity with id {}", id),

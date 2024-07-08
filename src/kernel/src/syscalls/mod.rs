@@ -23,7 +23,9 @@ use base::serialize::{Deserialize, M3Deserializer};
 use base::tcu;
 use base::{build_vmsg, format};
 
-use crate::cap::{CapTable, KObjectOwnedRef, KObjectWeakRef};
+use thread::{AsyncRc, AsyncWeak};
+
+use crate::cap::CapTable;
 use crate::tiles::ActivityMng;
 
 #[macro_export]
@@ -75,7 +77,7 @@ macro_rules! cap_to_kobj {
     ($kobj:expr, $ty:ident) => {
         // safety: we directly turn it into a KObjectOwnedRef here, so that it's okay
         match unsafe { $kobj.get() } {
-            KObject::$ty(k) => crate::cap::KObjectOwnedRef::new(k.clone()),
+            KObject::$ty(k) => thread::AsyncRc::new(k.clone()),
             _ => sysc_err!(Code::InvArgs, "Expected {:?} cap", stringify!($ty)),
         }
     };
@@ -107,10 +109,7 @@ fn check_unused(tbl: &CapTable, sel: CapSel) -> Result<(), VerboseError> {
     Ok(())
 }
 
-fn try_upgrade_kobj<T>(
-    weak: KObjectWeakRef<T>,
-    sel: CapSel,
-) -> Result<KObjectOwnedRef<T>, VerboseError> {
+fn try_upgrade_kobj<T>(weak: AsyncWeak<T>, sel: CapSel) -> Result<AsyncRc<T>, VerboseError> {
     weak.upgrade().ok_or_else(|| {
         VerboseError::new(
             Code::ObjectGone,

@@ -36,6 +36,10 @@ pub type Event = u64;
 
 const MAX_MSG_SIZE: usize = 1024;
 
+mod refs;
+
+pub use refs::{AsyncRc, AsyncWeak};
+
 #[cfg(target_arch = "x86_64")]
 #[derive(Default)]
 #[repr(C, align(8))]
@@ -318,6 +322,8 @@ pub fn wait_for(event: Event) {
         event,
         next.id
     );
+
+    refs::check_async_call();
 
     let mut cur = mem::replace(&mut tmng.current, next);
     cur.subscribe(event);

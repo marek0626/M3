@@ -26,7 +26,9 @@ use base::mem::{size_of, GlobAddr, GlobOff, PhysAddr, VirtAddr};
 use base::tcu;
 use base::util::math;
 
-use crate::cap::{Capability, KObject, KObjectOwnedRef, KObjectWeakRef, MapObject, SelRange};
+use thread::{AsyncRc, AsyncWeak};
+
+use crate::cap::{Capability, KObject, MapObject, SelRange};
 use crate::mem;
 use crate::tiles::{tilemng, Activity, TileMux};
 use crate::{create_kobj, ktcu};
@@ -63,7 +65,7 @@ trait ELFLoader {
     }
 }
 
-pub fn init_activity_async(act: KObjectOwnedRef<Activity>) -> Result<i32, Error> {
+pub fn init_activity_async(act: AsyncRc<Activity>) -> Result<i32, Error> {
     let mut loader = ActivityELFLoader(act.clone().downgrade());
 
     let root = act.is_root();
@@ -338,7 +340,7 @@ impl ELFLoader for MetalELFLoader {
     }
 }
 
-struct ActivityELFLoader(KObjectWeakRef<Activity>);
+struct ActivityELFLoader(AsyncWeak<Activity>);
 
 impl ELFLoader for ActivityELFLoader {
     fn load_segment_async(

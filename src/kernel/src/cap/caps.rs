@@ -26,7 +26,9 @@ use core::cmp;
 use core::fmt;
 use core::ptr::NonNull;
 
-use crate::cap::{EPObject, GateEP, KObject, KObjectOwnedRef, MapObject, SessObject, TileObject};
+use thread::AsyncRc;
+
+use crate::cap::{EPObject, GateEP, KObject, MapObject, SessObject, TileObject};
 use crate::ktcu;
 use crate::tiles::{tilemng, Activity, ActivityMng, INVAL_ID};
 
@@ -494,7 +496,7 @@ impl Capability {
             },
 
             KObject::EP(ref mut e) => {
-                EPObject::revoke(KObjectOwnedRef::new(e.clone()));
+                EPObject::revoke(AsyncRc::new(e.clone()));
             },
 
             KObject::Tile(ref mut tile) => {
@@ -506,7 +508,7 @@ impl Capability {
                         // TODO we cannot use these references across the async call below
                         let tileobj = unsafe { parent.get().clone() };
                         if let KObject::Tile(p) = tileobj {
-                            let tile = KObjectOwnedRef::new(tile.clone());
+                            let tile = AsyncRc::new(tile.clone());
                             TileObject::revoke_async(tile, &p);
                         }
                     }
@@ -551,7 +553,7 @@ impl Capability {
                 // sharing a session between multiple activities, but are at most "granting" the
                 // session to someone else if we don't want to use it ourself.
                 if self.derived {
-                    let sess = KObjectOwnedRef::new(s.clone());
+                    let sess = AsyncRc::new(s.clone());
                     SessObject::close_async(sess, revoker);
                 }
             },

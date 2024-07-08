@@ -22,10 +22,9 @@ use base::kif::{self, syscalls};
 use base::mem::{GlobOff, MsgBuf, PhysAddr, PhysAddrRaw};
 use base::tcu;
 
-use crate::cap::KObjectOwnedRef;
-use crate::cap::{
-    wait_for_async, Capability, EPCategory, EPObject, GateObject, KObject, SemObject,
-};
+use thread::AsyncRc;
+
+use crate::cap::{Capability, EPCategory, EPObject, GateObject, KObject, SemObject};
 use crate::ktcu;
 use crate::platform;
 use crate::syscalls::{check_unused, get_request, reply_success, send_reply, try_upgrade_kobj};
@@ -33,7 +32,7 @@ use crate::tiles::{tilemng, Activity, TileMux};
 
 #[inline(never)]
 pub fn alloc_ep_async(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::AllocEP = get_request(msg)?;
@@ -127,7 +126,7 @@ pub fn alloc_ep_async(
 
 #[inline(never)]
 pub fn mgate_region(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::MGateRegion = get_request(msg)?;
@@ -148,7 +147,7 @@ pub fn mgate_region(
 
 #[inline(never)]
 pub fn rgate_buffer(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::RGateBuffer = get_request(msg)?;
@@ -168,10 +167,7 @@ pub fn rgate_buffer(
 }
 
 #[inline(never)]
-pub fn kmem_quota(
-    act: KObjectOwnedRef<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
+pub fn kmem_quota(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::KMemQuota = get_request(msg)?;
     sysc_log!(act, "kmem_quota(kmem={})", r.kmem);
 
@@ -190,10 +186,7 @@ pub fn kmem_quota(
 }
 
 #[inline(never)]
-pub fn get_sess(
-    act: KObjectOwnedRef<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
+pub fn get_sess(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::GetSess = get_request(msg)?;
     sysc_log!(
         act,
@@ -244,7 +237,7 @@ pub fn get_sess(
 
 #[inline(never)]
 pub fn activate_mgate(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::ActivateMGate = get_request(msg)?;
@@ -288,7 +281,7 @@ pub fn activate_mgate(
 
 #[inline(never)]
 pub fn activate_rgate(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::ActivateRGate = get_request(msg)?;
@@ -384,7 +377,7 @@ pub fn activate_rgate(
 
 #[inline(never)]
 pub fn activate_sgate_async(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::ActivateSGate = get_request(msg)?;
@@ -416,7 +409,7 @@ pub fn activate_sgate_async(
         let event = rgate.get_event();
         let rg_weak = rgate.downgrade();
         let act_weak = act.downgrade();
-        wait_for_async(event);
+        thread::wait_for(event);
 
         let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
         let rgate = try_upgrade_kobj(rg_weak, kif::INVALID_SEL)?;
@@ -441,10 +434,7 @@ pub fn activate_sgate_async(
 }
 
 #[inline(never)]
-pub fn invalidate(
-    act: KObjectOwnedRef<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
+pub fn invalidate(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::Invalidate = get_request(msg)?;
     sysc_log!(act, "invalidate(ep={})", r.ep);
 
@@ -470,7 +460,7 @@ pub fn invalidate(
 
 #[inline(never)]
 pub fn sem_ctrl_async(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::SemCtrl = get_request(msg)?;
@@ -502,7 +492,7 @@ pub fn sem_ctrl_async(
 
 #[inline(never)]
 pub fn activity_ctrl_async(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::ActivityCtrl = get_request(msg)?;
@@ -547,7 +537,7 @@ pub fn activity_ctrl_async(
 
 #[inline(never)]
 pub fn activity_wait_async(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::ActivityWait = get_request(msg)?;
@@ -583,7 +573,7 @@ pub fn activity_wait_async(
 }
 
 pub fn reset_stats(
-    act: KObjectOwnedRef<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     sysc_log!(act, "reset_stats()",);
@@ -597,10 +587,7 @@ pub fn reset_stats(
     Ok(())
 }
 
-pub fn noop(
-    act: KObjectOwnedRef<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
+pub fn noop(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     sysc_log!(act, "noop()",);
 
     reply_success(msg);

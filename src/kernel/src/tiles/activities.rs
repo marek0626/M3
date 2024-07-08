@@ -28,10 +28,9 @@ use base::tcu::{ActId, EpId, TileId, STD_EPS_COUNT, UPCALL_REP_OFF};
 use bitflags::bitflags;
 use core::fmt;
 
-use crate::cap::{
-    wait_for_async, CapTable, Capability, EPObject, KMemObject, KObject, KObjectOwnedRef,
-    KObjectWeakRef, TileObject,
-};
+use thread::{AsyncRc, AsyncWeak};
+
+use crate::cap::{CapTable, Capability, EPObject, KMemObject, KObject, TileObject};
 use crate::com::{QueueId, SendQueue};
 use crate::platform;
 use crate::thread_startup_async;
@@ -72,7 +71,7 @@ pub struct Activity {
     // keep a copy of the tile id for performance reasons (does never change)
     tile_id: TileId,
 
-    tile: KObjectWeakRef<TileObject>,
+    tile: AsyncWeak<TileObject>,
     // we currently have to store a strong reference here, because the activity needs access to it
     // until it is fully destructed to give back all the kmem quota it uses for its capabilities
     kmem: Rc<KMemObject>,
@@ -84,7 +83,7 @@ pub struct Activity {
     obj_caps: RefCell<CapTable>,
     map_caps: RefCell<CapTable>,
 
-    eps: RefCell<Vec<KObjectWeakRef<EPObject>>>,
+    eps: RefCell<Vec<AsyncWeak<EPObject>>>,
     rbuf_phys: Cell<PhysAddr>,
     upcalls: RefCell<Box<SendQueue>>,
 }
@@ -93,12 +92,12 @@ impl Activity {
     pub fn new(
         name: &str,
         id: ActId,
-        tile: KObjectOwnedRef<TileObject>,
+        tile: AsyncRc<TileObject>,
         eps_start: EpId,
-        kmem: KObjectOwnedRef<KMemObject>,
+        kmem: AsyncRc<KMemObject>,
         flags: ActivityFlags,
-    ) -> Result<KObjectOwnedRef<Self>, Error> {
-        let act = KObjectOwnedRef::new(Rc::new(Activity {
+    ) -> Result<AsyncRc<Self>, Error> {
+        let act = AsyncRc::new(Rc::new(Activity {
             id,
             name: name.to_string(),
             flags,
@@ -153,7 +152,7 @@ impl Activity {
         Ok(act)
     }
 
-    pub fn init_async(act: KObjectOwnedRef<Self>) -> Result<(), Error> {
+    pub fn init_async(act: AsyncRc<Self>) -> Result<(), Error> {
         use base::kif::PageFlags;
 
         let act_weak = act.clone().downgrade();
@@ -271,11 +270,11 @@ impl Activity {
         self.id
     }
 
-    pub fn tile(&self) -> KObjectOwnedRef<TileObject> {
+    pub fn tile(&self) -> AsyncRc<TileObject> {
         self.tile.upgrade().unwrap()
     }
 
-    pub fn tile_weak(&self) -> &KObjectWeakRef<TileObject> {
+    pub fn tile_weak(&self) -> &AsyncWeak<TileObject> {
         &self.tile
     }
 
@@ -331,11 +330,11 @@ impl Activity {
         self.exit_code.replace(None)
     }
 
-    pub fn add_ep(&self, ep: KObjectOwnedRef<EPObject>) {
+    pub fn add_ep(&self, ep: AsyncRc<EPObject>) {
         self.eps.borrow_mut().push(ep.downgrade());
     }
 
-    pub fn rem_ep(&self, ep: &KObjectOwnedRef<EPObject>) {
+    pub fn rem_ep(&self, ep: &AsyncRc<EPObject>) {
         self.eps
             .borrow_mut()
             .retain(|e| e.upgrade().unwrap().ep() != ep.ep());
@@ -366,11 +365,7 @@ impl Activity {
         None
     }
 
-    pub fn wait_exit_async(
-        act: KObjectOwnedRef<Self>,
-        event: u64,
-        sels: &[u64],
-    ) -> Option<(CapSel, Code)> {
+    pub fn wait_exit_async(act: AsyncRc<Self>, event: u64, sels: &[u64]) -> Option<(CapSel, Code)> {
         let act_id = act.id();
         let act_weak = act.downgrade();
 
@@ -399,7 +394,7 @@ impl Activity {
             // wait until someone exits
             let event = &EXIT_EVENT as *const _ as thread::Event;
             drop(act);
-            wait_for_async(event);
+            thread::wait_for(event);
         };
 
         // ensure that we are removed from the list in any case. we might have started to wait
@@ -481,7 +476,7 @@ impl Activity {
             .unwrap();
     }
 
-    pub fn start_app_async(act: KObjectOwnedRef<Activity>) -> Result<(), Error> {
+    pub fn start_app_async(act: AsyncRc<Activity>) -> Result<(), Error> {
         if act.state.get() != State::INIT {
             return Ok(());
         }
@@ -495,12 +490,7 @@ impl Activity {
         ActivityMng::start_activity_async(id, tile_id)
     }
 
-    pub fn stop_app_async(
-        act: KObjectOwnedRef<Activity>,
-        exit_code: Code,
-        is_self: bool,
-        revoker: ActId,
-    ) {
+    pub fn stop_app_async(act: AsyncRc<Activity>, exit_code: Code, is_self: bool, revoker: ActId) {
         if act.state.get() == State::DEAD {
             return;
         }
@@ -536,7 +526,7 @@ impl Activity {
         }
     }
 
-    fn exit_app_async(act: KObjectOwnedRef<Activity>, exit_code: Code, stop: bool, revoker: ActId) {
+    fn exit_app_async(act: AsyncRc<Activity>, exit_code: Code, stop: bool, revoker: ActId) {
         let mut tilemux = tilemng::tilemux(act.tile_id());
         // force-invalidate standard EPs
         for ep in act.eps_start..act.eps_start + STD_EPS_COUNT as EpId {
@@ -590,7 +580,7 @@ impl Activity {
         }
     }
 
-    pub fn force_stop_async(act: KObjectOwnedRef<Activity>, stop: bool, revoker: ActId) {
+    pub fn force_stop_async(act: AsyncRc<Activity>, stop: bool, revoker: ActId) {
         let act_weak = act.clone().downgrade();
 
         ActivityMng::stop_activity_async(act, stop).unwrap();

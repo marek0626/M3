@@ -29,9 +29,10 @@ use base::tcu::{self, ActId, EpId, TileId};
 
 use core::cmp;
 
+use thread::{AsyncRc, AsyncWeak};
+
 use crate::cap::{
-    EPCategory, EPObject, EPQuota, GateObject, KObjectOwnedRef, KObjectWeakRef, MGateObject,
-    RGateObject, SGateObject, TileObject,
+    EPCategory, EPObject, EPQuota, GateObject, MGateObject, RGateObject, SGateObject, TileObject,
 };
 use crate::ktcu;
 use crate::mem;
@@ -51,10 +52,10 @@ impl TileState {
         for ep in 0..tcu::PMEM_PROT_EPS as EpId {
             let epobj = EPObject::new(
                 EPCategory::PMP,
-                KObjectWeakRef::new(),
+                AsyncWeak::default(),
                 ep,
                 0,
-                KObjectOwnedRef::new(tile.clone()).downgrade(),
+                AsyncRc::new(tile.clone()).downgrade(),
             );
             // safety: this is okay, because these EPObjects are never destructed
             pmp.push(unsafe { epobj.inner().clone() });
@@ -260,7 +261,7 @@ impl TileMux {
 
     pub fn reset_async(
         tile: TileId,
-        mux_mem: Option<KObjectOwnedRef<MGateObject>>,
+        mux_mem: Option<AsyncRc<MGateObject>>,
         ep_count: Option<usize>,
         root: bool,
     ) -> Result<(), Error> {
@@ -370,16 +371,16 @@ impl TileMux {
         self.state.as_ref().map(|state| state.eps.size())
     }
 
-    pub fn pmp_ep(&self, ep: EpId) -> Option<KObjectOwnedRef<EPObject>> {
+    pub fn pmp_ep(&self, ep: EpId) -> Option<AsyncRc<EPObject>> {
         self.state
             .as_ref()
-            .map(|state| KObjectOwnedRef::new(state.pmp[ep as usize].clone()))
+            .map(|state| AsyncRc::new(state.pmp[ep as usize].clone()))
     }
 
     pub fn configure_pmp_ep(
         &mut self,
         ep: tcu::EpId,
-        mg: &KObjectOwnedRef<MGateObject>,
+        mg: &AsyncRc<MGateObject>,
     ) -> Result<(), Error> {
         self.config_mem_ep(ep, INVAL_ID, mg, mg.tile_id())?;
 
@@ -443,7 +444,7 @@ impl TileMux {
         &mut self,
         ep: EpId,
         act: ActId,
-        obj: &KObjectOwnedRef<SGateObject>,
+        obj: &AsyncRc<SGateObject>,
     ) -> Result<(), Error> {
         let rgate = obj.rgate().ok_or_else(|| Error::new(Code::ObjectGone))?;
         assert!(rgate.activated());
@@ -469,7 +470,7 @@ impl TileMux {
         ep: EpId,
         act: ActId,
         reply_eps: Option<EpId>,
-        obj: &KObjectOwnedRef<RGateObject>,
+        obj: &AsyncRc<RGateObject>,
     ) -> Result<(), Error> {
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {
             let act = self.ep_activity_id(act);
@@ -492,7 +493,7 @@ impl TileMux {
         &mut self,
         ep: EpId,
         act: ActId,
-        obj: &KObjectOwnedRef<MGateObject>,
+        obj: &AsyncRc<MGateObject>,
         tile_id: TileId,
     ) -> Result<(), Error> {
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {
