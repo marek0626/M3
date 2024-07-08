@@ -25,7 +25,7 @@ pub fn prepare_shake_mem(t: &mut dyn WvTester, size: usize) -> MemGate {
 
     // Fill memory with pseudo-random data from SHAKE128
     let mgated = wv_require_ok!(mgate.derive_cap(0, size as GlobOff, Perm::W));
-    wv_assert_ok!(t, hash.ep().configure(mgated.sel()));
+    wv_assert_ok!(t, hash.ep().configure_mgate(mgated.sel()));
     wv_assert_ok!(t, hash.output(0, size));
     mgate
 }

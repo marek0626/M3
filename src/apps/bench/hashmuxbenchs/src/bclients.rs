@@ -248,7 +248,7 @@ fn _sync_and_wait_for_clients(rgate: &RecvGate, mut clients: Vec<Client>) {
                 // Obtain EP from activity and configure it with the MemGate
                 let sel = wv_require_ok!(clients[i].act.activity_mut().obtain_obj(sel));
                 let ep = EP::new_bind(INVALID_EP, sel);
-                wv_assert_ok!(t, ep.configure(clients[i].mcap.sel()));
+                wv_assert_ok!(t, ep.configure_mgate(clients[i].mcap.sel()));
                 eps.push(ep);
             }
             true

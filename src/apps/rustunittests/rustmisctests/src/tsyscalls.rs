@@ -46,7 +46,9 @@ pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, create_sem);
     wv_run_test!(t, alloc_ep);
 
-    wv_run_test!(t, activate);
+    wv_run_test!(t, activate_mgate);
+    wv_run_test!(t, activate_sgate);
+    wv_run_test!(t, activate_rgate);
     wv_run_test!(t, activity_ctrl);
     wv_run_test!(t, derive_mem);
     wv_run_test!(t, derive_kmem);
@@ -422,11 +424,7 @@ fn alloc_ep(t: &mut dyn WvTester) {
         }
 
         let mgate = wv_require_ok!(MemGate::new(0x1000, Perm::RW));
-        wv_assert_err!(
-            t,
-            syscalls::activate(sel, mgate.sel(), INVALID_SEL, 0),
-            Code::InvArgs
-        );
+        wv_assert_err!(t, syscalls::activate_mgate(sel, mgate.sel()), Code::InvArgs);
     }
 
     // invalid dest selector
@@ -522,100 +520,128 @@ fn alloc_ep(t: &mut dyn WvTester) {
     );
 }
 
-fn activate(t: &mut dyn WvTester) {
+fn activate_mgate(t: &mut dyn WvTester) {
     let ep1 = wv_require_ok!(EpMng::get().acquire(0));
-    let ep2 = wv_require_ok!(EpMng::get().acquire(0));
-    let ep3 = wv_require_ok!(EpMng::get().acquire(1));
-    let ep4 = wv_require_ok!(EpMng::get().acquire(2));
+    let ep2 = wv_require_ok!(EpMng::get().acquire(1));
     let sel = SelSpace::get().alloc_sel();
     let mgate = wv_require_ok!(MemCap::new(0x1000, Perm::RW));
-    let rgate = wv_require_ok!(RecvCap::new(5, 5));
+
+    // invalid EP sel
+    wv_assert_err!(
+        t,
+        syscalls::activate_mgate(SEL_ACT, mgate.sel()),
+        Code::InvArgs
+    );
+    wv_assert_err!(t, syscalls::activate_mgate(sel, mgate.sel()), Code::InvArgs);
+    // invalid mgate sel
+    wv_assert_err!(
+        t,
+        syscalls::activate_mgate(ep1.sel(), SEL_ACT),
+        Code::InvArgs
+    );
+    // can't activate mgate with EPs that has replies attached
+    wv_assert_err!(
+        t,
+        syscalls::activate_mgate(ep2.sel(), mgate.sel()),
+        Code::InvArgs
+    );
+    // already activated
+    let mgate = wv_require_ok!(mgate.activate());
+    wv_assert_err!(
+        t,
+        syscalls::activate_mgate(ep1.sel(), mgate.sel()),
+        Code::Exists
+    );
+
+    EpMng::get().release(ep2, true);
+    EpMng::get().release(ep1, true);
+}
+
+fn activate_sgate(t: &mut dyn WvTester) {
+    let ep1 = wv_require_ok!(EpMng::get().acquire(0));
+    let ep2 = wv_require_ok!(EpMng::get().acquire(1));
+    let sel = SelSpace::get().alloc_sel();
+    let rgate = wv_require_ok!(RecvGate::new(5, 5));
     let sgate = wv_require_ok!(SendCap::new(&rgate));
 
     // invalid EP sel
     wv_assert_err!(
         t,
-        syscalls::activate(SEL_ACT, mgate.sel(), INVALID_SEL, 0),
+        syscalls::activate_sgate(SEL_ACT, sgate.sel()),
+        Code::InvArgs
+    );
+    wv_assert_err!(t, syscalls::activate_sgate(sel, sgate.sel()), Code::InvArgs);
+    // invalid sgate sel
+    wv_assert_err!(
+        t,
+        syscalls::activate_sgate(ep1.sel(), SEL_ACT),
+        Code::InvArgs
+    );
+    // can't activate sgate with EPs that has replies attached
+    wv_assert_err!(
+        t,
+        syscalls::activate_sgate(ep2.sel(), sgate.sel()),
+        Code::InvArgs
+    );
+    // already activated
+    let sgate = wv_require_ok!(sgate.activate());
+    wv_assert_err!(
+        t,
+        syscalls::activate_sgate(ep1.sel(), sgate.sel()),
+        Code::Exists
+    );
+
+    EpMng::get().release(ep2, true);
+    EpMng::get().release(ep1, true);
+}
+
+fn activate_rgate(t: &mut dyn WvTester) {
+    let ep1 = wv_require_ok!(EpMng::get().acquire(0));
+    let ep2 = wv_require_ok!(EpMng::get().acquire(1));
+    let ep3 = wv_require_ok!(EpMng::get().acquire(2));
+    let sel = SelSpace::get().alloc_sel();
+    let mgate = wv_require_ok!(MemCap::new(0x1000, Perm::RW));
+    let rgate = wv_require_ok!(RecvCap::new(5, 5));
+
+    // invalid EP sel
+    wv_assert_err!(
+        t,
+        syscalls::activate_rgate(SEL_ACT, mgate.sel(), INVALID_SEL, 0),
         Code::InvArgs
     );
     wv_assert_err!(
         t,
-        syscalls::activate(sel, mgate.sel(), INVALID_SEL, 0),
+        syscalls::activate_rgate(sel, mgate.sel(), INVALID_SEL, 0),
         Code::InvArgs
     );
-    // invalid mgate sel
+    // invalid rgate sel
     wv_assert_err!(
         t,
-        syscalls::activate(ep1.sel(), SEL_ACT, INVALID_SEL, 0),
-        Code::InvArgs
-    );
-    // can't activate sgate/mgate with EPs that has replies attached
-    wv_assert_err!(
-        t,
-        syscalls::activate(ep3.sel(), mgate.sel(), INVALID_SEL, 0),
-        Code::InvArgs
-    );
-    wv_assert_err!(
-        t,
-        syscalls::activate(ep3.sel(), sgate.sel(), INVALID_SEL, 0),
-        Code::InvArgs
-    );
-    // receive buffer specified for MemGate
-    wv_assert_err!(
-        t,
-        syscalls::activate(ep1.sel(), mgate.sel(), mgate.sel(), 0),
-        Code::InvArgs
-    );
-    wv_assert_err!(
-        t,
-        syscalls::activate(ep1.sel(), mgate.sel(), INVALID_SEL, 1),
+        syscalls::activate_rgate(ep1.sel(), SEL_ACT, INVALID_SEL, 0),
         Code::InvArgs
     );
     // can't specify memory cap for rgate without VM
     if !Activity::own().tile_desc().has_virtmem() {
         wv_assert_err!(
             t,
-            syscalls::activate(ep3.sel(), rgate.sel(), mgate.sel(), 0),
+            syscalls::activate_rgate(ep2.sel(), rgate.sel(), mgate.sel(), 0),
             Code::InvArgs
         );
     }
     // wrong number of reply slots
     wv_assert_err!(
         t,
-        syscalls::activate(ep4.sel(), rgate.sel(), INVALID_SEL, 0),
+        syscalls::activate_rgate(ep3.sel(), rgate.sel(), INVALID_SEL, 0),
         Code::InvArgs
     );
     // already activated
     let rgate = wv_require_ok!(rgate.activate());
     wv_assert_err!(
         t,
-        syscalls::activate(ep3.sel(), rgate.sel(), INVALID_SEL, 0),
-        Code::Exists
-    );
-    wv_assert_ok!(
-        t,
-        syscalls::activate(ep1.sel(), sgate.sel(), INVALID_SEL, 0)
-    );
-    wv_assert_err!(
-        t,
-        syscalls::activate(ep2.sel(), sgate.sel(), INVALID_SEL, 0),
-        Code::Exists
-    );
-    wv_assert_ok!(
-        t,
-        syscalls::activate(ep1.sel(), INVALID_SEL, INVALID_SEL, 0)
-    );
-    wv_assert_ok!(
-        t,
-        syscalls::activate(ep1.sel(), mgate.sel(), INVALID_SEL, 0)
-    );
-    wv_assert_err!(
-        t,
-        syscalls::activate(ep2.sel(), mgate.sel(), INVALID_SEL, 0),
+        syscalls::activate_rgate(ep2.sel(), rgate.sel(), INVALID_SEL, 0),
         Code::Exists
     );
 
-    EpMng::get().release(ep3, true);
     EpMng::get().release(ep2, true);
     EpMng::get().release(ep1, true);
 }

@@ -25,6 +25,7 @@ use base::rc::{Rc, SRc, Weak};
 use base::tcu::{ActId, EpId, Label, TileId};
 
 use core::fmt;
+use core::ops::Deref;
 
 use crate::com::Service;
 use crate::ktcu;
@@ -85,15 +86,6 @@ impl KObject {
         let idx: usize = unsafe { *(self as *const _ as *const usize) };
         KOBJ_SIZES[idx]
     }
-
-    pub fn to_gate(&self) -> Option<GateObject> {
-        match self {
-            KObject::MGate(g) => Some(GateObject::Mem(g.clone())),
-            KObject::RGate(g) => Some(GateObject::Recv(g.clone())),
-            KObject::SGate(g) => Some(GateObject::Send(g.clone())),
-            _ => None,
-        }
-    }
 }
 
 impl fmt::Debug for KObject {
@@ -142,26 +134,35 @@ pub enum GateObject {
     Mem(SRc<MGateObject>),
 }
 
-impl GateObject {
-    pub fn set_ep(&self, ep: &Rc<EPObject>) {
-        match self {
-            Self::Recv(g) => g.gep.borrow_mut().set_ep(ep),
-            Self::Send(g) => g.gep.borrow_mut().set_ep(ep),
-            Self::Mem(g) => g.gep.borrow_mut().set_ep(ep),
-        }
+pub struct BaseGate {
+    gep: RefCell<GateEP>,
+}
+
+impl BaseGate {
+    pub fn set_ep(&self, ep: &Rc<EPObject>, gobj: GateObject) {
+        self.gep.borrow_mut().set_ep(ep);
+        ep.set_gate(gobj);
     }
 
-    pub fn remove_ep(&self) {
-        match self {
-            Self::Recv(g) => g.gep.borrow_mut().remove_ep(),
-            Self::Send(g) => g.gep.borrow_mut().remove_ep(),
-            Self::Mem(g) => g.gep.borrow_mut().remove_ep(),
+    pub fn gate_ep(&self) -> Ref<'_, GateEP> {
+        self.gep.borrow()
+    }
+
+    pub fn gate_ep_mut(&self) -> RefMut<'_, GateEP> {
+        self.gep.borrow_mut()
+    }
+}
+
+impl Default for BaseGate {
+    fn default() -> Self {
+        Self {
+            gep: RefCell::from(GateEP::new()),
         }
     }
 }
 
 pub struct RGateObject {
-    gep: RefCell<GateEP>,
+    base: BaseGate,
     loc: Cell<Option<(TileId, EpId)>>,
     addr: Cell<PhysAddr>,
     order: u32,
@@ -172,17 +173,13 @@ pub struct RGateObject {
 impl RGateObject {
     pub fn new(order: u32, msg_order: u32, serial: bool) -> SRc<Self> {
         SRc::new(Self {
-            gep: RefCell::from(GateEP::new()),
+            base: BaseGate::default(),
             loc: Cell::from(None),
             addr: Cell::from(PhysAddr::default()),
             order,
             msg_order,
             serial,
         })
-    }
-
-    pub fn gate_ep_mut(&self) -> RefMut<'_, GateEP> {
-        self.gep.borrow_mut()
     }
 
     pub fn location(&self) -> Option<(TileId, EpId)> {
@@ -241,6 +238,14 @@ impl RGateObject {
     }
 }
 
+impl Deref for RGateObject {
+    type Target = BaseGate;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
 impl fmt::Debug for RGateObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "RGate[loc=")?;
@@ -256,7 +261,7 @@ impl fmt::Debug for RGateObject {
 }
 
 pub struct SGateObject {
-    gep: RefCell<GateEP>,
+    base: BaseGate,
     rgate: SRc<RGateObject>,
     label: Label,
     credits: u32,
@@ -265,19 +270,11 @@ pub struct SGateObject {
 impl SGateObject {
     pub fn new(rgate: &SRc<RGateObject>, label: Label, credits: u32) -> SRc<Self> {
         SRc::new(Self {
-            gep: RefCell::from(GateEP::new()),
+            base: BaseGate::default(),
             rgate: rgate.clone(),
             label,
             credits,
         })
-    }
-
-    pub fn gate_ep(&self) -> Ref<'_, GateEP> {
-        self.gep.borrow()
-    }
-
-    pub fn gate_ep_mut(&self) -> RefMut<'_, GateEP> {
-        self.gep.borrow_mut()
     }
 
     pub fn rgate(&self) -> &SRc<RGateObject> {
@@ -306,6 +303,14 @@ impl SGateObject {
     }
 }
 
+impl Deref for SGateObject {
+    type Target = BaseGate;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
 impl fmt::Debug for SGateObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "SGate[rgate=")?;
@@ -315,7 +320,7 @@ impl fmt::Debug for SGateObject {
 }
 
 pub struct MGateObject {
-    gep: RefCell<GateEP>,
+    base: BaseGate,
     mem: mem::Allocation,
     perms: kif::Perm,
     derived: bool,
@@ -324,19 +329,11 @@ pub struct MGateObject {
 impl MGateObject {
     pub fn new(mem: mem::Allocation, perms: kif::Perm, derived: bool) -> SRc<Self> {
         SRc::new(Self {
-            gep: RefCell::from(GateEP::new()),
+            base: BaseGate::default(),
             mem,
             perms,
             derived,
         })
-    }
-
-    pub fn gate_ep(&self) -> Ref<'_, GateEP> {
-        self.gep.borrow()
-    }
-
-    pub fn gate_ep_mut(&self) -> RefMut<'_, GateEP> {
-        self.gep.borrow_mut()
     }
 
     pub fn tile_id(&self) -> TileId {
@@ -366,6 +363,14 @@ impl Drop for MGateObject {
         if !self.derived {
             mem::borrow_mut().free(&self.mem);
         }
+    }
+}
+
+impl Deref for MGateObject {
+    type Target = BaseGate;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
     }
 }
 
@@ -829,17 +834,6 @@ impl EPObject {
         self.gate.borrow().is_some()
     }
 
-    pub fn configure(ep: &Rc<Self>, gate: &KObject) {
-        Self::configure_obj(ep, gate.to_gate().unwrap());
-    }
-
-    pub fn configure_obj(ep: &Rc<Self>, obj: GateObject) {
-        // we tell the gate object its gate object
-        obj.set_ep(ep);
-        // we tell the endpoint its current gate object
-        ep.set_gate(obj);
-    }
-
     pub fn deconfigure(&self, force: bool) -> Result<bool, Error> {
         let mut invalidated = false;
         if let Some(ref gate) = self.gate.borrow_mut().take() {
@@ -868,7 +862,11 @@ impl EPObject {
             }
 
             // we tell the gate that it's ep is no longer valid
-            gate.remove_ep();
+            match gate {
+                GateObject::Recv(g) => g.gep.borrow_mut().remove_ep(),
+                GateObject::Send(g) => g.gep.borrow_mut().remove_ep(),
+                GateObject::Mem(g) => g.gep.borrow_mut().remove_ep(),
+            }
         }
         Ok(invalidated)
     }

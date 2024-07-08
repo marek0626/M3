@@ -174,14 +174,40 @@ epid_t Syscalls::alloc_ep(capsel_t dst, capsel_t act, epid_t ep, uint replies) {
     return reply->ep;
 }
 
-void Syscalls::activate(capsel_t ep, capsel_t gate, capsel_t rbuf_mem, goff_t rbuf_off) {
+void Syscalls::activate_mgate(capsel_t ep, capsel_t gate) {
     MsgBuf req_buf;
-    auto &req = req_buf.cast<KIF::Syscall::Activate>();
-    req.opcode = KIF::Syscall::ACTIVATE;
+    auto &req = req_buf.cast<KIF::Syscall::ActivateMGate>();
+    req.opcode = KIF::Syscall::ACTIVATE_MGATE;
+    req.ep_sel = ep;
+    req.gate_sel = gate;
+    send_receive_throw(req_buf);
+}
+
+void Syscalls::activate_sgate(capsel_t ep, capsel_t gate) {
+    MsgBuf req_buf;
+    auto &req = req_buf.cast<KIF::Syscall::ActivateSGate>();
+    req.opcode = KIF::Syscall::ACTIVATE_SGATE;
+    req.ep_sel = ep;
+    req.gate_sel = gate;
+    send_receive_throw(req_buf);
+}
+
+void Syscalls::activate_rgate(capsel_t ep, capsel_t gate, capsel_t rbuf_mem, goff_t rbuf_off) {
+    MsgBuf req_buf;
+    auto &req = req_buf.cast<KIF::Syscall::ActivateRGate>();
+    req.opcode = KIF::Syscall::ACTIVATE_RGATE;
     req.ep_sel = ep;
     req.gate_sel = gate;
     req.rbuf_mem = rbuf_mem;
     req.rbuf_off = rbuf_off;
+    send_receive_throw(req_buf);
+}
+
+void Syscalls::invalidate(capsel_t ep) {
+    MsgBuf req_buf;
+    auto &req = req_buf.cast<KIF::Syscall::Invalidate>();
+    req.opcode = KIF::Syscall::INVALIDATE;
+    req.ep_sel = ep;
     send_receive_throw(req_buf);
 }
 

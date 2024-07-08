@@ -27,9 +27,7 @@ use base::util::math;
 use base::vec;
 
 use crate::args;
-use crate::cap::{
-    Capability, GateObject, KMemObject, KObject, MGateObject, RGateObject, TileObject,
-};
+use crate::cap::{Capability, KMemObject, KObject, MGateObject, RGateObject, TileObject};
 use crate::mem::{self, Allocation};
 use crate::platform;
 use crate::tiles::{loader, tilemng, Activity, ActivityFlags, State, TileMux};
@@ -187,7 +185,7 @@ impl ActivityMng {
 
         // load and start tilemux
         loader::load_mux_async(tile_id, &mux_mem).expect("Unable to load TileMux");
-        let mux_mgate = GateObject::Mem(MGateObject::new(mux_mem, Perm::RWX, false));
+        let mux_mgate = MGateObject::new(mux_mem, Perm::RWX, false);
         // note that we provide access to the entire ROOT memory pool via PMP down below and
         // therefore provide access to parts of this pool twice. that's currently required, because
         // TileMux reads PMP EP0 to discover the available memory.

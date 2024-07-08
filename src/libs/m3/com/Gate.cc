@@ -26,14 +26,21 @@ Gate::~Gate() {
     release_ep();
 }
 
-EP *Gate::activate(capsel_t sel, capsel_t rbuf_mem, goff_t rbuf_off) {
+EP *Gate::activate(capsel_t sel, bool mem) {
     auto ep = EPMng::get().acquire();
-    activate_on(sel, *ep, rbuf_mem, rbuf_off);
+    activate_on(sel, *ep, mem);
     return ep;
 }
 
-void Gate::activate_on(capsel_t sel, const EP &ep, capsel_t rbuf_mem, goff_t rbuf_off) {
-    Syscalls::activate(ep.sel(), sel, rbuf_mem, rbuf_off);
+void Gate::activate_on(capsel_t sel, const EP &ep, bool mem) {
+    if(mem)
+        Syscalls::activate_mgate(ep.sel(), sel);
+    else
+        Syscalls::activate_sgate(ep.sel(), sel);
+}
+
+void Gate::activate_rgate_on(capsel_t sel, const EP &ep, capsel_t rbuf_mem, goff_t rbuf_off) {
+    Syscalls::activate_rgate(ep.sel(), sel, rbuf_mem, rbuf_off);
 }
 
 void Gate::release_ep(bool force_inval) noexcept {

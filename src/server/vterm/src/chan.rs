@@ -102,7 +102,7 @@ impl Channel {
     fn activate(&mut self) -> Result<(), Error> {
         if !self.active {
             let sel = self.ep.ok_or_else(|| Error::new(Code::InvArgs))?;
-            EP::new_bind(0, sel).configure(self.mem.sel())?;
+            EP::new_bind(0, sel).configure_mgate(self.mem.sel())?;
             self.active = true;
         }
         Ok(())

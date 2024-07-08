@@ -13,12 +13,15 @@
  * General Public License version 2 for more details.
  */
 
+use m3::cap::SelSpace;
 use m3::col::ToString;
+use m3::com::{RecvGate, SendCap};
 use m3::errors::Code;
 use m3::kif::{Perm, TileDesc, TileISA, TileType};
 use m3::mem::GlobOff;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, Tile};
+use m3::util::math;
 use m3::{wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_require_some, wv_run_test};
 
 use resmng::childs::Child;
@@ -87,16 +90,26 @@ fn basics(t: &mut dyn WvTester) {
 }
 
 fn services(t: &mut dyn WvTester, child: &mut dyn Child, res: &mut Resources) {
+    let srv_sel = SelSpace::get().alloc_sel();
+    // reg_service() obtains and activates the SendGate from the child. thus, create one and
+    // delegate it to the child.
+    let rgate = wv_require_ok!(RecvGate::new(math::next_log2(64), math::next_log2(64)));
+    let scap = wv_require_ok!(SendCap::new(&rgate));
+    wv_assert_ok!(t, child.delegate(scap.sel(), scap.sel()));
+
     wv_assert_err!(
         t,
-        child.reg_service(res, 123, 124, "other".to_string(), 16),
+        child.reg_service(res, srv_sel, scap.sel(), "other".to_string(), 16),
         Code::InvArgs
     );
-    wv_assert_ok!(t, child.reg_service(res, 123, 124, "test".to_string(), 16));
+    wv_assert_ok!(
+        t,
+        child.reg_service(res, srv_sel, scap.sel(), "test".to_string(), 16)
+    );
     wv_assert_eq!(t, child.res().services().len(), 1);
 
-    wv_assert_err!(t, child.unreg_service(res, 124), Code::InvArgs);
-    wv_assert_ok!(t, child.unreg_service(res, 123));
+    wv_assert_err!(t, child.unreg_service(res, scap.sel()), Code::InvArgs);
+    wv_assert_ok!(t, child.unreg_service(res, srv_sel));
     wv_assert_eq!(t, child.res().services().len(), 0);
 }
 

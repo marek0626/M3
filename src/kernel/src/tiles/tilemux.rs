@@ -250,7 +250,7 @@ impl TileMux {
 
     pub fn reset_async(
         tile: TileId,
-        mux_mem: Option<GateObject>,
+        mux_mem: Option<SRc<MGateObject>>,
         ep_count: Option<usize>,
         root: bool,
     ) -> Result<(), Error> {
@@ -282,21 +282,17 @@ impl TileMux {
                     }
 
                     let mux_mem = mux_mem.unwrap();
-                    let mgate = match mux_mem {
-                        GateObject::Mem(ref mg) => mg.clone(),
-                        _ => unreachable!(),
-                    };
 
                     // use the given memory gate for the first PMP EP (for the multiplexer)
                     if platform::tile_desc(tile).has_virtmem() {
-                        tilemux.configure_pmp_ep(0, mux_mem)?;
+                        tilemux.configure_pmp_ep(0, &mux_mem)?;
                     }
 
                     if env::boot().platform == env::Platform::Hw {
                         if platform::tile_desc(tile).isa() != TileISA::RISCV32 {
                             // write trampoline to 0x1000_0000 to jump to TileMux's entry point
                             let trampoline: u64 = 0x0000_0000_0000_306f; // j _start (+0x3000)
-                            ktcu::write_slice(mgate.tile_id(), mgate.offset(), &[trampoline]);
+                            ktcu::write_slice(mux_mem.tile_id(), mux_mem.offset(), &[trampoline]);
                         }
                     }
                     // accelerators with co-processors run straccmux and don't do the jump, because
@@ -308,7 +304,7 @@ impl TileMux {
                             0x0001_22b7, // lui t0, 0x12 = 0x12000
                             0x0000_8282, // jr  t0
                         ];
-                        ktcu::write_slice(mgate.tile_id(), mgate.offset(), &trampoline);
+                        ktcu::write_slice(mux_mem.tile_id(), mux_mem.offset(), &trampoline);
                     }
                 }
             }
@@ -368,18 +364,13 @@ impl TileMux {
         self.state.as_ref().map(|state| &state.pmp[ep as usize])
     }
 
-    pub fn configure_pmp_ep(&mut self, ep: tcu::EpId, gate: GateObject) -> Result<(), Error> {
-        match gate {
-            GateObject::Mem(ref mg) => {
-                self.config_mem_ep(ep, INVAL_ID, mg, mg.tile_id())?;
+    pub fn configure_pmp_ep(&mut self, ep: tcu::EpId, mg: &SRc<MGateObject>) -> Result<(), Error> {
+        self.config_mem_ep(ep, INVAL_ID, mg, mg.tile_id())?;
 
-                // remember that the MemGate is activated on this EP for the case that the MemGate gets
-                // revoked. If so, the EP is automatically invalidated.
-                let ep_obj = self.pmp_ep(ep).ok_or_else(|| Error::new(Code::InvState))?;
-                EPObject::configure_obj(ep_obj, gate);
-            },
-            _ => return Err(Error::new(Code::InvArgs)),
-        }
+        // remember that the MemGate is activated on this EP for the case that the MemGate gets
+        // revoked. If so, the EP is automatically invalidated.
+        let ep_obj = self.pmp_ep(ep).ok_or_else(|| Error::new(Code::InvState))?;
+        mg.set_ep(ep_obj, GateObject::Mem(mg.clone()));
         Ok(())
     }
 

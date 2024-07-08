@@ -50,7 +50,10 @@ pub enum Operation {
     AllocEP,
 
     // Capability operations
-    Activate,
+    ActivateMGate,
+    ActivateRGate,
+    ActivateSGate,
+    Invalidate,
     ActCtrl,
     ActWait,
     DeriveMem,
@@ -163,11 +166,31 @@ pub struct AllocEP {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[repr(C)]
-pub struct Activate {
+pub struct ActivateMGate {
+    pub ep: CapSel,
+    pub gate: CapSel,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[repr(C)]
+pub struct ActivateRGate {
     pub ep: CapSel,
     pub gate: CapSel,
     pub rbuf_mem: CapSel,
     pub rbuf_off: GlobOff,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[repr(C)]
+pub struct ActivateSGate {
+    pub ep: CapSel,
+    pub gate: CapSel,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[repr(C)]
+pub struct Invalidate {
+    pub ep: CapSel,
 }
 
 /// The operations for the `act_ctrl` system call

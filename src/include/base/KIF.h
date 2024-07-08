@@ -169,7 +169,10 @@ struct KIF {
             ALLOC_EPS,
 
             // capability operations
-            ACTIVATE,
+            ACTIVATE_MGATE,
+            ACTIVATE_RGATE,
+            ACTIVATE_SGATE,
+            INVALIDATE,
             ACT_CTRL,
             ACT_WAIT,
             DERIVE_MEM,
@@ -286,11 +289,25 @@ struct KIF {
             xfer_t ep;
         } PACKED;
 
-        struct Activate : public DefaultRequest {
+        struct ActivateMGate : public DefaultRequest {
+            xfer_t ep_sel;
+            xfer_t gate_sel;
+        } PACKED;
+
+        struct ActivateSGate : public DefaultRequest {
+            xfer_t ep_sel;
+            xfer_t gate_sel;
+        } PACKED;
+
+        struct ActivateRGate : public DefaultRequest {
             xfer_t ep_sel;
             xfer_t gate_sel;
             xfer_t rbuf_mem;
             xfer_t rbuf_off;
+        } PACKED;
+
+        struct Invalidate : public DefaultRequest {
+            xfer_t ep_sel;
         } PACKED;
 
         struct ActivityCtrl : public DefaultRequest {

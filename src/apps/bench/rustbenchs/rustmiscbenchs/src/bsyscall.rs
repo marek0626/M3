@@ -72,10 +72,7 @@ fn activate(t: &mut dyn WvTester) {
     wv_perf!(
         "activate",
         prof.run::<CycleInstant, _>(|| {
-            wv_assert_ok!(
-                t,
-                syscalls::activate(ep.sel(), mcap.sel(), kif::INVALID_SEL, 0)
-            );
+            wv_assert_ok!(t, syscalls::activate_mgate(ep.sel(), mcap.sel()));
         })
     );
 

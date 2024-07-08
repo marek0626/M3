@@ -92,7 +92,7 @@ fn hash_mem(t: &mut dyn WvTester) {
             Ok(sess) => sess,
             Err(_) => continue,
         };
-        wv_assert_ok!(t, hash.ep().configure(mgated.sel()));
+        wv_assert_ok!(t, hash.ep().configure_mgate(mgated.sel()));
 
         let res = prof.run::<CycleInstant, _>(|| {
             wv_assert_ok!(t, hash.input(0, SIZE));
@@ -120,7 +120,7 @@ fn hash_mem_sizes(t: &mut dyn WvTester) {
 
     for shift in 0..=MAX_SIZE_SHIFT {
         let hash = wv_require_ok!(HashSession::new("hash-bench", TEST_ALGO));
-        wv_assert_ok!(t, hash.ep().configure(mgated.sel()));
+        wv_assert_ok!(t, hash.ep().configure_mgate(mgated.sel()));
 
         let size = 1usize << shift;
         if shift == 14 {
@@ -200,7 +200,7 @@ fn shake_mem(t: &mut dyn WvTester) {
             Ok(sess) => sess,
             Err(_) => continue,
         };
-        wv_assert_ok!(t, hash.ep().configure(mgated.sel()));
+        wv_assert_ok!(t, hash.ep().configure_mgate(mgated.sel()));
 
         let res = prof.run::<CycleInstant, _>(|| {
             wv_assert_ok!(t, hash.output(0, SIZE));
@@ -233,7 +233,7 @@ fn shake_mem_sizes(t: &mut dyn WvTester) {
         }
 
         let hash = wv_require_ok!(HashSession::new("hash-bench", SHAKE_TEST_ALGO));
-        wv_assert_ok!(t, hash.ep().configure(mgated.sel()));
+        wv_assert_ok!(t, hash.ep().configure_mgate(mgated.sel()));
 
         let res = prof.run::<CycleInstant, _>(|| {
             wv_assert_ok!(t, hash.output(0, size));

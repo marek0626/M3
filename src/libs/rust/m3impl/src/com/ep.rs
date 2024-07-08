@@ -173,15 +173,21 @@ impl EP {
         self.flags.contains(EPFlags::CACHEABLE)
     }
 
-    /// Configures this endpoint for the given gate for a different activity. Note that this call
-    /// deliberately bypasses the gate object.
-    pub fn configure(&self, gate: Selector) -> Result<(), Error> {
-        syscalls::activate(self.sel(), gate, kif::INVALID_SEL, 0)
+    /// Configures this endpoint for the given send gate for a different activity. Note that this
+    /// call deliberately bypasses the gate object.
+    pub fn configure_sgate(&self, gate: Selector) -> Result<(), Error> {
+        syscalls::activate_sgate(self.sel(), gate)
+    }
+
+    /// Configures this endpoint for the given memory gate for a different activity. Note that this
+    /// call deliberately bypasses the gate object.
+    pub fn configure_mgate(&self, gate: Selector) -> Result<(), Error> {
+        syscalls::activate_mgate(self.sel(), gate)
     }
 
     /// Invalidates this endpoint
     pub fn invalidate(&self) -> Result<(), Error> {
-        syscalls::activate(self.sel(), kif::INVALID_SEL, kif::INVALID_SEL, 0)
+        syscalls::invalidate(self.sel())
     }
 
     fn alloc_cap(epid: EpId, act: Selector, replies: usize) -> Result<(Selector, EpId), Error> {

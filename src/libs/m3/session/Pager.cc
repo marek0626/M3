@@ -100,8 +100,8 @@ Reference<Pager> Pager::create_clone() {
 
 void Pager::init(ChildActivity &act) {
     // activate send and receive gate for page faults
-    Syscalls::activate(act.sel() + 1, _pf_sgate.sel(), KIF::INV_SEL, 0);
-    Syscalls::activate(act.sel() + 2, _pf_rgate.sel(), KIF::INV_SEL, 0);
+    Syscalls::activate_sgate(act.sel() + 1, _pf_sgate.sel());
+    Syscalls::activate_rgate(act.sel() + 2, _pf_rgate.sel(), KIF::INV_SEL, 0);
 
     // delegate the session cap
     act.delegate_obj(sel());
