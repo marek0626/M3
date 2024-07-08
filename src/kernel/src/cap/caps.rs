@@ -503,7 +503,7 @@ impl Capability {
                 if !self.derived && sel != SEL_TILE {
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
-                        // XXX
+                        // TODO we cannot use these references across the async call below
                         let tileobj = unsafe { parent.get().clone() };
                         if let KObject::Tile(p) = tileobj {
                             let tile = KObjectOwnedRef::new(tile.clone());
@@ -518,7 +518,7 @@ impl Capability {
                 if !self.derived && sel != SEL_KMEM {
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
-                        // XXX
+                        // TODO we cannot use these references across the async call below
                         let kmemobj = unsafe { parent.get().clone() };
                         if let KObject::KMem(p) = kmemobj {
                             k.revoke(parent.activity(), parent.sel(), &p);

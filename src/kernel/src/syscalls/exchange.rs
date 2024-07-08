@@ -218,8 +218,8 @@ pub fn revoke_async(
 
     let actcap = {
         let actcap = get_kobj!(act, r.act, Activity);
-        // XXX this does not work; we probably need to do the revoke in two phases: 1. remove all links
-        // and collect the objects to destroy (sync) and 2. destroy the objects (async)
+        // TODO this does not work; we probably need to do the revoke in two phases: 1. remove all
+        // links and collect the objects to destroy (sync) and 2. destroy the objects (async)
         unsafe { actcap.inner().clone() }
     };
 
