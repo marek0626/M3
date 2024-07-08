@@ -144,12 +144,10 @@ impl ActivityMng {
             )?;
         }
 
-        if let Some(act) = act_weak.upgrade() {
-            Activity::init_async(act)
-        }
-        else {
-            Err(Error::new(Code::NotFound))
-        }
+        let act = act_weak
+            .upgrade()
+            .ok_or_else(|| Error::new(Code::ObjectGone))?;
+        Activity::init_async(act)
     }
 
     pub fn start_activity_async(act_id: ActId, tile_id: TileId) -> Result<(), Error> {

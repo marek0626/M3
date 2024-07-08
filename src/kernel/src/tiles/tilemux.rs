@@ -445,7 +445,7 @@ impl TileMux {
         act: ActId,
         obj: &KObjectOwnedRef<SGateObject>,
     ) -> Result<(), Error> {
-        let rgate = obj.rgate().ok_or_else(|| Error::new(Code::NotFound))?;
+        let rgate = obj.rgate().ok_or_else(|| Error::new(Code::ObjectGone))?;
         assert!(rgate.activated());
 
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {
@@ -853,7 +853,7 @@ impl TileMux {
                 .map(|v| v.state() != State::DEAD)
                 .unwrap_or(false)
             {
-                return Err(Error::new(Code::ActivityGone));
+                return Err(Error::new(Code::ObjectGone));
             }
         }
 

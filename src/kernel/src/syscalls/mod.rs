@@ -13,6 +13,7 @@
  * General Public License version 2 for more details.
  */
 
+use base::col::ToString;
 use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{self, CapSel};
@@ -112,12 +113,16 @@ fn try_upgrade_kobj<T>(
 ) -> Result<KObjectOwnedRef<T>, VerboseError> {
     weak.upgrade().ok_or_else(|| {
         VerboseError::new(
-            // TODO new error code
-            Code::NotFound,
-            format!(
-                "Kernel object (Selector {}) was revoked during async call",
-                sel
-            ),
+            Code::ObjectGone,
+            if sel != kif::INVALID_SEL {
+                format!(
+                    "Kernel object (Selector {}) was revoked during async call",
+                    sel
+                )
+            }
+            else {
+                "Kernel object was revoked during async call".to_string()
+            },
         )
     })
 }

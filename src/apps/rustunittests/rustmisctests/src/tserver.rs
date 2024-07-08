@@ -255,7 +255,7 @@ fn server_notsup_main() -> Result<(), Error> {
 
         let res = server_loop(|| {
             if STOP.get() {
-                return Err(Error::new(Code::ActivityGone));
+                return Err(Error::new(Code::ObjectGone));
             }
 
             srv.fetch_and_handle(&mut hdl)?;
@@ -265,7 +265,7 @@ fn server_notsup_main() -> Result<(), Error> {
         });
         match res {
             // if there is any other error than our own stop signal, break
-            Err(e) if e.code() != Code::ActivityGone => break,
+            Err(e) if e.code() != Code::ObjectGone => break,
             _ => {},
         }
     }

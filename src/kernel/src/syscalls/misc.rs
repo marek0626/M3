@@ -407,7 +407,7 @@ pub fn activate_sgate_async(
         sysc_err!(Code::Exists, "SendGate is already activated");
     }
 
-    let rgate = sg.rgate().ok_or_else(|| Error::new(Code::NotFound))?;
+    let rgate = sg.rgate().ok_or_else(|| Error::new(Code::ObjectGone))?;
 
     let (ep, sg) = if !rgate.activated() {
         sysc_log!(act, "activate: waiting for rgate {:?}", *rgate);

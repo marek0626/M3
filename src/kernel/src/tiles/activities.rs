@@ -162,7 +162,7 @@ impl Activity {
 
         let act = act_weak
             .upgrade()
-            .ok_or_else(|| Error::new(Code::NotFound))?;
+            .ok_or_else(|| Error::new(Code::ObjectGone))?;
 
         let desc = platform::tile_desc(act.tile_id());
         if !desc.is_device() {
@@ -182,7 +182,7 @@ impl Activity {
 
                 let act = act_weak
                     .upgrade()
-                    .ok_or_else(|| Error::new(Code::NotFound))?;
+                    .ok_or_else(|| Error::new(Code::ObjectGone))?;
                 let phys = ktcu::glob_to_phys_remote(act.tile_id(), glob, base::kif::PageFlags::RW)
                     .unwrap();
                 (act, phys)

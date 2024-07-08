@@ -719,7 +719,7 @@ impl SemObject {
         loop {
             let sem = sem_weak
                 .upgrade()
-                .ok_or_else(|| Error::new(Code::NotFound))?;
+                .ok_or_else(|| Error::new(Code::ObjectGone))?;
             if sem.counter.get() != 0 {
                 sem.counter.set(sem.counter.get() - 1);
                 break;
@@ -733,7 +733,7 @@ impl SemObject {
 
             let sem = tmp_weak
                 .upgrade()
-                .ok_or_else(|| Error::new(Code::NotFound))?;
+                .ok_or_else(|| Error::new(Code::ObjectGone))?;
             if sem.waiters.get() == -1 {
                 return Err(Error::new(Code::RecvGone));
             }
@@ -870,7 +870,7 @@ impl TileObject {
 
             let tile = tile_weak
                 .upgrade()
-                .ok_or_else(|| Error::new(Code::NotFound))?;
+                .ok_or_else(|| Error::new(Code::ObjectGone))?;
 
             match res {
                 Err(e) => {

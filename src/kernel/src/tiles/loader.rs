@@ -83,14 +83,14 @@ pub fn init_activity_async(act: KObjectOwnedRef<Activity>) -> Result<i32, Error>
         )?;
 
         if !act_weak.can_upgrade() {
-            return Err(Error::new(Code::NotFound));
+            return Err(Error::new(Code::ObjectGone));
         }
 
         let flags = PageFlags::from(kif::Perm::RW);
         loader.load_segment_async(desc.env_space().0, env_addr, PAGE_SIZE, flags, false)?;
 
         if !act_weak.can_upgrade() {
-            return Err(Error::new(Code::NotFound));
+            return Err(Error::new(Code::ObjectGone));
         }
 
         ktcu::glob_to_phys_remote(tile_id, env_addr, flags)?
@@ -349,7 +349,10 @@ impl ELFLoader for ActivityELFLoader {
         flags: PageFlags,
         map: bool,
     ) -> Result<(), Error> {
-        let act = self.0.upgrade().ok_or_else(|| Error::new(Code::NotFound))?;
+        let act = self
+            .0
+            .upgrade()
+            .ok_or_else(|| Error::new(Code::ObjectGone))?;
         let tile_id = act.tile_id();
 
         if act.tile_desc().has_virtmem() {
@@ -380,13 +383,16 @@ impl ELFLoader for ActivityELFLoader {
 
                 map_obj_weak
                     .upgrade()
-                    .ok_or_else(|| Error::new(Code::NotFound))?
+                    .ok_or_else(|| Error::new(Code::ObjectGone))?
             }
             else {
                 map_obj
             };
 
-            let act = self.0.upgrade().ok_or_else(|| Error::new(Code::NotFound))?;
+            let act = self
+                .0
+                .upgrade()
+                .ok_or_else(|| Error::new(Code::ObjectGone))?;
             let res = act.map_caps().borrow_mut().insert(Capability::new_range(
                 SelRange::new_range(dst_sel as kif::CapSel, pages as kif::CapSel),
                 create_kobj!(map_obj, Map),
@@ -405,7 +411,10 @@ impl ELFLoader for ActivityELFLoader {
         size: usize,
         flags: PageFlags,
     ) -> Result<(), Error> {
-        let act = self.0.upgrade().ok_or_else(|| Error::new(Code::NotFound))?;
+        let act = self
+            .0
+            .upgrade()
+            .ok_or_else(|| Error::new(Code::ObjectGone))?;
         let tile_id = act.tile_id();
         let tile_desc = act.tile_desc();
         drop(act);
@@ -419,7 +428,7 @@ impl ELFLoader for ActivityELFLoader {
             self.load_segment_async(virt, mem.global(), size, flags, true)?;
 
             if !self.0.can_upgrade() {
-                return Err(Error::new(Code::NotFound));
+                return Err(Error::new(Code::ObjectGone));
             }
 
             ktcu::glob_to_phys_remote(tile_id, mem.global(), flags)?
@@ -432,7 +441,10 @@ impl ELFLoader for ActivityELFLoader {
     }
 
     fn map_heap_async(&mut self, virt: VirtAddr) -> Result<(), Error> {
-        let act = self.0.upgrade().ok_or_else(|| Error::new(Code::NotFound))?;
+        let act = self
+            .0
+            .upgrade()
+            .ok_or_else(|| Error::new(Code::ObjectGone))?;
         let tile_desc = act.tile_desc();
         drop(act);
 
@@ -444,14 +456,17 @@ impl ELFLoader for ActivityELFLoader {
             )?;
             self.load_segment_async(virt, phys.global(), MOD_HEAP_SIZE, PageFlags::RW, true)?;
             if !self.0.can_upgrade() {
-                return Err(Error::new(Code::NotFound));
+                return Err(Error::new(Code::ObjectGone));
             }
         }
         Ok(())
     }
 
     fn map_stack_async(&mut self) -> Result<(), Error> {
-        let act = self.0.upgrade().ok_or_else(|| Error::new(Code::NotFound))?;
+        let act = self
+            .0
+            .upgrade()
+            .ok_or_else(|| Error::new(Code::ObjectGone))?;
         let tile_desc = act.tile_desc();
         drop(act);
 
@@ -464,7 +479,7 @@ impl ELFLoader for ActivityELFLoader {
             )?;
             self.load_segment_async(virt, phys.global(), size, PageFlags::RW, true)?;
             if !self.0.can_upgrade() {
-                return Err(Error::new(Code::NotFound));
+                return Err(Error::new(Code::ObjectGone));
             }
         }
         Ok(())

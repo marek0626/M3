@@ -60,7 +60,7 @@ pub enum Code {
     NoIRQ,
     // SW Errors
     InvArgs,
-    ActivityGone,
+    ObjectGone,
     OutOfMem,
     NoSuchFile,
     NotSup,

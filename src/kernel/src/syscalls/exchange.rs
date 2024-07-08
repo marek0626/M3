@@ -143,7 +143,7 @@ pub fn exchange_over_sess_async(
         }
     );
 
-    let serv = sess.service().ok_or_else(|| Error::new(Code::NotFound))?;
+    let serv = sess.service().ok_or_else(|| Error::new(Code::ObjectGone))?;
     let label = sess.creator() as tcu::Label;
 
     log!(

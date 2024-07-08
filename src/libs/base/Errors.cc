@@ -54,7 +54,7 @@ static const char *errmsgs[] = {
     "No PMP endpoint",
     "No pending IRQ",
     "Invalid arguments",
-    "Activity gone",
+    "Object gone",
     /* 30 */
     "Out of memory",
     "No such file or directory",
