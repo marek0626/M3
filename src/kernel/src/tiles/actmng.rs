@@ -15,7 +15,7 @@
 
 use base::cell::LazyStaticRefCell;
 use base::cfg;
-use base::col::Vec;
+use base::col::{String, ToString, Vec};
 use base::errors::{Code, Error};
 use base::io::LogFlags;
 use base::kif::{self, Perm};
@@ -82,7 +82,7 @@ impl ActivityMng {
     }
 
     pub fn create_activity_async(
-        name: &str,
+        name: String,
         tile: AsyncRc<TileObject>,
         eps_start: tcu::EpId,
         kmem: AsyncRc<KMemObject>,
@@ -96,7 +96,7 @@ impl ActivityMng {
         log!(
             LogFlags::KernActs,
             "Created Activity {} [id={}, tile={}]",
-            name,
+            act.name(),
             id,
             tile_id
         );
@@ -237,7 +237,7 @@ impl ActivityMng {
         // create root activity
         let kmem = KMemObject::new(args::get().kmem - cfg::FIXED_KMEM);
         let act = Self::create_activity_async(
-            "root",
+            "root".to_string(),
             tile,
             tcu::FIRST_USER_EP,
             kmem,

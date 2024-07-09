@@ -31,11 +31,11 @@ use crate::syscalls::{check_unused, get_request, reply_success, try_upgrade_kobj
 use crate::tiles::Activity;
 
 #[inline(never)]
-pub fn derive_tile_async(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::DeriveTile = get_request(msg)?;
+pub fn derive_tile_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::DeriveTile = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(
         act,
         "derive_tile(tile={}, dst={}, eps={:?}, time={:?}, pts={:?})",
@@ -58,16 +58,16 @@ pub fn derive_tile_async(
     let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.tile));
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn derive_kmem(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::DeriveKMem = get_request(msg)?;
+pub fn derive_kmem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::DeriveKMem = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(
         act,
         "derive_kmem(kmem={}, dst={}, quota={:#x})",
@@ -87,13 +87,16 @@ pub fn derive_kmem(
     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.kmem));
     assert!(kmem.alloc(&act, r.kmem, r.quota));
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn derive_mem(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
-    let r: syscalls::DeriveMem = get_request(msg)?;
+pub fn derive_mem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::DeriveMem = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(
         act,
         "derive_mem(act={}, src={}, dst={}, size={:#x}, offset={:#x}, perms={:?})",
@@ -124,16 +127,16 @@ pub fn derive_mem(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
 
     try_kmem_quota!(tact.obj_caps().borrow_mut().insert_as_child(cap, r.src));
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn derive_srv_async(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::DeriveSrv = get_request(msg)?;
+pub fn derive_srv_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::DeriveSrv = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(
         act,
         "derive_srv(dst_srv={}, dst_sgate={}, srv={}, sessions={}, event={})",
@@ -154,7 +157,7 @@ pub fn derive_srv_async(
     let srv: AsyncRc<ServObject> = act.get_kobj(r.srv)?;
 
     // everything worked, send the reply
-    reply_success(msg);
+    reply_success(&act);
 
     let mut smsg = MsgBuf::borrow_def();
     build_vmsg!(smsg, kif::service::Request::DeriveCrt {

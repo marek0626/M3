@@ -35,11 +35,11 @@ use crate::syscalls::{check_unused, get_request, reply_success, send_reply, try_
 use crate::tiles::{tilemng, Activity, ActivityFlags, ActivityMng};
 
 #[inline(never)]
-pub fn create_mgate(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::CreateMGate = get_request(msg)?;
+pub fn create_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::CreateMGate = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(
         act,
         "create_mgate(dst={}, act={}, addr={}, size={:#x}, perms={:?})",
@@ -117,16 +117,16 @@ pub fn create_mgate(
         try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.act));
     }
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn create_rgate(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::CreateRGate = get_request(msg)?;
+pub fn create_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::CreateRGate = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(
         act,
         "create_rgate(dst={}, size={:#x}, msg_size={:#x})",
@@ -149,16 +149,16 @@ pub fn create_rgate(
     let rgate = RGateObject::new(r.order, r.msg_order, false);
     try_kmem_quota!(act_caps.insert(Capability::new(r.dst, rgate)));
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn create_sgate(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::CreateSGate = get_request(msg)?;
+pub fn create_sgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::CreateSGate = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(
         act,
         "create_sgate(dst={}, rgate={}, label={:#x}, credits={})",
@@ -180,13 +180,15 @@ pub fn create_sgate(
 
     try_kmem_quota!(act_caps.insert_as_child(cap, r.rgate));
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn create_srv(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
-    let r: syscalls::CreateSrv<'_> = get_request(msg)?;
+pub fn create_srv(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::CreateSrv<'_> = get_request(&msg)?;
+
     sysc_log!(
         act,
         "create_srv(dst={}, rgate={}, creator={}, name={})",
@@ -216,16 +218,17 @@ pub fn create_srv(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
 
     try_kmem_quota!(act_caps.insert(cap));
 
-    reply_success(msg);
+    drop(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn create_sess(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::CreateSess = get_request(msg)?;
+pub fn create_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::CreateSess = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(
         act,
         "create_sess(dst={}, srv={}, creator={}, ident={:#x}, auto_close={})",
@@ -251,16 +254,15 @@ pub fn create_sess(
 
     try_kmem_quota!(obj_caps.insert_as_child(cap, r.srv));
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn create_activity_async(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::CreateActivity<'_> = get_request(msg)?;
+pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::CreateActivity<'_> = get_request(&msg)?;
+
     sysc_log!(
         act,
         "create_activity(dst={}, name={}, tile={}, kmem={})",
@@ -311,11 +313,15 @@ pub fn create_activity_async(
     }
     drop(tilemux);
 
+    let name = r.name.to_string();
+    let dst_sel = r.dst;
+    drop(msg);
+
     let act_weak = act.downgrade();
 
     // create activity
     let nact =
-        match ActivityMng::create_activity_async(r.name, tile, eps, kmem, ActivityFlags::empty()) {
+        match ActivityMng::create_activity_async(name, tile, eps, kmem, ActivityFlags::empty()) {
             Ok(nact) => nact,
             Err(e) => sysc_err!(e.code(), "Unable to create Activity"),
         };
@@ -323,7 +329,7 @@ pub fn create_activity_async(
     let act = try_upgrade_kobj(act_weak, INVALID_SEL)?;
 
     // give activity cap to the parent
-    let cap = Capability::new(r.dst, nact.clone());
+    let cap = Capability::new(dst_sel, nact.clone());
     try_kmem_quota!(act.obj_caps().borrow_mut().insert(cap));
 
     // create EP caps for the pager EPs
@@ -340,8 +346,8 @@ pub fn create_activity_async(
                 0,
                 nact.tile_weak().clone(),
             );
-            let scap = Capability::new(r.dst + 1 + i as CapSel, ep);
-            try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(scap, r.dst));
+            let scap = Capability::new(dst_sel + 1 + i as CapSel, ep);
+            try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(scap, dst_sel));
         }
     }
 
@@ -350,14 +356,17 @@ pub fn create_activity_async(
         id: nact.id(),
         eps_start: eps,
     });
-    send_reply(msg, &kreply);
+    send_reply(&act, &kreply);
 
     Ok(())
 }
 
 #[inline(never)]
-pub fn create_sem(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
-    let r: syscalls::CreateSem = get_request(msg)?;
+pub fn create_sem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::CreateSem = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(act, "create_sem(dst={}, value={})", r.dst, r.value);
 
     check_unused(&act.obj_caps().borrow(), r.dst)?;
@@ -366,16 +375,16 @@ pub fn create_sem(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
     let cap = Capability::new(r.dst, sem);
     try_kmem_quota!(act.obj_caps().borrow_mut().insert(cap));
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn create_map_async(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::CreateMap = get_request(msg)?;
+pub fn create_map_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::CreateMap = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(
         act,
         "create_map(dst={}, act={}, mgate={}, first={}, pages={}, perms={:?})",
@@ -473,7 +482,7 @@ pub fn create_map_async(
     }
 
     // create map cap, if not yet existing
-    if !exists {
+    let act = if !exists {
         // if we cannot upgrade the destination activity or map object, we just created mapping was
         // already unmapped again.
         let dst_act = try_upgrade_kobj(dst_act_weak, r.act)?;
@@ -486,14 +495,21 @@ pub fn create_map_async(
                 act.obj_caps().borrow_mut(),
                 r.mgate,
             ));
+            Some(act)
         }
         else {
             // if we fail to upgrade the syscall-performing activity, we cannot insert the mapping
             // and thus have to unmap it at TileMux again
             MapObject::unmap_async(act_id, act_tile, virt, r.pages as usize);
+            None
         }
     }
+    else {
+        act_weak.upgrade()
+    };
 
-    reply_success(msg);
+    if let Some(act) = act {
+        reply_success(&act);
+    }
     Ok(())
 }

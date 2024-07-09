@@ -34,11 +34,11 @@ use crate::syscalls::{check_unused, get_request, reply_success, send_reply, try_
 use crate::tiles::{tilemng, Activity, TileMux};
 
 #[inline(never)]
-pub fn alloc_ep_async(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::AllocEP = get_request(msg)?;
+pub fn alloc_ep_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::AllocEP = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(
         act,
         "alloc_ep(dst={}, act={}, epid={}, replies={})",
@@ -125,17 +125,17 @@ pub fn alloc_ep_async(
     build_vmsg!(kreply, Code::Success, kif::syscalls::AllocEPReply {
         ep: epid
     });
-    send_reply(msg, &kreply);
+    send_reply(&act, &kreply);
 
     Ok(())
 }
 
 #[inline(never)]
-pub fn mgate_region(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::MGateRegion = get_request(msg)?;
+pub fn mgate_region(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::MGateRegion = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(act, "mgate_addr(mgate={})", r.mgate);
 
     let act_caps = act.obj_caps().borrow();
@@ -146,17 +146,17 @@ pub fn mgate_region(
         global: mgate.addr(),
         size: mgate.size(),
     });
-    send_reply(msg, &kreply);
+    send_reply(&act, &kreply);
 
     Ok(())
 }
 
 #[inline(never)]
-pub fn rgate_buffer(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::RGateBuffer = get_request(msg)?;
+pub fn rgate_buffer(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::RGateBuffer = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(act, "rgate_buffer(rgate={})", r.rgate);
 
     let act_caps = act.obj_caps().borrow();
@@ -167,14 +167,17 @@ pub fn rgate_buffer(
         order: rgate.order(),
         msg_order: rgate.msg_order(),
     });
-    send_reply(msg, &kreply);
+    send_reply(&act, &kreply);
 
     Ok(())
 }
 
 #[inline(never)]
-pub fn kmem_quota(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
-    let r: syscalls::KMemQuota = get_request(msg)?;
+pub fn kmem_quota(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::KMemQuota = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(act, "kmem_quota(kmem={})", r.kmem);
 
     let act_caps = act.obj_caps().borrow();
@@ -186,14 +189,17 @@ pub fn kmem_quota(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
         total: kmem.quota(),
         left: kmem.left(),
     });
-    send_reply(msg, &kreply);
+    send_reply(&act, &kreply);
 
     Ok(())
 }
 
 #[inline(never)]
-pub fn get_sess(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
-    let r: syscalls::GetSess = get_request(msg)?;
+pub fn get_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::GetSess = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(
         act,
         "get_sess(dst={}, srv={}, act={}, sid={})",
@@ -243,16 +249,16 @@ pub fn get_sess(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
         sysc_err!(Code::InvArgs, "Unknown session id {}", r.sid);
     }
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn activate_mgate(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::ActivateMGate = get_request(msg)?;
+pub fn activate_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::ActivateMGate = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(act, "activate_mgate(ep={}, gate={})", r.ep, r.gate,);
 
     let ep: AsyncRc<EPObject> = act.get_kobj(r.ep)?;
@@ -287,16 +293,16 @@ pub fn activate_mgate(
 
     mg.set_ep(&ep, GateObject::Mem(mg.clone().downgrade()));
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn activate_rgate(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::ActivateRGate = get_request(msg)?;
+pub fn activate_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::ActivateRGate = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(
         act,
         "activate_rgate(ep={}, gate={}, rbuf_mem={}, rbuf_off={:#x})",
@@ -383,16 +389,16 @@ pub fn activate_rgate(
 
     rg.set_ep(&ep, GateObject::Recv(rg.clone().downgrade()));
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn activate_sgate_async(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::ActivateSGate = get_request(msg)?;
+pub fn activate_sgate_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::ActivateSGate = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(act, "activate_sgate(ep={}, gate={})", r.ep, r.gate,);
 
     let ep: AsyncRc<EPObject> = act.get_kobj(r.ep)?;
@@ -414,7 +420,7 @@ pub fn activate_sgate_async(
 
     let rgate = sg.rgate().ok_or_else(|| Error::new(Code::ObjectGone))?;
 
-    let (ep, sg) = if !rgate.activated() {
+    let (act, ep, sg) = if !rgate.activated() {
         sysc_log!(act, "activate: waiting for rgate {:?}", *rgate);
         let ep_weak = ep.downgrade();
         let sg_weak = sg.downgrade();
@@ -428,10 +434,10 @@ pub fn activate_sgate_async(
         sysc_log!(act, "activate: rgate {:?} is activated", *rgate);
         let ep = try_upgrade_kobj(ep_weak, r.ep)?;
         let sg = try_upgrade_kobj(sg_weak, r.gate)?;
-        (ep, sg)
+        (act, ep, sg)
     }
     else {
-        (ep, sg)
+        (act, ep, sg)
     };
 
     if let Err(e) = tilemng::tilemux(dst_tile).config_snd_ep(epid, ep.activity().unwrap().id(), &sg)
@@ -441,13 +447,16 @@ pub fn activate_sgate_async(
 
     sg.set_ep(&ep, GateObject::Send(sg.clone().downgrade()));
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn invalidate(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
-    let r: syscalls::Invalidate = get_request(msg)?;
+pub fn invalidate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::Invalidate = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(act, "invalidate(ep={})", r.ep);
 
     let ep: AsyncRc<EPObject> = act.get_kobj(r.ep)?;
@@ -466,23 +475,24 @@ pub fn invalidate(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
         );
     }
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn sem_ctrl_async(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::SemCtrl = get_request(msg)?;
+pub fn sem_ctrl_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::SemCtrl = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(act, "sem_ctrl(sem={}, op={:?})", r.sem, r.op);
 
     let sem: AsyncRc<SemObject> = act.get_kobj(r.sem)?;
 
-    match r.op {
+    let act = match r.op {
         kif::syscalls::SemOp::Up => {
             sem.up();
+            act
         },
 
         kif::syscalls::SemOp::Down => {
@@ -495,19 +505,20 @@ pub fn sem_ctrl_async(
             if let Err(e) = res {
                 sysc_err!(e.code(), "Semaphore operation failed");
             }
+            act
         },
-    }
+    };
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn activity_ctrl_async(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::ActivityCtrl = get_request(msg)?;
+pub fn activity_ctrl_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::ActivityCtrl = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(
         act,
         "activity_ctrl(act={}, op={:?}, arg={:#x})",
@@ -517,6 +528,7 @@ pub fn activity_ctrl_async(
     );
 
     let actcap: AsyncRc<Activity> = act.get_kobj(r.act)?;
+    let act_weak = act.clone().downgrade();
 
     match r.op {
         kif::syscalls::ActivityOp::Start => {
@@ -537,22 +549,24 @@ pub fn activity_ctrl_async(
 
             Activity::stop_app_async(actcap, Code::from(r.arg as u32), is_self, act_id);
             if is_self {
-                msg.ack();
+                // syscall message has already been invalidated
                 return Ok(());
             }
         },
-    };
+    }
 
-    reply_success(msg);
+    if let Some(act) = act_weak.upgrade() {
+        reply_success(&act);
+    }
     Ok(())
 }
 
 #[inline(never)]
-pub fn activity_wait_async(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::ActivityWait = get_request(msg)?;
+pub fn activity_wait_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::ActivityWait = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(
         act,
         "activity_wait(activities={}, event={})",
@@ -569,8 +583,11 @@ pub fn activity_wait_async(
 
     // In any case, check whether a activity already exited. If event == 0, wait until that happened.
     // For event != 0, remember that we want to get notified and send an upcall on a activity's exit.
-    if let Some((sel, code)) = Activity::wait_exit_async(act, r.event, &r.acts[0..r.act_count]) {
-        let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
+    let res = Activity::wait_exit_async(act, r.event, &r.acts[0..r.act_count]);
+
+    let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
+
+    if let Some((sel, code)) = res {
         sysc_log!(act, "act_wait-cont(act={}, exitcode={:?})", sel, code);
 
         reply_msg.act_sel = sel;
@@ -579,15 +596,12 @@ pub fn activity_wait_async(
 
     let mut reply = MsgBuf::borrow_def();
     build_vmsg!(reply, Code::Success, reply_msg);
-    send_reply(msg, &reply);
+    send_reply(&act, &reply);
 
     Ok(())
 }
 
-pub fn reset_stats(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
+pub fn reset_stats(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     sysc_log!(act, "reset_stats()",);
 
     for tile in platform::user_tiles() {
@@ -595,13 +609,13 @@ pub fn reset_stats(
         tilemng::tilemux(tile).reset_stats().ok();
     }
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
-pub fn noop(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn noop(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     sysc_log!(act, "noop()",);
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }

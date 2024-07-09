@@ -532,6 +532,11 @@ impl OwnedMessage {
         }
     }
 
+    /// Invalidates the internal message, so that is no longer accessible
+    pub fn invalidate(&mut self) {
+        self.msg = None;
+    }
+
     /// Acknowledge the message
     ///
     /// Afterwards, `self` should not be interacted with anymore.
