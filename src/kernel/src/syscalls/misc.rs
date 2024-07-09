@@ -25,7 +25,7 @@ use base::tcu;
 use thread::AsyncRc;
 
 use crate::cap::{
-    Capability, EPCategory, EPObject, GateObject, KMemObject, KObject, MGateObject, RGateObject,
+    Capability, EPCategory, EPObject, GateObject, KMemObject, MGateObject, RGateObject,
     SGateObject, SemObject, ServObject, SessObject,
 };
 use crate::ktcu;
@@ -218,10 +218,14 @@ pub fn get_sess(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
     let srv_root = srvcap.get_root();
 
     // walk through the childs to find the session with given id (only root cap can create sessions)
-    // safety: we don't keep the reference across an async call here
-    let csess = srv_root.find_child(
-        |c| matches!(unsafe { c.get_unchecked() }, KObject::Sess(s) if s.ident() == r.sid),
-    );
+    let csess = srv_root.find_child(|c| {
+        if let Ok(s) = c.get::<AsyncRc<SessObject>>() {
+            if s.ident() == r.sid {
+                return true;
+            }
+        }
+        false
+    });
     if let Some(s) = csess
         .as_ref()
         .and_then(|c| c.get::<AsyncRc<SessObject>>().ok())
