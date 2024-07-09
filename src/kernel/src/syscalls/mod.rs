@@ -150,6 +150,7 @@ fn get_request<'m, R: Deserialize<'m>>(msg: &'m tcu::Message) -> Result<R, Error
 pub fn handle_async(mut msg: tcu::OwnedMessage) {
     let msg = &mut msg;
     let act = ActivityMng::activity(msg.header.label() as tcu::ActId).unwrap();
+    let act_weak = act.clone().downgrade();
 
     use kif::syscalls::Operation;
     let opcode = msg.as_words()[0];
@@ -198,18 +199,19 @@ pub fn handle_async(mut msg: tcu::OwnedMessage) {
     };
 
     if let Err(e) = res {
-        let act = ActivityMng::activity(msg.header.label() as tcu::ActId).unwrap();
-        log!(
-            LogFlags::Error,
-            "\x1B[37;41m{}:{}@{}: {:?} failed: {} ({:?})\x1B[0m",
-            act.id(),
-            act.name(),
-            act.tile_id(),
-            Operation::try_from(opcode),
-            e.msg(),
-            e.code()
-        );
+        if let Some(act) = act_weak.upgrade() {
+            log!(
+                LogFlags::Error,
+                "\x1B[37;41m{}:{}@{}: {:?} failed: {} ({:?})\x1B[0m",
+                act.id(),
+                act.name(),
+                act.tile_id(),
+                Operation::try_from(opcode),
+                e.msg(),
+                e.code()
+            );
 
-        reply_result(msg, e.code());
+            reply_result(msg, e.code());
+        }
     }
 }
