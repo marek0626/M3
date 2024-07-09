@@ -350,23 +350,18 @@ impl Activity {
 
     fn fetch_exit(&self, sels: &[u64]) -> Option<(CapSel, Code)> {
         for sel in sels {
-            let wact = self
+            if let Ok(wv) = self
                 .obj_caps()
                 .borrow()
-                .get(*sel as CapSel)
-                // safety: we don't keep the reference here across an async call
-                .map(|c| unsafe { c.get_unchecked().clone() });
-            match wact {
-                Ok(KObject::Activity(wv)) => {
-                    if wv.id() == self.id() {
-                        continue;
-                    }
+                .get_kobj::<AsyncRc<Activity>>(*sel as CapSel)
+            {
+                if wv.id() == self.id() {
+                    continue;
+                }
 
-                    if let Some(code) = wv.fetch_exit_code() {
-                        return Some((*sel, code));
-                    }
-                },
-                _ => continue,
+                if let Some(code) = wv.fetch_exit_code() {
+                    return Some((*sel, code));
+                }
             }
         }
 
