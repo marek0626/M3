@@ -355,6 +355,8 @@ pub fn try_yield() {
                 next.id
             );
 
+            refs::check_async_call();
+
             let cur = mem::replace(&mut tmng.current, next);
 
             // safety: moving between two lists is fine
@@ -383,6 +385,8 @@ pub fn stop() {
             tmng.current.id,
             next.id
         );
+
+        refs::check_async_call();
 
         let mut cur = mem::replace(&mut tmng.current, next);
 
