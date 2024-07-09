@@ -38,7 +38,7 @@ const MAX_MSG_SIZE: usize = 1024;
 
 mod refs;
 
-pub use refs::{AsyncRc, AsyncWeak};
+pub use refs::{AsyncLock, AsyncRc, AsyncWeak};
 
 #[cfg(target_arch = "x86_64")]
 #[derive(Default)]
