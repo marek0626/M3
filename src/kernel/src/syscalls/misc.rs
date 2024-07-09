@@ -26,7 +26,7 @@ use thread::AsyncRc;
 
 use crate::cap::{
     Capability, EPCategory, EPObject, GateObject, KMemObject, KObject, MGateObject, RGateObject,
-    SGateObject, SemObject, ServObject,
+    SGateObject, SemObject, ServObject, SessObject,
 };
 use crate::ktcu;
 use crate::platform;
@@ -219,10 +219,13 @@ pub fn get_sess(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
 
     // walk through the childs to find the session with given id (only root cap can create sessions)
     // safety: we don't keep the reference across an async call here
-    let mut csess = srv_root.find_child(
+    let csess = srv_root.find_child(
         |c| matches!(unsafe { c.get_unchecked() }, KObject::Sess(s) if s.ident() == r.sid),
     );
-    if let Some(KObject::Sess(s)) = csess.as_mut().map(|c| unsafe { c.get_unchecked().clone() }) {
+    if let Some(s) = csess
+        .as_ref()
+        .and_then(|c| c.get::<AsyncRc<SessObject>>().ok())
+    {
         if s.creator() != creator {
             sysc_err!(Code::NoPerm, "Cannot get access to foreign session");
         }
