@@ -24,7 +24,10 @@ use base::tcu;
 
 use thread::AsyncRc;
 
-use crate::cap::{Capability, EPCategory, EPObject, GateObject, KObject, SemObject};
+use crate::cap::{
+    Capability, EPCategory, EPObject, GateObject, KMemObject, MGateObject, RGateObject,
+    SGateObject, SemObject, ServObject, SessObject,
+};
 use crate::ktcu;
 use crate::platform;
 use crate::syscalls::{check_unused, get_request, reply_success, send_reply, try_upgrade_kobj};
@@ -51,7 +54,7 @@ pub fn alloc_ep_async(
     }
 
     let ep_count = 1 + r.replies as usize;
-    let dst_act = get_kobj!(act, r.act, Activity);
+    let dst_act: AsyncRc<Activity> = act.get_kobj(r.act)?;
     if !dst_act.tile().has_quota(ep_count) {
         sysc_err!(
             Code::NoSpace,
@@ -112,7 +115,7 @@ pub fn alloc_ep_async(
         r.replies,
         dst_act.tile_weak().clone(),
     );
-    let cap = Capability::new(r.dst, create_kobj!(ep, EP));
+    let cap = Capability::new(r.dst, ep);
     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.act));
 
     dst_act.tile().alloc(ep_count);
@@ -136,7 +139,7 @@ pub fn mgate_region(
     sysc_log!(act, "mgate_addr(mgate={})", r.mgate);
 
     let act_caps = act.obj_caps().borrow();
-    let mgate = get_kobj_ref!(act_caps, r.mgate, MGate);
+    let mgate: AsyncRc<MGateObject> = act_caps.get_kobj(r.mgate)?;
 
     let mut kreply = MsgBuf::borrow_def();
     build_vmsg!(kreply, Code::Success, kif::syscalls::MGateRegionReply {
@@ -157,7 +160,7 @@ pub fn rgate_buffer(
     sysc_log!(act, "rgate_buffer(rgate={})", r.rgate);
 
     let act_caps = act.obj_caps().borrow();
-    let rgate = get_kobj_ref!(act_caps, r.rgate, RGate);
+    let rgate: AsyncRc<RGateObject> = act_caps.get_kobj(r.rgate)?;
 
     let mut kreply = MsgBuf::borrow_def();
     build_vmsg!(kreply, Code::Success, kif::syscalls::RGateBufferReply {
@@ -175,7 +178,7 @@ pub fn kmem_quota(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
     sysc_log!(act, "kmem_quota(kmem={})", r.kmem);
 
     let act_caps = act.obj_caps().borrow();
-    let kmem = get_kobj_ref!(act_caps, r.kmem, KMem);
+    let kmem: AsyncRc<KMemObject> = act_caps.get_kobj(r.kmem)?;
 
     let mut kreply = MsgBuf::borrow_def();
     build_vmsg!(kreply, Code::Success, kif::syscalls::KMemQuotaReply {
@@ -200,7 +203,7 @@ pub fn get_sess(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
         r.sid
     );
 
-    let actcap = get_kobj!(act, r.act, Activity);
+    let actcap: AsyncRc<Activity> = act.get_kobj(r.act)?;
     check_unused(&actcap.obj_caps().borrow(), r.dst)?;
     if act.ptr_eq(&actcap) {
         sysc_err!(Code::InvArgs, "Cannot get session for own Activity");
@@ -208,19 +211,25 @@ pub fn get_sess(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
 
     // get service cap
     let mut act_caps = act.obj_caps().borrow_mut();
-    let srvcap = act_caps
-        .get_mut(r.srv)
-        .ok_or_else(|| VerboseError::new(Code::InvArgs, "Invalid capability".to_string()))?;
-    let creator = cap_to_kobj!(srvcap, Serv).creator();
+    let srvcap = act_caps.get_mut(r.srv)?;
+    let creator = srvcap.get::<AsyncRc<ServObject>>()?.creator();
 
     // find root service cap
     let srv_root = srvcap.get_root();
 
     // walk through the childs to find the session with given id (only root cap can create sessions)
-    // safety: we don't keep the reference across an async call here
-    let mut csess = srv_root
-        .find_child(|c| matches!(unsafe { c.get() }, KObject::Sess(s) if s.ident() == r.sid));
-    if let Some(KObject::Sess(s)) = csess.as_mut().map(|c| unsafe { c.get().clone() }) {
+    let csess = srv_root.find_child(|c| {
+        if let Ok(s) = c.get::<AsyncRc<SessObject>>() {
+            if s.ident() == r.sid {
+                return true;
+            }
+        }
+        false
+    });
+    if let Some(s) = csess
+        .as_ref()
+        .and_then(|c| c.get::<AsyncRc<SessObject>>().ok())
+    {
         if s.creator() != creator {
             sysc_err!(Code::NoPerm, "Cannot get access to foreign session");
         }
@@ -246,7 +255,7 @@ pub fn activate_mgate(
     let r: syscalls::ActivateMGate = get_request(msg)?;
     sysc_log!(act, "activate_mgate(ep={}, gate={})", r.ep, r.gate,);
 
-    let ep = get_kobj!(act, r.ep, EP);
+    let ep: AsyncRc<EPObject> = act.get_kobj(r.ep)?;
     if ep.replies() != 0 {
         sysc_err!(Code::InvArgs, "Only rgates use EP caps with reply slots");
     }
@@ -260,7 +269,7 @@ pub fn activate_mgate(
         );
     }
 
-    let mg = get_kobj!(act, r.gate, MGate);
+    let mg: AsyncRc<MGateObject> = act.get_kobj(r.gate)?;
 
     if mg.gate_ep().get_ep().is_some() {
         sysc_err!(Code::Exists, "MemGate is already activated");
@@ -297,7 +306,7 @@ pub fn activate_rgate(
         r.rbuf_off,
     );
 
-    let ep = get_kobj!(act, r.ep, EP);
+    let ep: AsyncRc<EPObject> = act.get_kobj(r.ep)?;
 
     // activity that is currently active on the endpoint
     let ep_act = ep.activity().unwrap();
@@ -309,7 +318,7 @@ pub fn activate_rgate(
         sysc_err!(e.code(), "Invalidation of EP {}:{} failed", dst_tile, epid);
     }
 
-    let rg = get_kobj!(act, r.gate, RGate);
+    let rg: AsyncRc<RGateObject> = act.get_kobj(r.gate)?;
     if rg.activated() {
         sysc_err!(Code::Exists, "RecvGate is already activated");
     }
@@ -326,7 +335,7 @@ pub fn activate_rgate(
             + cfg::DEF_RBUF_SIZE as PhysAddrRaw
     }
     else if dst_desc.has_virtmem() {
-        let rbuf = get_kobj!(act, r.rbuf_mem, MGate);
+        let rbuf: AsyncRc<MGateObject> = act.get_kobj(r.rbuf_mem)?;
         if r.rbuf_off >= rbuf.size() || r.rbuf_off + rg.size() as GlobOff > rbuf.size() {
             sysc_err!(Code::InvArgs, "Invalid receive buffer memory");
         }
@@ -386,7 +395,7 @@ pub fn activate_sgate_async(
     let r: syscalls::ActivateSGate = get_request(msg)?;
     sysc_log!(act, "activate_sgate(ep={}, gate={})", r.ep, r.gate,);
 
-    let ep = get_kobj!(act, r.ep, EP);
+    let ep: AsyncRc<EPObject> = act.get_kobj(r.ep)?;
     if ep.replies() != 0 {
         sysc_err!(Code::InvArgs, "Only rgates use EP caps with reply slots");
     }
@@ -398,7 +407,7 @@ pub fn activate_sgate_async(
         sysc_err!(e.code(), "Invalidation of EP {}:{} failed", dst_tile, epid);
     }
 
-    let sg = get_kobj!(act, r.gate, SGate);
+    let sg: AsyncRc<SGateObject> = act.get_kobj(r.gate)?;
     if sg.gate_ep().get_ep().is_some() {
         sysc_err!(Code::Exists, "SendGate is already activated");
     }
@@ -441,7 +450,7 @@ pub fn invalidate(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result
     let r: syscalls::Invalidate = get_request(msg)?;
     sysc_log!(act, "invalidate(ep={})", r.ep);
 
-    let ep = get_kobj!(act, r.ep, EP);
+    let ep: AsyncRc<EPObject> = act.get_kobj(r.ep)?;
 
     if let Err(e) = tilemng::tilemux(ep.tile_id()).invalidate_ep(
         ep.activity().unwrap().id(),
@@ -469,7 +478,7 @@ pub fn sem_ctrl_async(
     let r: syscalls::SemCtrl = get_request(msg)?;
     sysc_log!(act, "sem_ctrl(sem={}, op={:?})", r.sem, r.op);
 
-    let sem = get_kobj!(act, r.sem, Sem);
+    let sem: AsyncRc<SemObject> = act.get_kobj(r.sem)?;
 
     match r.op {
         kif::syscalls::SemOp::Up => {
@@ -507,7 +516,7 @@ pub fn activity_ctrl_async(
         r.arg
     );
 
-    let actcap = get_kobj!(act, r.act, Activity);
+    let actcap: AsyncRc<Activity> = act.get_kobj(r.act)?;
 
     match r.op {
         kif::syscalls::ActivityOp::Start => {

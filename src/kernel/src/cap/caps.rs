@@ -16,7 +16,7 @@
 use base::cell::{RefCell, RefMut, StaticCell};
 use base::cfg;
 use base::col::Treap;
-use base::errors::{Code, Error};
+use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{CapRngDesc, CapSel, SEL_ACT, SEL_KMEM, SEL_TILE};
 use base::log;
@@ -31,6 +31,8 @@ use thread::AsyncRc;
 use crate::cap::{EPObject, GateEP, KObject, MapObject, SessObject, TileObject};
 use crate::ktcu;
 use crate::tiles::{tilemng, Activity, ActivityMng, State, INVAL_ID};
+
+use super::IntoKObject;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct SelRange {
@@ -107,24 +109,35 @@ impl CapTable {
     }
 
     pub fn unused(&self, sel: CapSel) -> bool {
-        self.get(sel).is_none()
+        self.caps.get(&SelRange::new(sel)).is_none()
     }
 
     pub fn range_unused(&self, crd: &CapRngDesc) -> bool {
         for s in crd.start()..crd.start() + crd.count() {
-            if self.get(s).is_some() {
+            if !self.unused(s) {
                 return false;
             }
         }
         true
     }
 
-    pub fn get(&self, sel: CapSel) -> Option<&Capability> {
-        self.caps.get(&SelRange::new(sel))
+    pub fn get(&self, sel: CapSel) -> Result<&Capability, Error> {
+        self.caps
+            .get(&SelRange::new(sel))
+            .ok_or_else(|| Error::new(Code::InvCap))
     }
 
-    pub fn get_mut(&mut self, sel: CapSel) -> Option<&mut Capability> {
-        self.caps.get_mut(&SelRange::new(sel))
+    pub fn get_mut(&mut self, sel: CapSel) -> Result<&mut Capability, Error> {
+        self.caps
+            .get_mut(&SelRange::new(sel))
+            .ok_or_else(|| Error::new(Code::InvCap))
+    }
+
+    pub fn get_kobj<T>(&self, sel: CapSel) -> Result<T, VerboseError>
+    where
+        T: for<'a> TryFrom<&'a KObject, Error = VerboseError>,
+    {
+        self.get(sel)?.get()
     }
 
     #[inline(always)]
@@ -221,7 +234,7 @@ impl CapTable {
         let mut sel = crd.start();
         while sel < crd.start() + crd.count() {
             let tbl_ref = tbl.borrow_mut();
-            match RefMut::filter_map(tbl_ref, |t| t.get_mut(sel)) {
+            match RefMut::filter_map(tbl_ref, |t| t.get_mut(sel).ok()) {
                 Ok(cap) => {
                     if !cap.can_revoke() {
                         return Err(Error::new(Code::NotRevocable));
@@ -278,14 +291,21 @@ impl Capability {
         128 + crate::slab::HEADER_SIZE
     }
 
-    pub fn new(sel: CapSel, obj: KObject) -> Self {
+    pub fn new<T>(sel: CapSel, obj: AsyncRc<T>) -> Self
+    where
+        AsyncRc<T>: IntoKObject<T>,
+    {
         Self::new_range(SelRange::new(sel), obj)
     }
 
-    pub fn new_range(sels: SelRange, obj: KObject) -> Self {
+    pub fn new_range<T>(sels: SelRange, obj: AsyncRc<T>) -> Self
+    where
+        AsyncRc<T>: IntoKObject<T>,
+    {
         Capability {
             sels,
-            obj,
+            // safety: as we directly keep the KObject in the capability, the conversion is okay
+            obj: unsafe { obj.into_kobj() },
             table: None,
             child: None,
             parent: None,
@@ -307,11 +327,19 @@ impl Capability {
         self.sels.count
     }
 
+    pub fn get<T>(&self) -> Result<T, VerboseError>
+    where
+        T: for<'a> TryFrom<&'a KObject, Error = VerboseError>,
+    {
+        // safety: we directly turn it into a KObjectOwnedRef here, so that it's okay
+        unsafe { self.get_unchecked() }.try_into()
+    }
+
     //
     // # Safety
     //
     // The caller cannot keep the KObject across async calls.
-    pub unsafe fn get(&self) -> &KObject {
+    pub unsafe fn get_unchecked(&self) -> &KObject {
         &self.obj
     }
 
@@ -506,7 +534,7 @@ impl Capability {
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
                         // TODO we cannot use these references across the async call below
-                        let tileobj = unsafe { parent.get().clone() };
+                        let tileobj = unsafe { parent.get_unchecked().clone() };
                         if let KObject::Tile(p) = tileobj {
                             let tile = AsyncRc::new(tile.clone());
                             TileObject::revoke_async(tile, &p);
@@ -521,7 +549,7 @@ impl Capability {
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
                         // TODO we cannot use these references across the async call below
-                        let kmemobj = unsafe { parent.get().clone() };
+                        let kmemobj = unsafe { parent.get_unchecked().clone() };
                         if let KObject::KMem(p) = kmemobj {
                             k.revoke(parent.activity(), parent.sel(), &p);
                         }

@@ -57,45 +57,6 @@ macro_rules! try_kmem_quota {
     };
 }
 
-macro_rules! get_cap {
-    ($table:expr, $sel:expr) => {{
-        // note that we deliberately use match here, because ok_or_else(...)? results in worse code
-        match $table.get($sel) {
-            Some(c) => c,
-            None => sysc_err!(Code::InvArgs, "Invalid capability"),
-        }
-    }};
-}
-#[macro_export]
-macro_rules! create_kobj {
-    ($kref:expr, $ty:ident) => {
-        // safety: conversion to KObject is fine as this is a place where we can keep the Rc
-        KObject::$ty(unsafe { $kref.inner().clone() })
-    };
-}
-macro_rules! cap_to_kobj {
-    ($kobj:expr, $ty:ident) => {
-        // safety: we directly turn it into a KObjectOwnedRef here, so that it's okay
-        match unsafe { $kobj.get() } {
-            KObject::$ty(k) => thread::AsyncRc::new(k.clone()),
-            _ => sysc_err!(Code::InvArgs, "Expected {:?} cap", stringify!($ty)),
-        }
-    };
-}
-macro_rules! get_kobj {
-    ($act:expr, $sel:expr, $ty:ident) => {{
-        let caps = $act.obj_caps().borrow();
-        let cap = get_cap!(caps, $sel);
-        cap_to_kobj!(cap, $ty)
-    }};
-}
-macro_rules! get_kobj_ref {
-    ($table:expr, $sel:expr, $ty:ident) => {{
-        let cap = get_cap!($table, $sel);
-        cap_to_kobj!(cap, $ty)
-    }};
-}
-
 mod create;
 mod derive;
 mod exchange;

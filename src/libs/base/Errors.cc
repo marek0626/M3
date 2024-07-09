@@ -84,6 +84,7 @@ static const char *errmsgs[] = {
     "Bad file descriptor",
     "Invalid seek",
     "Unspecified error",
+    "Invalid capability",
 
     /* Socket */
     "Invalid state",

@@ -28,10 +28,10 @@ use base::util::math;
 
 use thread::{AsyncRc, AsyncWeak};
 
-use crate::cap::{Capability, KObject, MapObject, SelRange};
+use crate::cap::{Capability, MapObject, SelRange};
+use crate::ktcu;
 use crate::mem;
 use crate::tiles::{tilemng, Activity, TileMux};
-use crate::{create_kobj, ktcu};
 
 use crate::platform;
 
@@ -396,7 +396,7 @@ impl ELFLoader for ActivityELFLoader {
                 .ok_or_else(|| Error::new(Code::ObjectGone))?;
             let res = act.map_caps().borrow_mut().insert(Capability::new_range(
                 SelRange::new_range(dst_sel as kif::CapSel, pages as kif::CapSel),
-                create_kobj!(map_obj, Map),
+                map_obj,
             ));
             res
         }

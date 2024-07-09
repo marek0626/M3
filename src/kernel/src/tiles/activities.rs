@@ -17,7 +17,7 @@ use base::boxed::Box;
 use base::build_vmsg;
 use base::cell::{Cell, RefCell, StaticRefCell};
 use base::col::{String, ToString, Vec};
-use base::errors::{Code, Error};
+use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{self, CapRngDesc, CapSel, CapType, TileDesc};
 use base::log;
@@ -30,12 +30,12 @@ use core::fmt;
 
 use thread::{AsyncRc, AsyncWeak};
 
-use crate::cap::{CapTable, Capability, EPObject, KMemObject, KObject, TileObject};
+use crate::cap::{CapTable, Capability, EPObject, IntoKObject, KMemObject, KObject, TileObject};
 use crate::com::{QueueId, SendQueue};
-use crate::platform;
+use crate::ktcu;
 use crate::thread_startup_async;
 use crate::tiles::{loader, tilemng, ActivityMng};
-use crate::{create_kobj, ktcu};
+use crate::{impl_from_kobj, platform};
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -126,16 +126,16 @@ impl Activity {
             // kmem cap
             act.obj_caps().borrow_mut().insert(Capability::new(
                 kif::SEL_KMEM,
-                KObject::KMem(act.kmem.clone()),
+                AsyncRc::new(act.kmem.clone()),
             ))?;
             // tile cap
             act.obj_caps()
                 .borrow_mut()
-                .insert(Capability::new(kif::SEL_TILE, create_kobj!(tile, Tile)))?;
+                .insert(Capability::new(kif::SEL_TILE, tile.clone()))?;
             // cap for own activity
             act.obj_caps()
                 .borrow_mut()
-                .insert(Capability::new(kif::SEL_ACT, create_kobj!(act, Activity)))?;
+                .insert(Capability::new(kif::SEL_ACT, act.clone()))?;
 
             // alloc standard EPs
             tilemng::tilemux(act.tile_id()).alloc_eps(eps_start, STD_EPS_COUNT);
@@ -310,6 +310,14 @@ impl Activity {
         &self.map_caps
     }
 
+    pub fn get_kobj<T>(&self, sel: kif::CapSel) -> Result<T, VerboseError>
+    where
+        T: for<'a> TryFrom<&'a KObject, Error = VerboseError>,
+    {
+        let table = self.obj_caps().borrow();
+        table.get_kobj(sel)
+    }
+
     pub fn state(&self) -> State {
         self.state.get()
     }
@@ -342,23 +350,18 @@ impl Activity {
 
     fn fetch_exit(&self, sels: &[u64]) -> Option<(CapSel, Code)> {
         for sel in sels {
-            let wact = self
+            if let Ok(wv) = self
                 .obj_caps()
                 .borrow()
-                .get(*sel as CapSel)
-                // safety: we don't keep the reference here across an async call
-                .map(|c| unsafe { c.get().clone() });
-            match wact {
-                Some(KObject::Activity(wv)) => {
-                    if wv.id() == self.id() {
-                        continue;
-                    }
+                .get_kobj::<AsyncRc<Activity>>(*sel as CapSel)
+            {
+                if wv.id() == self.id() {
+                    continue;
+                }
 
-                    if let Some(code) = wv.fetch_exit_code() {
-                        return Some((*sel, code));
-                    }
-                },
-                _ => continue,
+                if let Some(code) = wv.fetch_exit_code() {
+                    return Some((*sel, code));
+                }
             }
         }
 
@@ -593,6 +596,8 @@ impl Activity {
         }
     }
 }
+
+impl_from_kobj!(Activity, Activity);
 
 impl Drop for Activity {
     fn drop(&mut self) {

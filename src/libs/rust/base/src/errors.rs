@@ -87,6 +87,7 @@ pub enum Code {
     BadFd,
     SeekPipe,
     Unspecified,
+    InvCap,
     // networking
     InvState,
     WouldBlock,

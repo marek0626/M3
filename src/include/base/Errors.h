@@ -86,6 +86,7 @@ struct Errors {
         BAD_FD,
         SEEK_PIPE,
         UNSPECIFIED,
+        INV_CAP,
         // networking
         INV_STATE,
         WOULD_BLOCK,

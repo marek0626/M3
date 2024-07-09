@@ -28,11 +28,11 @@ use base::vec;
 
 use thread::AsyncRc;
 
-use crate::cap::{Capability, KMemObject, KObject, MGateObject, RGateObject, TileObject};
+use crate::args;
+use crate::cap::{Capability, KMemObject, MGateObject, RGateObject, TileObject};
 use crate::mem::{self, Allocation};
 use crate::platform;
 use crate::tiles::{loader, tilemng, Activity, ActivityFlags, State, TileMux};
-use crate::{args, create_kobj};
 
 pub struct ActivityMng {
     acts: Vec<Option<Rc<Activity>>>,
@@ -251,7 +251,7 @@ impl ActivityMng {
         {
             let alloc = Allocation::new(platform::info_addr(), platform::info_size() as GlobOff);
             let mgate = MGateObject::new(alloc, kif::Perm::RWX, false);
-            let cap = Capability::new(sel, create_kobj!(mgate, MGate));
+            let cap = Capability::new(sel, mgate);
 
             act.obj_caps().borrow_mut().insert(cap).unwrap();
             sel += 1;
@@ -260,7 +260,7 @@ impl ActivityMng {
         // serial rgate
         {
             let rgate = RGateObject::new(cfg::SERIAL_BUF_ORD, cfg::SERIAL_BUF_ORD, true);
-            let cap = Capability::new(sel, create_kobj!(rgate, RGate));
+            let cap = Capability::new(sel, rgate);
             act.obj_caps().borrow_mut().insert(cap).unwrap();
             sel += 1;
         }
@@ -270,7 +270,7 @@ impl ActivityMng {
             let size = math::round_up(m.size as usize, cfg::PAGE_SIZE);
             let alloc = Allocation::new(GlobAddr::new(m.addr), size as GlobOff);
             let mgate = MGateObject::new(alloc, kif::Perm::RWX, false);
-            let cap = Capability::new(sel, create_kobj!(mgate, MGate));
+            let cap = Capability::new(sel, mgate);
 
             act.obj_caps().borrow_mut().insert(cap).unwrap();
             sel += 1;
@@ -279,7 +279,7 @@ impl ActivityMng {
         // TILES
         for tile in platform::user_tiles() {
             let tile_obj = tilemng::tilemux(tile).tile().clone();
-            let cap = Capability::new(sel, KObject::Tile(tile_obj));
+            let cap = Capability::new(sel, AsyncRc::new(tile_obj));
             act.obj_caps().borrow_mut().insert(cap).unwrap();
             sel += 1;
         }
@@ -310,7 +310,7 @@ impl ActivityMng {
 
                 if m.mem_type() != mem::MemType::ROOT {
                     // insert capability
-                    let cap = Capability::new(sel, create_kobj!(mgate_obj, MGate));
+                    let cap = Capability::new(sel, mgate_obj);
                     act.obj_caps().borrow_mut().insert(cap).unwrap();
                     sel += 1;
                 }

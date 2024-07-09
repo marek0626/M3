@@ -26,7 +26,7 @@
 //!
 //! This module provides an alternative via the `AsyncRc` and `AsyncWeak` types: guard access to
 //! objects via `AsyncRc` and enforce that we either drop them before an async call or convert them
-//! to `AsyncWeak`.
+//! to `AsyncWeak`. Similarly, `AsyncLock` prevents that async calls are done while it is held.
 
 use core::ops::Deref;
 
@@ -230,5 +230,30 @@ impl<T> Deref for AsyncRc<T> {
 
     fn deref(&self) -> &Self::Target {
         self.obj.deref()
+    }
+}
+
+/// A lock for async calls
+///
+/// Holding an instance of `AsyncLock` prevents that async calls are done.
+pub struct AsyncLock;
+
+impl AsyncLock {
+    /// Creates a new `AsyncLock`
+    pub fn new() -> Self {
+        inc_owned_refs();
+        Self
+    }
+}
+
+impl Default for AsyncLock {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for AsyncLock {
+    fn drop(&mut self) {
+        dec_owned_refs();
     }
 }

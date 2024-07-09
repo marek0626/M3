@@ -77,6 +77,14 @@ generate_m3lx_deps() {
         return
     fi
 
+    # use a unique location for the modules because we otherwise cannot start multiple M³Linux runs
+    # in parallel, which we need in our CI system.
+    tmp_mod_path=$(mktemp -d)
+    cp -a "$M3_MOD_PATH/"* "$tmp_mod_path"
+    export M3_MOD_PATH=$tmp_mod_path
+    trap 'rm -rf $M3_MOD_PATH' EXIT ERR INT TERM
+    export M3_MOD_PATH
+
     # generate final initrd
     crossroot="$(readlink -f "$crossdir/../../")"
     bbl="$(readlink -f "build/riscv-pk/bbl")"
@@ -86,26 +94,38 @@ generate_m3lx_deps() {
     if [ ! -f "$crossroot/build/buildroot-fs/cpio/fakeroot" ]; then
         echo "Please run ./b mkrootfs first" >&2 && exit 1
     fi
-    rsync -auH --exclude=/THIS_IS_NOT_YOUR_ROOT_FILESYSTEM "$crossroot/target/" "$targetdir"
-    # copy our overlay directory to the target directory (binaries in stripped form)
-    for f in "$build"/lxbin/*; do
-        "$crossdir/${crossname}strip" -o "$targetdir/$(basename "$f")" "$f"
-    done
-    cp -a src/m3lx/rootfs/* "$targetdir"
-    # now generate image
-    ( cd cross/buildroot && PATH="$crossroot/host/sbin:$PATH" FAKEROOTDONTTRYCHOWN=1 \
-        "$crossroot/host/bin/fakeroot" -- "$crossroot/build/buildroot-fs/cpio/fakeroot" ) >/dev/null
-    rm -rf "$targetdir"
+    # ensure that we do not create the initrd in parallel (targetdir is shared)
+    {
+        # lock file with fd 200
+        if ! flock 200; then
+            echo "Unable to acquire lock for initrd generation" >&2 && exit 1
+        fi
+        rsync -auH --exclude=/THIS_IS_NOT_YOUR_ROOT_FILESYSTEM "$crossroot/target/" "$targetdir"
+        # copy our overlay directory to the target directory (binaries in stripped form)
+        for f in "$build"/lxbin/*; do
+            "$crossdir/${crossname}strip" -o "$targetdir/$(basename "$f")" "$f"
+        done
+        cp -a src/m3lx/rootfs/* "$targetdir"
+        # now generate image
+        ( cd cross/buildroot && PATH="$crossroot/host/sbin:$PATH" FAKEROOTDONTTRYCHOWN=1 \
+            "$crossroot/host/bin/fakeroot" -- "$crossroot/build/buildroot-fs/cpio/fakeroot" ) >/dev/null
+        rm -rf "$targetdir"
 
-    # create files in module path for the requested initrd modules
-    # note that the following two loops are actually not necessary, because there is currently no
-    # way to specify the multiplexer or initrd to use. however, I think for consistency we should
-    # allow different domains to reference different multiplexers and initrds and extend this later.
-    initrds=$(xmllint --xpath './/dom[@initrd]/@initrd' "$1" | sed -e 's/initrd="\(.*\)"/\1/g' | sort | uniq)
-    for initrd_name in $initrds; do
-        initrd_dst=$(xmllint --xpath "string(.//mods/mod[@name=\"$initrd_name\"]/@file)" "$1")
-        cp -f "$initrd" "$M3_MOD_PATH/$initrd_dst"
-    done
+        # determine initrd size
+        initrd_size=$(stat --printf="%s" "$initrd")
+        # round up to page size
+        initrd_size=$(python3 -c "print('{}'.format(($initrd_size + 0xFFF) & 0xFFFFF000))")
+
+        # create files in module path for the requested initrd modules
+        # note that the following two loops are actually not necessary, because there is currently no
+        # way to specify the multiplexer or initrd to use. however, I think for consistency we should
+        # allow different domains to reference different multiplexers and initrds and extend this later.
+        initrds=$(xmllint --xpath './/dom[@initrd]/@initrd' "$1" | sed -e 's/initrd="\(.*\)"/\1/g' | sort | uniq)
+        for initrd_name in $initrds; do
+            initrd_dst=$(xmllint --xpath "string(.//mods/mod[@name=\"$initrd_name\"]/@file)" "$1")
+            cp -f "$initrd" "$M3_MOD_PATH/$initrd_dst"
+        done
+    } 200>build/.initrd.lock
 
     # create files in module path for the requested mux modules
     muxes=$(xmllint --xpath './/dom[@mux]/@mux' "$1" | sed -e 's/mux="\(.*\)"/\1/g' | sort | uniq)
@@ -113,11 +133,6 @@ generate_m3lx_deps() {
         mux_dst=$(xmllint --xpath "string(.//mods/mod[@name=\"$mux_name\"]/@file)" "$1")
         cp -f "$bbl" "$M3_MOD_PATH/$mux_dst"
     done
-
-    # determine initrd size
-    initrd_size=$(stat --printf="%s" "$initrd")
-    # round up to page size
-    initrd_size=$(python3 -c "print('{}'.format(($initrd_size + 0xFFF) & 0xFFFFF000))")
 
     # generate DTBs
     dtbs=$(xmllint --xpath './/dom[@dtb]/@dtb' "$1" | sed -e 's/dtb="\(.*\)"/\1/g' | sort | uniq)
