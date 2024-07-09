@@ -64,14 +64,17 @@ pub fn alloc_ep_async(
     let mut tilemux = tilemng::tilemux(dst_act.tile_id());
 
     let (act, dst_act, epid) = if tilemux.mux_type() == kif::syscalls::MuxType::Accel {
+        let act_weak = act.downgrade();
         let dst_act_id = dst_act.id();
         let dst_act_weak = dst_act.downgrade();
-        let act_weak = act.downgrade();
 
         let epid = TileMux::request_ep_async(tilemux, dst_act_id, r.epid, r.replies)?;
 
-        let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
+        // if dst_act is gone, everything has already been cleaned up at TileMux
         let dst_act = try_upgrade_kobj(dst_act_weak, r.act)?;
+        // in theory we would need to give them back if act is gone, but there is currently no way
+        // to free them anyway, so that there is also nothing to do here.
+        let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
         tilemux = tilemng::tilemux(dst_act.tile_id());
         (act, dst_act, epid)
     }
