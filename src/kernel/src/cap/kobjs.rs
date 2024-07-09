@@ -835,14 +835,6 @@ impl TileObject {
     }
 
     pub fn revoke_async(tile: AsyncRc<Self>, parent: &TileObject) {
-        // we free the EP quota if it's different from our parent's quota (only our own childs can
-        // have the same EP quota, but they are already gone).
-        if !Rc::ptr_eq(&tile.ep_quota, &parent.ep_quota) {
-            // grant the EPs back to our parent
-            parent.free(tile.ep_quota.left());
-            assert!(tile.ep_quota.left() == tile.ep_quota.total());
-        }
-
         // same for time and pts: free the ones that are different
         let time = if tile.time_quota != parent.time_quota {
             Some(tile.time_quota)
@@ -856,11 +848,29 @@ impl TileObject {
         else {
             None
         };
-        if time.is_some() || pts.is_some() {
+
+        // note that we first let TileMux remove the quotas and afterwards give the EPQuota back to
+        // our parent to avoid that someone can already spent the EPQuota for something new.
+        let tile = if time.is_some() || pts.is_some() {
             let tile_id = tile.tile();
-            drop(tile);
+            let tile_weak = tile.downgrade();
 
             TileMux::remove_quotas_async(tilemng::tilemux(tile_id), time, pts).ok();
+
+            // not that this cannot fail here as we are currently destroying this object, which
+            // means that it's already unreachable for everyone else
+            tile_weak.upgrade().unwrap()
+        }
+        else {
+            tile
+        };
+
+        // we free the EP quota if it's different from our parent's quota (only our own childs can
+        // have the same EP quota, but they are already gone).
+        if !Rc::ptr_eq(&tile.ep_quota, &parent.ep_quota) {
+            // grant the EPs back to our parent
+            parent.free(tile.ep_quota.left());
+            assert!(tile.ep_quota.left() == tile.ep_quota.total());
         }
     }
 }
