@@ -383,9 +383,8 @@ impl ELFLoader for ActivityELFLoader {
                     flags,
                 )?;
 
-                map_obj_weak
-                    .upgrade()
-                    .ok_or_else(|| Error::new(Code::ObjectGone))?
+                // this can never fail as we hold another reference above (_map_obj_clone)
+                map_obj_weak.upgrade().unwrap()
             }
             else {
                 map_obj
