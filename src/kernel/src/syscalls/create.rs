@@ -468,18 +468,27 @@ pub fn create_map_async(
 
     // create map cap, if not yet existing
     if !exists {
+        // if we cannot upgrade the destination activity or map object, we just created mapping was
+        // already unmapped again.
         let dst_act = try_upgrade_kobj(dst_act_weak, r.act)?;
         let map_obj = try_upgrade_kobj(map_obj_weak, INVALID_SEL)?;
-        let act = try_upgrade_kobj(act_weak, INVALID_SEL)?;
-        let cap = Capability::new_range(
-            SelRange::new_range(r.dst, r.pages),
-            create_kobj!(map_obj, Map),
-        );
-        try_kmem_quota!(dst_act.map_caps().borrow_mut().insert_as_child_from(
-            cap,
-            act.obj_caps().borrow_mut(),
-            r.mgate,
-        ));
+
+        if let Some(act) = act_weak.upgrade() {
+            let cap = Capability::new_range(
+                SelRange::new_range(r.dst, r.pages),
+                create_kobj!(map_obj, Map),
+            );
+            try_kmem_quota!(dst_act.map_caps().borrow_mut().insert_as_child_from(
+                cap,
+                act.obj_caps().borrow_mut(),
+                r.mgate,
+            ));
+        }
+        else {
+            // if we fail to upgrade the syscall-performing activity, we cannot insert the mapping
+            // and thus have to unmap it at TileMux again
+            MapObject::unmap_async(act_id, act_tile, virt, r.pages as usize);
+        }
     }
 
     reply_success(msg);

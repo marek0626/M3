@@ -33,7 +33,7 @@ use crate::com::{SendQueue, Service};
 use crate::ktcu;
 use crate::mem;
 use crate::platform;
-use crate::tiles::{tilemng, Activity, State, TileMux};
+use crate::tiles::{tilemng, Activity, TileMux};
 
 #[derive(Clone)]
 pub enum KObject {
@@ -1180,12 +1180,8 @@ impl MapObject {
         })
     }
 
-    pub fn unmap_async(act: &Activity, virt: VirtAddr, pages: usize) {
-        // TODO currently, it can happen that we've already stopped the activity, but still
-        // accept/continue a syscall that inserts something into the activity's table.
-        if act.state() != State::DEAD {
-            TileMux::unmap_async(tilemng::tilemux(act.tile_id()), act.id(), virt, pages).ok();
-        }
+    pub fn unmap_async(act_id: ActId, act_tile: TileId, virt: VirtAddr, pages: usize) {
+        TileMux::unmap_async(tilemng::tilemux(act_tile), act_id, virt, pages).ok();
     }
 }
 

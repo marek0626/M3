@@ -30,7 +30,7 @@ use thread::AsyncRc;
 
 use crate::cap::{EPObject, GateEP, KObject, MapObject, SessObject, TileObject};
 use crate::ktcu;
-use crate::tiles::{tilemng, Activity, ActivityMng, INVAL_ID};
+use crate::tiles::{tilemng, Activity, ActivityMng, State, INVAL_ID};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct SelRange {
@@ -559,9 +559,11 @@ impl Capability {
             },
 
             KObject::Map(ref m) => {
-                if m.mapped() {
+                // TODO currently, it can happen that we've already stopped the activity, but still
+                // accept/continue a syscall that inserts something into the activity's table.
+                if m.mapped() && act.state() != State::DEAD {
                     let virt = VirtAddr::new((self.sel() as GlobOff) << cfg::PAGE_BITS);
-                    MapObject::unmap_async(act, virt, self.len() as usize);
+                    MapObject::unmap_async(act.id(), act.tile_id(), virt, self.len() as usize);
                 }
             },
 
