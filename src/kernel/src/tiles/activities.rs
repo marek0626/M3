@@ -22,18 +22,20 @@ use base::io::LogFlags;
 use base::kif::{self, CapRngDesc, CapSel, CapType, TileDesc};
 use base::log;
 use base::mem::{MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
-use base::rc::{Rc, SRc};
+use base::rc::Rc;
 use base::tcu::Label;
 use base::tcu::{ActId, EpId, TileId, STD_EPS_COUNT, UPCALL_REP_OFF};
 use bitflags::bitflags;
 use core::fmt;
 
+use thread::{AsyncRc, AsyncWeak};
+
 use crate::cap::{CapTable, Capability, EPObject, KMemObject, KObject, TileObject};
 use crate::com::{QueueId, SendQueue};
-use crate::ktcu;
 use crate::platform;
 use crate::thread_startup_async;
 use crate::tiles::{loader, tilemng, ActivityMng};
+use crate::{create_kobj, ktcu};
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -66,9 +68,13 @@ pub struct Activity {
     name: String,
     flags: ActivityFlags,
     eps_start: EpId,
+    // keep a copy of the tile id for performance reasons (does never change)
+    tile_id: TileId,
 
-    tile: SRc<TileObject>,
-    kmem: SRc<KMemObject>,
+    tile: AsyncWeak<TileObject>,
+    // we currently have to store a strong reference here, because the activity needs access to it
+    // until it is fully destructed to give back all the kmem quota it uses for its capabilities
+    kmem: Rc<KMemObject>,
 
     state: Cell<State>,
     exit_code: Cell<Option<Code>>,
@@ -77,7 +83,7 @@ pub struct Activity {
     obj_caps: RefCell<CapTable>,
     map_caps: RefCell<CapTable>,
 
-    eps: RefCell<Vec<Rc<EPObject>>>,
+    eps: RefCell<Vec<AsyncWeak<EPObject>>>,
     rbuf_phys: Cell<PhysAddr>,
     upcalls: RefCell<Box<SendQueue>>,
 }
@@ -86,17 +92,20 @@ impl Activity {
     pub fn new(
         name: &str,
         id: ActId,
-        tile: SRc<TileObject>,
+        tile: AsyncRc<TileObject>,
         eps_start: EpId,
-        kmem: SRc<KMemObject>,
+        kmem: AsyncRc<KMemObject>,
         flags: ActivityFlags,
-    ) -> Result<Rc<Self>, Error> {
-        let act = Rc::new(Activity {
+    ) -> Result<AsyncRc<Self>, Error> {
+        let act = AsyncRc::new(Rc::new(Activity {
             id,
             name: name.to_string(),
             flags,
             eps_start,
-            kmem,
+            tile_id: tile.tile(),
+            // TODO this is not completely okay as it might delay the destruction of the kmem
+            // object beyond it's revocation.
+            kmem: unsafe { kmem.inner().clone() },
             state: Cell::from(State::INIT),
             exit_code: Cell::from(None),
             first_sel: Cell::from(kif::FIRST_FREE_SEL),
@@ -105,12 +114,14 @@ impl Activity {
             eps: RefCell::from(Vec::new()),
             rbuf_phys: Cell::from(PhysAddr::default()),
             upcalls: RefCell::from(SendQueue::new(QueueId::Activity(id), tile.tile())),
-            tile,
-        });
+            tile: tile.downgrade(),
+        }));
 
         {
             act.obj_caps.borrow_mut().set_activity(&act);
             act.map_caps.borrow_mut().set_activity(&act);
+
+            let tile = act.tile.upgrade().unwrap();
 
             // kmem cap
             act.obj_caps().borrow_mut().insert(Capability::new(
@@ -118,22 +129,20 @@ impl Activity {
                 KObject::KMem(act.kmem.clone()),
             ))?;
             // tile cap
-            act.obj_caps().borrow_mut().insert(Capability::new(
-                kif::SEL_TILE,
-                KObject::Tile(act.tile.clone()),
-            ))?;
+            act.obj_caps()
+                .borrow_mut()
+                .insert(Capability::new(kif::SEL_TILE, create_kobj!(tile, Tile)))?;
             // cap for own activity
-            act.obj_caps().borrow_mut().insert(Capability::new(
-                kif::SEL_ACT,
-                KObject::Activity(Rc::downgrade(&act)),
-            ))?;
+            act.obj_caps()
+                .borrow_mut()
+                .insert(Capability::new(kif::SEL_ACT, create_kobj!(act, Activity)))?;
 
             // alloc standard EPs
             tilemng::tilemux(act.tile_id()).alloc_eps(eps_start, STD_EPS_COUNT);
-            act.tile.alloc(STD_EPS_COUNT);
+            tile.alloc(STD_EPS_COUNT);
 
             // add us to tile
-            act.tile.add_activity();
+            tile.add_activity();
         }
 
         // some system calls are blocking, leading to a thread switch in the kernel. there is just
@@ -143,29 +152,45 @@ impl Activity {
         Ok(act)
     }
 
-    pub fn init_async(&self) -> Result<(), Error> {
+    pub fn init_async(act: AsyncRc<Self>) -> Result<(), Error> {
         use base::kif::PageFlags;
 
-        loader::init_activity_async(self)?;
+        let act_weak = act.clone().downgrade();
 
-        let desc = platform::tile_desc(self.tile_id());
+        loader::init_activity_async(act)?;
+
+        let act = act_weak
+            .upgrade()
+            .ok_or_else(|| Error::new(Code::ObjectGone))?;
+
+        let desc = platform::tile_desc(act.tile_id());
         if !desc.is_device() {
             // get physical address of receive buffer
             let rbuf_virt = desc.rbuf_std_space().0;
-            let rbuf_phys = if desc.has_virtmem() {
+            let (act, rbuf_phys) = if desc.has_virtmem() {
+                let act_id = act.id();
+                let tile_id = act.tile_id();
+                let act_weak = act.downgrade();
+
                 let glob = crate::tiles::TileMux::translate_async(
-                    tilemng::tilemux(self.tile_id()),
-                    self.id(),
+                    tilemng::tilemux(tile_id),
+                    act_id,
                     rbuf_virt,
                     PageFlags::RW,
                 )?;
-                ktcu::glob_to_phys_remote(self.tile_id(), glob, base::kif::PageFlags::RW).unwrap()
+
+                let act = act_weak
+                    .upgrade()
+                    .ok_or_else(|| Error::new(Code::ObjectGone))?;
+                let phys = ktcu::glob_to_phys_remote(act.tile_id(), glob, base::kif::PageFlags::RW)
+                    .unwrap();
+                (act, phys)
             }
             else {
-                rbuf_virt.as_phys(desc)
+                (act, rbuf_virt.as_phys(desc))
             };
 
-            self.init_eps(rbuf_phys)
+            act.init_eps(rbuf_phys)
         }
         else {
             Ok(())
@@ -196,7 +221,8 @@ impl Activity {
                 ktcu::KSYS_EP,
                 PhysAddr::new_raw(platform::tile_desc(self.tile_id()), 0xDEADBEEF),
             );
-            let sgate = SGateObject::new(&rgate, self.id() as tcu::Label, 1);
+            let _rg_clone = rgate.clone(); // keep one strong reference
+            let sgate = SGateObject::new(rgate.downgrade(), self.id() as tcu::Label, 1);
             tilemux.config_snd_ep(self.eps_start + tcu::SYSC_SEP_OFF, act, &sgate)?;
         }
 
@@ -244,19 +270,23 @@ impl Activity {
         self.id
     }
 
-    pub fn tile(&self) -> &SRc<TileObject> {
+    pub fn tile(&self) -> AsyncRc<TileObject> {
+        self.tile.upgrade().unwrap()
+    }
+
+    pub fn tile_weak(&self) -> &AsyncWeak<TileObject> {
         &self.tile
     }
 
     pub fn tile_id(&self) -> TileId {
-        self.tile.tile()
+        self.tile_id
     }
 
     pub fn tile_desc(&self) -> TileDesc {
         platform::tile_desc(self.tile_id())
     }
 
-    pub fn kmem(&self) -> &SRc<KMemObject> {
+    pub fn kmem(&self) -> &Rc<KMemObject> {
         &self.kmem
     }
 
@@ -300,12 +330,14 @@ impl Activity {
         self.exit_code.replace(None)
     }
 
-    pub fn add_ep(&self, ep: Rc<EPObject>) {
-        self.eps.borrow_mut().push(ep);
+    pub fn add_ep(&self, ep: AsyncRc<EPObject>) {
+        self.eps.borrow_mut().push(ep.downgrade());
     }
 
-    pub fn rem_ep(&self, ep: &Rc<EPObject>) {
-        self.eps.borrow_mut().retain(|e| e.ep() != ep.ep());
+    pub fn rem_ep(&self, ep: &AsyncRc<EPObject>) {
+        self.eps
+            .borrow_mut()
+            .retain(|e| e.upgrade().unwrap().ep() != ep.ep());
     }
 
     fn fetch_exit(&self, sels: &[u64]) -> Option<(CapSel, Code)> {
@@ -314,10 +346,10 @@ impl Activity {
                 .obj_caps()
                 .borrow()
                 .get(*sel as CapSel)
-                .map(|c| c.get().clone());
+                // safety: we don't keep the reference here across an async call
+                .map(|c| unsafe { c.get().clone() });
             match wact {
                 Some(KObject::Activity(wv)) => {
-                    let wv = wv.upgrade().unwrap();
                     if wv.id() == self.id() {
                         continue;
                     }
@@ -333,14 +365,19 @@ impl Activity {
         None
     }
 
-    pub fn wait_exit_async(&self, event: u64, sels: &[u64]) -> Option<(CapSel, Code)> {
+    pub fn wait_exit_async(act: AsyncRc<Self>, event: u64, sels: &[u64]) -> Option<(CapSel, Code)> {
+        let act_id = act.id();
+        let act_weak = act.downgrade();
+
         let res = loop {
+            let act = act_weak.upgrade()?;
+
             // independent of how we notify the activity, check for exits in case the activity we wait for
             // already exited.
-            if let Some((sel, code)) = self.fetch_exit(sels) {
+            if let Some((sel, code)) = act.fetch_exit(sels) {
                 // if we want to be notified by upcall, do that
                 if event != 0 {
-                    self.upcall_activity_wait(event, sel, code);
+                    act.upcall_activity_wait(event, sel, code);
                     // we never report the result via syscall reply, but we need Some for below.
                     break Some((kif::INVALID_SEL, Code::Success));
                 }
@@ -350,18 +387,19 @@ impl Activity {
             }
 
             // if we want to be notified by upcall, don't wait, just stop here
-            if event != 0 || self.state() != State::RUNNING {
+            if event != 0 || act.state() != State::RUNNING {
                 break None;
             }
 
             // wait until someone exits
             let event = &EXIT_EVENT as *const _ as thread::Event;
+            drop(act);
             thread::wait_for(event);
         };
 
         // ensure that we are removed from the list in any case. we might have started to wait
         // earlier and are now waiting again with a different selector list.
-        EXIT_LISTENERS.borrow_mut().retain(|l| l.id != self.id());
+        EXIT_LISTENERS.borrow_mut().retain(|l| l.id != act_id);
         match event {
             // sync wait
             0 => res,
@@ -370,7 +408,7 @@ impl Activity {
                 // if no one exited yet, remember us
                 if !sels.is_empty() && res.is_none() {
                     EXIT_LISTENERS.borrow_mut().push(ExitWait {
-                        id: self.id(),
+                        id: act_id,
                         event,
                         sels: sels.to_vec(),
                     });
@@ -438,77 +476,92 @@ impl Activity {
             .unwrap();
     }
 
-    pub fn start_app_async(&self) -> Result<(), Error> {
-        if self.state.get() != State::INIT {
+    pub fn start_app_async(act: AsyncRc<Activity>) -> Result<(), Error> {
+        if act.state.get() != State::INIT {
             return Ok(());
         }
 
-        self.state.set(State::RUNNING);
-        ActivityMng::start_activity_async(self)
+        act.state.set(State::RUNNING);
+
+        let id = act.id();
+        let tile_id = act.tile_id();
+        drop(act);
+
+        ActivityMng::start_activity_async(id, tile_id)
     }
 
-    pub fn stop_app_async(&self, exit_code: Code, is_self: bool, revoker: ActId) {
-        if self.state.get() == State::DEAD {
+    pub fn stop_app_async(act: AsyncRc<Activity>, exit_code: Code, is_self: bool, revoker: ActId) {
+        if act.state.get() == State::DEAD {
             return;
         }
 
         log!(
             LogFlags::KernActs,
             "Stopping Activity {} [id={}]",
-            self.name(),
-            self.id()
+            act.name(),
+            act.id()
         );
 
         if is_self {
-            self.exit_app_async(exit_code, false, revoker);
+            Self::exit_app_async(act, exit_code, false, revoker);
         }
-        else if self.state.get() == State::RUNNING {
+        else if act.state.get() == State::RUNNING {
             // devices always exit successfully
-            let exit_code = if self.tile_desc().is_device() {
+            let exit_code = if act.tile_desc().is_device() {
                 Code::Success
             }
             else {
                 Code::Unspecified
             };
-            self.exit_app_async(exit_code, true, revoker);
+            Self::exit_app_async(act, exit_code, true, revoker);
         }
         else {
-            self.state.set(State::DEAD);
-            ActivityMng::stop_activity_async(self, true).unwrap();
-            ktcu::drop_msgs(ktcu::KSYS_EP, self.id() as Label);
+            act.state.set(State::DEAD);
+            let act_weak = act.clone().downgrade();
+            ActivityMng::stop_activity_async(act, true).unwrap();
+
+            if let Some(act) = act_weak.upgrade() {
+                ktcu::drop_msgs(ktcu::KSYS_EP, act.id() as Label);
+            }
         }
     }
 
-    fn exit_app_async(&self, exit_code: Code, stop: bool, revoker: ActId) {
-        let mut tilemux = tilemng::tilemux(self.tile_id());
+    fn exit_app_async(act: AsyncRc<Activity>, exit_code: Code, stop: bool, revoker: ActId) {
+        let mut tilemux = tilemng::tilemux(act.tile_id());
         // force-invalidate standard EPs
-        for ep in self.eps_start..self.eps_start + STD_EPS_COUNT as EpId {
+        for ep in act.eps_start..act.eps_start + STD_EPS_COUNT as EpId {
             // ignore failures
-            tilemux.invalidate_ep(self.id(), ep, true, false).ok();
+            tilemux.invalidate_ep(act.id(), ep, true, false).ok();
         }
         drop(tilemux);
 
         // force-invalidate all other EPs of this activity
-        for ep in &*self.eps.borrow_mut() {
-            // ignore failures here
-            ep.deconfigure(true).ok();
+        for ep in &*act.eps.borrow_mut() {
+            if let Some(ep) = ep.upgrade() {
+                // ignore failures here
+                ep.deconfigure(true).ok();
+            }
         }
 
         // make sure that we don't get further syscalls by this activity
-        ktcu::drop_msgs(ktcu::KSYS_EP, self.id() as Label);
+        ktcu::drop_msgs(ktcu::KSYS_EP, act.id() as Label);
 
-        self.state.set(State::DEAD);
-        self.exit_code.set(Some(exit_code));
+        act.state.set(State::DEAD);
+        act.exit_code.set(Some(exit_code));
 
-        self.force_stop_async(stop, revoker);
+        let act_weak = act.clone().downgrade();
 
-        EXIT_LISTENERS.borrow_mut().retain(|l| l.id != self.id());
+        Self::force_stop_async(act, stop, revoker);
 
-        Self::send_exit_notify();
+        if let Some(act) = act_weak.upgrade() {
+            EXIT_LISTENERS.borrow_mut().retain(|l| l.id != act.id());
 
-        // if it's root, there is nobody waiting for it; just remove it
-        if self.is_root() {
-            ActivityMng::remove_activity_async(self.id(), revoker);
+            Self::send_exit_notify();
+
+            // if it's root, there is nobody waiting for it; just remove it
+            if act.is_root() {
+                ActivityMng::remove_activity_async(act.id(), revoker);
+            }
         }
     }
 
@@ -527,10 +580,17 @@ impl Activity {
         }
     }
 
-    pub fn force_stop_async(&self, stop: bool, revoker: ActId) {
-        ActivityMng::stop_activity_async(self, stop).unwrap();
+    pub fn force_stop_async(act: AsyncRc<Activity>, stop: bool, revoker: ActId) {
+        let act_weak = act.clone().downgrade();
 
-        self.revoke_caps_async(revoker);
+        ActivityMng::stop_activity_async(act, stop).unwrap();
+
+        if let Some(act_ref) = act_weak.upgrade() {
+            // TODO that's broken
+            let act = unsafe { act_ref.inner().clone() };
+            drop(act_ref);
+            act.revoke_caps_async(revoker);
+        }
     }
 }
 
@@ -540,10 +600,11 @@ impl Drop for Activity {
 
         // free standard EPs
         tilemng::tilemux(self.tile_id()).free_eps(self.eps_start, STD_EPS_COUNT);
-        self.tile.free(STD_EPS_COUNT);
+        let tile = self.tile();
+        tile.free(STD_EPS_COUNT);
 
         // remove us from tile
-        self.tile.rem_activity();
+        tile.rem_activity();
 
         assert!(self.obj_caps.borrow().is_empty());
         assert!(self.map_caps.borrow().is_empty());

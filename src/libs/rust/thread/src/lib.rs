@@ -36,6 +36,10 @@ pub type Event = u64;
 
 const MAX_MSG_SIZE: usize = 1024;
 
+mod refs;
+
+pub use refs::{AsyncRc, AsyncWeak};
+
 #[cfg(target_arch = "x86_64")]
 #[derive(Default)]
 #[repr(C, align(8))]
@@ -319,6 +323,8 @@ pub fn wait_for(event: Event) {
         next.id
     );
 
+    refs::check_async_call();
+
     let mut cur = mem::replace(&mut tmng.current, next);
     cur.subscribe(event);
 
@@ -349,6 +355,8 @@ pub fn try_yield() {
                 next.id
             );
 
+            refs::check_async_call();
+
             let cur = mem::replace(&mut tmng.current, next);
 
             // safety: moving between two lists is fine
@@ -377,6 +385,8 @@ pub fn stop() {
             tmng.current.id,
             next.id
         );
+
+        refs::check_async_call();
 
         let mut cur = mem::replace(&mut tmng.current, next);
 

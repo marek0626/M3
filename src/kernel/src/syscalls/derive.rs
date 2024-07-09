@@ -20,20 +20,20 @@ use base::io::LogFlags;
 use base::kif::{self, syscalls};
 use base::log;
 use base::mem::{GlobAddr, MsgBuf};
-use base::rc::Rc;
 use base::serialize::M3Deserializer;
 use base::tcu;
 
+use thread::AsyncRc;
+
 use crate::cap::{Capability, KObject};
-use crate::cap::{EPQuota, KMemObject, MGateObject, ServObject, TileObject};
-use crate::com::Service;
+use crate::cap::{KMemObject, MGateObject, ServObject, TileObject};
 use crate::mem;
-use crate::syscalls::{check_unused, get_request, reply_success};
-use crate::tiles::{tilemng, Activity, TileMux};
+use crate::syscalls::{check_unused, get_request, reply_success, try_upgrade_kobj};
+use crate::tiles::Activity;
 
 #[inline(never)]
 pub fn derive_tile_async(
-    act: &Rc<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::DeriveTile = get_request(msg)?;
@@ -50,46 +50,13 @@ pub fn derive_tile_async(
     check_unused(&act.obj_caps().borrow(), r.dst)?;
 
     let tile = get_kobj!(act, r.tile, Tile);
+    let act_weak = act.downgrade();
 
-    let ep_quota = if let Some(eps) = r.eps {
-        if !tile.has_quota(eps) {
-            sysc_err!(Code::NoSpace, "Insufficient EPs");
-        }
-        tile.alloc(eps);
+    let tile_new = TileObject::derive_async(tile, r.eps, r.time, r.pts)?;
+    let cap = Capability::new(r.dst, create_kobj!(tile_new, Tile));
 
-        EPQuota::new(eps)
-    }
-    else {
-        tile.ep_quota().clone()
-    };
-
-    let (time_id, pt_id) = if r.time.is_some() || r.pts.is_some() {
-        let tilemux = tilemng::tilemux(tile.tile());
-        match TileMux::derive_quota_async(
-            tilemux,
-            tile.time_quota_id(),
-            tile.pt_quota_id(),
-            r.time,
-            r.pts,
-        ) {
-            Err(e) => {
-                if let Some(eps) = r.eps {
-                    tile.free(eps);
-                }
-                return Err(VerboseError::from(e));
-            },
-            Ok(v) => v,
-        }
-    }
-    else {
-        (tile.time_quota_id(), tile.pt_quota_id())
-    };
-
-    let cap = Capability::new(
-        r.dst,
-        KObject::Tile(TileObject::new(tile.tile(), ep_quota, time_id, pt_id, true)),
-    );
     // TODO we will leak the quota object in TileMux if this fails
+    let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.tile));
 
     reply_success(msg);
@@ -97,7 +64,10 @@ pub fn derive_tile_async(
 }
 
 #[inline(never)]
-pub fn derive_kmem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn derive_kmem(
+    act: AsyncRc<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::DeriveKMem = get_request(msg)?;
     sysc_log!(
         act,
@@ -114,16 +84,16 @@ pub fn derive_kmem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<()
         sysc_err!(Code::NoSpace, "Insufficient quota");
     }
 
-    let cap = Capability::new(r.dst, KObject::KMem(KMemObject::new(r.quota)));
+    let cap = Capability::new(r.dst, create_kobj!(KMemObject::new(r.quota), KMem));
     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.kmem));
-    assert!(kmem.alloc(act, r.kmem, r.quota));
+    assert!(kmem.alloc(&act, r.kmem, r.quota));
 
     reply_success(msg);
     Ok(())
 }
 
 #[inline(never)]
-pub fn derive_mem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn derive_mem(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::DeriveMem = get_request(msg)?;
     sysc_log!(
         act,
@@ -136,7 +106,7 @@ pub fn derive_mem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(),
         r.perms
     );
 
-    let tact = get_kobj!(act, r.act, Activity).upgrade().unwrap();
+    let tact = get_kobj!(act, r.act, Activity);
     check_unused(&tact.obj_caps().borrow(), r.dst)?;
 
     let cap = {
@@ -150,7 +120,7 @@ pub fn derive_mem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(),
         let addr = mgate.addr().raw() + r.offset;
         let new_mem = mem::Allocation::new(GlobAddr::new(addr), r.size);
         let mgate_obj = MGateObject::new(new_mem, r.perms & mgate.perms(), true);
-        Capability::new(r.dst, KObject::MGate(mgate_obj))
+        Capability::new(r.dst, create_kobj!(mgate_obj, MGate))
     };
 
     try_kmem_quota!(tact.obj_caps().borrow_mut().insert_as_child(cap, r.src));
@@ -161,7 +131,7 @@ pub fn derive_mem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(),
 
 #[inline(never)]
 pub fn derive_srv_async(
-    act: &Rc<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::DeriveSrv = get_request(msg)?;
@@ -182,7 +152,7 @@ pub fn derive_srv_async(
         sysc_err!(Code::InvArgs, "Invalid session count");
     }
 
-    let srvcap = get_kobj!(act, r.srv, Serv);
+    let srv = get_kobj!(act, r.srv, Serv);
 
     // everything worked, send the reply
     reply_success(msg);
@@ -192,24 +162,24 @@ pub fn derive_srv_async(
         sessions: r.sessions
     });
 
-    let label = srvcap.creator() as tcu::Label;
+    let label = srv.creator() as tcu::Label;
     log!(
         LogFlags::KernServ,
         "Sending derive_crt(sessions={}) to service {} with creator {}",
         r.sessions,
-        srvcap.service().name(),
+        srv.name(),
         label,
     );
-    let res = Service::send_receive_async(srvcap.service(), label, smsg);
 
+    let srv_weak = srv.clone().downgrade();
+    let act_weak = act.downgrade();
+    let res = ServObject::send_receive_async(srv, label, smsg);
+
+    let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
+    let srv = try_upgrade_kobj(srv_weak, r.srv)?;
     let res = match res {
         Err(e) => {
-            sysc_log!(
-                act,
-                "Service {} unreachable: {:?}",
-                srvcap.service().name(),
-                e.code()
-            );
+            sysc_log!(act, "Service {} unreachable: {:?}", srv.name(), e.code());
             Err(e)
         },
 
@@ -223,7 +193,7 @@ pub fn derive_srv_async(
                     sysc_log!(act, "derive_srv continue with creator={}", reply.creator);
 
                     // obtain SendGate from server (do that first because it can fail)
-                    let serv_act = srvcap.service().activity();
+                    let serv_act = srv.server_act();
                     let mut serv_caps = serv_act.obj_caps().borrow_mut();
                     let src_cap = serv_caps.get_mut(reply.sgate_sel);
                     match src_cap {
@@ -238,24 +208,13 @@ pub fn derive_srv_async(
                     }
 
                     // derive new service object
-                    let cap = Capability::new(
-                        r.dst_srv,
-                        KObject::Serv(ServObject::new(
-                            srvcap.service().clone(),
-                            false,
-                            reply.creator,
-                        )),
-                    );
+                    let derived_srv = srv.derive(reply.creator);
+                    let cap = Capability::new(r.dst_srv, create_kobj!(derived_srv, Serv));
                     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.srv));
                     Ok(())
                 },
                 err => {
-                    sysc_log!(
-                        act,
-                        "Server {} denied derive: {:?}",
-                        srvcap.service().name(),
-                        err
-                    );
+                    sysc_log!(act, "Server {} denied derive: {:?}", srv.name(), err);
                     Err(Error::new(err))
                 },
             }

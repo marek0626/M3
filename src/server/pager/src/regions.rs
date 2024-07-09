@@ -165,7 +165,7 @@ impl Region {
                 // allocate new memory for our copy
                 let child = childs
                     .child_by_id_mut(self.child)
-                    .ok_or_else(|| Error::new(Code::ActivityGone))?;
+                    .ok_or_else(|| Error::new(Code::ObjectGone))?;
                 // TODO this memory is currently only free'd on child exit
                 let (ncap, _alloc) = child.alloc_local(self.size, Perm::RWX)?;
 

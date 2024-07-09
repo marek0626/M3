@@ -15,37 +15,38 @@
 
 use base::build_vmsg;
 use base::cell::{Cell, Ref, RefCell, RefMut, StaticCell};
-use base::env;
-use base::errors::{Code, Error};
+use base::col::ToString;
+use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{self, service, tilemux::QuotaId};
 use base::log;
-use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, PhysAddr, VirtAddr};
-use base::rc::{Rc, SRc, Weak};
+use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, MsgBufRef, PhysAddr, VirtAddr};
+use base::rc::Rc;
 use base::tcu::{ActId, EpId, Label, TileId};
+use base::{env, tcu};
+use thread::{AsyncRc, AsyncWeak};
 
 use core::fmt;
 use core::ops::Deref;
 
-use crate::com::Service;
+use crate::com::{SendQueue, Service};
 use crate::ktcu;
 use crate::mem;
 use crate::platform;
-use crate::tiles::{tilemng, Activity, State, TileMux};
+use crate::tiles::{tilemng, Activity, TileMux};
 
 #[derive(Clone)]
 pub enum KObject {
-    RGate(SRc<RGateObject>),
-    SGate(SRc<SGateObject>),
-    MGate(SRc<MGateObject>),
-    Map(SRc<MapObject>),
-    Serv(SRc<ServObject>),
-    Sess(SRc<SessObject>),
-    Sem(SRc<SemObject>),
-    // Only ActivityMng owns a activity (Rc<Activity>). Break cycle here by using Weak
-    Activity(Weak<Activity>),
-    KMem(SRc<KMemObject>),
-    Tile(SRc<TileObject>),
+    RGate(Rc<RGateObject>),
+    SGate(Rc<SGateObject>),
+    MGate(Rc<MGateObject>),
+    Map(Rc<MapObject>),
+    Serv(Rc<ServObject>),
+    Sess(Rc<SessObject>),
+    Sem(Rc<SemObject>),
+    Activity(Rc<Activity>),
+    KMem(Rc<KMemObject>),
+    Tile(Rc<TileObject>),
     EP(Rc<EPObject>),
 }
 
@@ -107,31 +108,33 @@ impl fmt::Debug for KObject {
 }
 
 pub struct GateEP {
-    ep: Weak<EPObject>,
+    ep: AsyncWeak<EPObject>,
 }
 
 impl GateEP {
     fn new() -> Self {
-        Self { ep: Weak::new() }
+        Self {
+            ep: AsyncWeak::default(),
+        }
     }
 
-    pub fn get_ep(&self) -> Option<Rc<EPObject>> {
+    pub fn get_ep(&self) -> Option<AsyncRc<EPObject>> {
         self.ep.upgrade()
     }
 
-    pub fn set_ep(&mut self, o: &Rc<EPObject>) {
-        self.ep = Rc::downgrade(o);
+    pub fn set_ep(&mut self, o: AsyncRc<EPObject>) {
+        self.ep = o.downgrade();
     }
 
     pub fn remove_ep(&mut self) {
-        self.ep = Weak::new()
+        self.ep = AsyncWeak::default()
     }
 }
 
 pub enum GateObject {
-    Recv(SRc<RGateObject>),
-    Send(SRc<SGateObject>),
-    Mem(SRc<MGateObject>),
+    Recv(AsyncWeak<RGateObject>),
+    Send(AsyncWeak<SGateObject>),
+    Mem(AsyncWeak<MGateObject>),
 }
 
 pub struct BaseGate {
@@ -139,8 +142,8 @@ pub struct BaseGate {
 }
 
 impl BaseGate {
-    pub fn set_ep(&self, ep: &Rc<EPObject>, gobj: GateObject) {
-        self.gep.borrow_mut().set_ep(ep);
+    pub fn set_ep(&self, ep: &AsyncRc<EPObject>, gobj: GateObject) {
+        self.gep.borrow_mut().set_ep(ep.clone());
         ep.set_gate(gobj);
     }
 
@@ -171,15 +174,15 @@ pub struct RGateObject {
 }
 
 impl RGateObject {
-    pub fn new(order: u32, msg_order: u32, serial: bool) -> SRc<Self> {
-        SRc::new(Self {
+    pub fn new(order: u32, msg_order: u32, serial: bool) -> AsyncRc<Self> {
+        AsyncRc::new(Rc::new(Self {
             base: BaseGate::default(),
             loc: Cell::from(None),
             addr: Cell::from(PhysAddr::default()),
             order,
             msg_order,
             serial,
-        })
+        }))
     }
 
     pub fn location(&self) -> Option<(TileId, EpId)> {
@@ -262,23 +265,23 @@ impl fmt::Debug for RGateObject {
 
 pub struct SGateObject {
     base: BaseGate,
-    rgate: SRc<RGateObject>,
+    rgate: AsyncWeak<RGateObject>,
     label: Label,
     credits: u32,
 }
 
 impl SGateObject {
-    pub fn new(rgate: &SRc<RGateObject>, label: Label, credits: u32) -> SRc<Self> {
-        SRc::new(Self {
+    pub fn new(rgate: AsyncWeak<RGateObject>, label: Label, credits: u32) -> AsyncRc<Self> {
+        AsyncRc::new(Rc::new(Self {
             base: BaseGate::default(),
-            rgate: rgate.clone(),
+            rgate,
             label,
             credits,
-        })
+        }))
     }
 
-    pub fn rgate(&self) -> &SRc<RGateObject> {
-        &self.rgate
+    pub fn rgate(&self) -> Option<AsyncRc<RGateObject>> {
+        self.rgate.upgrade()
     }
 
     pub fn label(&self) -> Label {
@@ -293,7 +296,7 @@ impl SGateObject {
         // is the send gate activated?
         if let Some(sep) = self.gate_ep().get_ep() {
             // is the associated receive gate activated?
-            if let Some((recv_tile, recv_ep)) = self.rgate().location() {
+            if let Some((recv_tile, recv_ep)) = self.rgate().and_then(|rg| rg.location()) {
                 let tilemux = tilemng::tilemux(sep.tile_id());
                 tilemux
                     .invalidate_reply_eps(recv_tile, recv_ep, sep.ep())
@@ -314,7 +317,10 @@ impl Deref for SGateObject {
 impl fmt::Debug for SGateObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "SGate[rgate=")?;
-        self.rgate.print_loc(f)?;
+        match self.rgate() {
+            Some(rg) => rg.print_loc(f)?,
+            None => write!(f, "?")?,
+        }
         write!(f, ", lbl={:#x}, crd={}]", self.label, self.credits)
     }
 }
@@ -327,13 +333,13 @@ pub struct MGateObject {
 }
 
 impl MGateObject {
-    pub fn new(mem: mem::Allocation, perms: kif::Perm, derived: bool) -> SRc<Self> {
-        SRc::new(Self {
+    pub fn new(mem: mem::Allocation, perms: kif::Perm, derived: bool) -> AsyncRc<Self> {
+        AsyncRc::new(Rc::new(Self {
             base: BaseGate::default(),
             mem,
             perms,
             derived,
-        })
+        }))
     }
 
     pub fn tile_id(&self) -> TileId {
@@ -389,26 +395,53 @@ impl fmt::Debug for MGateObject {
 }
 
 pub struct ServObject {
-    serv: SRc<Service>,
+    // note: this Rc should not leak outside of this object to prevent that anyone accidentally
+    // keeps a reference across an async call
+    serv: Rc<Service>,
     owner: bool,
     creator: usize,
 }
 
 impl ServObject {
-    pub fn new(serv: SRc<Service>, owner: bool, creator: usize) -> SRc<Self> {
-        SRc::new(Self {
+    pub fn new(serv: Rc<Service>, owner: bool, creator: usize) -> AsyncRc<Self> {
+        AsyncRc::new(Rc::new(Self {
             serv,
             owner,
             creator,
-        })
+        }))
     }
 
-    pub fn service(&self) -> &SRc<Service> {
-        &self.serv
+    pub fn name(&self) -> &str {
+        self.serv.name()
+    }
+
+    pub fn server_act(&self) -> AsyncRc<Activity> {
+        self.serv.activity()
     }
 
     pub fn creator(&self) -> usize {
         self.creator
+    }
+
+    pub fn derive(&self, creator: usize) -> AsyncRc<Self> {
+        Self::new(self.serv.clone(), false, creator)
+    }
+
+    pub fn send_receive_async(
+        srv: AsyncRc<Self>,
+        lbl: Label,
+        msg: MsgBufRef<'_>,
+    ) -> Result<&'static tcu::Message, Error> {
+        let event = srv.serv.send(lbl, &msg)?;
+        drop(srv);
+        drop(msg);
+        SendQueue::receive_async(event)
+    }
+
+    pub fn abort(&self) {
+        if self.owner {
+            self.serv.abort();
+        }
     }
 }
 
@@ -423,24 +456,29 @@ impl fmt::Debug for ServObject {
 }
 
 pub struct SessObject {
-    srv: SRc<ServObject>,
+    srv: AsyncWeak<ServObject>,
     creator: usize,
     ident: u64,
     pub auto_close: bool,
 }
 
 impl SessObject {
-    pub fn new(srv: &SRc<ServObject>, creator: usize, ident: u64, auto_close: bool) -> SRc<Self> {
-        SRc::new(Self {
-            srv: srv.clone(),
+    pub fn new(
+        srv: AsyncWeak<ServObject>,
+        creator: usize,
+        ident: u64,
+        auto_close: bool,
+    ) -> AsyncRc<Self> {
+        AsyncRc::new(Rc::new(Self {
+            srv,
             creator,
             ident,
             auto_close,
-        })
+        }))
     }
 
-    pub fn service(&self) -> &SRc<ServObject> {
-        &self.srv
+    pub fn service(&self) -> Option<AsyncRc<ServObject>> {
+        self.srv.upgrade()
     }
 
     pub fn creator(&self) -> usize {
@@ -451,30 +489,32 @@ impl SessObject {
         self.ident
     }
 
-    pub fn close_async(&self, revoker: ActId) {
-        if self.auto_close {
-            // don't send the close, if the server is the revoker
-            if self.srv.service().activity().id() == revoker {
-                return;
+    pub fn close_async(sess: AsyncRc<Self>, revoker: ActId) {
+        if sess.auto_close {
+            if let Some(serv) = sess.service() {
+                // don't send the close, if the server is the revoker
+                if serv.server_act().id() == revoker {
+                    return;
+                }
+
+                log!(
+                    LogFlags::KernServ,
+                    "Sending close(sess={:#x}) to service {} with creator {}",
+                    sess.ident(),
+                    serv.name(),
+                    sess.creator,
+                );
+
+                let mut smsg = MsgBuf::borrow_def();
+                build_vmsg!(smsg, service::Request::Close { sid: sess.ident });
+
+                let creator = sess.creator as Label;
+                drop(sess);
+
+                // this should never fail, because the close request fails only if the creator does not
+                // own the session. but we know here that the creator owns this session.
+                ServObject::send_receive_async(serv, creator, smsg).unwrap();
             }
-
-            log!(
-                LogFlags::KernServ,
-                "Sending close(sess={:#x}) to service {} with creator {}",
-                self.ident(),
-                self.srv.service().name(),
-                self.creator,
-            );
-
-            let mut smsg = MsgBuf::borrow_def();
-            build_vmsg!(smsg, service::Request::Close { sid: self.ident });
-
-            // this should never fail, because the close request fails only if the creator does not
-            // own the session. but we know here that the creator owns this session.
-            self.srv
-                .service()
-                .send_receive_async(self.creator as Label, smsg)
-                .unwrap();
         }
     }
 }
@@ -484,7 +524,10 @@ impl fmt::Debug for SessObject {
         write!(
             f,
             "Sess[service={}, creator={}, ident={:#x}]",
-            self.service().service().name(),
+            match self.service().as_ref() {
+                Some(s) => s.name(),
+                None => "?",
+            },
             self.creator,
             self.ident,
         )
@@ -497,24 +540,38 @@ pub struct SemObject {
 }
 
 impl SemObject {
-    pub fn new(counter: u32) -> SRc<Self> {
-        SRc::new(Self {
+    pub fn new(counter: u32) -> AsyncRc<Self> {
+        AsyncRc::new(Rc::new(Self {
             counter: Cell::from(counter),
             waiters: Cell::from(0),
-        })
+        }))
     }
 
-    pub fn down_async(sem: &SRc<Self>) -> Result<(), Error> {
-        while sem.counter.get() == 0 {
+    pub fn down_async(s: AsyncRc<Self>) -> Result<(), Error> {
+        let sem_weak = s.downgrade();
+        loop {
+            let sem = sem_weak
+                .upgrade()
+                .ok_or_else(|| Error::new(Code::ObjectGone))?;
+            if sem.counter.get() != 0 {
+                sem.counter.set(sem.counter.get() - 1);
+                break;
+            }
+
             sem.waiters.set(sem.waiters.get() + 1);
             let event = sem.get_event();
+            let tmp_weak = sem.downgrade();
+
             thread::wait_for(event);
+
+            let sem = tmp_weak
+                .upgrade()
+                .ok_or_else(|| Error::new(Code::ObjectGone))?;
             if sem.waiters.get() == -1 {
                 return Err(Error::new(Code::RecvGone));
             }
             sem.waiters.set(sem.waiters.get() - 1);
         }
-        sem.counter.set(sem.counter.get() - 1);
         Ok(())
     }
 
@@ -596,15 +653,15 @@ impl TileObject {
         time_quota: QuotaId,
         pt_quota: QuotaId,
         derived: bool,
-    ) -> SRc<Self> {
-        let res = SRc::new(Self {
+    ) -> AsyncRc<Self> {
+        let res = AsyncRc::new(Rc::new(Self {
             tile,
             cur_acts: Cell::from(0),
             ep_quota: ep_quota.clone(),
             time_quota,
             pt_quota,
             derived,
-        });
+        }));
         log!(
             LogFlags::KernTiles,
             "Tile[{}, {:#x}]: {} new TileObject with EPs={}, time={}, pts={}",
@@ -616,6 +673,63 @@ impl TileObject {
             pt_quota,
         );
         res
+    }
+
+    pub fn derive_async(
+        tile: AsyncRc<Self>,
+        eps: Option<usize>,
+        time: Option<u64>,
+        pts: Option<usize>,
+    ) -> Result<AsyncRc<Self>, VerboseError> {
+        // only allocate it from the tile here, but don't keep an Rc to the EPQuota
+        if let Some(num) = eps {
+            if !tile.has_quota(num) {
+                return Err(VerboseError::new(
+                    Code::NoSpace,
+                    "Insufficient EPs".to_string(),
+                ));
+            }
+            tile.alloc(num);
+        }
+
+        let tile_id = tile.tile();
+        let (time_id, pt_id, tile) = if time.is_some() || pts.is_some() {
+            let tilemux = tilemng::tilemux(tile_id);
+            let time_quota_id = tile.time_quota_id();
+            let pt_quota_id = tile.pt_quota_id();
+            let tile_weak = tile.downgrade();
+
+            let res = TileMux::derive_quota_async(tilemux, time_quota_id, pt_quota_id, time, pts);
+
+            // note that we don't need to give the EP quota back to the tile as the tile was
+            // destroyed in this case, meaning that we already gave the quota back in
+            // TileObject::revoke_async.
+            let tile = tile_weak
+                .upgrade()
+                .ok_or_else(|| Error::new(Code::ObjectGone))?;
+
+            match res {
+                Err(e) => {
+                    if let Some(num) = eps {
+                        tile.free(num);
+                    }
+                    return Err(VerboseError::from(e));
+                },
+                Ok(v) => (v.0, v.1, tile),
+            }
+        }
+        else {
+            (tile.time_quota_id(), tile.pt_quota_id(), tile)
+        };
+
+        // now that the async call is done, create the EPQuota
+        let ep_quota = if let Some(num) = eps {
+            EPQuota::new(num)
+        }
+        else {
+            tile.ep_quota.clone()
+        };
+        Ok(Self::new(tile_id, ep_quota, time_id, pt_id, true))
     }
 
     pub fn tile(&self) -> TileId {
@@ -630,8 +744,8 @@ impl TileObject {
         self.cur_acts.get()
     }
 
-    pub fn ep_quota(&self) -> &Rc<EPQuota> {
-        &self.ep_quota
+    pub fn ep_quota(&self) -> &EPQuota {
+        self.ep_quota.as_ref()
     }
 
     pub fn time_quota_id(&self) -> QuotaId {
@@ -720,30 +834,43 @@ impl TileObject {
         self.ep_quota.left.set(total_eps);
     }
 
-    pub fn revoke_async(&self, parent: &TileObject) {
+    pub fn revoke_async(tile: AsyncRc<Self>, parent: &TileObject) {
+        // same for time and pts: free the ones that are different
+        let time = if tile.time_quota != parent.time_quota {
+            Some(tile.time_quota)
+        }
+        else {
+            None
+        };
+        let pts = if tile.pt_quota != parent.pt_quota {
+            Some(tile.pt_quota)
+        }
+        else {
+            None
+        };
+
+        // note that we first let TileMux remove the quotas and afterwards give the EPQuota back to
+        // our parent to avoid that someone can already spent the EPQuota for something new.
+        let tile = if time.is_some() || pts.is_some() {
+            let tile_id = tile.tile();
+            let tile_weak = tile.downgrade();
+
+            TileMux::remove_quotas_async(tilemng::tilemux(tile_id), time, pts).ok();
+
+            // not that this cannot fail here as we are currently destroying this object, which
+            // means that it's already unreachable for everyone else
+            tile_weak.upgrade().unwrap()
+        }
+        else {
+            tile
+        };
+
         // we free the EP quota if it's different from our parent's quota (only our own childs can
         // have the same EP quota, but they are already gone).
-        if !Rc::ptr_eq(&self.ep_quota, &parent.ep_quota) {
+        if !Rc::ptr_eq(&tile.ep_quota, &parent.ep_quota) {
             // grant the EPs back to our parent
-            parent.free(self.ep_quota.left());
-            assert!(self.ep_quota.left() == self.ep_quota.total());
-        }
-
-        // same for time and pts: free the ones that are different
-        let time = if self.time_quota != parent.time_quota {
-            Some(self.time_quota)
-        }
-        else {
-            None
-        };
-        let pts = if self.pt_quota != parent.pt_quota {
-            Some(self.pt_quota)
-        }
-        else {
-            None
-        };
-        if time.is_some() || pts.is_some() {
-            TileMux::remove_quotas_async(tilemng::tilemux(self.tile), time, pts).ok();
+            parent.free(tile.ep_quota.left());
+            assert!(tile.ep_quota.left() == tile.ep_quota.total());
         }
     }
 }
@@ -771,29 +898,33 @@ pub enum EPCategory {
 pub struct EPObject {
     cat: EPCategory,
     gate: RefCell<Option<GateObject>>,
-    act: Weak<Activity>,
+    act: AsyncWeak<Activity>,
     ep: EpId,
     replies: usize,
-    tile: SRc<TileObject>,
+    // keep a separate copy of the TileId, because this does never change and if we have a valid
+    // reference to an EPObject, the TileObject is always valid as well.
+    tile_id: TileId,
+    tile: AsyncWeak<TileObject>,
 }
 
 impl EPObject {
     pub fn new(
         cat: EPCategory,
-        act: Weak<Activity>,
+        act: AsyncWeak<Activity>,
         ep: EpId,
         replies: usize,
-        tile: &SRc<TileObject>,
-    ) -> Rc<Self> {
+        tile: AsyncWeak<TileObject>,
+    ) -> AsyncRc<Self> {
         let maybe_act = act.upgrade();
-        let ep = Rc::new(Self {
+        let ep = AsyncRc::new(Rc::new(Self {
             cat,
             gate: RefCell::from(None),
             act,
             ep,
             replies,
-            tile: tile.clone(),
-        });
+            tile_id: tile.upgrade().unwrap().tile(),
+            tile,
+        }));
         if let Some(v) = maybe_act {
             v.add_ep(ep.clone());
         }
@@ -801,10 +932,10 @@ impl EPObject {
     }
 
     pub fn tile_id(&self) -> TileId {
-        self.tile.tile()
+        self.tile_id
     }
 
-    pub fn activity(&self) -> Option<Rc<Activity>> {
+    pub fn activity(&self) -> Option<AsyncRc<Activity>> {
         self.act.upgrade()
     }
 
@@ -824,9 +955,9 @@ impl EPObject {
         self.gate.replace(Some(g));
     }
 
-    pub fn revoke(ep: &Rc<Self>) {
+    pub fn revoke(ep: AsyncRc<Self>) {
         if let Some(v) = ep.act.upgrade() {
-            v.rem_ep(ep);
+            v.rem_ep(&ep);
         }
     }
 
@@ -854,18 +985,26 @@ impl EPObject {
             }
 
             match gate {
-                // invalidate reply EPs
-                GateObject::Send(s) => s.invalidate_reply_eps(),
-                // deactivate receive gate
-                GateObject::Recv(r) => r.deactivate(),
-                _ => {},
-            }
-
-            // we tell the gate that it's ep is no longer valid
-            match gate {
-                GateObject::Recv(g) => g.gep.borrow_mut().remove_ep(),
-                GateObject::Send(g) => g.gep.borrow_mut().remove_ep(),
-                GateObject::Mem(g) => g.gep.borrow_mut().remove_ep(),
+                GateObject::Send(s) => {
+                    if let Some(s) = s.upgrade() {
+                        // invalidate reply EPs
+                        s.invalidate_reply_eps();
+                        // tell the gate that it's no longer valid
+                        s.gep.borrow_mut().remove_ep();
+                    }
+                },
+                GateObject::Recv(r) => {
+                    if let Some(r) = r.upgrade() {
+                        // deactivate receive gate
+                        r.deactivate();
+                        r.gep.borrow_mut().remove_ep();
+                    }
+                },
+                GateObject::Mem(m) => {
+                    if let Some(m) = m.upgrade() {
+                        m.gep.borrow_mut().remove_ep();
+                    }
+                },
             }
         }
         Ok(invalidated)
@@ -875,9 +1014,11 @@ impl EPObject {
 impl Drop for EPObject {
     fn drop(&mut self) {
         if self.cat == EPCategory::Custom {
-            tilemng::tilemux(self.tile.tile).free_eps(self.ep, 1 + self.replies);
+            if let Some(tile) = self.tile.upgrade() {
+                tilemng::tilemux(tile.tile).free_eps(self.ep, 1 + self.replies);
 
-            self.tile.free(1 + self.replies);
+                tile.free(1 + self.replies);
+            }
         }
     }
 }
@@ -890,7 +1031,7 @@ impl fmt::Debug for EPObject {
             self.activity().unwrap().id(),
             self.ep,
             self.replies,
-            self.tile
+            *self.tile.upgrade().unwrap()
         )
     }
 }
@@ -902,17 +1043,17 @@ pub struct KMemObject {
 }
 
 impl KMemObject {
-    pub fn new(quota: usize) -> SRc<Self> {
+    pub fn new(quota: usize) -> AsyncRc<Self> {
         static NEXT_ID: StaticCell<QuotaId> = StaticCell::new(0);
         let id = NEXT_ID.get();
         NEXT_ID.set(id + 1);
 
-        let kmem = SRc::new(Self {
+        let kmem = AsyncRc::new(Rc::new(Self {
             id,
             quota,
             left: Cell::from(quota),
-        });
-        log!(LogFlags::KernKMem, "{:?} created", kmem);
+        }));
+        log!(LogFlags::KernKMem, "{:?} created", *kmem);
         kmem
     }
 
@@ -1000,12 +1141,12 @@ pub struct MapObject {
 }
 
 impl MapObject {
-    pub fn new(glob: GlobAddr, flags: kif::PageFlags) -> SRc<Self> {
-        SRc::new(Self {
+    pub fn new(glob: GlobAddr, flags: kif::PageFlags) -> AsyncRc<Self> {
+        AsyncRc::new(Rc::new(Self {
             glob: Cell::from(glob),
             flags: Cell::from(flags),
             mapped: Cell::from(false),
-        })
+        }))
     }
 
     pub fn mapped(&self) -> bool {
@@ -1021,34 +1162,31 @@ impl MapObject {
     }
 
     pub fn map_async(
-        &self,
-        act: &Activity,
+        map: AsyncRc<Self>,
+        act_id: ActId,
+        act_tile: TileId,
         virt: VirtAddr,
         glob: GlobAddr,
         pages: usize,
         flags: kif::PageFlags,
     ) -> Result<(), Error> {
-        TileMux::map_async(
-            tilemng::tilemux(act.tile_id()),
-            act.id(),
-            virt,
-            glob,
-            pages,
-            flags,
-        )
-        .map(|_| {
-            self.glob.replace(glob);
-            self.flags.replace(flags);
-            self.mapped.set(true);
+        let map_weak = map.downgrade();
+        TileMux::map_async(tilemng::tilemux(act_tile), act_id, virt, glob, pages, flags).map(|_| {
+            if let Some(map) = map_weak.upgrade() {
+                // TODO note that this is racy (in theory) with other map and unmap (revoke) calls.
+                // this does not happen currently, as the pager is the single responsible entity
+                // for a given address space and does never hand out mapping capabilities to
+                // others. Therefore, all these operations are done by the pager and as there is
+                // only one syscall at a time, these races are not possible.
+                map.glob.replace(glob);
+                map.flags.replace(flags);
+                map.mapped.set(true);
+            }
         })
     }
 
-    pub fn unmap_async(&self, act: &Activity, virt: VirtAddr, pages: usize) {
-        // TODO currently, it can happen that we've already stopped the activity, but still
-        // accept/continue a syscall that inserts something into the activity's table.
-        if act.state() != State::DEAD {
-            TileMux::unmap_async(tilemng::tilemux(act.tile_id()), act.id(), virt, pages).ok();
-        }
+    pub fn unmap_async(act_id: ActId, act_tile: TileId, virt: VirtAddr, pages: usize) {
+        TileMux::unmap_async(tilemng::tilemux(act_tile), act_id, virt, pages).ok();
     }
 }
 

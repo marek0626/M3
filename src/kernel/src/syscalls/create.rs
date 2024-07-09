@@ -17,10 +17,12 @@ use base::build_vmsg;
 use base::cfg;
 use base::col::ToString;
 use base::errors::{Code, VerboseError};
+use base::kif::INVALID_SEL;
 use base::kif::{syscalls, CapRngDesc, CapSel, CapType, PageFlags, Perm};
 use base::mem::{GlobAddr, GlobOff, MsgBuf, VirtAddr, VirtAddrRaw};
-use base::rc::Rc;
 use base::tcu;
+
+use thread::AsyncRc;
 
 use crate::cap::{Capability, KObject, SelRange};
 use crate::cap::{
@@ -30,11 +32,15 @@ use crate::cap::{
 use crate::com::Service;
 use crate::mem;
 use crate::platform;
+use crate::syscalls::try_upgrade_kobj;
 use crate::syscalls::{check_unused, get_request, reply_success, send_reply};
 use crate::tiles::{tilemng, Activity, ActivityFlags, ActivityMng};
 
 #[inline(never)]
-pub fn create_mgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn create_mgate(
+    act: AsyncRc<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::CreateMGate = get_request(msg)?;
     sysc_log!(
         act,
@@ -56,7 +62,7 @@ pub fn create_mgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
         );
     }
 
-    let tgt_act = get_kobj!(act, r.act, Activity).upgrade().unwrap();
+    let tgt_act = get_kobj!(act, r.act, Activity);
 
     let sel = (r.addr.as_goff() / cfg::PAGE_SIZE as GlobOff) as CapSel;
     let glob = if platform::tile_desc(tgt_act.tile_id()).has_virtmem() {
@@ -64,7 +70,7 @@ pub fn create_mgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
         let map_cap = map_caps
             .get(sel)
             .ok_or_else(|| VerboseError::new(Code::InvArgs, "Invalid capability".to_string()))?;
-        let map_obj = as_obj!(map_cap.get(), Map);
+        let map_obj = cap_to_kobj!(map_cap, Map);
 
         // TODO think about the flags in MapObject again
         let map_perms = Perm::from_bits_truncate(map_obj.flags().bits() as u32);
@@ -91,7 +97,8 @@ pub fn create_mgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
     };
 
     let mem = mem::Allocation::new(glob, r.size);
-    let cap = Capability::new(r.dst, KObject::MGate(MGateObject::new(mem, r.perms, true)));
+    let mgate = MGateObject::new(mem, r.perms, true);
+    let cap = Capability::new(r.dst, create_kobj!(mgate, MGate));
 
     if platform::tile_desc(tgt_act.tile_id()).has_virtmem() {
         let map_caps = tgt_act.map_caps().borrow_mut();
@@ -109,7 +116,10 @@ pub fn create_mgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
 }
 
 #[inline(never)]
-pub fn create_rgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn create_rgate(
+    act: AsyncRc<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::CreateRGate = get_request(msg)?;
     sysc_log!(
         act,
@@ -130,17 +140,18 @@ pub fn create_rgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
         sysc_err!(Code::InvArgs, "Invalid size");
     }
 
-    try_kmem_quota!(act_caps.insert(Capability::new(
-        r.dst,
-        KObject::RGate(RGateObject::new(r.order, r.msg_order, false)),
-    )));
+    let rgate = RGateObject::new(r.order, r.msg_order, false);
+    try_kmem_quota!(act_caps.insert(Capability::new(r.dst, create_kobj!(rgate, RGate),)));
 
     reply_success(msg);
     Ok(())
 }
 
 #[inline(never)]
-pub fn create_sgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn create_sgate(
+    act: AsyncRc<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::CreateSGate = get_request(msg)?;
     sysc_log!(
         act,
@@ -154,12 +165,11 @@ pub fn create_sgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
     let mut act_caps = act.obj_caps().borrow_mut();
 
     check_unused(&act_caps, r.dst)?;
+
     let cap = {
         let rgate = get_kobj_ref!(act_caps, r.rgate, RGate);
-        Capability::new(
-            r.dst,
-            KObject::SGate(SGateObject::new(rgate, r.label, r.credits)),
-        )
+        let sgate = SGateObject::new(rgate.downgrade(), r.label, r.credits);
+        Capability::new(r.dst, create_kobj!(sgate, SGate))
     };
 
     try_kmem_quota!(act_caps.insert_as_child(cap, r.rgate));
@@ -169,7 +179,7 @@ pub fn create_sgate(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
 }
 
 #[inline(never)]
-pub fn create_srv(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn create_srv(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::CreateSrv<'_> = get_request(msg)?;
     sysc_log!(
         act,
@@ -193,8 +203,9 @@ pub fn create_srv(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(),
             sysc_err!(Code::InvArgs, "RGate is not activated");
         }
 
-        let serv = Service::new(act, r.name.to_string(), rgate.clone());
-        Capability::new(r.dst, KObject::Serv(ServObject::new(serv, true, r.creator)))
+        let serv = Service::new(act.clone(), r.name.to_string(), rgate);
+        let serv_obj = ServObject::new(serv, true, r.creator);
+        Capability::new(r.dst, create_kobj!(serv_obj, Serv))
     };
 
     try_kmem_quota!(act_caps.insert(cap));
@@ -204,7 +215,10 @@ pub fn create_srv(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(),
 }
 
 #[inline(never)]
-pub fn create_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn create_sess(
+    act: AsyncRc<Activity>,
+    msg: &mut tcu::OwnedMessage,
+) -> Result<(), VerboseError> {
     let r: syscalls::CreateSess = get_request(msg)?;
     sysc_log!(
         act,
@@ -220,15 +234,14 @@ pub fn create_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<()
     check_unused(&obj_caps, r.dst)?;
 
     let serv_cap = get_cap!(obj_caps, r.srv);
+    // TODO maybe we should store that rather in the ServObject?
     if serv_cap.has_parent() {
         sysc_err!(Code::InvArgs, "Only the service owner can create sessions");
     }
 
-    let serv = as_obj!(serv_cap.get(), Serv);
-    let cap = Capability::new(
-        r.dst,
-        KObject::Sess(SessObject::new(serv, r.creator, r.ident, r.auto_close)),
-    );
+    let serv = cap_to_kobj!(serv_cap, Serv);
+    let sess = SessObject::new(serv.downgrade(), r.creator, r.ident, r.auto_close);
+    let cap = Capability::new(r.dst, create_kobj!(sess, Sess));
 
     try_kmem_quota!(obj_caps.insert_as_child(cap, r.srv));
 
@@ -238,7 +251,7 @@ pub fn create_sess(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<()
 
 #[inline(never)]
 pub fn create_activity_async(
-    act: &Rc<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::CreateActivity<'_> = get_request(msg)?;
@@ -292,6 +305,8 @@ pub fn create_activity_async(
     }
     drop(tilemux);
 
+    let act_weak = act.downgrade();
+
     // create activity
     let nact =
         match ActivityMng::create_activity_async(r.name, tile, eps, kmem, ActivityFlags::empty()) {
@@ -299,27 +314,27 @@ pub fn create_activity_async(
             Err(e) => sysc_err!(e.code(), "Unable to create Activity"),
         };
 
+    let act = try_upgrade_kobj(act_weak, INVALID_SEL)?;
+
     // give activity cap to the parent
-    let cap = Capability::new(r.dst, KObject::Activity(Rc::downgrade(&nact)));
+    let cap = Capability::new(r.dst, create_kobj!(nact.clone(), Activity));
     try_kmem_quota!(act.obj_caps().borrow_mut().insert(cap));
 
     // create EP caps for the pager EPs
     if nact.tile_desc().has_virtmem() {
-        let nact_rc = Rc::downgrade(&nact);
+        let nact_weak = nact.clone().downgrade();
         for (i, ep) in [eps + tcu::PG_SEP_OFF, eps + tcu::PG_REP_OFF]
             .iter()
             .enumerate()
         {
-            let scap = Capability::new(
-                r.dst + 1 + i as CapSel,
-                KObject::EP(EPObject::new(
-                    EPCategory::Std,
-                    nact_rc.clone(),
-                    *ep,
-                    0,
-                    nact.tile(),
-                )),
+            let ep = EPObject::new(
+                EPCategory::Std,
+                nact_weak.clone(),
+                *ep,
+                0,
+                nact.tile_weak().clone(),
             );
+            let scap = Capability::new(r.dst + 1 + i as CapSel, create_kobj!(ep, EP));
             try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(scap, r.dst));
         }
     }
@@ -335,13 +350,14 @@ pub fn create_activity_async(
 }
 
 #[inline(never)]
-pub fn create_sem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
+pub fn create_sem(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
     let r: syscalls::CreateSem = get_request(msg)?;
     sysc_log!(act, "create_sem(dst={}, value={})", r.dst, r.value);
 
     check_unused(&act.obj_caps().borrow(), r.dst)?;
 
-    let cap = Capability::new(r.dst, KObject::Sem(SemObject::new(r.value)));
+    let sem = SemObject::new(r.value);
+    let cap = Capability::new(r.dst, create_kobj!(sem, Sem));
     try_kmem_quota!(act.obj_caps().borrow_mut().insert(cap));
 
     reply_success(msg);
@@ -350,7 +366,7 @@ pub fn create_sem(act: &Rc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(),
 
 #[inline(never)]
 pub fn create_map_async(
-    act: &Rc<Activity>,
+    act: AsyncRc<Activity>,
     msg: &mut tcu::OwnedMessage,
 ) -> Result<(), VerboseError> {
     let r: syscalls::CreateMap = get_request(msg)?;
@@ -365,7 +381,7 @@ pub fn create_map_async(
         r.perms
     );
 
-    let dst_act = get_kobj!(act, r.act, Activity).upgrade().unwrap();
+    let dst_act = get_kobj!(act, r.act, Activity);
     if !platform::tile_desc(dst_act.tile_id()).has_virtmem() {
         sysc_err!(Code::InvArgs, "Tile has no virtual-memory support");
     }
@@ -397,9 +413,10 @@ pub fn create_map_async(
     let virt = VirtAddr::new((r.dst as VirtAddrRaw) << (cfg::PAGE_BITS) as VirtAddrRaw);
     let base = mgate.addr().raw();
     let phys = GlobAddr::new(base + (cfg::PAGE_SIZE * r.first as usize) as u64);
+    drop(mgate);
 
     // retrieve/create map object
-    let (map_obj, exists) = {
+    let (map_obj, _map_obj_clone, exists) = {
         let map_caps = dst_act.map_caps().borrow();
         let map_cap: Option<&Capability> = map_caps.get(r.dst);
         match map_cap {
@@ -410,7 +427,7 @@ pub fn create_map_async(
                     sysc_err!(Code::InvArgs, "Map cap exists with different page count");
                 }
 
-                (c.get().clone(), true)
+                (cap_to_kobj!(c, Map), None, true)
             },
             None => {
                 let range = CapRngDesc::new(CapType::Mapping, r.dst, r.pages);
@@ -418,33 +435,60 @@ pub fn create_map_async(
                     sysc_err!(Code::InvArgs, "Capability range {} already in use", range);
                 }
 
-                let kobj = KObject::Map(MapObject::new(phys, PageFlags::from(r.perms)));
-                (kobj, false)
+                // ensure that we keep a copy to not lose it during the async call
+                let map_obj = MapObject::new(phys, PageFlags::from(r.perms));
+                // safety: it's okay to keep the Rc here across the async call, because the object
+                // was not inserted into the capability space yet and thus cannot be revoked
+                let map_clone = unsafe { map_obj.inner().clone() };
+                (map_obj, Some(map_clone), false)
             },
         }
     };
 
+    let dst_act_weak = dst_act.clone().downgrade();
+
+    // drop before async call
+    let (act_id, act_tile) = (dst_act.id(), dst_act.tile_id());
+    let act_weak = act.downgrade();
+    let map_obj_weak = map_obj.clone().downgrade();
+    drop(dst_act);
+
     // create/update the PTEs
-    if let KObject::Map(m) = &map_obj {
-        if let Err(e) = m.map_async(
-            &dst_act,
-            virt,
-            phys,
-            r.pages as usize,
-            PageFlags::from(r.perms),
-        ) {
-            sysc_err!(e.code(), "Unable to map memory");
-        }
+    if let Err(e) = MapObject::map_async(
+        map_obj,
+        act_id,
+        act_tile,
+        virt,
+        phys,
+        r.pages as usize,
+        PageFlags::from(r.perms),
+    ) {
+        sysc_err!(e.code(), "Unable to map memory");
     }
 
     // create map cap, if not yet existing
     if !exists {
-        let cap = Capability::new_range(SelRange::new_range(r.dst, r.pages), map_obj);
-        try_kmem_quota!(dst_act.map_caps().borrow_mut().insert_as_child_from(
-            cap,
-            act.obj_caps().borrow_mut(),
-            r.mgate,
-        ));
+        // if we cannot upgrade the destination activity or map object, we just created mapping was
+        // already unmapped again.
+        let dst_act = try_upgrade_kobj(dst_act_weak, r.act)?;
+        let map_obj = try_upgrade_kobj(map_obj_weak, INVALID_SEL)?;
+
+        if let Some(act) = act_weak.upgrade() {
+            let cap = Capability::new_range(
+                SelRange::new_range(r.dst, r.pages),
+                create_kobj!(map_obj, Map),
+            );
+            try_kmem_quota!(dst_act.map_caps().borrow_mut().insert_as_child_from(
+                cap,
+                act.obj_caps().borrow_mut(),
+                r.mgate,
+            ));
+        }
+        else {
+            // if we fail to upgrade the syscall-performing activity, we cannot insert the mapping
+            // and thus have to unmap it at TileMux again
+            MapObject::unmap_async(act_id, act_tile, virt, r.pages as usize);
+        }
     }
 
     reply_success(msg);

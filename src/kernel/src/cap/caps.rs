@@ -21,15 +21,16 @@ use base::io::LogFlags;
 use base::kif::{CapRngDesc, CapSel, SEL_ACT, SEL_KMEM, SEL_TILE};
 use base::log;
 use base::mem::{size_of, GlobOff, VirtAddr};
-use base::rc::Rc;
 use base::tcu::ActId;
 use core::cmp;
 use core::fmt;
 use core::ptr::NonNull;
 
-use crate::cap::{EPObject, GateEP, KObject};
+use thread::AsyncRc;
+
+use crate::cap::{EPObject, GateEP, KObject, MapObject, SessObject, TileObject};
 use crate::ktcu;
-use crate::tiles::{tilemng, Activity, ActivityMng, INVAL_ID};
+use crate::tiles::{tilemng, Activity, ActivityMng, State, INVAL_ID};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct SelRange {
@@ -96,8 +97,8 @@ impl CapTable {
         unsafe { &(*self.act.unwrap().as_ptr()) }
     }
 
-    pub fn set_activity(&mut self, act: &Rc<Activity>) {
-        let act_ptr = unsafe { NonNull::new_unchecked(Rc::as_ptr(act) as *mut _) };
+    pub fn set_activity(&mut self, act: &Activity) {
+        let act_ptr = unsafe { NonNull::new_unchecked(act as *const _ as *mut _) };
         self.act = Some(act_ptr);
     }
 
@@ -306,7 +307,11 @@ impl Capability {
         self.sels.count
     }
 
-    pub fn get(&self) -> &KObject {
+    //
+    // # Safety
+    //
+    // The caller cannot keep the KObject across async calls.
+    pub unsafe fn get(&self) -> &KObject {
         &self.obj
     }
 
@@ -453,7 +458,7 @@ impl Capability {
                 ktcu::invalidate_ep_remote(ep.tile_id(), ep.ep(), true).ok();
             }
 
-            EPObject::revoke(&ep);
+            EPObject::revoke(ep);
 
             cgp.remove_ep();
         }
@@ -485,15 +490,13 @@ impl Capability {
         match self.obj {
             KObject::Activity(ref v) => {
                 // remove activity if we revoked the root capability and if it's not the own activity
-                if let Some(v) = v.upgrade() {
-                    if sel != SEL_ACT && self.parent.is_none() && !v.is_root() {
-                        ActivityMng::remove_activity_async(v.id(), revoker);
-                    }
+                if sel != SEL_ACT && self.parent.is_none() && !v.is_root() {
+                    ActivityMng::remove_activity_async(v.id(), revoker);
                 }
             },
 
             KObject::EP(ref mut e) => {
-                EPObject::revoke(e);
+                EPObject::revoke(AsyncRc::new(e.clone()));
             },
 
             KObject::Tile(ref mut tile) => {
@@ -502,8 +505,11 @@ impl Capability {
                 if !self.derived && sel != SEL_TILE {
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
-                        if let KObject::Tile(p) = parent.get() {
-                            tile.revoke_async(p);
+                        // TODO we cannot use these references across the async call below
+                        let tileobj = unsafe { parent.get().clone() };
+                        if let KObject::Tile(p) = tileobj {
+                            let tile = AsyncRc::new(tile.clone());
+                            TileObject::revoke_async(tile, &p);
                         }
                     }
                 }
@@ -514,8 +520,10 @@ impl Capability {
                 if !self.derived && sel != SEL_KMEM {
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
-                        if let KObject::KMem(p) = parent.get() {
-                            k.revoke(parent.activity(), parent.sel(), p);
+                        // TODO we cannot use these references across the async call below
+                        let kmemobj = unsafe { parent.get().clone() };
+                        if let KObject::KMem(p) = kmemobj {
+                            k.revoke(parent.activity(), parent.sel(), &p);
                         }
                     }
                 }
@@ -535,7 +543,7 @@ impl Capability {
             },
 
             KObject::Serv(ref s) => {
-                s.service().abort();
+                s.abort();
             },
 
             KObject::Sess(ref s) => {
@@ -545,14 +553,17 @@ impl Capability {
                 // sharing a session between multiple activities, but are at most "granting" the
                 // session to someone else if we don't want to use it ourself.
                 if self.derived {
-                    s.close_async(revoker);
+                    let sess = AsyncRc::new(s.clone());
+                    SessObject::close_async(sess, revoker);
                 }
             },
 
             KObject::Map(ref m) => {
-                if m.mapped() {
+                // TODO currently, it can happen that we've already stopped the activity, but still
+                // accept/continue a syscall that inserts something into the activity's table.
+                if m.mapped() && act.state() != State::DEAD {
                     let virt = VirtAddr::new((self.sel() as GlobOff) << cfg::PAGE_BITS);
-                    m.unmap_async(act, virt, self.len() as usize);
+                    MapObject::unmap_async(act.id(), act.tile_id(), virt, self.len() as usize);
                 }
             },
 

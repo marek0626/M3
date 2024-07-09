@@ -24,10 +24,12 @@ use base::kif::{self, TileAttr, TileISA};
 use base::log;
 use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, VirtAddr};
 use base::quota;
-use base::rc::{Rc, SRc, Weak};
+use base::rc::Rc;
 use base::tcu::{self, ActId, EpId, TileId};
 
 use core::cmp;
+
+use thread::{AsyncRc, AsyncWeak};
 
 use crate::cap::{
     EPCategory, EPObject, EPQuota, GateObject, MGateObject, RGateObject, SGateObject, TileObject,
@@ -35,7 +37,7 @@ use crate::cap::{
 use crate::ktcu;
 use crate::mem;
 use crate::platform;
-use crate::tiles::{tilemng, INVAL_ID};
+use crate::tiles::{tilemng, Activity, INVAL_ID};
 
 struct TileState {
     pmp: Vec<Rc<EPObject>>,
@@ -44,11 +46,19 @@ struct TileState {
 }
 
 impl TileState {
-    fn new(tile: &SRc<TileObject>, ep_count: Option<usize>) -> Result<Self, Error> {
+    fn new(tile: &Rc<TileObject>, ep_count: Option<usize>) -> Result<Self, Error> {
         // create PMP EPObjects for this Tile
         let mut pmp = Vec::new();
         for ep in 0..tcu::PMEM_PROT_EPS as EpId {
-            pmp.push(EPObject::new(EPCategory::PMP, Weak::new(), ep, 0, tile));
+            let epobj = EPObject::new(
+                EPCategory::PMP,
+                AsyncWeak::default(),
+                ep,
+                0,
+                AsyncRc::new(tile.clone()).downgrade(),
+            );
+            // safety: this is okay, because these EPObjects are never destructed
+            pmp.push(unsafe { epobj.inner().clone() });
         }
 
         assert!(platform::tile_desc(tile.tile()).has_internal_eps() == ep_count.is_none());
@@ -137,7 +147,7 @@ impl Drop for TileState {
 }
 
 pub struct TileMux {
-    tile: SRc<TileObject>,
+    tile: Rc<TileObject>,
     acts: Vec<ActId>,
     queue: base::boxed::Box<crate::com::SendQueue>,
     state: Option<TileState>,
@@ -157,7 +167,8 @@ impl TileMux {
         );
 
         TileMux {
-            tile,
+            // safety: this is okay, because the TileObject is never destructed
+            tile: unsafe { tile.inner().clone() },
             acts: Vec::new(),
             queue: crate::com::SendQueue::new(crate::com::QueueId::TileMux(tile_id), tile_id),
             state: None,
@@ -250,7 +261,7 @@ impl TileMux {
 
     pub fn reset_async(
         tile: TileId,
-        mux_mem: Option<SRc<MGateObject>>,
+        mux_mem: Option<AsyncRc<MGateObject>>,
         ep_count: Option<usize>,
         root: bool,
     ) -> Result<(), Error> {
@@ -320,7 +331,7 @@ impl TileMux {
             start
         };
 
-        // reset the tile; start it if mux_mem is some; stop it otherwise
+        // reset the tile and start/stop it
         ktcu::reset_tile(tile, start)?;
 
         let mut tilemux = tilemng::tilemux(tile);
@@ -344,7 +355,7 @@ impl TileMux {
         Ok(())
     }
 
-    pub fn tile(&self) -> &SRc<TileObject> {
+    pub fn tile(&self) -> &Rc<TileObject> {
         &self.tile
     }
 
@@ -360,17 +371,23 @@ impl TileMux {
         self.state.as_ref().map(|state| state.eps.size())
     }
 
-    pub fn pmp_ep(&self, ep: EpId) -> Option<&Rc<EPObject>> {
-        self.state.as_ref().map(|state| &state.pmp[ep as usize])
+    pub fn pmp_ep(&self, ep: EpId) -> Option<AsyncRc<EPObject>> {
+        self.state
+            .as_ref()
+            .map(|state| AsyncRc::new(state.pmp[ep as usize].clone()))
     }
 
-    pub fn configure_pmp_ep(&mut self, ep: tcu::EpId, mg: &SRc<MGateObject>) -> Result<(), Error> {
+    pub fn configure_pmp_ep(
+        &mut self,
+        ep: tcu::EpId,
+        mg: &AsyncRc<MGateObject>,
+    ) -> Result<(), Error> {
         self.config_mem_ep(ep, INVAL_ID, mg, mg.tile_id())?;
 
         // remember that the MemGate is activated on this EP for the case that the MemGate gets
         // revoked. If so, the EP is automatically invalidated.
         let ep_obj = self.pmp_ep(ep).ok_or_else(|| Error::new(Code::InvState))?;
-        mg.set_ep(ep_obj, GateObject::Mem(mg.clone()));
+        mg.set_ep(&ep_obj, GateObject::Mem(mg.clone().downgrade()));
         Ok(())
     }
 
@@ -427,9 +444,9 @@ impl TileMux {
         &mut self,
         ep: EpId,
         act: ActId,
-        obj: &SRc<SGateObject>,
+        obj: &AsyncRc<SGateObject>,
     ) -> Result<(), Error> {
-        let rgate = obj.rgate();
+        let rgate = obj.rgate().ok_or_else(|| Error::new(Code::ObjectGone))?;
         assert!(rgate.activated());
 
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {
@@ -453,7 +470,7 @@ impl TileMux {
         ep: EpId,
         act: ActId,
         reply_eps: Option<EpId>,
-        obj: &SRc<RGateObject>,
+        obj: &AsyncRc<RGateObject>,
     ) -> Result<(), Error> {
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {
             let act = self.ep_activity_id(act);
@@ -476,7 +493,7 @@ impl TileMux {
         &mut self,
         ep: EpId,
         act: ActId,
-        obj: &SRc<MGateObject>,
+        obj: &AsyncRc<MGateObject>,
         tile_id: TileId,
     ) -> Result<(), Error> {
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {
@@ -583,7 +600,7 @@ impl TileMux {
 
         if has_act {
             let act = ActivityMng::activity(r.act_id).unwrap();
-            act.stop_app_async(r.status, true, INVAL_ID);
+            Activity::stop_app_async(act, r.status, true, INVAL_ID);
         }
 
         let mut reply = MsgBuf::borrow_def();
@@ -837,7 +854,7 @@ impl TileMux {
                 .map(|v| v.state() != State::DEAD)
                 .unwrap_or(false)
             {
-                return Err(Error::new(Code::ActivityGone));
+                return Err(Error::new(Code::ObjectGone));
             }
         }
 

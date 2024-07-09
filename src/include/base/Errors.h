@@ -59,7 +59,7 @@ struct Errors {
         NO_IRQ,
         // SW errors
         INV_ARGS,
-        ACT_GONE,
+        OBJECT_GONE,
         OUT_OF_MEM,
         NO_SUCH_FILE,
         NOT_SUP,

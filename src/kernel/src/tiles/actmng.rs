@@ -21,16 +21,18 @@ use base::io::LogFlags;
 use base::kif::{self, Perm};
 use base::log;
 use base::mem::{GlobAddr, GlobOff};
-use base::rc::{Rc, SRc};
-use base::tcu;
+use base::rc::Rc;
+use base::tcu::{self, ActId, TileId};
 use base::util::math;
 use base::vec;
 
-use crate::args;
+use thread::AsyncRc;
+
 use crate::cap::{Capability, KMemObject, KObject, MGateObject, RGateObject, TileObject};
 use crate::mem::{self, Allocation};
 use crate::platform;
 use crate::tiles::{loader, tilemng, Activity, ActivityFlags, State, TileMux};
+use crate::{args, create_kobj};
 
 pub struct ActivityMng {
     acts: Vec<Option<Rc<Activity>>>,
@@ -54,8 +56,10 @@ impl ActivityMng {
     }
 
     #[inline(always)]
-    pub fn activity(id: tcu::ActId) -> Option<Rc<Activity>> {
-        INST.borrow().acts[id as usize].as_ref().cloned()
+    pub fn activity(id: tcu::ActId) -> Option<AsyncRc<Activity>> {
+        INST.borrow().acts[id as usize]
+            .as_ref()
+            .map(|a| AsyncRc::new(a.clone()))
     }
 
     fn get_id() -> Result<tcu::ActId, Error> {
@@ -79,11 +83,11 @@ impl ActivityMng {
 
     pub fn create_activity_async(
         name: &str,
-        tile: SRc<TileObject>,
+        tile: AsyncRc<TileObject>,
         eps_start: tcu::EpId,
-        kmem: SRc<KMemObject>,
+        kmem: AsyncRc<KMemObject>,
         flags: ActivityFlags,
-    ) -> Result<Rc<Activity>, Error> {
+    ) -> Result<AsyncRc<Activity>, Error> {
         let id: tcu::ActId = Self::get_id()?;
         let tile_id = tile.tile();
 
@@ -97,40 +101,75 @@ impl ActivityMng {
             tile_id
         );
 
-        let clone = act.clone();
+        // note that this insertion is currently required, because when doing sidecalls to TileMux
+        // we use the acts table to check whether the activity is still alive.
         {
             let mut actmng = INST.borrow_mut();
-            actmng.acts[id as usize] = Some(act);
+            // safety: we need to keep another reference here to ensure that we decrement the
+            // activity count on activity removal.
+            actmng.acts[id as usize] = Some(unsafe { act.inner().clone() });
             actmng.count += 1;
         }
-
         tilemng::tilemux(tile_id).add_activity(id);
-        if flags.is_empty() {
-            Self::init_activity_async(&clone).unwrap();
-        }
 
-        Ok(clone)
+        let act = if flags.is_empty() {
+            let act_weak = act.clone().downgrade();
+
+            // if this call fails, we need to undo our actions above
+            if let Err(e) = Self::init_activity_async(act) {
+                // note that this is okay, because we have not inserted the new activity into a
+                // capability table and thus nobody else will have removed it from the table yet.
+                tilemng::tilemux(tile_id).rem_activity(id);
+                let mut actmng = INST.borrow_mut();
+                actmng.acts[id as usize] = None;
+                actmng.count -= 1;
+                return Err(e);
+            }
+
+            // this cannot fail as we keep a reference in actmng.acts above (which will not be
+            // removed because nobody has a capability yet)
+            act_weak.upgrade().unwrap()
+        }
+        else {
+            act
+        };
+
+        Ok(act)
     }
 
-    fn init_activity_async(act: &Activity) -> Result<(), Error> {
+    fn init_activity_async(act: AsyncRc<Activity>) -> Result<(), Error> {
+        let act_weak = act.clone().downgrade();
+
         if platform::tile_desc(act.tile_id()).supports_tilemux() {
+            let id = act.id();
+            let tile = act.tile();
+            let tile_id = tile.tile();
+            let time_quota_id = tile.time_quota_id();
+            let pt_quota_id = tile.pt_quota_id();
+            let eps_start = act.eps_start();
+            drop(tile);
+            drop(act);
+
             TileMux::activity_init_async(
-                tilemng::tilemux(act.tile_id()),
-                act.id(),
-                act.tile().time_quota_id(),
-                act.tile().pt_quota_id(),
-                act.eps_start(),
+                tilemng::tilemux(tile_id),
+                id,
+                time_quota_id,
+                pt_quota_id,
+                eps_start,
             )?;
         }
 
-        act.init_async()
+        let act = act_weak
+            .upgrade()
+            .ok_or_else(|| Error::new(Code::ObjectGone))?;
+        Activity::init_async(act)
     }
 
-    pub fn start_activity_async(act: &Activity) -> Result<(), Error> {
-        if platform::tile_desc(act.tile_id()).supports_tilemux() {
+    pub fn start_activity_async(act_id: ActId, tile_id: TileId) -> Result<(), Error> {
+        if platform::tile_desc(tile_id).supports_tilemux() {
             TileMux::activity_ctrl_async(
-                tilemng::tilemux(act.tile_id()),
-                act.id(),
+                tilemng::tilemux(tile_id),
+                act_id,
                 kif::tilemux::ActivityOp::Start,
             )
         }
@@ -139,11 +178,15 @@ impl ActivityMng {
         }
     }
 
-    pub fn stop_activity_async(act: &Activity, stop: bool) -> Result<(), Error> {
+    pub fn stop_activity_async(act: AsyncRc<Activity>, stop: bool) -> Result<(), Error> {
         if stop && platform::tile_desc(act.tile_id()).supports_tilemux() {
+            let id = act.id();
+            let tile_id = act.tile_id();
+            drop(act);
+
             TileMux::activity_ctrl_async(
-                tilemng::tilemux(act.tile_id()),
-                act.id(),
+                tilemng::tilemux(tile_id),
+                id,
                 kif::tilemux::ActivityOp::Stop,
             )?;
         }
@@ -159,7 +202,7 @@ impl ActivityMng {
 
         let tile_id = tilemng::find_tile(&tile_emem)
             .unwrap_or_else(|| tilemng::find_tile(&tile_imem).unwrap());
-        let tile = tilemng::tilemux(tile_id).tile().clone();
+        let tile = AsyncRc::new(tilemng::tilemux(tile_id).tile().clone());
         let tile_desc = platform::tile_desc(tile_id);
 
         // allocate memory for tilemux itself
@@ -207,10 +250,8 @@ impl ActivityMng {
         // boot info
         {
             let alloc = Allocation::new(platform::info_addr(), platform::info_size() as GlobOff);
-            let cap = Capability::new(
-                sel,
-                KObject::MGate(MGateObject::new(alloc, kif::Perm::RWX, false)),
-            );
+            let mgate = MGateObject::new(alloc, kif::Perm::RWX, false);
+            let cap = Capability::new(sel, create_kobj!(mgate, MGate));
 
             act.obj_caps().borrow_mut().insert(cap).unwrap();
             sel += 1;
@@ -218,14 +259,8 @@ impl ActivityMng {
 
         // serial rgate
         {
-            let cap = Capability::new(
-                sel,
-                KObject::RGate(RGateObject::new(
-                    cfg::SERIAL_BUF_ORD,
-                    cfg::SERIAL_BUF_ORD,
-                    true,
-                )),
-            );
+            let rgate = RGateObject::new(cfg::SERIAL_BUF_ORD, cfg::SERIAL_BUF_ORD, true);
+            let cap = Capability::new(sel, create_kobj!(rgate, RGate));
             act.obj_caps().borrow_mut().insert(cap).unwrap();
             sel += 1;
         }
@@ -234,10 +269,8 @@ impl ActivityMng {
         for m in platform::mods() {
             let size = math::round_up(m.size as usize, cfg::PAGE_SIZE);
             let alloc = Allocation::new(GlobAddr::new(m.addr), size as GlobOff);
-            let cap = Capability::new(
-                sel,
-                KObject::MGate(MGateObject::new(alloc, kif::Perm::RWX, false)),
-            );
+            let mgate = MGateObject::new(alloc, kif::Perm::RWX, false);
+            let cap = Capability::new(sel, create_kobj!(mgate, MGate));
 
             act.obj_caps().borrow_mut().insert(cap).unwrap();
             sel += 1;
@@ -277,7 +310,7 @@ impl ActivityMng {
 
                 if m.mem_type() != mem::MemType::ROOT {
                     // insert capability
-                    let cap = Capability::new(sel, KObject::MGate(mgate_obj));
+                    let cap = Capability::new(sel, create_kobj!(mgate_obj, MGate));
                     act.obj_caps().borrow_mut().insert(cap).unwrap();
                     sel += 1;
                 }
@@ -288,8 +321,9 @@ impl ActivityMng {
         act.set_first_sel(sel);
 
         // go!
-        Self::init_activity_async(&act)?;
-        act.start_app_async()
+        let act_weak = act.clone().downgrade();
+        Self::init_activity_async(act)?;
+        Activity::start_app_async(act_weak.upgrade().unwrap())
     }
 
     pub fn remove_activity_async(id: tcu::ActId, revoker: tcu::ActId) {
@@ -301,7 +335,8 @@ impl ActivityMng {
                 actmng.count -= 1;
                 drop(actmng);
                 tilemng::tilemux(v.tile_id()).rem_activity(v.id());
-                v.force_stop_async(v.state() != State::DEAD, revoker);
+                let act_ref = AsyncRc::new(v.clone());
+                Activity::force_stop_async(act_ref, v.state() != State::DEAD, revoker);
             },
             None => panic!("Removing nonexisting Activity with id {}", id),
         };

@@ -16,34 +16,36 @@
 use base::boxed::Box;
 use base::cell::RefCell;
 use base::col::String;
-use base::errors::Error;
-use base::mem::{MsgBuf, MsgBufRef};
-use base::rc::{Rc, SRc, Weak};
+use base::errors::{Code, Error};
+use base::mem::MsgBuf;
+use base::rc::Rc;
 use base::tcu;
 use core::fmt;
+
+use thread::{AsyncRc, AsyncWeak};
 
 use crate::cap::RGateObject;
 use crate::com::{QueueId, SendQueue};
 use crate::tiles::Activity;
 
 pub struct Service {
-    act: Weak<Activity>,
+    act: AsyncWeak<Activity>,
     name: String,
-    rgate: SRc<RGateObject>,
+    rgate: AsyncWeak<RGateObject>,
     queue: RefCell<Box<SendQueue>>,
 }
 
 impl Service {
-    pub fn new(act: &Rc<Activity>, name: String, rgate: SRc<RGateObject>) -> SRc<Self> {
-        SRc::new(Service {
-            act: Rc::downgrade(act),
+    pub fn new(act: AsyncRc<Activity>, name: String, rgate: AsyncRc<RGateObject>) -> Rc<Self> {
+        Rc::new(Service {
             name,
-            rgate,
+            rgate: rgate.downgrade(),
             queue: RefCell::from(SendQueue::new(QueueId::Serv(act.id()), act.tile_id())),
+            act: act.downgrade(),
         })
     }
 
-    pub fn activity(&self) -> Rc<Activity> {
+    pub fn activity(&self) -> AsyncRc<Activity> {
         self.act.upgrade().unwrap()
     }
 
@@ -52,18 +54,12 @@ impl Service {
     }
 
     pub fn send(&self, lbl: tcu::Label, msg: &MsgBuf) -> Result<thread::Event, Error> {
-        let (_, rep) = self.rgate.location().unwrap();
+        let rg = self
+            .rgate
+            .upgrade()
+            .ok_or_else(|| Error::new(Code::ObjectGone))?;
+        let (_, rep) = rg.location().unwrap();
         self.queue.borrow_mut().send(rep, lbl, msg)
-    }
-
-    pub fn send_receive_async(
-        &self,
-        lbl: tcu::Label,
-        msg: MsgBufRef<'_>,
-    ) -> Result<&'static tcu::Message, Error> {
-        let event = self.send(lbl, &msg)?;
-        drop(msg);
-        SendQueue::receive_async(event)
     }
 
     pub fn abort(&self) {
@@ -74,7 +70,12 @@ impl Service {
 impl fmt::Debug for Service {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Service[name={}, rgate=", self.name)?;
-        self.rgate.print_loc(f)?;
+        if let Some(rg) = self.rgate.upgrade() {
+            rg.print_loc(f)?;
+        }
+        else {
+            write!(f, "?")?;
+        }
         write!(f, "]")
     }
 }
