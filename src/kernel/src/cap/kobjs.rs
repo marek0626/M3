@@ -1173,6 +1173,11 @@ impl MapObject {
         let map_weak = map.downgrade();
         TileMux::map_async(tilemng::tilemux(act_tile), act_id, virt, glob, pages, flags).map(|_| {
             if let Some(map) = map_weak.upgrade() {
+                // TODO note that this is racy (in theory) with other map and unmap (revoke) calls.
+                // this does not happen currently, as the pager is the single responsible entity
+                // for a given address space and does never hand out mapping capabilities to
+                // others. Therefore, all these operations are done by the pager and as there is
+                // only one syscall at a time, these races are not possible.
                 map.glob.replace(glob);
                 map.flags.replace(flags);
                 map.mapped.set(true);
