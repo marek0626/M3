@@ -701,6 +701,9 @@ impl TileObject {
 
             let res = TileMux::derive_quota_async(tilemux, time_quota_id, pt_quota_id, time, pts);
 
+            // note that we don't need to give the EP quota back to the tile as the tile was
+            // destroyed in this case, meaning that we already gave the quota back in
+            // TileObject::revoke_async.
             let tile = tile_weak
                 .upgrade()
                 .ok_or_else(|| Error::new(Code::ObjectGone))?;
