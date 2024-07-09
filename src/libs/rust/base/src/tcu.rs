@@ -502,10 +502,10 @@ impl Message {
 
 /// Received message that owns a message slot
 ///
-/// The message is read-only.
-/// [`Self`] owns the slot to prevent answering the message while a reference to
-/// the contents are held.
-/// This avoids data races between the Rust code and the TCU (would be UB).
+/// The message is read-only. [`Self`] owns the slot to prevent answering the message while a
+/// reference to the contents are held. This avoids data races between the Rust code and the TCU
+/// (would be UB).
+#[derive(Default)]
 pub struct OwnedMessage {
     rep: EpId,
     msg: Option<NonNull<()>>,
@@ -517,9 +517,12 @@ pub struct OwnedMessage {
 impl OwnedMessage {
     const GONE: &'static str = "message already gone";
 
+    /// Creates a new instance with given message
+    ///
     /// # Safety
-    /// Safe if rep, base, and off describe a valid message for as long as
-    /// `Self::msg` is [`Some`], i.e., the message is not answered.
+    ///
+    /// Safe if rep, base, and off describe a valid message for as long as `Self::msg` is [`Some`],
+    /// i.e., the message is not answered.
     pub unsafe fn new(rep: EpId, base: VirtAddr, off: usize) -> Self {
         Self {
             rep,
