@@ -17,7 +17,6 @@
  */
 
 use core::fmt;
-use core::intrinsics;
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 
@@ -28,18 +27,15 @@ pub type BoxRef<T> = NonNull<T>;
 
 /// The trait for the list elements
 pub trait BoxItem {
-    /// The actual type of the element
-    type T: BoxItem;
-
     /// Returns the next element
-    fn next(&self) -> Option<BoxRef<Self::T>>;
+    fn next(&self) -> Option<BoxRef<Self>>;
     /// Sets the next element to `next`
-    fn set_next(&mut self, next: Option<BoxRef<Self::T>>);
+    fn set_next(&mut self, next: Option<BoxRef<Self>>);
 
     /// Returns the previous element
-    fn prev(&self) -> Option<BoxRef<Self::T>>;
+    fn prev(&self) -> Option<BoxRef<Self>>;
     /// Sets the previous element to `prev`
-    fn set_prev(&mut self, prev: Option<BoxRef<Self::T>>);
+    fn set_prev(&mut self, prev: Option<BoxRef<Self>>);
 }
 
 /// Convenience macro to implement [`BoxItem`] in the default way.
@@ -58,21 +54,19 @@ pub trait BoxItem {
 macro_rules! impl_boxitem {
     ($t:ty) => {
         impl $crate::col::BoxItem for $t {
-            type T = $t;
-
-            fn next(&self) -> Option<$crate::col::BoxRef<$t>> {
+            fn next(&self) -> Option<$crate::col::BoxRef<Self>> {
                 self.next
             }
 
-            fn set_next(&mut self, next: Option<$crate::col::BoxRef<$t>>) {
+            fn set_next(&mut self, next: Option<$crate::col::BoxRef<Self>>) {
                 self.next = next;
             }
 
-            fn prev(&self) -> Option<$crate::col::BoxRef<$t>> {
+            fn prev(&self) -> Option<$crate::col::BoxRef<Self>> {
                 self.prev
             }
 
-            fn set_prev(&mut self, prev: Option<$crate::col::BoxRef<$t>>) {
+            fn set_prev(&mut self, prev: Option<$crate::col::BoxRef<Self>>) {
                 self.prev = prev;
             }
         }
@@ -91,7 +85,7 @@ impl<'a, T: BoxItem> Iterator for BoxListIter<'a, T> {
     fn next(&mut self) -> Option<&'a T> {
         self.head.map(|item| unsafe {
             let item = &*item.as_ptr();
-            self.head = intrinsics::transmute(item.next());
+            self.head = item.next();
             item
         })
     }
@@ -109,7 +103,7 @@ impl<'a, T: BoxItem> Iterator for BoxListIterMut<'a, T> {
     fn next(&mut self) -> Option<&'a mut T> {
         self.head.map(|item| unsafe {
             let item = &mut *item.as_ptr();
-            self.head = intrinsics::transmute(item.next());
+            self.head = item.next();
             item
         })
     }
@@ -141,13 +135,13 @@ impl<'a, T: BoxItem> BoxListIterMut<'a, T> {
                             head.as_mut().set_prev(None);
                         },
                         Some(mut pp) => {
-                            pp.as_mut().set_next(Some(intrinsics::transmute(head)));
-                            head.as_mut().set_prev(Some(intrinsics::transmute(pp)));
+                            pp.as_mut().set_next(Some(head));
+                            head.as_mut().set_prev(Some(pp));
                         },
                     }
 
                     self.list.len -= 1;
-                    Box::from_raw(prev as *mut T)
+                    Box::from_raw(prev)
                 })
             },
         }
@@ -248,14 +242,14 @@ impl<T: BoxItem> BoxList<T> {
     /// Inserts the given element at the front of the list
     pub fn push_front(&mut self, mut item: Box<T>) {
         unsafe {
-            item.set_next(intrinsics::transmute(self.head));
+            item.set_next(self.head);
             item.set_prev(None);
 
             let item_ptr = Some(NonNull::new_unchecked(Box::into_raw(item)));
 
             match self.head {
                 None => self.tail = item_ptr,
-                Some(mut head) => head.as_mut().set_prev(intrinsics::transmute(item_ptr)),
+                Some(mut head) => head.as_mut().set_prev(item_ptr),
             }
 
             self.head = item_ptr;
@@ -267,13 +261,13 @@ impl<T: BoxItem> BoxList<T> {
     pub fn push_back(&mut self, mut item: Box<T>) {
         unsafe {
             item.set_next(None);
-            item.set_prev(intrinsics::transmute(self.tail));
+            item.set_prev(self.tail);
 
             let item_ptr = Some(NonNull::new_unchecked(Box::into_raw(item)));
 
             match self.tail {
                 None => self.head = item_ptr,
-                Some(mut tail) => tail.as_mut().set_next(intrinsics::transmute(item_ptr)),
+                Some(mut tail) => tail.as_mut().set_next(item_ptr),
             }
 
             self.tail = item_ptr;
@@ -285,7 +279,7 @@ impl<T: BoxItem> BoxList<T> {
     pub fn pop_front(&mut self) -> Option<Box<T>> {
         self.head.map(|item| unsafe {
             let item = item.as_ptr();
-            self.head = intrinsics::transmute((*item).next());
+            self.head = (*item).next();
 
             match self.head {
                 None => self.tail = None,
@@ -301,7 +295,7 @@ impl<T: BoxItem> BoxList<T> {
     pub fn pop_back(&mut self) -> Option<Box<T>> {
         self.tail.map(|item| unsafe {
             let item = item.as_ptr();
-            self.tail = intrinsics::transmute((*item).prev());
+            self.tail = (*item).prev();
 
             match self.tail {
                 None => self.head = None,
@@ -326,24 +320,18 @@ impl<T: BoxItem> BoxList<T> {
 
         // remove us from the list
         match item.prev() {
-            Some(mut p) => p.as_mut().set_next(intrinsics::transmute(item.next())),
-            None => self.head = intrinsics::transmute(item.next()),
+            Some(mut p) => p.as_mut().set_next(item.next()),
+            None => self.head = item.next(),
         }
         // it's not at the back, so we can assume next() is Some
-        item.next()
-            .unwrap()
-            .as_mut()
-            .set_prev(intrinsics::transmute(item.prev()));
+        item.next().unwrap().as_mut().set_prev(item.prev());
 
         // let the current tail's next point to us
         let item_ptr = Some(NonNull::new_unchecked(item as *mut T));
-        self.tail
-            .unwrap()
-            .as_mut()
-            .set_next(intrinsics::transmute(item_ptr));
+        self.tail.unwrap().as_mut().set_next(item_ptr);
 
         // add us to the end
-        item.set_prev(intrinsics::transmute(self.tail));
+        item.set_prev(self.tail);
         item.set_next(None);
         self.tail = item_ptr;
     }
