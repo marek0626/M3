@@ -101,6 +101,8 @@ impl ActivityMng {
             tile_id
         );
 
+        // note that this insertion is currently required, because when doing sidecalls to TileMux
+        // we use the acts table to check whether the activity is still alive.
         {
             let mut actmng = INST.borrow_mut();
             // safety: we need to keep another reference here to ensure that we decrement the
@@ -108,11 +110,24 @@ impl ActivityMng {
             actmng.acts[id as usize] = Some(unsafe { act.inner().clone() });
             actmng.count += 1;
         }
-
         tilemng::tilemux(tile_id).add_activity(id);
+
         let act = if flags.is_empty() {
             let act_weak = act.clone().downgrade();
-            Self::init_activity_async(act).unwrap();
+
+            // if this call fails, we need to undo our actions above
+            if let Err(e) = Self::init_activity_async(act) {
+                // note that this is okay, because we have not inserted the new activity into a
+                // capability table and thus nobody else will have removed it from the table yet.
+                tilemng::tilemux(tile_id).rem_activity(id);
+                let mut actmng = INST.borrow_mut();
+                actmng.acts[id as usize] = None;
+                actmng.count -= 1;
+                return Err(e);
+            }
+
+            // this cannot fail as we keep a reference in actmng.acts above (which will not be
+            // removed because nobody has a capability yet)
             act_weak.upgrade().unwrap()
         }
         else {
