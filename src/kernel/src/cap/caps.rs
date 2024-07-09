@@ -32,6 +32,8 @@ use crate::cap::{EPObject, GateEP, KObject, MapObject, SessObject, TileObject};
 use crate::ktcu;
 use crate::tiles::{tilemng, Activity, ActivityMng, State, INVAL_ID};
 
+use super::IntoKObject;
+
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct SelRange {
     start: CapSel,
@@ -289,14 +291,21 @@ impl Capability {
         128 + crate::slab::HEADER_SIZE
     }
 
-    pub fn new(sel: CapSel, obj: KObject) -> Self {
+    pub fn new<T>(sel: CapSel, obj: AsyncRc<T>) -> Self
+    where
+        AsyncRc<T>: IntoKObject<T>,
+    {
         Self::new_range(SelRange::new(sel), obj)
     }
 
-    pub fn new_range(sels: SelRange, obj: KObject) -> Self {
+    pub fn new_range<T>(sels: SelRange, obj: AsyncRc<T>) -> Self
+    where
+        AsyncRc<T>: IntoKObject<T>,
+    {
         Capability {
             sels,
-            obj,
+            // safety: as we directly keep the KObject in the capability, the conversion is okay
+            obj: unsafe { obj.into_kobj() },
             table: None,
             child: None,
             parent: None,

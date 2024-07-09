@@ -30,7 +30,7 @@ use core::fmt;
 
 use thread::{AsyncRc, AsyncWeak};
 
-use crate::cap::{CapTable, Capability, EPObject, KMemObject, KObject, TileObject};
+use crate::cap::{CapTable, Capability, EPObject, IntoKObject, KMemObject, KObject, TileObject};
 use crate::com::{QueueId, SendQueue};
 use crate::ktcu;
 use crate::thread_startup_async;
@@ -126,16 +126,16 @@ impl Activity {
             // kmem cap
             act.obj_caps().borrow_mut().insert(Capability::new(
                 kif::SEL_KMEM,
-                KObject::KMem(act.kmem.clone()),
+                AsyncRc::new(act.kmem.clone()),
             ))?;
             // tile cap
             act.obj_caps()
                 .borrow_mut()
-                .insert(Capability::new(kif::SEL_TILE, tile.clone().into()))?;
+                .insert(Capability::new(kif::SEL_TILE, tile.clone()))?;
             // cap for own activity
             act.obj_caps()
                 .borrow_mut()
-                .insert(Capability::new(kif::SEL_ACT, act.clone().into()))?;
+                .insert(Capability::new(kif::SEL_ACT, act.clone()))?;
 
             // alloc standard EPs
             tilemng::tilemux(act.tile_id()).alloc_eps(eps_start, STD_EPS_COUNT);

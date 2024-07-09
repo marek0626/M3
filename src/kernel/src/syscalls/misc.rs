@@ -115,7 +115,7 @@ pub fn alloc_ep_async(
         r.replies,
         dst_act.tile_weak().clone(),
     );
-    let cap = Capability::new(r.dst, ep.into());
+    let cap = Capability::new(r.dst, ep);
     try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.act));
 
     dst_act.tile().alloc(ep_count);

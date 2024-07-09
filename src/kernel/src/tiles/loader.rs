@@ -396,7 +396,7 @@ impl ELFLoader for ActivityELFLoader {
                 .ok_or_else(|| Error::new(Code::ObjectGone))?;
             let res = act.map_caps().borrow_mut().insert(Capability::new_range(
                 SelRange::new_range(dst_sel as kif::CapSel, pages as kif::CapSel),
-                map_obj.into(),
+                map_obj,
             ));
             res
         }

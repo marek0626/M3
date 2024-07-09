@@ -283,7 +283,7 @@ pub fn tile_mem(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
 
     let mem = tile.memory();
     let mgate = MGateObject::new(mem, kif::Perm::RWX, true);
-    let cap = Capability::new(r.dst, mgate.into());
+    let cap = Capability::new(r.dst, mgate);
     try_kmem_quota!(act_caps.insert_as_child(cap, r.tile));
 
     reply_success(msg);

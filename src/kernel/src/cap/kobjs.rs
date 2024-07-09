@@ -50,6 +50,10 @@ pub enum KObject {
     EP(Rc<EPObject>),
 }
 
+pub trait IntoKObject<T> {
+    unsafe fn into_kobj(self) -> KObject;
+}
+
 #[macro_export]
 macro_rules! impl_from_kobj {
     ($ty:ty, $name:ident) => {
@@ -67,10 +71,9 @@ macro_rules! impl_from_kobj {
             }
         }
 
-        impl From<AsyncRc<$ty>> for KObject {
-            fn from(rc: AsyncRc<$ty>) -> Self {
-                // safety: conversion to KObject is fine as this is a place where we can keep the Rc
-                KObject::$name(unsafe { rc.inner().clone() })
+        impl IntoKObject<$ty> for AsyncRc<$ty> {
+            unsafe fn into_kobj(self) -> KObject {
+                KObject::$name(self.inner().clone())
             }
         }
     };
