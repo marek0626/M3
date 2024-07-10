@@ -289,6 +289,16 @@ impl fmt::Display for Error {
     }
 }
 
+#[macro_export]
+macro_rules! verror {
+    ($e:expr, $msg:tt) => ({
+        $crate::errors::VerboseError::new($e, $msg)
+    });
+    ($e:expr, $fmt:tt, $($args:tt)*) => ({
+        $crate::errors::VerboseError::new($e, $crate::format!($fmt, $($args)*))
+    });
+}
+
 /// A verbose error type that contains an error message
 pub struct VerboseError {
     code: Code,

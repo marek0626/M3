@@ -13,7 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use base::build_vmsg;
 use base::cfg;
 use base::col::ToString;
 use base::errors::{Code, VerboseError};
@@ -21,6 +20,7 @@ use base::kif::INVALID_SEL;
 use base::kif::{syscalls, CapRngDesc, CapSel, CapType, PageFlags, Perm};
 use base::mem::{GlobAddr, GlobOff, MsgBuf, VirtAddr, VirtAddrRaw};
 use base::tcu;
+use base::{build_vmsg, verror};
 
 use thread::AsyncRc;
 
@@ -54,10 +54,10 @@ pub fn create_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     if (r.addr.as_goff() & cfg::PAGE_MASK as GlobOff) != 0
         || (r.size & cfg::PAGE_MASK as GlobOff) != 0
     {
-        sysc_err!(
+        return Err(verror!(
             Code::InvArgs,
             "Virt address and size need to be page-aligned"
-        );
+        ));
     }
 
     let tgt_act: AsyncRc<Activity> = act.get_kobj(r.act)?;
@@ -66,7 +66,7 @@ pub fn create_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let glob = if platform::tile_desc(tgt_act.tile_id()).has_virtmem() {
         let pages = (r.size / cfg::PAGE_SIZE as GlobOff) as CapSel;
         if pages == 0 {
-            sysc_err!(Code::InvArgs, "Region is empty");
+            return Err(verror!(Code::InvArgs, "Region is empty"));
         }
 
         let map_caps = tgt_act.map_caps().borrow();
@@ -76,13 +76,13 @@ pub fn create_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         // TODO think about the flags in MapObject again
         let map_perms = Perm::from_bits_truncate(map_obj.flags().bits() as u32);
         if !(r.perms & !Perm::RWX).is_empty() || !(r.perms & !map_perms).is_empty() {
-            sysc_err!(Code::NoPerm, "Invalid permissions");
+            return Err(verror!(Code::NoPerm, "Invalid permissions"));
         }
 
         let pages = (r.size / cfg::PAGE_SIZE as GlobOff) as CapSel;
         let off = sel - map_cap.sel();
         if off + pages > map_cap.len() {
-            sysc_err!(Code::InvArgs, "Invalid length");
+            return Err(verror!(Code::InvArgs, "Invalid length"));
         }
 
         let phys =
@@ -91,12 +91,12 @@ pub fn create_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     }
     else {
         if r.size == 0 {
-            sysc_err!(Code::InvArgs, "Region is empty");
+            return Err(verror!(Code::InvArgs, "Region is empty"));
         }
         // use the same error code here as above where we fail with InvCap for non-existing mapping
         // capabilities (unmapped regions)
         if r.addr + r.size >= cfg::MEM_CAP_END {
-            sysc_err!(Code::InvCap, "Region is out of bounds");
+            return Err(verror!(Code::InvCap, "Region is out of bounds"));
         }
 
         GlobAddr::new_with(tgt_act.tile_id(), r.addr.as_goff())
@@ -143,7 +143,7 @@ pub fn create_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         || r.order - r.msg_order >= 32
         || (1 << (r.order - r.msg_order)) > cfg::MAX_RB_SIZE
     {
-        sysc_err!(Code::InvArgs, "Invalid size");
+        return Err(verror!(Code::InvArgs, "Invalid size"));
     }
 
     let rgate = RGateObject::new(r.order, r.msg_order, false);
@@ -200,7 +200,7 @@ pub fn create_srv(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     check_unused(&act.obj_caps().borrow(), r.dst)?;
     if r.name.is_empty() {
-        sysc_err!(Code::InvArgs, "Invalid server name");
+        return Err(verror!(Code::InvArgs, "Invalid server name"));
     }
 
     let mut act_caps = act.obj_caps().borrow_mut();
@@ -208,7 +208,7 @@ pub fn create_srv(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let cap = {
         let rgate: AsyncRc<RGateObject> = act_caps.get_kobj(r.rgate)?;
         if !rgate.activated() {
-            sysc_err!(Code::InvArgs, "RGate is not activated");
+            return Err(verror!(Code::InvArgs, "RGate is not activated"));
         }
 
         let serv = Service::new(act.clone(), r.name.to_string(), rgate);
@@ -245,7 +245,10 @@ pub fn create_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let serv_cap = obj_caps.get(r.srv)?;
     // TODO maybe we should store that rather in the ServObject?
     if serv_cap.has_parent() {
-        sysc_err!(Code::InvArgs, "Only the service owner can create sessions");
+        return Err(verror!(
+            Code::InvArgs,
+            "Only the service owner can create sessions"
+        ));
     }
 
     let serv: AsyncRc<ServObject> = serv_cap.get()?;
@@ -277,25 +280,25 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
         .borrow()
         .range_unused(&CapRngDesc::new(CapType::Object, r.dst, 3))
     {
-        sysc_err!(
+        return Err(verror!(
             Code::InvArgs,
             "Selectors {}..{} already in use",
             r.dst,
             r.dst + 2
-        );
+        ));
     }
     if r.name.is_empty() {
-        sysc_err!(Code::InvArgs, "Invalid name");
+        return Err(verror!(Code::InvArgs, "Invalid name"));
     }
 
     let tile: AsyncRc<TileObject> = act.get_kobj(r.tile)?;
     if !tile.has_quota(tcu::STD_EPS_COUNT) {
-        sysc_err!(
+        return Err(verror!(
             Code::InvArgs,
             "Tile cap has insufficient EPs (have {}, need {})",
             tile.ep_quota().left(),
             tcu::STD_EPS_COUNT
-        );
+        ));
     }
 
     let kmem: AsyncRc<KMemObject> = act.get_kobj(r.kmem)?;
@@ -306,10 +309,13 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
     let tilemux = tilemng::tilemux(tile_id);
     let eps = match tilemux.find_eps(tcu::STD_EPS_COUNT) {
         Ok(eps) => eps,
-        Err(e) => sysc_err!(e.code(), "No free range for standard EPs"),
+        Err(e) => return Err(verror!(e.code(), "No free range for standard EPs")),
     };
     if tilemux.has_activities() && !platform::tile_desc(tile.tile()).has_virtmem() {
-        sysc_err!(Code::NotSup, "Virtual memory is required for tile sharing");
+        return Err(verror!(
+            Code::NotSup,
+            "Virtual memory is required for tile sharing"
+        ));
     }
     drop(tilemux);
 
@@ -323,7 +329,7 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
     let nact =
         match ActivityMng::create_activity_async(name, tile, eps, kmem, ActivityFlags::empty()) {
             Ok(nact) => nact,
-            Err(e) => sysc_err!(e.code(), "Unable to create Activity"),
+            Err(e) => return Err(verror!(e.code(), "Unable to create Activity")),
         };
 
     let act = try_upgrade_kobj(act_weak, INVALID_SEL)?;
@@ -398,22 +404,22 @@ pub fn create_map_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     let dst_act: AsyncRc<Activity> = act.get_kobj(r.act)?;
     if !platform::tile_desc(dst_act.tile_id()).has_virtmem() {
-        sysc_err!(Code::InvArgs, "Tile has no virtual-memory support");
+        return Err(verror!(Code::InvArgs, "Tile has no virtual-memory support"));
     }
 
     let mgate: AsyncRc<MGateObject> = act.get_kobj(r.mgate)?;
     if (mgate.addr().raw() & cfg::PAGE_MASK as GlobOff) != 0
         || (mgate.size() & cfg::PAGE_MASK as GlobOff) != 0
     {
-        sysc_err!(
+        return Err(verror!(
             Code::InvArgs,
             "Memory capability is not page aligned (addr={}, size={:#x})",
             mgate.addr(),
             mgate.size()
-        );
+        ));
     }
     if (r.perms.bits() & !mgate.perms().bits()) != 0 {
-        sysc_err!(Code::InvArgs, "Invalid permissions");
+        return Err(verror!(Code::InvArgs, "Invalid permissions"));
     }
 
     let total_pages = (mgate.size() >> cfg::PAGE_BITS) as CapSel;
@@ -422,7 +428,7 @@ pub fn create_map_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         || r.first >= total_pages
         || r.first + r.pages > total_pages
     {
-        sysc_err!(Code::InvArgs, "Region of memory cap is invalid");
+        return Err(verror!(Code::InvArgs, "Region of memory cap is invalid"));
     }
 
     let virt = VirtAddr::new((r.dst as VirtAddrRaw) << (cfg::PAGE_BITS) as VirtAddrRaw);
@@ -439,7 +445,10 @@ pub fn create_map_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
                 // TODO check for kernel-created caps
                 // TODO we have to update MemGates that are childs of this cap
                 if c.len() != r.pages {
-                    sysc_err!(Code::InvArgs, "Map cap exists with different page count");
+                    return Err(verror!(
+                        Code::InvArgs,
+                        "Map cap exists with different page count"
+                    ));
                 }
 
                 (c.get::<AsyncRc<MapObject>>()?, None, true)
@@ -447,7 +456,11 @@ pub fn create_map_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
             Err(_) => {
                 let range = CapRngDesc::new(CapType::Mapping, r.dst, r.pages);
                 if !map_caps.range_unused(&range) {
-                    sysc_err!(Code::InvArgs, "Capability range {} already in use", range);
+                    return Err(verror!(
+                        Code::InvArgs,
+                        "Capability range {} already in use",
+                        range
+                    ));
                 }
 
                 // ensure that we keep a copy to not lose it during the async call
@@ -478,7 +491,7 @@ pub fn create_map_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.pages as usize,
         PageFlags::from(r.perms),
     ) {
-        sysc_err!(e.code(), "Unable to map memory");
+        return Err(verror!(e.code(), "Unable to map memory"));
     }
 
     // create map cap, if not yet existing
