@@ -23,6 +23,7 @@ use m3::test::{DefaultWvTester, WvTester};
 use m3::{println, wv_run_suite};
 
 mod tactivity;
+mod tsems;
 mod tserver;
 mod tsrvmsgs;
 
@@ -30,6 +31,7 @@ mod tsrvmsgs;
 pub fn main() -> Result<(), Error> {
     let mut tester = DefaultWvTester::default();
     wv_run_suite!(tester, tactivity::run);
+    wv_run_suite!(tester, tsems::run);
     wv_run_suite!(tester, tserver::run);
     wv_run_suite!(tester, tsrvmsgs::run);
     println!("{}", tester);
