@@ -13,7 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use base::col::ToString;
 use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{self, CapSel};
@@ -42,7 +41,7 @@ macro_rules! sysc_log {
 #[macro_export]
 macro_rules! sysc_err {
     ($e:expr, $fmt:tt) => ({
-        return Err(base::errors::VerboseError::new($e, $fmt.to_string()));
+        return Err(base::errors::VerboseError::new($e, $fmt));
     });
     ($e:expr, $fmt:tt, $($args:tt)*) => ({
         return Err(base::errors::VerboseError::new($e, base::format!($fmt, $($args)*)));
@@ -72,18 +71,21 @@ fn check_unused(tbl: &CapTable, sel: CapSel) -> Result<(), VerboseError> {
 
 fn try_upgrade_kobj<T>(weak: AsyncWeak<T>, sel: CapSel) -> Result<AsyncRc<T>, VerboseError> {
     weak.upgrade().ok_or_else(|| {
-        VerboseError::new(
-            Code::ObjectGone,
-            if sel != kif::INVALID_SEL {
+        if sel != kif::INVALID_SEL {
+            VerboseError::new(
+                Code::ObjectGone,
                 format!(
                     "Kernel object (Selector {}) was revoked during async call",
                     sel
-                )
-            }
-            else {
-                "Kernel object was revoked during async call".to_string()
-            },
-        )
+                ),
+            )
+        }
+        else {
+            VerboseError::new(
+                Code::ObjectGone,
+                "Kernel object was revoked during async call",
+            )
+        }
     })
 }
 

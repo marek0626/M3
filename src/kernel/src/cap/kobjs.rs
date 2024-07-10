@@ -725,10 +725,7 @@ impl TileObject {
         // only allocate it from the tile here, but don't keep an Rc to the EPQuota
         if let Some(num) = eps {
             if !tile.has_quota(num) {
-                return Err(VerboseError::new(
-                    Code::NoSpace,
-                    "Insufficient EPs".to_string(),
-                ));
+                return Err(VerboseError::new(Code::NoSpace, "Insufficient EPs"));
             }
             tile.alloc(num);
         }

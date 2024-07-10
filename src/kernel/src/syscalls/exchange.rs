@@ -14,7 +14,6 @@
  */
 
 use base::build_vmsg;
-use base::col::ToString;
 use base::errors::{Code, Error, VerboseError};
 use base::format;
 use base::io::LogFlags;
@@ -45,7 +44,7 @@ fn do_exchange(
     if act1.id() == act2.id() {
         return Err(VerboseError::new(
             Code::InvArgs,
-            "Cannot exchange with same Activity".to_string(),
+            "Cannot exchange with same Activity",
         ));
     }
     if c1.cap_type() != c2.cap_type() {
@@ -67,7 +66,7 @@ fn do_exchange(
     if !dst.obj_caps().borrow().range_unused(dst_rng) {
         return Err(VerboseError::new(
             Code::InvArgs,
-            "Destination selectors already in use".to_string(),
+            "Destination selectors already in use",
         ));
     }
 

@@ -129,10 +129,7 @@ fn recv_reply(
             waiter.wait_for(timeout);
 
             if !sock.borrow_as().has_data() {
-                return Err(VerboseError::new(
-                    Code::Timeout,
-                    "ICMP reply timed out".to_string(),
-                ));
+                return Err(VerboseError::new(Code::Timeout, "ICMP reply timed out"));
             }
         }
 
@@ -239,10 +236,7 @@ fn parse_args() -> Result<PingSettings, VerboseError> {
     }
 
     if i >= args.len() {
-        return Err(VerboseError::new(
-            Code::InvArgs,
-            "Missing arguments".to_string(),
-        ));
+        return Err(VerboseError::new(Code::InvArgs, "Missing arguments"));
     }
 
     settings.dest = args[i].to_string();
@@ -250,7 +244,7 @@ fn parse_args() -> Result<PingSettings, VerboseError> {
     if settings.nbytes > 1024 {
         return Err(VerboseError::new(
             Code::InvArgs,
-            "Max. payload size is 1024 bytes".to_string(),
+            "Max. payload size is 1024 bytes",
         ));
     }
 

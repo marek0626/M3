@@ -144,7 +144,7 @@ impl subsys::ChildStarter for PagedChildStarter {
         }
         else {
             act.exec_file(None, child.arguments())
-                .map_err(|e| VerboseError::new(e.code(), "Unable to start Activity".to_string()))?
+                .map_err(|e| VerboseError::new(e.code(), "Unable to start Activity"))?
         };
 
         child.set_running(Box::new(run));
@@ -165,9 +165,7 @@ impl subsys::ChildStarter for PagedChildStarter {
         // parent has already set PMP EPs, we don't want to overwrite them.
         tile.state_mut()
             .add_mem_region(fs_mod, fs_mod_size, true, false)
-            .map_err(|e| {
-                VerboseError::new(e.code(), "Unable to add PMP EP for FS image".to_string())
-            })
+            .map_err(|e| VerboseError::new(e.code(), "Unable to add PMP EP for FS image"))
     }
 }
 

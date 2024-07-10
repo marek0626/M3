@@ -307,15 +307,16 @@ impl Subsystem {
         // mark own tile as used to ensure that we allocate a different one for the next domain in
         // case our domain contains just ourself.
         if !root.domains().first().unwrap().pseudo {
-            let own = res.tiles().find(Activity::own().tile_desc()).map_err(|e| {
-                VerboseError::new(e.code(), "Unable to allocate own tile".to_string())
-            })?;
+            let own = res
+                .tiles()
+                .find(Activity::own().tile_desc())
+                .map_err(|e| VerboseError::new(e.code(), "Unable to allocate own tile"))?;
             res.tiles().add_user(&own);
         }
         else if !Activity::own().tile_desc().has_virtmem() {
             return Err(VerboseError::new(
                 Code::InvArgs,
-                "Can't share tile without VM support".to_string(),
+                "Can't share tile without VM support",
             ));
         }
 
@@ -414,9 +415,7 @@ impl Subsystem {
                     tile_usage
                         .state_mut()
                         .add_mem_region(slice.derive()?, slice.capacity() as usize, true, true)
-                        .map_err(|e| {
-                            VerboseError::new(e.code(), "Unable to add PMP region".to_string())
-                        })?;
+                        .map_err(|e| VerboseError::new(e.code(), "Unable to add PMP region"))?;
                 }
             }
             else {
@@ -673,7 +672,7 @@ impl Subsystem {
             // alloc_mem gives us full pages; cut it down to the string size
             cfg_slice.derive_with(0, size)?.activate()
         })
-        .map_err(|e| VerboseError::new(e.code(), "Unable to pass boot.xml to child".to_string()))?;
+        .map_err(|e| VerboseError::new(e.code(), "Unable to pass boot.xml to child"))?;
 
         // add remaining boot modules
         pass_down_mods(res.mods(), &mut sub, cfg)?;

@@ -22,7 +22,7 @@ mod loader;
 use m3::boxed::Box;
 use m3::cap::Selector;
 use m3::cfg;
-use m3::col::{ToString, Vec};
+use m3::col::Vec;
 use m3::com::{GateCap, MemCap, MemGate, RGateArgs, RecvCap, RecvGate, SGateArgs, SendCap};
 use m3::errors::{Code, Error, VerboseError};
 use m3::format;
@@ -147,7 +147,7 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
                 .resmng(resmng_scap)
                 .kmem(child.kmem()),
         )
-        .map_err(|e| VerboseError::new(e.code(), "Unable to create Activity".to_string()))?;
+        .map_err(|e| VerboseError::new(e.code(), "Unable to create Activity"))?;
 
         if Activity::own().mounts().get_by_path("/").is_some() {
             act.add_mount("/", "/");
@@ -190,7 +190,7 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
         }
         else {
             act.exec_file(None, child.arguments())
-                .map_err(|e| VerboseError::new(e.code(), "Unable to start Activity".to_string()))?
+                .map_err(|e| VerboseError::new(e.code(), "Unable to start Activity"))?
         };
 
         child.set_running(Box::new(run));
@@ -222,18 +222,15 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
             let mslice = res.memory().find_mem(range.0, range.1, kif::Perm::RW)?;
 
             // create memory gate for this range
-            let mgate = mslice.derive().map_err(|e| {
-                VerboseError::new(e.code(), "Unable to derive from boot module".to_string())
-            })?;
+            let mgate = mslice
+                .derive()
+                .map_err(|e| VerboseError::new(e.code(), "Unable to derive from boot module"))?;
 
             // configure PMP EP
             tile.state_mut()
                 .add_mem_region(mgate, range.1 as usize, true, true)
                 .map_err(|e| {
-                    VerboseError::new(
-                        e.code(),
-                        "Unable to add PMP region for boot module".to_string(),
-                    )
+                    VerboseError::new(e.code(), "Unable to add PMP region for boot module")
                 })
         }
         else {

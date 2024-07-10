@@ -15,7 +15,6 @@
 
 use base::build_vmsg;
 use base::cfg;
-use base::col::ToString;
 use base::errors::Error;
 use base::errors::{Code, VerboseError};
 use base::kif::{self, syscalls};
