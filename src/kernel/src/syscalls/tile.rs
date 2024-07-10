@@ -13,13 +13,12 @@
  * General Public License version 2 for more details.
  */
 
-use base::build_vmsg;
-use base::col::ToString;
 use base::errors::{Code, Error, VerboseError};
 use base::kif::{self, syscalls};
 use base::mem::MsgBuf;
 use base::quota::Quota;
 use base::tcu;
+use base::{build_vmsg, verror};
 
 use thread::AsyncRc;
 
@@ -49,13 +48,11 @@ pub fn tile_quota_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         if tilemng::tilemux(tile_id).is_initialized() {
             TileMux::get_quota_async(tilemng::tilemux(tile_id), time_quota_id, pt_quota_id)
                 .map_err(|e| {
-                    VerboseError::new(
+                    verror!(
                         e.code(),
-                        base::format!(
-                            "Unable to get quota for time={}, pts={}",
-                            time_quota_id,
-                            pt_quota_id
-                        ),
+                        "Unable to get quota for time={}, pts={}",
+                        time_quota_id,
+                        pt_quota_id,
                     )
                 })?
         }
@@ -107,16 +104,16 @@ pub fn tile_set_quota_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> 
     let tile: AsyncRc<TileObject> = act.get_kobj(r.tile)?;
 
     if tile.derived() {
-        sysc_err!(
+        return Err(verror!(
             Code::NoPerm,
             "Cannot set tile quota with derived tile capability"
-        );
+        ));
     }
     if tile.activities() > 1 {
-        sysc_err!(
+        return Err(verror!(
             Code::InvArgs,
             "Cannot set tile quota with more than one Activity on the tile"
-        );
+        ));
     }
 
     let tilemux = tilemng::tilemux(tile.tile());
@@ -151,21 +148,24 @@ pub fn tile_set_pmp(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let act_caps = act.obj_caps().borrow();
     let tile: AsyncRc<TileObject> = act_caps.get_kobj(r.tile)?;
     if tile.derived() {
-        sysc_err!(Code::NoPerm, "Cannot set PMP EPs for derived tile objects");
+        return Err(verror!(
+            Code::NoPerm,
+            "Cannot set PMP EPs for derived tile objects"
+        ));
     }
     if r.overwrite && tile.activities() > 0 {
-        sysc_err!(
+        return Err(verror!(
             Code::InvState,
             "Cannot overwrite PMP EPs with existing activities"
-        );
+        ));
     }
 
     if r.ep < 1 || r.ep >= tcu::PMEM_PROT_EPS as tcu::EpId {
-        sysc_err!(
+        return Err(verror!(
             Code::InvArgs,
             "Only EPs 1..{} can be used for tile_set_pmp",
             tcu::PMEM_PROT_EPS
-        );
+        ));
     }
 
     let mut tilemux = tilemng::tilemux(tile.tile());
@@ -173,7 +173,7 @@ pub fn tile_set_pmp(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     // invalidate EP if requested
     if r.mgate == kif::INVALID_SEL {
         if let Err(e) = tilemux.invalidate_ep(INVAL_ID, r.ep, true, false) {
-            sysc_err!(e.code(), "Unable to invalidate PMP EP");
+            return Err(verror!(e.code(), "Unable to invalidate PMP EP"));
         }
     }
 
@@ -183,12 +183,12 @@ pub fn tile_set_pmp(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     // if overwrite is disabled, the EP needs to be invalid
     if r.mgate != kif::INVALID_SEL && ep_obj.is_configured() && !r.overwrite {
-        sysc_err!(Code::Exists, "PMP EP is already set");
+        return Err(verror!(Code::Exists, "PMP EP is already set"));
     }
 
     // deconfigure the EP first to ensure that it is not already configured for another gate
     if let Err(e) = ep_obj.deconfigure(false) {
-        sysc_err!(e.code(), "Unable to deconfigure PMP EP");
+        return Err(verror!(e.code(), "Unable to deconfigure PMP EP"));
     }
 
     if r.mgate != kif::INVALID_SEL {
@@ -217,7 +217,10 @@ pub fn tile_reset_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let act_caps = act.obj_caps().borrow();
     let tile: AsyncRc<TileObject> = act_caps.get_kobj(r.tile)?;
     if tile.derived() {
-        sysc_err!(Code::NoPerm, "Cannot reset tiles for derived tile objects");
+        return Err(verror!(
+            Code::NoPerm,
+            "Cannot reset tiles for derived tile objects"
+        ));
     }
 
     let tile_id = tile.tile();
@@ -228,7 +231,10 @@ pub fn tile_reset_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         // tiles that have internal EPs do not support external EPs and tiles without internal EPs need
         // external EPs.
         if platform::tile_desc(tile.tile()).has_internal_eps() != r.ep_count.is_none() {
-            sysc_err!(Code::InvArgs, "Tile-internal EPs vs. external EP range");
+            return Err(verror!(
+                Code::InvArgs,
+                "Tile-internal EPs vs. external EP range"
+            ));
         }
 
         Some(
@@ -289,10 +295,13 @@ pub fn tile_mem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let mut act_caps = act.obj_caps().borrow_mut();
     let tile: AsyncRc<TileObject> = act_caps.get_kobj(r.tile)?;
     if tile.derived() {
-        sysc_err!(Code::NoPerm, "Cannot reset tiles for derived tile objects");
+        return Err(verror!(
+            Code::NoPerm,
+            "Cannot reset tiles for derived tile objects"
+        ));
     }
     if !platform::tile_desc(tile.tile()).has_memory() {
-        sysc_err!(Code::InvArgs, "Tile has no internal memory");
+        return Err(verror!(Code::InvArgs, "Tile has no internal memory"));
     }
 
     let mem = tile.memory();

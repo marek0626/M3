@@ -13,7 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use base::col::ToString;
 use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{self, CapSel};
@@ -21,7 +20,7 @@ use base::log;
 use base::mem;
 use base::serialize::{Deserialize, M3Deserializer};
 use base::tcu::{self, OwnedMessage};
-use base::{build_vmsg, format};
+use base::{build_vmsg, verror};
 
 use thread::{AsyncRc, AsyncWeak};
 
@@ -39,20 +38,10 @@ macro_rules! sysc_log {
     )
 }
 
-#[macro_export]
-macro_rules! sysc_err {
-    ($e:expr, $fmt:tt) => ({
-        return Err(base::errors::VerboseError::new($e, $fmt.to_string()));
-    });
-    ($e:expr, $fmt:tt, $($args:tt)*) => ({
-        return Err(base::errors::VerboseError::new($e, base::format!($fmt, $($args)*)));
-    });
-}
-
 macro_rules! try_kmem_quota {
     ($e:expr) => {
         if let Err(e) = $e {
-            sysc_err!(e.code(), "Insufficient kernel memory quota");
+            return Err(verror!(e.code(), "Insufficient kernel memory quota"));
         }
     };
 }
@@ -65,25 +54,28 @@ mod tile;
 
 fn check_unused(tbl: &CapTable, sel: CapSel) -> Result<(), VerboseError> {
     if !tbl.unused(sel) {
-        sysc_err!(Code::InvArgs, "Selector {} already in use", sel);
+        Err(verror!(Code::InvArgs, "Selector {} already in use", sel))
     }
-    Ok(())
+    else {
+        Ok(())
+    }
 }
 
 fn try_upgrade_kobj<T>(weak: AsyncWeak<T>, sel: CapSel) -> Result<AsyncRc<T>, VerboseError> {
     weak.upgrade().ok_or_else(|| {
-        VerboseError::new(
-            Code::ObjectGone,
-            if sel != kif::INVALID_SEL {
-                format!(
-                    "Kernel object (Selector {}) was revoked during async call",
-                    sel
-                )
-            }
-            else {
-                "Kernel object was revoked during async call".to_string()
-            },
-        )
+        if sel != kif::INVALID_SEL {
+            verror!(
+                Code::ObjectGone,
+                "Kernel object (Selector {}) was revoked during async call",
+                sel,
+            )
+        }
+        else {
+            verror!(
+                Code::ObjectGone,
+                "Kernel object was revoked during async call",
+            )
+        }
     })
 }
 

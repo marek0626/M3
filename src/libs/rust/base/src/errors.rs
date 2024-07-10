@@ -21,6 +21,8 @@
 use core::fmt;
 use core::intrinsics;
 
+use alloc::borrow::Cow;
+
 use crate::col::String;
 use crate::serialize::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -287,16 +289,32 @@ impl fmt::Display for Error {
     }
 }
 
+#[macro_export]
+macro_rules! verror {
+    ($e:expr, $msg:expr) => ({
+        $crate::errors::VerboseError::new($e, $msg)
+    });
+    ($e:expr, $fmt:expr, $($args:tt)*) => ({
+        $crate::errors::VerboseError::new($e, $crate::format!($fmt, $($args)*))
+    });
+}
+
 /// A verbose error type that contains an error message
 pub struct VerboseError {
     code: Code,
-    msg: String,
+    msg: Cow<'static, str>,
 }
 
 impl VerboseError {
     /// Creates a new error with given error code and error message
-    pub fn new(code: Code, msg: String) -> Self {
-        Self { code, msg }
+    pub fn new<T>(code: Code, msg: T) -> Self
+    where
+        T: Into<Cow<'static, str>>,
+    {
+        Self {
+            code,
+            msg: msg.into(),
+        }
     }
 
     /// Returns the error code
@@ -305,7 +323,7 @@ impl VerboseError {
     }
 
     /// Returns the error code
-    pub fn msg(&self) -> &String {
+    pub fn msg(&self) -> &str {
         &self.msg
     }
 

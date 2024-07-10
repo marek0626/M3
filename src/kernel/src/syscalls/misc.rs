@@ -13,14 +13,13 @@
  * General Public License version 2 for more details.
  */
 
-use base::build_vmsg;
 use base::cfg;
-use base::col::ToString;
 use base::errors::Error;
 use base::errors::{Code, VerboseError};
 use base::kif::{self, syscalls};
 use base::mem::{GlobOff, MsgBuf, PhysAddr, PhysAddrRaw};
 use base::tcu;
+use base::{build_vmsg, verror};
 
 use thread::AsyncRc;
 
@@ -50,18 +49,22 @@ pub fn alloc_ep_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     check_unused(&act.obj_caps().borrow(), r.dst)?;
     if r.replies > cfg::MAX_RB_SIZE {
-        sysc_err!(Code::InvArgs, "Invalid reply count ({})", r.replies);
+        return Err(verror!(
+            Code::InvArgs,
+            "Invalid reply count ({}))",
+            r.replies
+        ));
     }
 
     let ep_count = 1 + r.replies as usize;
     let dst_act: AsyncRc<Activity> = act.get_kobj(r.act)?;
     if !dst_act.tile().has_quota(ep_count) {
-        sysc_err!(
+        return Err(verror!(
             Code::NoSpace,
             "Tile cap has insufficient EPs (have {}, need {})",
             dst_act.tile().ep_quota().left(),
             ep_count
-        );
+        ));
     }
 
     let mut tilemux = tilemng::tilemux(dst_act.tile_id());
@@ -84,26 +87,26 @@ pub fn alloc_ep_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     else if r.epid == tcu::INVALID_EP {
         match tilemux.find_eps(ep_count) {
             Ok(epid) => (act, dst_act, epid),
-            Err(e) => sysc_err!(e.code(), "No free EP range for {} EPs", ep_count),
+            Err(e) => return Err(verror!(e.code(), "No free EP range for {} EPs", ep_count)),
         }
     }
     else {
         let avail_eps = tilemux.ep_count().unwrap();
         if r.epid as usize > avail_eps || r.epid as usize + ep_count > avail_eps {
-            sysc_err!(
+            return Err(verror!(
                 Code::InvArgs,
                 "Invalid endpoint id ({}:{})",
                 r.epid,
                 ep_count
-            );
+            ));
         }
         if !tilemux.eps_free(r.epid, ep_count) {
-            sysc_err!(
+            return Err(verror!(
                 Code::InvArgs,
                 "Endpoints {}..{} not free",
                 r.epid,
                 r.epid as usize + ep_count - 1
-            );
+            ));
         }
         (act, dst_act, r.epid)
     };
@@ -212,7 +215,10 @@ pub fn get_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let actcap: AsyncRc<Activity> = act.get_kobj(r.act)?;
     check_unused(&actcap.obj_caps().borrow(), r.dst)?;
     if act.ptr_eq(&actcap) {
-        sysc_err!(Code::InvArgs, "Cannot get session for own Activity");
+        return Err(verror!(
+            Code::InvArgs,
+            "Cannot get session for own Activity"
+        ));
     }
 
     // get service cap
@@ -237,7 +243,10 @@ pub fn get_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         .and_then(|c| c.get::<AsyncRc<SessObject>>().ok())
     {
         if s.creator() != creator {
-            sysc_err!(Code::NoPerm, "Cannot get access to foreign session");
+            return Err(verror!(
+                Code::NoPerm,
+                "Cannot get access to foreign session"
+            ));
         }
 
         try_kmem_quota!(actcap
@@ -246,7 +255,7 @@ pub fn get_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
             .obtain(r.dst, csess.unwrap(), true));
     }
     else {
-        sysc_err!(Code::InvArgs, "Unknown session id {}", r.sid);
+        return Err(verror!(Code::InvArgs, "Unknown session id {}", r.sid));
     }
 
     reply_success(&act);
@@ -263,22 +272,25 @@ pub fn activate_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     let ep: AsyncRc<EPObject> = act.get_kobj(r.ep)?;
     if ep.replies() != 0 {
-        sysc_err!(Code::InvArgs, "Only rgates use EP caps with reply slots");
+        return Err(verror!(
+            Code::InvArgs,
+            "Only rgates use EP caps with reply slots"
+        ));
     }
 
     if let Err(e) = ep.deconfigure(false) {
-        sysc_err!(
+        return Err(verror!(
             e.code(),
             "Invalidation of EP {}:{} failed",
             ep.tile_id(),
             ep.ep()
-        );
+        ));
     }
 
     let mg: AsyncRc<MGateObject> = act.get_kobj(r.gate)?;
 
     if mg.gate_ep().get_ep().is_some() {
-        sysc_err!(Code::Exists, "MemGate is already activated");
+        return Err(verror!(Code::Exists, "MemGate is already activated"));
     }
 
     let tile_id = mg.tile_id();
@@ -288,7 +300,7 @@ pub fn activate_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         &mg,
         tile_id,
     ) {
-        sysc_err!(e.code(), "Unable to configure mem EP");
+        return Err(verror!(e.code(), "Unable to configure mem EP"));
     }
 
     mg.set_ep(&ep, GateObject::Mem(mg.clone().downgrade()));
@@ -321,12 +333,17 @@ pub fn activate_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let dst_tile = ep.tile_id();
 
     if let Err(e) = ep.deconfigure(false) {
-        sysc_err!(e.code(), "Invalidation of EP {}:{} failed", dst_tile, epid);
+        return Err(verror!(
+            e.code(),
+            "Invalidation of EP {}:{} failed",
+            dst_tile,
+            epid,
+        ));
     }
 
     let rg: AsyncRc<RGateObject> = act.get_kobj(r.gate)?;
     if rg.activated() {
-        sysc_err!(Code::Exists, "RecvGate is already activated");
+        return Err(verror!(Code::Exists, "RecvGate is already activated"));
     }
 
     // determine receive buffer address
@@ -343,23 +360,24 @@ pub fn activate_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     else if dst_desc.has_virtmem() {
         let rbuf: AsyncRc<MGateObject> = act.get_kobj(r.rbuf_mem)?;
         if r.rbuf_off >= rbuf.size() || r.rbuf_off + rg.size() as GlobOff > rbuf.size() {
-            sysc_err!(Code::InvArgs, "Invalid receive buffer memory");
+            return Err(verror!(Code::InvArgs, "Invalid receive buffer memory"));
         }
         if platform::tile_desc(rbuf.tile_id()).tile_type() != kif::TileType::Mem {
-            sysc_err!(Code::InvArgs, "rbuffer not in physical memory");
+            return Err(verror!(Code::InvArgs, "rbuffer not in physical memory"));
         }
         let rbuf_phys = ktcu::glob_to_phys_remote(dst_tile, rbuf.addr(), kif::PageFlags::RW)
             .map_err(|e| {
-                VerboseError::new(
+                verror!(
                     e.code(),
-                    base::format!("Receive buffer at {} not accessible via PMP", rbuf.addr()),
+                    "Receive buffer at {} not accessible via PMP",
+                    rbuf.addr(),
                 )
             })?;
         rbuf_phys + r.rbuf_off as PhysAddrRaw
     }
     else {
         if r.rbuf_mem != kif::INVALID_SEL {
-            sysc_err!(Code::InvArgs, "rbuffer mem cap given for SPM tile");
+            return Err(verror!(Code::InvArgs, "rbuffer mem cap given for SPM tile"));
         }
         PhysAddr::new_raw(dst_desc, r.rbuf_off as PhysAddrRaw)
     };
@@ -367,12 +385,12 @@ pub fn activate_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let replies = if ep.replies() > 0 {
         let slots = 1 << (rg.order() - rg.msg_order());
         if ep.replies() != slots {
-            sysc_err!(
+            return Err(verror!(
                 Code::InvArgs,
                 "EP cap has {} reply slots, need {}",
                 ep.replies(),
                 slots
-            );
+            ));
         }
         Some(epid + 1)
     }
@@ -384,7 +402,7 @@ pub fn activate_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     if let Err(e) = tilemng::tilemux(dst_tile).config_rcv_ep(epid, ep_act.id(), replies, &rg) {
         rg.deactivate();
-        sysc_err!(e.code(), "Unable to configure recv EP");
+        return Err(verror!(e.code(), "Unable to configure recv EP"));
     }
 
     rg.set_ep(&ep, GateObject::Recv(rg.clone().downgrade()));
@@ -403,19 +421,27 @@ pub fn activate_sgate_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> 
 
     let ep: AsyncRc<EPObject> = act.get_kobj(r.ep)?;
     if ep.replies() != 0 {
-        sysc_err!(Code::InvArgs, "Only rgates use EP caps with reply slots");
+        return Err(verror!(
+            Code::InvArgs,
+            "Only rgates use EP caps with reply slots"
+        ));
     }
 
     let epid = ep.ep();
     let dst_tile = ep.tile_id();
 
     if let Err(e) = ep.deconfigure(false) {
-        sysc_err!(e.code(), "Invalidation of EP {}:{} failed", dst_tile, epid);
+        return Err(verror!(
+            e.code(),
+            "Invalidation of EP {}:{} failed",
+            dst_tile,
+            epid,
+        ));
     }
 
     let sg: AsyncRc<SGateObject> = act.get_kobj(r.gate)?;
     if sg.gate_ep().get_ep().is_some() {
-        sysc_err!(Code::Exists, "SendGate is already activated");
+        return Err(verror!(Code::Exists, "SendGate is already activated"));
     }
 
     let rgate = sg.rgate().ok_or_else(|| Error::new(Code::ObjectGone))?;
@@ -442,7 +468,7 @@ pub fn activate_sgate_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> 
 
     if let Err(e) = tilemng::tilemux(dst_tile).config_snd_ep(epid, ep.activity().unwrap().id(), &sg)
     {
-        sysc_err!(e.code(), "Unable to configure send EP");
+        return Err(verror!(e.code(), "Unable to configure send EP"));
     }
 
     sg.set_ep(&ep, GateObject::Send(sg.clone().downgrade()));
@@ -467,12 +493,12 @@ pub fn invalidate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         !ep.is_rgate(),
         true,
     ) {
-        sysc_err!(
+        return Err(verror!(
             e.code(),
             "Invalidation of EP {}:{} failed",
             ep.tile_id(),
             ep.ep()
-        );
+        ));
     }
 
     reply_success(&act);
@@ -503,7 +529,7 @@ pub fn sem_ctrl_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
             let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
             sysc_log!(act, "sem_ctrl-cont(res={:?})", res);
             if let Err(e) = res {
-                sysc_err!(e.code(), "Semaphore operation failed");
+                return Err(verror!(e.code(), "Semaphore operation failed"));
             }
             act
         },
@@ -533,12 +559,12 @@ pub fn activity_ctrl_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     match r.op {
         kif::syscalls::ActivityOp::Start => {
             if act.ptr_eq(&actcap) {
-                sysc_err!(Code::InvArgs, "Activity can't start itself");
+                return Err(verror!(Code::InvArgs, "Activity can't start itself"));
             }
             drop(act);
 
             if let Err(e) = Activity::start_app_async(actcap) {
-                sysc_err!(e.code(), "Unable to start Activity");
+                return Err(verror!(e.code(), "Unable to start Activity"));
             }
         },
 

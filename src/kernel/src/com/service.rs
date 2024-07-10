@@ -58,7 +58,7 @@ impl Service {
             .rgate
             .upgrade()
             .ok_or_else(|| Error::new(Code::ObjectGone))?;
-        let (_, rep) = rg.location().unwrap();
+        let (_, rep) = rg.location().ok_or_else(|| Error::new(Code::RecvGone))?;
         self.queue.borrow_mut().send(rep, lbl, msg)
     }
 

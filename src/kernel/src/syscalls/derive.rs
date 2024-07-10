@@ -13,8 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use base::build_vmsg;
-use base::col::ToString;
 use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{self, syscalls};
@@ -22,6 +20,7 @@ use base::log;
 use base::mem::{GlobAddr, MsgBuf};
 use base::serialize::M3Deserializer;
 use base::tcu;
+use base::{build_vmsg, verror};
 
 use thread::AsyncRc;
 
@@ -80,7 +79,7 @@ pub fn derive_kmem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     let kmem: AsyncRc<KMemObject> = act.get_kobj(r.kmem)?;
     if !kmem.has_quota(r.quota) {
-        sysc_err!(Code::NoSpace, "Insufficient quota");
+        return Err(verror!(Code::NoSpace, "Insufficient quota"));
     }
 
     let cap = Capability::new(r.dst, KMemObject::new(r.quota));
@@ -116,7 +115,7 @@ pub fn derive_mem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         let mgate: AsyncRc<MGateObject> = act_caps.get_kobj(r.src)?;
         if r.offset.checked_add(r.size).is_none() || r.offset + r.size > mgate.size() || r.size == 0
         {
-            sysc_err!(Code::InvArgs, "Size or offset invalid");
+            return Err(verror!(Code::InvArgs, "Size or offset invalid"));
         }
 
         let addr = mgate.addr().raw() + r.offset;
@@ -151,7 +150,7 @@ pub fn derive_srv_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     check_unused(&act.obj_caps().borrow(), r.dst_sgate)?;
 
     if r.sessions == 0 {
-        sysc_err!(Code::InvArgs, "Invalid session count");
+        return Err(verror!(Code::InvArgs, "Invalid session count"));
     }
 
     let srv: AsyncRc<ServObject> = act.get_kobj(r.srv)?;

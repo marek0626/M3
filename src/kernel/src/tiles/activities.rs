@@ -16,7 +16,7 @@
 use base::boxed::Box;
 use base::build_vmsg;
 use base::cell::{Cell, RefCell, StaticRefCell};
-use base::col::{String, ToString, Vec};
+use base::col::{String, Vec};
 use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{self, CapRngDesc, CapSel, CapType, TileDesc};

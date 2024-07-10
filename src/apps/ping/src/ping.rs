@@ -20,7 +20,6 @@ use m3::client::Network;
 use m3::col::{String, ToString, Vec};
 use m3::env;
 use m3::errors::{Code, Error, VerboseError};
-use m3::format;
 use m3::mem;
 use m3::net::{self, IpAddr, RawSocket, RawSocketArgs, DNS};
 use m3::println;
@@ -28,6 +27,7 @@ use m3::tiles::OwnActivity;
 use m3::time::{TimeDuration, TimeInstant};
 use m3::util;
 use m3::vec;
+use m3::verror;
 use m3::vfs::{FileEvent, FileRef, FileWaiter};
 
 #[repr(packed, C)]
@@ -129,10 +129,7 @@ fn recv_reply(
             waiter.wait_for(timeout);
 
             if !sock.borrow_as().has_data() {
-                return Err(VerboseError::new(
-                    Code::Timeout,
-                    "ICMP reply timed out".to_string(),
-                ));
+                return Err(verror!(Code::Timeout, "ICMP reply timed out"));
             }
         }
 
@@ -205,9 +202,8 @@ fn usage() -> ! {
 }
 
 fn parse_arg<T: core::str::FromStr>(arg: &str, name: &str) -> Result<T, VerboseError> {
-    arg.parse::<T>().map_err(|_| {
-        VerboseError::new(Code::InvArgs, format!("Could not parse {} '{}'", name, arg))
-    })
+    arg.parse::<T>()
+        .map_err(|_| verror!(Code::InvArgs, "Could not parse {} '{}'", name, arg))
 }
 
 fn parse_args() -> Result<PingSettings, VerboseError> {
@@ -239,19 +235,13 @@ fn parse_args() -> Result<PingSettings, VerboseError> {
     }
 
     if i >= args.len() {
-        return Err(VerboseError::new(
-            Code::InvArgs,
-            "Missing arguments".to_string(),
-        ));
+        return Err(verror!(Code::InvArgs, "Missing arguments"));
     }
 
     settings.dest = args[i].to_string();
 
     if settings.nbytes > 1024 {
-        return Err(VerboseError::new(
-            Code::InvArgs,
-            "Max. payload size is 1024 bytes".to_string(),
-        ));
+        return Err(verror!(Code::InvArgs, "Max. payload size is 1024 bytes",));
     }
 
     Ok(settings)

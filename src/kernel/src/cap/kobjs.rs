@@ -13,9 +13,7 @@
  * General Public License version 2 for more details.
  */
 
-use base::build_vmsg;
 use base::cell::{Cell, Ref, RefCell, RefMut, StaticCell};
-use base::col::ToString;
 use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{self, service, tilemux::QuotaId};
@@ -23,6 +21,7 @@ use base::log;
 use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, MsgBufRef, PhysAddr, VirtAddr};
 use base::rc::Rc;
 use base::tcu::{ActId, EpId, Label, TileId};
+use base::{build_vmsg, verror};
 use base::{env, tcu};
 use thread::{AsyncRc, AsyncWeak};
 
@@ -63,9 +62,9 @@ macro_rules! impl_from_kobj {
             fn try_from(kobj: &KObject) -> Result<Self, Self::Error> {
                 match kobj {
                     KObject::$name(s) => Ok(thread::AsyncRc::new(s.clone())),
-                    _ => Err(base::errors::VerboseError::new(
+                    _ => Err(base::verror!(
                         base::errors::Code::InvArgs,
-                        concat!("Expected ", stringify!($name)).to_string(),
+                        concat!("Expected ", stringify!($name)),
                     )),
                 }
             }
@@ -725,10 +724,7 @@ impl TileObject {
         // only allocate it from the tile here, but don't keep an Rc to the EPQuota
         if let Some(num) = eps {
             if !tile.has_quota(num) {
-                return Err(VerboseError::new(
-                    Code::NoSpace,
-                    "Insufficient EPs".to_string(),
-                ));
+                return Err(verror!(Code::NoSpace, "Insufficient EPs"));
             }
             tile.alloc(num);
         }

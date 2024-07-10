@@ -38,6 +38,7 @@ use m3::server::{ExcType, RequestHandler, Server};
 use m3::tcu::Label;
 use m3::tiles::{Activity, ActivityArgs, ChildActivity};
 use m3::util::math;
+use m3::verror;
 use m3::vfs;
 
 use addrspace::AddrSpace;
@@ -66,9 +67,8 @@ impl PagedChildStarter {
         }
 
         let id = self.mounts.len();
-        let fs = M3FS::new(id, name).map_err(|e| {
-            VerboseError::new(e.code(), format!("Unable to open m3fs session {}", name))
-        })?;
+        let fs = M3FS::new(id, name)
+            .map_err(|e| verror!(e.code(), "Unable to open m3fs session {}", name))?;
         let our_path = format!("/child-mount-{}", name);
         Activity::own().mounts().add(&our_path, fs)?;
         self.mounts.push((name.to_string(), our_path.to_string()));
@@ -132,19 +132,15 @@ impl subsys::ChildStarter for PagedChildStarter {
 
             // start activity
             let file = vfs::VFS::open(child.name(), vfs::OpenFlags::RX | vfs::OpenFlags::NEW_SESS)
-                .map_err(|e| {
-                    VerboseError::new(e.code(), format!("Unable to open {}", child.name()))
-                })?;
+                .map_err(|e| verror!(e.code(), "Unable to open {}", child.name()))?;
             let mut mapper = mapper::ChildMapper::new(aspace, act.tile_desc().has_virtmem());
 
             act.exec_file(Some((&mut mapper, file.into_generic())), child.arguments())
-                .map_err(|e| {
-                    VerboseError::new(e.code(), format!("Unable to execute {}", child.name()))
-                })?
+                .map_err(|e| verror!(e.code(), "Unable to execute {}", child.name()))?
         }
         else {
             act.exec_file(None, child.arguments())
-                .map_err(|e| VerboseError::new(e.code(), "Unable to start Activity".to_string()))?
+                .map_err(|e| verror!(e.code(), "Unable to start Activity"))?
         };
 
         child.set_running(Box::new(run));
@@ -165,9 +161,7 @@ impl subsys::ChildStarter for PagedChildStarter {
         // parent has already set PMP EPs, we don't want to overwrite them.
         tile.state_mut()
             .add_mem_region(fs_mod, fs_mod_size, true, false)
-            .map_err(|e| {
-                VerboseError::new(e.code(), "Unable to add PMP EP for FS image".to_string())
-            })
+            .map_err(|e| verror!(e.code(), "Unable to add PMP EP for FS image"))
     }
 }
 

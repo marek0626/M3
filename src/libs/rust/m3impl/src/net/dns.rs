@@ -16,12 +16,11 @@
 use core::mem;
 use core::str::FromStr;
 
-use base::col::ToString;
 use base::errors::{Code, Error, VerboseError};
 use base::rc::Rc;
 use base::time::TimeDuration;
 use base::util::random::LinearCongruentialGenerator;
-use base::vec;
+use base::{vec, verror};
 
 use crate::client::Network;
 use crate::net::{DGramSocket, DgramSocketArgs, Endpoint, IpAddr, Port, Socket, UdpSocket};
@@ -183,18 +182,15 @@ impl DNS {
 
     fn handle_response(buf: &[u8], txid: u16) -> Result<IpAddr, VerboseError> {
         if buf.len() < mem::size_of::<DNSHeader>() {
-            return Err(VerboseError::new(
-                Code::NotFound,
-                "Invalid DNS response".to_string(),
-            ));
+            return Err(verror!(Code::NotFound, "Invalid DNS response"));
         }
 
         // safety: the length is sufficient now and heap allocations are 16-byte aligned
         let header = unsafe { &*(buf.as_ptr() as *const DNSHeader) };
         if u16::from_be(header.id) != txid {
-            return Err(VerboseError::new(
+            return Err(verror!(
                 Code::NotFound,
-                "Received DNS response with wrong transaction id".to_string(),
+                "Received DNS response with wrong transaction id",
             ));
         }
 
@@ -230,10 +226,7 @@ impl DNS {
     fn parse_answers(buf: &[u8], start: usize, count: usize) -> Result<IpAddr, VerboseError> {
         for off in start..start + count {
             if off + mem::size_of::<DNSAnswer>() > buf.len() {
-                return Err(VerboseError::new(
-                    Code::NotFound,
-                    "Invalid DNS response".to_string(),
-                ));
+                return Err(verror!(Code::NotFound, "Invalid DNS response"));
             }
 
             // safety: we check above whether we are in bounds and DNSAnswer has no alignment req.
@@ -245,9 +238,6 @@ impl DNS {
             }
         }
 
-        Err(VerboseError::new(
-            Code::NotFound,
-            "No IPv4 address in DNS response".to_string(),
-        ))
+        Err(verror!(Code::NotFound, "No IPv4 address in DNS response",))
     }
 }

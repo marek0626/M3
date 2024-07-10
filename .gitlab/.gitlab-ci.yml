@@ -66,9 +66,10 @@ test:
   rules:
     - if: '$CI_MERGE_REQUEST_LABELS !~ /:no-ci:|:no-ci-tests:/'
   script:
+    - kubectl exec -n os -t m3-ci -- sh -c "./bootstrap.sh $CI_COMMIT_SHA"
+    - kubectl exec -n os -t m3-ci -- sh -c "cd M3 && python3 ./ci/gcdir.py -m 10 /cache/results"
     - kubectl exec -n os -t m3-ci -- sh -c "
-        ./bootstrap.sh $CI_COMMIT_SHA
-          && cd M3
+          cd M3
           && nix develop path:. -c
             ./ci/tests/gem5.sh --publish /results --web /web
               /cache/results/$(date -I)-$CI_COMMIT_SHA

@@ -30,7 +30,7 @@ use m3::tcu::TileId;
 use m3::tiles::{Activity, ChildActivity, Tile, TileArgs};
 use m3::time::TimeDuration;
 use m3::util::math;
-use m3::{format, tcu};
+use m3::{tcu, verror};
 
 use crate::childs;
 use crate::config;
@@ -307,15 +307,16 @@ impl Subsystem {
         // mark own tile as used to ensure that we allocate a different one for the next domain in
         // case our domain contains just ourself.
         if !root.domains().first().unwrap().pseudo {
-            let own = res.tiles().find(Activity::own().tile_desc()).map_err(|e| {
-                VerboseError::new(e.code(), "Unable to allocate own tile".to_string())
-            })?;
+            let own = res
+                .tiles()
+                .find(Activity::own().tile_desc())
+                .map_err(|e| verror!(e.code(), "Unable to allocate own tile"))?;
             res.tiles().add_user(&own);
         }
         else if !Activity::own().tile_desc().has_virtmem() {
-            return Err(VerboseError::new(
+            return Err(verror!(
                 Code::InvArgs,
-                "Can't share tile without VM support".to_string(),
+                "Can't share tile without VM support",
             ));
         }
 
@@ -330,12 +331,11 @@ impl Subsystem {
                 let own_desc = Activity::own().tile_desc();
                 let base = TileDesc::new(own_desc.tile_type(), own_desc.isa(), 0);
                 res.tiles().find_with_attr(base, &dom.tile.0).map_err(|e| {
-                    VerboseError::new(
+                    verror!(
                         e.code(),
-                        format!(
-                            "Unable to allocate tile for domain {} with {}",
-                            idx, dom.tile.0
-                        ),
+                        "Unable to allocate tile for domain {} with {}",
+                        idx,
+                        dom.tile.0,
                     )
                 })?
             }
@@ -346,9 +346,7 @@ impl Subsystem {
                     &dom.tile.0,
                     TileArgs::default().init(false).inherit_pmp(false),
                 )
-                .map_err(|e| {
-                    VerboseError::new(e.code(), format!("Unable to get tile {}", dom.tile.0))
-                })?;
+                .map_err(|e| verror!(e.code(), "Unable to get tile {}", dom.tile.0))?;
                 tiles::TileUsage::new_obj(child_tile)
             };
 
@@ -358,9 +356,10 @@ impl Subsystem {
             });
             let mem_pool = Rc::new(RefCell::new(res.memory_mut().alloc_pool(dom_mem).map_err(
                 |e| {
-                    VerboseError::new(
+                    verror!(
                         e.code(),
-                        format!("Unable to allocate memory pool with {} b", dom_mem),
+                        "Unable to allocate memory pool with {} b",
+                        dom_mem,
                     )
                 },
             )?));
@@ -414,9 +413,7 @@ impl Subsystem {
                     tile_usage
                         .state_mut()
                         .add_mem_region(slice.derive()?, slice.capacity() as usize, true, true)
-                        .map_err(|e| {
-                            VerboseError::new(e.code(), "Unable to add PMP region".to_string())
-                        })?;
+                        .map_err(|e| verror!(e.code(), "Unable to add PMP region"))?;
                 }
             }
             else {
@@ -467,9 +464,10 @@ impl Subsystem {
                 .kmem()
                 .derive(domain_kmem_bytes)
                 .map_err(|e| {
-                    VerboseError::new(
+                    verror!(
                         e.code(),
-                        format!("Unable to derive {}b of kernel memory", domain_kmem_bytes),
+                        "Unable to derive {}b of kernel memory",
+                        domain_kmem_bytes,
                     )
                 })?;
 
@@ -490,13 +488,11 @@ impl Subsystem {
                 .tile_obj()
                 .set_quota(child_total_time, tile_quota.page_tables().total())
                 .map_err(|e| {
-                    VerboseError::new(
+                    verror!(
                         e.code(),
-                        format!(
-                            "Unable to set quota for tile to time={:?}, pts={}",
-                            child_total_time,
-                            tile_quota.page_tables().total()
-                        ),
+                        "Unable to set quota for tile to time={:?}, pts={}",
+                        child_total_time,
+                        tile_quota.page_tables().total(),
                     )
                 })?;
 
@@ -510,12 +506,12 @@ impl Subsystem {
                     tile_usage
                         .derive(domain_eps, domain_time, domain_pts)
                         .map_err(|e| {
-                            VerboseError::new(
+                            verror!(
                                 e.code(),
-                                format!(
-                                    "Unable to derive new tile with eps={:?}, time={:?}, pts={:?}",
-                                    domain_eps, domain_time, domain_pts,
-                                ),
+                                "Unable to derive new tile with eps={:?}, time={:?}, pts={:?}",
+                                domain_eps,
+                                domain_time,
+                                domain_pts,
                             )
                         })?,
                 )
@@ -539,12 +535,12 @@ impl Subsystem {
                         Some(base.clone()),
                         base.derive(cfg.eps(), cfg.time(), cfg.page_tables())
                             .map_err(|e| {
-                                VerboseError::new(
+                                verror!(
                                     e.code(),
-                                    format!(
-                                        "Unable to derive new tile with {:?} EPs, {:?} time, {:?} pts",
-                                        cfg.eps(), cfg.time(), cfg.page_tables(),
-                                    ),
+                                    "Unable to derive new tile with {:?} EPs, {:?} time, {:?} pts",
+                                    cfg.eps(),
+                                    cfg.time(),
+                                    cfg.page_tables(),
                                 )
                             })?,
                     )
@@ -561,9 +557,10 @@ impl Subsystem {
                 // kernel memory for child
                 let kmem = if let Some(kmem_bytes) = cfg.kernel_mem() {
                     domain_kmem.derive(kmem_bytes).map_err(|e| {
-                        VerboseError::new(
+                        verror!(
                             e.code(),
-                            format!("Unable to derive {}b of kernel memory", kmem_bytes),
+                            "Unable to derive {}b of kernel memory",
+                            kmem_bytes,
                         )
                     })?
                 }
@@ -673,7 +670,7 @@ impl Subsystem {
             // alloc_mem gives us full pages; cut it down to the string size
             cfg_slice.derive_with(0, size)?.activate()
         })
-        .map_err(|e| VerboseError::new(e.code(), "Unable to pass boot.xml to child".to_string()))?;
+        .map_err(|e| verror!(e.code(), "Unable to pass boot.xml to child"))?;
 
         // add remaining boot modules
         pass_down_mods(res.mods(), &mut sub, cfg)?;
@@ -692,12 +689,10 @@ impl Subsystem {
         let sub_mem = old_umem_quota - child_mem.quota();
 
         // add memory
-        let sub_slice = mem_pool.borrow_mut().allocate_slice(sub_mem).map_err(|e| {
-            VerboseError::new(
-                e.code(),
-                format!("Unable to allocate {}b for subsys", sub_mem),
-            )
-        })?;
+        let sub_slice = mem_pool
+            .borrow_mut()
+            .allocate_slice(sub_mem)
+            .map_err(|e| verror!(e.code(), "Unable to allocate {}b for subsys", sub_mem,))?;
         sub.add_mem(sub_slice.derive()?, sub_slice.in_reserved_mem());
 
         // add services
@@ -779,9 +774,10 @@ impl SubsystemBuilder {
             .memory_mut()
             .alloc_mem(self.desc_size() as GlobOff)
             .map_err(|e| {
-                VerboseError::new(
+                verror!(
                     e.code(),
-                    format!("Unable to allocate {}b for subsys info", self.desc_size()),
+                    "Unable to allocate {}b for subsys info",
+                    self.desc_size(),
                 )
             })?
             .derive()?
@@ -848,21 +844,19 @@ impl SubsystemBuilder {
             }
             else {
                 if *sess_frac > (serv.sessions() - sess_fixed) {
-                    return Err(VerboseError::new(
+                    return Err(verror!(
                         Code::NoSpace,
-                        format!(
-                            "Insufficient session quota for {} (have {}, need {})",
-                            name,
-                            serv.sessions() - sess_fixed,
-                            *sess_frac
-                        ),
+                        "Insufficient session quota for {} (have {}, need {})",
+                        name,
+                        serv.sessions() - sess_fixed,
+                        *sess_frac
                     ));
                 }
                 (serv.sessions() - sess_fixed) / sess_frac
             };
-            let subserv = serv.derive_async(child, sessions).map_err(|e| {
-                VerboseError::new(e.code(), format!("Unable to derive from service {}", name))
-            })?;
+            let subserv = serv
+                .derive_async(child, sessions)
+                .map_err(|e| verror!(e.code(), "Unable to derive from service {}", name))?;
             let boot_serv = boot::Service::new(name, sessions);
             mem.write_obj(&boot_serv, off)?;
 
@@ -927,12 +921,10 @@ fn pass_down_mods(
             for m in child.mods() {
                 // find mod with desired name
                 let bmod = mods.find(m.name().global()).ok_or_else(|| {
-                    VerboseError::new(
+                    verror!(
                         Code::NotFound,
-                        format!(
-                            "Unable to find boot module {} for subsys",
-                            m.name().global()
-                        ),
+                        "Unable to find boot module {} for subsys",
+                        m.name().global()
                     )
                 })?;
 
@@ -994,12 +986,11 @@ fn split_mem(res: &Resources, cfg: &config::AppConfig) -> Result<(usize, GlobOff
         for a in d.apps() {
             if let Some(kmem) = a.kernel_mem() {
                 if total_kmem < kmem {
-                    return Err(VerboseError::new(
+                    return Err(verror!(
                         Code::OutOfMem,
-                        format!(
-                            "Insufficient kernel memory (need {}, have {})",
-                            kmem, total_kmem
-                        ),
+                        "Insufficient kernel memory (need {}, have {})",
+                        kmem,
+                        total_kmem
                     ));
                 }
                 total_kmem -= kmem;
@@ -1008,12 +999,11 @@ fn split_mem(res: &Resources, cfg: &config::AppConfig) -> Result<(usize, GlobOff
 
             if let Some(amem) = a.user_mem() {
                 if total_umem < amem as GlobOff {
-                    return Err(VerboseError::new(
+                    return Err(verror!(
                         Code::OutOfMem,
-                        format!(
-                            "Insufficient user memory (need {}, have {})",
-                            amem, total_umem
-                        ),
+                        "Insufficient user memory (need {}, have {})",
+                        amem,
+                        total_umem
                     ));
                 }
                 total_umem -= amem as GlobOff;
