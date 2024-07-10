@@ -640,6 +640,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustdestrtests"
+version = "0.1.0"
+dependencies = [
+ "m3",
+]
+
+[[package]]
 name = "rusthello"
 version = "0.1.0"
 dependencies = [

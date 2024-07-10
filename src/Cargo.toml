@@ -33,6 +33,7 @@ members = [
     "apps/ruststandalone/vmtest",
     "apps/ruststdtest",
     "apps/rustunittests/rustalgotests",
+    "apps/rustunittests/rustdestrtests",
     "apps/rustunittests/rustmisctests",
     "apps/rustunittests/rustvfstests",
     "apps/spammer",

@@ -108,7 +108,7 @@ run_bench() {
     fi
 
     if [ "$bench" = "unittests" ] || [ "$bench" = "rust-algo-tests" ] || [ "$bench" = "rust-misc-tests" ] ||
-        [ "$bench" = "rust-vfs-tests" ] || [ "$bench" = "hello" ] ||
+        [ "$bench" = "rust-vfs-tests" ] || [ "$bench" = "rust-destr-tests" ] || [ "$bench" = "hello" ] ||
         [ "$bench" = "rust-net-tests" ] || [ "$bench" = "cpp-net-tests" ] || [ "$bench" = "facever" ] ||
         [ "$bench" = "hashmux-tests" ] || [ "$bench" = "msgchan" ] || [ "$bench" = "resmngtest" ] ||
         [ "$bench" = "standalone" ] || [ "$bench" = "vmtest" ] || [ "$bench" = "rust-sndrcv" ] ||
@@ -218,7 +218,7 @@ all+=" lxrust-benchs lxcpp-benchs lxtcutest"
 all+=" chantests"
 all+=" unittests hashmux-benchs hashmux-tests resmngtest"
 all+=" rust-net-tests cpp-net-tests rust-net-benchs cpp-net-benchs"
-all+=" rust-algo-tests rust-misc-tests rust-vfs-tests"
+all+=" rust-algo-tests rust-destr-tests rust-misc-tests rust-vfs-tests"
 all+=" rust-algo-benchs rust-misc-benchs rust-vfs-benchs"
 all+=" cpp-algo-benchs cpp-misc-benchs cpp-vfs-benchs"
 all+=" facever rots-raser"
