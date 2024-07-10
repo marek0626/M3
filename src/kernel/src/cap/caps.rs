@@ -564,6 +564,8 @@ impl Capability {
 
             KObject::RGate(ref mut o) => {
                 Self::invalidate_ep(o.gate_ep_mut(), INVAL_ID, false);
+                // notify potential send-gate activations blocked on this receive gate
+                thread::notify(o.get_event(), None);
             },
 
             KObject::MGate(ref mut o) => {
