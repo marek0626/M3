@@ -27,6 +27,31 @@ def mkdir(path: str):
     os.makedirs(path, exist_ok=True)
 
 
+def gc_dir(dir: str, max: int):
+    files = []
+    if os.path.isdir(dir):
+        # collect folder items including the last modification time. note that the last access
+        # time would be better, but we would need to track that manually and that's maybe not
+        # worth the trouble.
+        for f in os.listdir(dir):
+            mtime = os.path.getmtime(os.path.join(dir, f))
+            files.append((mtime, f))
+
+        # if we're at the limit, evict the least recently modified entries
+        if len(files) > max:
+            sorted_files = sorted(files,
+                                  key=cmp_to_key(lambda f1, f2: f2[0] - f1[0]))
+            for i in range(max, len(files)):
+                fpath = os.path.join(dir, sorted_files[i][1])
+                mdate = datetime.utcfromtimestamp(sorted_files[i][0])
+                hdate = mdate.strftime('%Y-%m-%d %H:%M:%S')
+                print('{}: evicting (modified on {})...'.format(fpath, hdate))
+                if os.path.isfile(fpath):
+                    os.unlink(fpath)
+                elif os.path.isdir(fpath):
+                    shutil.rmtree(fpath)
+
+
 class BuildTask:
     def __init__(self, name: str, in_path: str, out_path: str, cache_dir: str,
                  cmd, shell=False, werror=False):
@@ -134,26 +159,7 @@ class BuildTask:
 
     def gc(self):
         dir = '{}/{}'.format(self.cache_dir, self.name)
-        files = []
-        if os.path.isdir(dir):
-            # collect folder items including the last modification time. note that the last access
-            # time would be better, but we would need to track that manually and that's maybe not
-            # worth the trouble.
-            for f in os.listdir(dir):
-                mtime = os.path.getmtime(os.path.join(dir, f))
-                files.append((mtime, f))
-
-            # if we're at the limit, evict the least recently modified entries
-            if len(files) >= CACHE_CAP:
-                sorted_files = sorted(files,
-                                      key=cmp_to_key(lambda f1, f2: f2[0] - f1[0]))
-                for i in range(CACHE_CAP - 1, len(files)):
-                    fpath = os.path.join(dir, sorted_files[i][1])
-                    mdate = datetime.utcfromtimestamp(sorted_files[i][0])
-                    hdate = mdate.strftime('%Y-%m-%d %H:%M:%S')
-                    print('{}: evicting {} (modified on {})...'
-                          .format(self.out_path, sorted_files[i][1], hdate))
-                    shutil.rmtree(fpath)
+        gc_dir(dir, CACHE_CAP - 1)
 
 
 def build_all(tasks: [BuildTask], incremental: bool):
