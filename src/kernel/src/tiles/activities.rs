@@ -23,9 +23,10 @@ use base::kif::{self, CapRngDesc, CapSel, CapType, TileDesc};
 use base::log;
 use base::mem::{MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
 use base::rc::Rc;
-use base::tcu::Label;
 use base::tcu::{ActId, EpId, TileId, STD_EPS_COUNT, UPCALL_REP_OFF};
+use base::tcu::{Label, OwnedMessage};
 use bitflags::bitflags;
+use core::cell::Ref;
 use core::fmt;
 
 use thread::{AsyncRc, AsyncWeak};
@@ -86,11 +87,13 @@ pub struct Activity {
     eps: RefCell<Vec<AsyncWeak<EPObject>>>,
     rbuf_phys: Cell<PhysAddr>,
     upcalls: RefCell<Box<SendQueue>>,
+
+    cur_sysc: RefCell<OwnedMessage>,
 }
 
 impl Activity {
     pub fn new(
-        name: &str,
+        name: String,
         id: ActId,
         tile: AsyncRc<TileObject>,
         eps_start: EpId,
@@ -99,7 +102,7 @@ impl Activity {
     ) -> Result<AsyncRc<Self>, Error> {
         let act = AsyncRc::new(Rc::new(Activity {
             id,
-            name: name.to_string(),
+            name,
             flags,
             eps_start,
             tile_id: tile.tile(),
@@ -115,6 +118,7 @@ impl Activity {
             rbuf_phys: Cell::from(PhysAddr::default()),
             upcalls: RefCell::from(SendQueue::new(QueueId::Activity(id), tile.tile())),
             tile: tile.downgrade(),
+            cur_sysc: RefCell::from(OwnedMessage::default()),
         }));
 
         {
@@ -348,6 +352,21 @@ impl Activity {
             .retain(|e| e.upgrade().unwrap().ep() != ep.ep());
     }
 
+    pub fn syscall(&self) -> Ref<'_, OwnedMessage> {
+        self.cur_sysc.borrow()
+    }
+
+    pub fn set_syscall(&self, msg: OwnedMessage) {
+        *self.cur_sysc.borrow_mut() = msg;
+    }
+
+    pub fn reply_syscall(&self, reply: &MsgBuf) -> Result<(), Error> {
+        // note that we cannot hand out a mutable reference to the OwnedMessage, because that would
+        // allow the caller to swap it with something else. Thus, we replicate this method and call
+        // reply ourself.
+        self.cur_sysc.borrow_mut().reply(reply)
+    }
+
     fn fetch_exit(&self, sels: &[u64]) -> Option<(CapSel, Code)> {
         for sel in sels {
             if let Ok(wv) = self
@@ -525,6 +544,8 @@ impl Activity {
 
             if let Some(act) = act_weak.upgrade() {
                 ktcu::drop_msgs(ktcu::KSYS_EP, act.id() as Label);
+                // ensure that we don't access the last syscall anymore (or reply)
+                act.cur_sysc.borrow_mut().invalidate();
             }
         }
     }
@@ -548,6 +569,8 @@ impl Activity {
 
         // make sure that we don't get further syscalls by this activity
         ktcu::drop_msgs(ktcu::KSYS_EP, act.id() as Label);
+        // ensure that we don't access the last syscall anymore (or reply)
+        act.cur_sysc.borrow_mut().invalidate();
 
         act.state.set(State::DEAD);
         act.exit_code.set(Some(exit_code));

@@ -83,8 +83,11 @@ fn do_exchange(
 }
 
 #[inline(never)]
-pub fn exchange(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(), VerboseError> {
-    let r: syscalls::Exchange = get_request(msg)?;
+pub fn exchange(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::Exchange = get_request(&msg)?;
+    drop(msg);
+
     let other_crd = CapRngDesc::new(r.own.cap_type(), r.other, r.own.count());
 
     sysc_log!(
@@ -99,16 +102,16 @@ pub fn exchange(act: AsyncRc<Activity>, msg: &mut tcu::OwnedMessage) -> Result<(
     let actcap: AsyncRc<Activity> = act.get_kobj(r.act)?;
     do_exchange(&act, &actcap, &r.own, &other_crd, r.obtain)?;
 
-    reply_success(msg);
+    reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn exchange_over_sess_async(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::ExchangeSess = get_request(msg)?;
+pub fn exchange_over_sess_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::ExchangeSess = get_request(&msg)?;
+    drop(msg);
+
     let name = if r.obtain { "obtain" } else { "delegate" };
     sysc_log!(
         act,
@@ -198,17 +201,17 @@ pub fn exchange_over_sess_async(
     build_vmsg!(kreply, Code::Success, syscalls::ExchangeSessReply {
         args: reply.data.args,
     });
-    send_reply(msg, &kreply);
+    send_reply(&act, &kreply);
 
     Ok(())
 }
 
 #[inline(never)]
-pub fn revoke_async(
-    act: AsyncRc<Activity>,
-    msg: &mut tcu::OwnedMessage,
-) -> Result<(), VerboseError> {
-    let r: syscalls::Revoke = get_request(msg)?;
+pub fn revoke_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::Revoke = get_request(&msg)?;
+    drop(msg);
+
     sysc_log!(act, "revoke(act={}, crd={}, own={})", r.act, r.crd, r.own);
 
     if r.crd.cap_type() == CapType::Object && r.crd.start() <= SEL_ACT {
@@ -223,7 +226,8 @@ pub fn revoke_async(
     };
 
     let act_id = act.id();
-    drop(act);
+
+    let act_weak = act.downgrade();
 
     if let Err(e) = actcap.revoke_async(r.crd, r.own, act_id) {
         sysc_err!(
@@ -234,6 +238,8 @@ pub fn revoke_async(
         );
     }
 
-    reply_success(msg);
+    if let Some(act) = act_weak.upgrade() {
+        reply_success(&act);
+    }
     Ok(())
 }

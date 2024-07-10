@@ -607,6 +607,8 @@ impl TileMux {
         build_vmsg!(&mut reply, kif::DefaultReply {
             error: Code::Success,
         });
+        // note that it's fine to keep the message across the async call above, because we never
+        // remove messages from the EP we received it from
         if let Err(e) = msg.reply(&reply) {
             log!(
                 LogFlags::Error,
