@@ -25,6 +25,7 @@ use m3::{println, wv_run_suite};
 mod tactivity;
 mod tsems;
 mod tserver;
+mod tsgate;
 mod tsrvmsgs;
 
 #[no_mangle]
@@ -33,6 +34,7 @@ pub fn main() -> Result<(), Error> {
     wv_run_suite!(tester, tactivity::run);
     wv_run_suite!(tester, tsems::run);
     wv_run_suite!(tester, tserver::run);
+    wv_run_suite!(tester, tsgate::run);
     wv_run_suite!(tester, tsrvmsgs::run);
     println!("{}", tester);
     Ok(())
