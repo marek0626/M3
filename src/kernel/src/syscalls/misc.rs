@@ -367,9 +367,10 @@ pub fn activate_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         }
         let rbuf_phys = ktcu::glob_to_phys_remote(dst_tile, rbuf.addr(), kif::PageFlags::RW)
             .map_err(|e| {
-                VerboseError::new(
+                verror!(
                     e.code(),
-                    base::format!("Receive buffer at {} not accessible via PMP", rbuf.addr()),
+                    "Receive buffer at {} not accessible via PMP",
+                    rbuf.addr(),
                 )
             })?;
         rbuf_phys + r.rbuf_off as PhysAddrRaw

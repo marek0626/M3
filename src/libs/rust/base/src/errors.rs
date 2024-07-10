@@ -291,10 +291,10 @@ impl fmt::Display for Error {
 
 #[macro_export]
 macro_rules! verror {
-    ($e:expr, $msg:tt) => ({
+    ($e:expr, $msg:expr) => ({
         $crate::errors::VerboseError::new($e, $msg)
     });
-    ($e:expr, $fmt:tt, $($args:tt)*) => ({
+    ($e:expr, $fmt:expr, $($args:tt)*) => ({
         $crate::errors::VerboseError::new($e, $crate::format!($fmt, $($args)*))
     });
 }

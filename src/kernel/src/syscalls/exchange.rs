@@ -14,7 +14,6 @@
  */
 
 use base::errors::{Code, Error, VerboseError};
-use base::format;
 use base::io::LogFlags;
 use base::kif::{service, syscalls, CapRngDesc, CapType, INVALID_SEL, SEL_ACT};
 use base::log;
@@ -42,29 +41,26 @@ fn do_exchange(
     let dst_rng = if obtain { c1 } else { c2 };
 
     if act1.id() == act2.id() {
-        return Err(VerboseError::new(
-            Code::InvArgs,
-            "Cannot exchange with same Activity",
-        ));
+        return Err(verror!(Code::InvArgs, "Cannot exchange with same Activity",));
     }
     if c1.cap_type() != c2.cap_type() {
-        return Err(VerboseError::new(
+        return Err(verror!(
             Code::InvArgs,
-            format!(
-                "Cap types differ ({:?} vs {:?})",
-                c1.cap_type(),
-                c2.cap_type()
-            ),
+            "Cap types differ ({:?} vs {:?})",
+            c1.cap_type(),
+            c2.cap_type(),
         ));
     }
     if (obtain && c2.count() > c1.count()) || (!obtain && c2.count() != c1.count()) {
-        return Err(VerboseError::new(
+        return Err(verror!(
             Code::InvArgs,
-            format!("Cap counts differ ({} vs {})", c2.count(), c1.count()),
+            "Cap counts differ ({} vs {})",
+            c2.count(),
+            c1.count(),
         ));
     }
     if !dst.obj_caps().borrow().range_unused(dst_rng) {
-        return Err(VerboseError::new(
+        return Err(verror!(
             Code::InvArgs,
             "Destination selectors already in use",
         ));

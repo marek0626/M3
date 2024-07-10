@@ -30,7 +30,7 @@ pub mod net;
 pub use base::{
     backtrace, borrow, boxed, build_vmsg, cell, cfg, col, cpu, crypto, elf, errors, format,
     function, impl_boxitem, kif, libc, log, mem, quota, rc, serde, serialize, sync, tcu, time,
-    tmif, util, vec,
+    tmif, util, vec, verror,
 };
 
 pub mod cap;

@@ -20,7 +20,7 @@ use base::log;
 use base::mem;
 use base::serialize::{Deserialize, M3Deserializer};
 use base::tcu::{self, OwnedMessage};
-use base::{build_vmsg, format, verror};
+use base::{build_vmsg, verror};
 
 use thread::{AsyncRc, AsyncWeak};
 
@@ -64,16 +64,14 @@ fn check_unused(tbl: &CapTable, sel: CapSel) -> Result<(), VerboseError> {
 fn try_upgrade_kobj<T>(weak: AsyncWeak<T>, sel: CapSel) -> Result<AsyncRc<T>, VerboseError> {
     weak.upgrade().ok_or_else(|| {
         if sel != kif::INVALID_SEL {
-            VerboseError::new(
+            verror!(
                 Code::ObjectGone,
-                format!(
-                    "Kernel object (Selector {}) was revoked during async call",
-                    sel
-                ),
+                "Kernel object (Selector {}) was revoked during async call",
+                sel,
             )
         }
         else {
-            VerboseError::new(
+            verror!(
                 Code::ObjectGone,
                 "Kernel object was revoked during async call",
             )

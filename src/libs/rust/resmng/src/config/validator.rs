@@ -15,7 +15,7 @@
 
 use m3::col::{BTreeMap, BTreeSet, String};
 use m3::errors::{Code, VerboseError};
-use m3::format;
+use m3::verror;
 
 use crate::config::{AppConfig, TileDesc};
 use crate::resources::Resources;
@@ -38,15 +38,13 @@ fn validate_tiles(cfg: &AppConfig, res: &Resources) -> Result<(), VerboseError> 
         if !tile.optional() {
             let available = count_tiles(res, tile);
             if available < tile.count() {
-                return Err(VerboseError::new(
+                return Err(verror!(
                     Code::NotFound,
-                    format!(
-                        "AppConfig '{}' needs tile type '{}' {} times, but {} are available",
-                        cfg.name(),
-                        tile.tile_type().0,
-                        tile.count(),
-                        available
-                    ),
+                    "AppConfig '{}' needs tile type '{}' {} times, but {} are available",
+                    cfg.name(),
+                    tile.tile_type().0,
+                    tile.count(),
+                    available
                 ));
             }
         }
@@ -71,13 +69,11 @@ fn validate_services(cfg: &AppConfig, parent_set: &BTreeSet<String>) -> Result<(
         for a in d.apps() {
             for serv in a.services() {
                 if set.contains(serv.name().global()) {
-                    return Err(VerboseError::new(
+                    return Err(verror!(
                         Code::Exists,
-                        format!(
-                            "config '{}': service '{}' does already exist",
-                            a.name(),
-                            serv.name().global()
-                        ),
+                        "config '{}': service '{}' does already exist",
+                        a.name(),
+                        serv.name().global()
                     ));
                 }
                 set.insert(serv.name().global().clone());
@@ -99,13 +95,11 @@ fn validate_services(cfg: &AppConfig, parent_set: &BTreeSet<String>) -> Result<(
 
     for sess in cfg.sessions() {
         if !set.contains(sess.name().global()) && !parent_set.contains(sess.name().global()) {
-            return Err(VerboseError::new(
+            return Err(verror!(
                 Code::NotFound,
-                format!(
-                    "config '{}': service '{}' does not exist",
-                    cfg.name(),
-                    sess.name().global()
-                ),
+                "config '{}': service '{}' does not exist",
+                cfg.name(),
+                sess.name().global()
             ));
         }
     }
@@ -119,13 +113,11 @@ fn validate_gates(cfg: &AppConfig) -> Result<(), VerboseError> {
         for a in d.apps() {
             for rgate in a.rgates() {
                 if map.contains_key(rgate.name().global()) {
-                    return Err(VerboseError::new(
+                    return Err(verror!(
                         Code::Exists,
-                        format!(
-                            "config '{}': rgate '{}' does already exist",
-                            a.name(),
-                            rgate.name().global()
-                        ),
+                        "config '{}': rgate '{}' does already exist",
+                        a.name(),
+                        rgate.name().global()
                     ));
                 }
                 map.insert(rgate.name().global().clone(), rgate.slots());
@@ -141,25 +133,21 @@ fn validate_gates(cfg: &AppConfig) -> Result<(), VerboseError> {
                 match map.get_mut(sgate.name().global()) {
                     Some(s) => {
                         if *s == 0 {
-                            return Err(VerboseError::new(
+                            return Err(verror!(
                                 Code::NoSpace,
-                                format!(
-                                    "config '{}': not enough slots in rgate '{}'",
-                                    a.name(),
-                                    sgate.name().global()
-                                ),
+                                "config '{}': not enough slots in rgate '{}'",
+                                a.name(),
+                                sgate.name().global()
                             ));
                         }
                         *s -= 1;
                     },
                     None => {
-                        return Err(VerboseError::new(
+                        return Err(verror!(
                             Code::NotFound,
-                            format!(
-                                "config '{}': rgate '{}' does not exist",
-                                a.name(),
-                                sgate.name().global()
-                            ),
+                            "config '{}': rgate '{}' does not exist",
+                            a.name(),
+                            sgate.name().global()
                         ));
                     },
                 }
@@ -179,13 +167,11 @@ fn validate_mods(cfg: &AppConfig, res: &Resources) -> Result<(), VerboseError> {
 
     for bmod in cfg.mods() {
         if res.mods().find(bmod.name().global()).is_none() {
-            return Err(VerboseError::new(
+            return Err(verror!(
                 Code::NotFound,
-                format!(
-                    "AppConfig '{}' needs non-existing boot module '{}'",
-                    cfg.name(),
-                    bmod.name().global(),
-                ),
+                "AppConfig '{}' needs non-existing boot module '{}'",
+                cfg.name(),
+                bmod.name().global(),
             ));
         }
     }

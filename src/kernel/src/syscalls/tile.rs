@@ -48,13 +48,11 @@ pub fn tile_quota_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         if tilemng::tilemux(tile_id).is_initialized() {
             TileMux::get_quota_async(tilemng::tilemux(tile_id), time_quota_id, pt_quota_id)
                 .map_err(|e| {
-                    VerboseError::new(
+                    verror!(
                         e.code(),
-                        base::format!(
-                            "Unable to get quota for time={}, pts={}",
-                            time_quota_id,
-                            pt_quota_id
-                        ),
+                        "Unable to get quota for time={}, pts={}",
+                        time_quota_id,
+                        pt_quota_id,
                     )
                 })?
         }
