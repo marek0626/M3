@@ -18,12 +18,14 @@
 
 use core::mem::size_of_val;
 
-use m3::build_vmsg;
-use m3::cap::Selector;
+use m3::cap::{SelSpace, Selector};
 use m3::cell::StaticCell;
 use m3::client::ClientSession;
-use m3::com::{recv_msg, RGateArgs, RecvGate, SGateArgs, SendCap, SendGate};
+use m3::com::{
+    recv_msg, GateIStream, RGateArgs, RecvGate, SGateArgs, Semaphore, SendCap, SendGate,
+};
 use m3::errors::{Code, Error};
+use m3::kif::service::{DeriveCreatorReply, Request};
 use m3::kif::{self, CapRngDesc, CapType};
 use m3::mem::MsgBuf;
 use m3::server::{
@@ -33,12 +35,16 @@ use m3::server::{
 use m3::syscalls;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ActivityArgs, ChildActivity, OwnActivity, RunningActivity, Tile};
-use m3::{send_vmsg, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_run_test};
+use m3::{
+    build_vmsg, reply_vmsg, send_vmsg, wv_assert, wv_assert_eq, wv_assert_err, wv_assert_ok,
+    wv_require_ok, wv_run_test,
+};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, testnoresp);
     wv_run_test!(t, testcliexit);
     wv_run_test!(t, testcaps);
+    wv_run_test!(t, testderive);
 }
 
 struct CrashSession {
@@ -315,5 +321,90 @@ fn testcaps(t: &mut dyn WvTester) {
     }
 
     wv_assert_err!(t, ClientSession::new("test"), Code::InvArgs);
+    wv_assert_eq!(t, sact.wait(), Ok(Code::Success));
+}
+
+fn server_derive_main() -> Result<(), Error> {
+    let mut src = Activity::own().data_source();
+    let sig_sem = Semaphore::bind(src.pop().unwrap());
+    let srv_sel: Selector = src.pop().unwrap();
+
+    let mut t = DefaultWvTester::default();
+
+    let rgate = wv_require_ok!(RecvGate::new(7, 7));
+    wv_assert_ok!(t, syscalls::create_srv(srv_sel, rgate.sel(), "dummy", 0));
+
+    // notify our parent that the service is available
+    wv_assert_ok!(t, sig_sem.up());
+
+    // wait until we receive a request from the kernel
+    let msg = wv_require_ok!(rgate.receive(None));
+    let mut is = GateIStream::new(msg, &rgate);
+    // this should always be the DeriveCrt request
+    let req: Request<'_> = wv_require_ok!(is.pop());
+    wv_assert!(t, matches!(req, Request::DeriveCrt { sessions: _ }));
+
+    // now first revoke the service cap
+    wv_assert_ok!(
+        t,
+        syscalls::revoke(
+            Activity::own().sel(),
+            CapRngDesc::new(CapType::Object, srv_sel, 1),
+            true,
+        )
+    );
+
+    // and then reply
+    wv_assert_ok!(
+        t,
+        reply_vmsg!(is, Code::Success, DeriveCreatorReply {
+            creator: 1,
+            sgate_sel: kif::INVALID_SEL,
+        })
+    );
+
+    Ok(())
+}
+
+fn testderive(t: &mut dyn WvTester) {
+    let sig_sem = wv_require_ok!(Semaphore::create(0));
+    let srv_sel = SelSpace::get().alloc_sel();
+
+    let server_tile = wv_require_ok!(Tile::get("compat|own"));
+    let mut serv = wv_require_ok!(ChildActivity::new_with(
+        server_tile,
+        // ensure that srv_sel is not reused by the child
+        ActivityArgs::new("server").first_sel(srv_sel + 1)
+    ));
+
+    wv_assert_ok!(t, serv.delegate_obj(sig_sem.sel()));
+
+    let mut dst = serv.data_sink();
+    dst.push(sig_sem.sel());
+    dst.push(srv_sel);
+
+    let sact = wv_require_ok!(serv.run(server_derive_main));
+
+    // wait until service is ready
+    wv_assert_ok!(t, sig_sem.down());
+
+    // obtain service cap from child
+    let our_sel = wv_require_ok!(sact.activity().obtain_obj(srv_sel));
+
+    // perform derive_srv call on this service cap
+    let sels = SelSpace::get().alloc_sels(2);
+    wv_assert_ok!(
+        t,
+        syscalls::derive_srv(our_sel, sels + 0, sels + 1, 1, 0xDEAD_BEEF)
+    );
+
+    // wait for upcall
+    let msg = wv_require_ok!(RecvGate::upcall().receive(None));
+    let mut is = GateIStream::new(msg, RecvGate::upcall());
+    // this should be a derive service upcall
+    let _opcode: kif::upcalls::Operation = wv_require_ok!(is.pop());
+    let resp: kif::upcalls::DeriveSrv = wv_require_ok!(is.pop());
+    wv_assert_eq!(t, resp.error, Code::ObjectGone);
+
     wv_assert_eq!(t, sact.wait(), Ok(Code::Success));
 }
