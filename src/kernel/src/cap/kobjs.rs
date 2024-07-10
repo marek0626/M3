@@ -574,7 +574,7 @@ impl fmt::Debug for SessObject {
 
 pub struct SemObject {
     counter: Cell<u32>,
-    waiters: Cell<i32>,
+    waiters: Cell<u32>,
 }
 
 impl SemObject {
@@ -605,9 +605,6 @@ impl SemObject {
             let sem = tmp_weak
                 .upgrade()
                 .ok_or_else(|| Error::new(Code::ObjectGone))?;
-            if sem.waiters.get() == -1 {
-                return Err(Error::new(Code::RecvGone));
-            }
             sem.waiters.set(sem.waiters.get() - 1);
         }
         Ok(())
@@ -624,7 +621,6 @@ impl SemObject {
         if self.waiters.get() > 0 {
             thread::notify(self.get_event(), None);
         }
-        self.waiters.set(-1);
     }
 
     fn get_event(&self) -> thread::Event {
