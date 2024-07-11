@@ -363,6 +363,13 @@ fn create_activity(t: &mut dyn WvTester) {
         Code::InvArgs
     );
 
+    // dest selector out of range
+    wv_assert_err!(
+        t,
+        syscalls::create_activity(CapSel::MAX, "test", tile.sel(), kmem),
+        Code::InvArgs
+    );
+
     // invalid name
     wv_assert_err!(
         t,
