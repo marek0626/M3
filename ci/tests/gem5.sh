@@ -173,7 +173,7 @@ run_bench() {
     # set memory and time limits
     if [ "$M3_GEM5_CPU" = "DerivO3CPU" ]; then
         ulimit -v 12000000  # 12GB virt mem
-        ulimit -t 3000      # 50min CPU time
+        ulimit -t 2400      # 40min CPU time
     else
         ulimit -v 7000000   # 6GB virt mem
         ulimit -t 1500      # 25min CPU time
