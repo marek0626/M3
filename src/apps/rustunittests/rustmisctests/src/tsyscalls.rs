@@ -1174,6 +1174,7 @@ fn revoke(t: &mut dyn WvTester) {
     let crd_tile = CapRngDesc::new(CapType::Object, SEL_TILE, 1);
     let crd_act = CapRngDesc::new(CapType::Object, SEL_ACT, 1);
     let crd_mem = CapRngDesc::new(CapType::Object, SEL_KMEM, 1);
+    let crd_inv = CapRngDesc::new(CapType::Object, CapSel::MAX, 2);
 
     // invalid activity selector
     wv_assert_err!(t, syscalls::revoke(SEL_KMEM, crd_act, true), Code::InvArgs);
@@ -1191,6 +1192,12 @@ fn revoke(t: &mut dyn WvTester) {
     wv_assert_err!(
         t,
         syscalls::revoke(Activity::own().sel(), crd_mem, true),
+        Code::InvArgs
+    );
+    // invalid capability range descriptor
+    wv_assert_err!(
+        t,
+        syscalls::revoke(Activity::own().sel(), crd_inv, true),
         Code::InvArgs
     );
 }
