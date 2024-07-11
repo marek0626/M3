@@ -632,7 +632,7 @@ impl fmt::Debug for Capability {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Cap[act={}, sel={}, len={}, obj={:?}]",
+            "Cap[act={}, sel={}, len={}: {:?}]",
             self.activity().id(),
             self.sel(),
             self.len(),

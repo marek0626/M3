@@ -117,20 +117,30 @@ impl KObject {
     }
 }
 
+fn fmt_kobj<T: fmt::Debug>(f: &mut fmt::Formatter<'_>, o: &Rc<T>) -> fmt::Result {
+    write!(
+        f,
+        "{:?}; @{:#x}; refs={}",
+        o,
+        Rc::as_ptr(o) as usize,
+        Rc::strong_count(o),
+    )
+}
+
 impl fmt::Debug for KObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            KObject::SGate(s) => write!(f, "{:?}", s),
-            KObject::RGate(r) => write!(f, "{:?}", r),
-            KObject::MGate(m) => write!(f, "{:?}", m),
-            KObject::Map(m) => write!(f, "{:?}", m),
-            KObject::Serv(s) => write!(f, "{:?}", s),
-            KObject::Sess(s) => write!(f, "{:?}", s),
-            KObject::Activity(v) => write!(f, "{:?}", v),
-            KObject::Sem(s) => write!(f, "{:?}", s),
-            KObject::KMem(k) => write!(f, "{:?}", k),
-            KObject::Tile(p) => write!(f, "{:?}", p),
-            KObject::EP(e) => write!(f, "{:?}", e),
+            KObject::SGate(o) => fmt_kobj(f, o),
+            KObject::RGate(o) => fmt_kobj(f, o),
+            KObject::MGate(o) => fmt_kobj(f, o),
+            KObject::Map(o) => fmt_kobj(f, o),
+            KObject::Serv(o) => fmt_kobj(f, o),
+            KObject::Sess(o) => fmt_kobj(f, o),
+            KObject::Activity(o) => fmt_kobj(f, o),
+            KObject::Sem(o) => fmt_kobj(f, o),
+            KObject::KMem(o) => fmt_kobj(f, o),
+            KObject::Tile(o) => fmt_kobj(f, o),
+            KObject::EP(o) => fmt_kobj(f, o),
         }
     }
 }
