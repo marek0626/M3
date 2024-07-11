@@ -27,6 +27,7 @@ pub type CapSel = u64;
 
 /// A capability range descriptor, which describes a continuous range of capabilities
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(try_from = "UnsafeCapRngDesc")]
 pub struct CapRngDesc {
     start: u64,
     count: u64,
@@ -78,5 +79,56 @@ impl fmt::Display for CapRngDesc {
             self.start(),
             self.count()
         )
+    }
+}
+
+/// Possible errors while creating a [`CapRngDesc`]
+pub enum CapRngError {
+    /// The last capability in the range (if any) is not representable as an int
+    LastCapOverflow,
+    /// The provided count does not fit in the [`CapRngDesc`]
+    CountTooLarge,
+}
+
+impl fmt::Display for CapRngError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CapRngError::LastCapOverflow => {
+                write!(f, "last capability selector is not representable")
+            },
+            CapRngError::CountTooLarge => {
+                write!(f, "count is not representable in range descriptor")
+            },
+        }
+    }
+}
+
+/// Helper struct that binary data is deserialized into without validation
+///
+/// [`CapRngDesc`] is created from this after validation
+#[derive(Deserialize)]
+struct UnsafeCapRngDesc {
+    start: u64,
+    count: u64,
+}
+
+impl TryFrom<UnsafeCapRngDesc> for CapRngDesc {
+    type Error = CapRngError;
+
+    fn try_from(desc: UnsafeCapRngDesc) -> Result<Self, Self::Error> {
+        let unval = CapRngDesc {
+            start: desc.start,
+            count_ty: desc.count,
+        };
+        // Only when count > 0 overflows can occur.
+        if let Some(c) = unval.count().checked_sub(1) {
+            // Try to compute last element without overflow.
+            let last = unval.start().checked_add(c);
+            if last.is_none() {
+                return Err(CapRngError::LastCapOverflow);
+            }
+        }
+        // Guaranteed that the last capability selector is representable.
+        Ok(unval)
     }
 }
