@@ -1,5 +1,6 @@
 dirs = [
     'rustalgotests',
+    'rustdestrtests',
     'rustmisctests',
     'rustvfstests'
 ]

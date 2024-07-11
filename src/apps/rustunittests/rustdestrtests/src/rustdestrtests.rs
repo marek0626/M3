@@ -23,23 +23,19 @@ use m3::test::{DefaultWvTester, WvTester};
 use m3::{println, wv_run_suite};
 
 mod tactivity;
-mod tmgate;
-mod tpaging;
-mod trgate;
 mod tsems;
+mod tserver;
 mod tsgate;
-mod tsyscalls;
+mod tsrvmsgs;
 
 #[no_mangle]
 pub fn main() -> Result<(), Error> {
     let mut tester = DefaultWvTester::default();
     wv_run_suite!(tester, tactivity::run);
-    wv_run_suite!(tester, tmgate::run);
-    wv_run_suite!(tester, tpaging::run);
-    wv_run_suite!(tester, trgate::run);
     wv_run_suite!(tester, tsems::run);
+    wv_run_suite!(tester, tserver::run);
     wv_run_suite!(tester, tsgate::run);
-    wv_run_suite!(tester, tsyscalls::run);
+    wv_run_suite!(tester, tsrvmsgs::run);
     println!("{}", tester);
     Ok(())
 }

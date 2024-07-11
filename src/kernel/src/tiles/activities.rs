@@ -473,11 +473,14 @@ impl Activity {
         self.send_upcall::<kif::upcalls::ActivityWait>(&buf, &msg);
     }
 
-    pub fn upcall_derive_srv(&self, event: u64, result: Result<(), Error>) {
+    pub fn upcall_derive_srv(&self, event: u64, result: Result<(), VerboseError>) {
         let mut buf = MsgBuf::borrow_def();
         let msg = kif::upcalls::DeriveSrv {
             event,
-            error: Code::from(result),
+            error: match result {
+                Ok(_) => Code::Success,
+                Err(e) => e.code(),
+            },
         };
         build_vmsg!(buf, kif::upcalls::Operation::DeriveSrv, msg);
 

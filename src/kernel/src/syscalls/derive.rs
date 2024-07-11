@@ -176,52 +176,65 @@ pub fn derive_srv_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let act_weak = act.downgrade();
     let res = ServObject::send_receive_async(srv, label, smsg);
 
+    // if the activity is gone, we can return an error here and will fail to send a reply in the
+    // syscall handler.
     let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
-    let srv = try_upgrade_kobj(srv_weak, r.srv)?;
-    let res = match res {
-        Err(e) => {
-            sysc_log!(act, "Service {} unreachable: {:?}", srv.name(), e.code());
-            Err(e)
-        },
 
-        Ok(rmsg) => {
-            let mut de = M3Deserializer::new(rmsg.as_words());
-            let err: Code = de.pop()?;
-            match err {
-                Code::Success => {
-                    let reply: kif::service::DeriveCreatorReply = de.pop()?;
+    // perform this operation in a closure to catch errors and in all cases reply via upcall. this
+    // is required because we have already replied to the syscall and cannot do that again as it
+    // happens in the syscall handler.
+    let finish = |act: &AsyncRc<Activity>| -> Result<(), VerboseError> {
+        let srv = try_upgrade_kobj(srv_weak, r.srv)?;
+        match res {
+            Err(e) => {
+                sysc_log!(act, "Service {} unreachable: {:?}", srv.name(), e.code());
+                Err(e.into())
+            },
 
-                    sysc_log!(act, "derive_srv continue with creator={}", reply.creator);
+            Ok(rmsg) => {
+                let mut de = M3Deserializer::new(rmsg.as_words());
+                let err: Code = de.pop()?;
+                match err {
+                    Code::Success => {
+                        let reply: kif::service::DeriveCreatorReply = de.pop()?;
 
-                    // obtain SendGate from server (do that first because it can fail)
-                    let serv_act = srv.server_act();
-                    let mut serv_caps = serv_act.obj_caps().borrow_mut();
-                    let src_cap = serv_caps.get_mut(reply.sgate_sel);
-                    match src_cap {
-                        Err(_) => {
-                            sysc_log!(act, "Service gave invalid SendGate cap {}", reply.sgate_sel)
-                        },
-                        Ok(c) => try_kmem_quota!(act.obj_caps().borrow_mut().obtain(
-                            r.dst_sgate,
-                            c,
-                            true
-                        )),
-                    }
+                        sysc_log!(act, "derive_srv continue with creator={}", reply.creator);
 
-                    // derive new service object
-                    let derived_srv = srv.derive(reply.creator);
-                    let cap = Capability::new(r.dst_srv, derived_srv);
-                    try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.srv));
-                    Ok(())
-                },
-                err => {
-                    sysc_log!(act, "Server {} denied derive: {:?}", srv.name(), err);
-                    Err(Error::new(err))
-                },
-            }
-        },
+                        // obtain SendGate from server (do that first because it can fail)
+                        let serv_act = srv.server_act();
+                        let mut serv_caps = serv_act.obj_caps().borrow_mut();
+                        let src_cap = serv_caps.get_mut(reply.sgate_sel);
+                        match src_cap {
+                            Err(_) => {
+                                sysc_log!(
+                                    act,
+                                    "Service gave invalid SendGate cap {}",
+                                    reply.sgate_sel
+                                )
+                            },
+                            Ok(c) => try_kmem_quota!(act.obj_caps().borrow_mut().obtain(
+                                r.dst_sgate,
+                                c,
+                                true
+                            )),
+                        }
+
+                        // derive new service object
+                        let derived_srv = srv.derive(reply.creator);
+                        let cap = Capability::new(r.dst_srv, derived_srv);
+                        try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.srv));
+                        Ok(())
+                    },
+                    err => {
+                        sysc_log!(act, "Server {} denied derive: {:?}", srv.name(), err);
+                        Err(Error::new(err).into())
+                    },
+                }
+            },
+        }
     };
 
+    let res = finish(&act);
     act.upcall_derive_srv(r.event, res);
     Ok(())
 }

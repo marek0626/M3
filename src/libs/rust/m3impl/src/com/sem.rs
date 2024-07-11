@@ -42,6 +42,11 @@ impl Semaphore {
     /// Creates a new semaphore with the initial value `value`.
     pub fn create(value: u32) -> Result<Self, Error> {
         let sel = SelSpace::get().alloc_sel();
+        Self::create_with_sel(value, sel)
+    }
+
+    /// Creates a new semaphore with the initial value `value` using the given selector.
+    pub fn create_with_sel(value: u32, sel: Selector) -> Result<Self, Error> {
         syscalls::create_sem(sel, value)?;
 
         Ok(Semaphore {

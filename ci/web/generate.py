@@ -19,7 +19,7 @@ TESTS = [
     "chantests",
     "unittests", "hashmux-benchs", "hashmux-tests", "resmngtest",
     "rust-net-tests", "cpp-net-tests", "rust-net-benchs", "cpp-net-benchs",
-    "rust-algo-tests", "rust-misc-tests", "rust-vfs-tests",
+    "rust-algo-tests", "rust-destr-tests", "rust-misc-tests", "rust-vfs-tests",
     "rust-algo-benchs", "rust-misc-benchs", "rust-vfs-benchs",
     "cpp-algo-benchs", "cpp-misc-benchs", "cpp-vfs-benchs",
     "facever", "rots-raser",

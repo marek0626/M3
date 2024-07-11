@@ -23,14 +23,14 @@ use crate::kif::{CapRngDesc, CapSel};
 use crate::serialize::{Deserialize, Serialize};
 
 /// The data part of the delegate/obtain request messages
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[repr(C)]
 pub struct ExchangeData {
     pub caps: CapRngDesc,
     pub args: ExchangeArgs,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[repr(C)]
 pub enum Request<'s> {
     Open { arg: &'s str },
@@ -42,7 +42,7 @@ pub enum Request<'s> {
 }
 
 /// The open reply message
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[repr(C)]
 pub struct OpenReply {
     pub sid: CapSel,
@@ -50,7 +50,7 @@ pub struct OpenReply {
 }
 
 /// The open reply message
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[repr(C)]
 pub struct DeriveCreatorReply {
     pub creator: usize,
@@ -58,7 +58,7 @@ pub struct DeriveCreatorReply {
 }
 
 /// The delegate/obtain reply message
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[repr(C)]
 pub struct ExchangeReply {
     pub data: ExchangeData,
