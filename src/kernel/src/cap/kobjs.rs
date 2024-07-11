@@ -559,7 +559,9 @@ impl SessObject {
 
                 // this should never fail, because the close request fails only if the creator does not
                 // own the session. but we know here that the creator owns this session.
-                ServObject::send_receive_async(serv, creator, smsg).unwrap();
+                if let Err(e) = ServObject::send_receive_async(serv, creator, smsg) {
+                    log!(LogFlags::Error, "Session-close request failed: {}", e);
+                }
             }
         }
     }
