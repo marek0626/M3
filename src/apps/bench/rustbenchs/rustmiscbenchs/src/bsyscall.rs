@@ -206,7 +206,7 @@ fn create_map(t: &mut dyn WvTester) {
     }
 
     const DEST: VirtAddr = VirtAddr::new(0x3000_0000);
-    let prof = Profiler::default().repeats(100).warmup(10);
+    let prof = Profiler::default().repeats(25).warmup(10);
 
     struct Tester<'a> {
         tester: &'a mut dyn WvTester,
