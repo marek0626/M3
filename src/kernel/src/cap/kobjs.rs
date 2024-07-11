@@ -902,9 +902,13 @@ impl TileObject {
 
             TileMux::remove_quotas_async(tilemng::tilemux(tile_id), time, pts).ok();
 
-            // not that this cannot fail here as we are currently destroying this object, which
-            // means that it's already unreachable for everyone else
-            tile_weak.upgrade().unwrap()
+            // if that fails, someone else removed the object in the meantime and we can stop here
+            // (for example, child cap is revoked first, gets stuck in the async call below, and
+            // the parent cap is revoked in the meantime)
+            match tile_weak.upgrade() {
+                Some(tile) => tile,
+                None => return,
+            }
         }
         else {
             tile
