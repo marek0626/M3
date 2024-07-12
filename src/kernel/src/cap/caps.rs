@@ -21,6 +21,7 @@ use base::io::LogFlags;
 use base::kif::{CapRngDesc, CapSel, SEL_ACT, SEL_KMEM, SEL_TILE};
 use base::log;
 use base::mem::{size_of, GlobOff, VirtAddr};
+use base::rc::Rc;
 use base::tcu::ActId;
 use core::cmp;
 use core::fmt;
@@ -394,6 +395,8 @@ impl Capability {
     ///
     /// Returns `true` when no more capabilities are found.
     fn revoke_single_async(mut cap: RefMut<'_, Self>, self_included: bool, revoker: ActId) -> bool {
+        log!(LogFlags::KernCaps, "Revoking cap {:?}", *cap);
+
         let mut is_child = false;
         // Loop to the first child.
         loop {
@@ -500,7 +503,7 @@ impl Capability {
         }
     }
 
-    fn release_async(mut self, revoker: ActId) {
+    fn release_async(self, revoker: ActId) {
         log!(LogFlags::KernCaps, "Freeing cap {:?}", self);
 
         let act = self.activity();
@@ -516,18 +519,21 @@ impl Capability {
         }
 
         match self.obj {
-            KObject::Activity(ref v) => {
+            KObject::Activity(v) => {
                 // remove activity if we revoked the root capability and if it's not the own activity
                 if sel != SEL_ACT && self.parent.is_none() && !v.is_root() {
                     ActivityMng::remove_activity_async(v.id(), revoker);
                 }
             },
 
-            KObject::EP(ref mut e) => {
+            KObject::EP(e) => {
                 EPObject::revoke(AsyncRc::new(e.clone()));
+                if !self.derived {
+                    assert_eq!(Rc::strong_count(&e), 1);
+                }
             },
 
-            KObject::Tile(ref mut tile) => {
+            KObject::Tile(tile) => {
                 // if the cap is derived, it doesn't own the kobj. if it's the activity's own Tile, the
                 // kobj always belongs to the parent (but derived is false).
                 if !self.derived && sel != SEL_TILE {
@@ -536,14 +542,13 @@ impl Capability {
                         // TODO we cannot use these references across the async call below
                         let tileobj = unsafe { parent.get_unchecked().clone() };
                         if let KObject::Tile(p) = tileobj {
-                            let tile = AsyncRc::new(tile.clone());
-                            TileObject::revoke_async(tile, &p);
+                            TileObject::revoke_async(AsyncRc::new(tile), &p);
                         }
                     }
                 }
             },
 
-            KObject::KMem(ref k) => {
+            KObject::KMem(k) => {
                 // see above
                 if !self.derived && sel != SEL_KMEM {
                     if let Some(parent) = self.parent {
@@ -557,34 +562,51 @@ impl Capability {
                 }
             },
 
-            KObject::SGate(ref mut o) => {
+            KObject::SGate(o) => {
                 o.invalidate_reply_eps();
                 Self::invalidate_ep(o.gate_ep_mut(), revoker, true);
+                if !self.derived {
+                    assert_eq!(Rc::strong_count(&o), 1);
+                }
             },
 
-            KObject::RGate(ref mut o) => {
+            KObject::RGate(o) => {
                 Self::invalidate_ep(o.gate_ep_mut(), INVAL_ID, false);
                 // notify potential send-gate activations blocked on this receive gate
                 thread::notify(o.get_event(), None);
+                if !self.derived {
+                    assert_eq!(Rc::strong_count(&o), 1);
+                }
             },
 
-            KObject::MGate(ref mut o) => {
+            KObject::MGate(o) => {
                 Self::invalidate_ep(o.gate_ep_mut(), INVAL_ID, false);
+                if !self.derived {
+                    assert_eq!(Rc::strong_count(&o), 1);
+                }
             },
 
-            KObject::Serv(ref s) => {
+            KObject::Serv(s) => {
                 s.abort();
+                if !self.derived {
+                    assert_eq!(Rc::strong_count(&s), 1);
+                }
             },
 
-            KObject::Sess(ref s) => {
+            KObject::Sess(s) => {
                 // if the session is derived, we notify the server about this and let him remove the
                 // session. this has the consequence that in delegation chains every activity in the
                 // chain can remove the session for all. I think this is fine, because we are never
                 // sharing a session between multiple activities, but are at most "granting" the
                 // session to someone else if we don't want to use it ourself.
                 if self.derived {
-                    let sess = AsyncRc::new(s.clone());
-                    SessObject::close_async(sess, revoker);
+                    // release the Rc within the KObject before doing the async call, because the
+                    // server typically revokes its non-derived cap during the async call. That is,
+                    // without releasing our reference the strong-count check below fails.
+                    SessObject::close_async(AsyncRc::new(s), revoker);
+                }
+                else {
+                    assert_eq!(Rc::strong_count(&s), 1);
                 }
             },
 
@@ -592,13 +614,19 @@ impl Capability {
                 // TODO currently, it can happen that we've already stopped the activity, but still
                 // accept/continue a syscall that inserts something into the activity's table.
                 if m.mapped() && act.state() != State::DEAD {
-                    let virt = VirtAddr::new((self.sel() as GlobOff) << cfg::PAGE_BITS);
+                    let virt = VirtAddr::new((sel as GlobOff) << cfg::PAGE_BITS);
                     MapObject::unmap_async(act.id(), act.tile_id(), virt, self.len() as usize);
+                }
+                if !self.derived {
+                    assert_eq!(Rc::strong_count(m), 1);
                 }
             },
 
-            KObject::Sem(ref s) => {
+            KObject::Sem(s) => {
                 s.revoke();
+                if !self.derived {
+                    assert_eq!(Rc::strong_count(&s), 1);
+                }
             },
         }
     }
@@ -630,7 +658,7 @@ impl fmt::Debug for Capability {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Cap[act={}, sel={}, len={}, obj={:?}]",
+            "Cap[act={}, sel={}, len={}: {:?}]",
             self.activity().id(),
             self.sel(),
             self.len(),

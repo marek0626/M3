@@ -173,7 +173,7 @@ run_bench() {
     # set memory and time limits
     if [ "$M3_GEM5_CPU" = "DerivO3CPU" ]; then
         ulimit -v 12000000  # 12GB virt mem
-        ulimit -t 3000      # 50min CPU time
+        ulimit -t 2400      # 40min CPU time
     else
         ulimit -v 7000000   # 6GB virt mem
         ulimit -t 1500      # 25min CPU time
@@ -215,12 +215,12 @@ jobs_init "$(nproc)"
 
 all=""
 all+=" lxrust-benchs lxcpp-benchs lxtcutest"
-all+=" chantests"
-all+=" unittests hashmux-benchs hashmux-tests resmngtest"
 all+=" rust-net-tests cpp-net-tests rust-net-benchs cpp-net-benchs"
 all+=" rust-algo-tests rust-destr-tests rust-misc-tests rust-vfs-tests"
 all+=" rust-algo-benchs rust-misc-benchs rust-vfs-benchs"
 all+=" cpp-algo-benchs cpp-misc-benchs cpp-vfs-benchs"
+all+=" chantests"
+all+=" unittests hashmux-benchs hashmux-tests resmngtest"
 all+=" facever rots-raser"
 all+=" find tar untar sqlite leveldb sha256sum sort"
 all+=" cat_awk cat_wc grep_awk grep_wc"
