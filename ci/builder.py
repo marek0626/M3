@@ -209,7 +209,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
     # when we build for riscv64, we always need the riscv32 toolchain as well to run stuff on the
     # accelerator co-processors
     ccisas = isas.copy()
-    if 'riscv64' in ccisas:
+    if 'riscv64' in ccisas and 'riscv32' not in ccisas:
         ccisas.append('riscv32')
 
     # build all cross compilers
