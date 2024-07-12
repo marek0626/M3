@@ -791,13 +791,16 @@ impl SubsystemBuilder {
             serv_count: self.servs.len() as u64,
         };
         mem.write_obj(&info, off)?;
-        act.delegate_to(CapRngDesc::new(CapType::Object, mem.sel(), 1), sel)?;
+        act.delegate_to(CapRngDesc::new_single(CapType::Object, mem.sel()), sel)?;
         off += size_of::<boot::Info>() as GlobOff;
         sel += 1;
 
         // serial rgate
         if self.serial {
-            act.delegate_to(CapRngDesc::new(CapType::Object, SERIAL_RGATE_SEL, 1), sel)?;
+            act.delegate_to(
+                CapRngDesc::new_single(CapType::Object, SERIAL_RGATE_SEL),
+                sel,
+            )?;
         }
         sel += 1;
 
@@ -807,7 +810,7 @@ impl SubsystemBuilder {
             let m = boot::Mod::new(addr, size, name);
             mem.write_obj(&m, off)?;
 
-            act.delegate_to(CapRngDesc::new(CapType::Object, mgate.sel(), 1), sel)?;
+            act.delegate_to(CapRngDesc::new_single(CapType::Object, mgate.sel()), sel)?;
 
             off += size_of::<boot::Mod>() as GlobOff;
             sel += 1;
@@ -818,7 +821,7 @@ impl SubsystemBuilder {
             let boot_tile = boot::Tile::new(tile.id(), tile.desc());
             mem.write_obj(&boot_tile, off)?;
 
-            act.delegate_to(CapRngDesc::new(CapType::Object, tile.sel(), 1), sel)?;
+            act.delegate_to(CapRngDesc::new_single(CapType::Object, tile.sel()), sel)?;
 
             off += size_of::<boot::Tile>() as GlobOff;
             sel += 1;
@@ -830,7 +833,7 @@ impl SubsystemBuilder {
             let boot_mem = boot::Mem::new(addr, size, *reserved);
             mem.write_obj(&boot_mem, off)?;
 
-            act.delegate_to(CapRngDesc::new(CapType::Object, mgate.sel(), 1), sel)?;
+            act.delegate_to(CapRngDesc::new_single(CapType::Object, mgate.sel()), sel)?;
 
             off += size_of::<boot::Mem>() as GlobOff;
             sel += 1;
@@ -860,9 +863,12 @@ impl SubsystemBuilder {
             let boot_serv = boot::Service::new(name, sessions);
             mem.write_obj(&boot_serv, off)?;
 
-            act.delegate_to(CapRngDesc::new(CapType::Object, subserv.serv_sel(), 1), sel)?;
             act.delegate_to(
-                CapRngDesc::new(CapType::Object, subserv.sgate_sel(), 1),
+                CapRngDesc::new_single(CapType::Object, subserv.serv_sel()),
+                sel,
+            )?;
+            act.delegate_to(
+                CapRngDesc::new_single(CapType::Object, subserv.sgate_sel()),
                 sel + 1,
             )?;
 

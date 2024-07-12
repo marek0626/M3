@@ -188,7 +188,7 @@ fn testcliexit(t: &mut dyn WvTester) {
                 kif::syscalls::ExchangeSess {
                     act: Activity::own().sel(),
                     sess: sess.sel(),
-                    crd: kif::CapRngDesc::new(kif::CapType::Object, 0, 1),
+                    crd: kif::CapRngDesc::new_single(kif::CapType::Object, 0),
                     args,
                     obtain: true,
                 }
@@ -303,7 +303,7 @@ fn testcaps(t: &mut dyn WvTester) {
             );
         }
         else {
-            let crd = CapRngDesc::new(CapType::Object, sess.sel(), 1);
+            let crd = CapRngDesc::new_single(CapType::Object, sess.sel());
             for _ in 0..5 {
                 wv_assert_err!(
                     t,
@@ -349,7 +349,7 @@ fn server_derive_main() -> Result<(), Error> {
         t,
         syscalls::revoke(
             Activity::own().sel(),
-            CapRngDesc::new(CapType::Object, srv_sel, 1),
+            CapRngDesc::new_single(CapType::Object, srv_sel),
             false,
         )
     );

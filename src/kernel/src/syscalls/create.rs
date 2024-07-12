@@ -278,7 +278,7 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
     if !act
         .obj_caps()
         .borrow()
-        .range_unused(&CapRngDesc::new(CapType::Object, r.dst, 3))
+        .range_unused(&CapRngDesc::new(CapType::Object, r.dst, 3)?)
     {
         return Err(verror!(
             Code::InvArgs,
@@ -454,7 +454,7 @@ pub fn create_map_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
                 (c.get::<AsyncRc<MapObject>>()?, None, true)
             },
             Err(_) => {
-                let range = CapRngDesc::new(CapType::Mapping, r.dst, r.pages);
+                let range = CapRngDesc::new(CapType::Mapping, r.dst, r.pages)?;
                 if !map_caps.range_unused(&range) {
                     return Err(verror!(
                         Code::InvArgs,

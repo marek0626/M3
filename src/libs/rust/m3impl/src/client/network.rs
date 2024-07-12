@@ -70,7 +70,7 @@ impl Network {
             },
         )?;
 
-        let chan = NetEventChannel::new_client(crd.start())?;
+        let chan = NetEventChannel::new_client(crd)?;
         Ok(BaseSocket::new(sd, ty, chan))
     }
 

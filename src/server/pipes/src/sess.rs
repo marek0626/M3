@@ -136,7 +136,7 @@ impl PipesSession {
             }
         })?;
 
-        xchg.out_caps(kif::CapRngDesc::new(kif::CapType::Object, sel, 1));
+        xchg.out_caps(kif::CapRngDesc::new_single(kif::CapType::Object, sel));
 
         Ok(())
     }
@@ -173,7 +173,8 @@ impl PipesSession {
             }
         })?;
 
-        xchg.out_caps(kif::CapRngDesc::new(kif::CapType::Object, sel, 2));
+        // FIXME: Does this unwrap never panic?
+        xchg.out_caps(kif::CapRngDesc::new(kif::CapType::Object, sel, 2).unwrap());
 
         Ok(())
     }
@@ -209,7 +210,8 @@ impl PipesSession {
             Ok(res)
         })?;
 
-        xchg.out_caps(kif::CapRngDesc::new(kif::CapType::Object, sel, 2));
+        // FIXME: Does this unwrap never panic?
+        xchg.out_caps(kif::CapRngDesc::new(kif::CapType::Object, sel, 2).unwrap());
 
         Ok(())
     }
@@ -232,7 +234,7 @@ impl PipesSession {
 
                 log!(LogFlags::PipeReqs, "[{}] pipes::set_mem(sel={})", sid, sel);
 
-                xchg.out_caps(kif::CapRngDesc::new(kif::CapType::Object, sel, 1));
+                xchg.out_caps(kif::CapRngDesc::new_single(kif::CapType::Object, sel));
 
                 Ok(())
             },
@@ -254,7 +256,7 @@ impl PipesSession {
 
                 log!(LogFlags::PipeReqs, "[{}] pipes::set_dest(sel={})", sid, sel);
 
-                xchg.out_caps(kif::CapRngDesc::new(kif::CapType::Object, sel, 1));
+                xchg.out_caps(kif::CapRngDesc::new_single(kif::CapType::Object, sel));
 
                 Ok(())
             },
@@ -281,7 +283,7 @@ impl PipesSession {
                 );
                 c.enable_notify(sel)?;
 
-                xchg.out_caps(kif::CapRngDesc::new(kif::CapType::Object, sel, 1));
+                xchg.out_caps(kif::CapRngDesc::new_single(kif::CapType::Object, sel));
 
                 Ok(())
             },

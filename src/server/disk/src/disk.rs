@@ -106,7 +106,7 @@ impl DiskSession {
         sess.blocks.remove(&range);
         sess.blocks.insert(range, sel);
 
-        xchg.out_caps(kif::CapRngDesc::new(kif::CapType::Object, sel, 1));
+        xchg.out_caps(kif::CapRngDesc::new_single(kif::CapType::Object, sel));
         Ok(())
     }
 

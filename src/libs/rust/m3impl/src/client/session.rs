@@ -97,7 +97,7 @@ impl ClientSession {
     /// [`SendGate`] from the server that can be used afterwards to send requests to the server.
     /// The [`SendGate`] will be obtained for the given activity and bound to the given selector.
     pub fn connect_for(&self, act: &Activity, sel: Selector) -> Result<(), Error> {
-        let crd = kif::CapRngDesc::new(kif::CapType::Object, sel, 1);
+        let crd = kif::CapRngDesc::new_single(kif::CapType::Object, sel);
         self.obtain_for(
             act.sel(),
             crd,
@@ -108,7 +108,7 @@ impl ClientSession {
 
     /// Delegates the object capability with selector `sel` to the server.
     pub fn delegate_obj(&self, sel: Selector) -> Result<(), Error> {
-        let crd = kif::CapRngDesc::new(kif::CapType::Object, sel, 1);
+        let crd = kif::CapRngDesc::new_single(kif::CapType::Object, sel);
         self.delegate_crd(crd)
     }
 
@@ -179,7 +179,8 @@ impl ClientSession {
         POST: FnMut(&mut M3Deserializer<'_>) -> Result<(), Error>,
     {
         let caps = SelSpace::get().alloc_sels(count);
-        let crd = kif::CapRngDesc::new(kif::CapType::Object, caps, count);
+        // FIXME: Does this unwrap never panic?
+        let crd = kif::CapRngDesc::new(kif::CapType::Object, caps, count).unwrap();
         self.obtain_for(Activity::own().sel(), crd, pre, post)?;
         Ok(crd)
     }

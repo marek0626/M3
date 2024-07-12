@@ -147,10 +147,9 @@ impl FSSession {
                     new_sel,
                     id
                 );
-                xchg.out_caps(m3::kif::CapRngDesc::new(
+                xchg.out_caps(m3::kif::CapRngDesc::new_single(
                     m3::kif::CapType::Object,
                     new_sel,
-                    1,
                 ));
                 xchg.out_args().push(id);
                 Ok(())
@@ -183,10 +182,9 @@ impl FSSession {
                 let new_sel = SelSpace::get().alloc_sel();
                 log!(LogFlags::FSSess, "[{}] fs::set_dest(sel={})", sid, new_sel);
                 fs.set_ep(new_sel);
-                xchg.out_caps(m3::kif::CapRngDesc::new(
+                xchg.out_caps(m3::kif::CapRngDesc::new_single(
                     m3::kif::CapType::Object,
                     new_sel,
-                    1,
                 ));
                 Ok(())
             },

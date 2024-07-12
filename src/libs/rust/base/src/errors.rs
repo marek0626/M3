@@ -24,6 +24,7 @@ use core::intrinsics;
 use alloc::borrow::Cow;
 
 use crate::col::String;
+use crate::kif::CapRngError;
 use crate::serialize::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// The error codes
@@ -335,6 +336,19 @@ impl VerboseError {
 impl From<Error> for VerboseError {
     fn from(e: Error) -> Self {
         Self::new(e.code(), String::default())
+    }
+}
+
+impl From<CapRngError> for VerboseError {
+    fn from(e: CapRngError) -> Self {
+        match e {
+            CapRngError::LastCapOverflow => {
+                Self::new(Code::InvArgs, "Capability range out of bounds")
+            },
+            CapRngError::CountTooLarge => {
+                Self::new(Code::InvArgs, "Capability range count not representable")
+            },
+        }
     }
 }
 

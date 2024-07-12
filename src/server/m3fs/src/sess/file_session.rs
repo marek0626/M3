@@ -43,7 +43,7 @@ impl Drop for Entry {
         // revoke all capabilities
         m3::tiles::Activity::own()
             .revoke(
-                m3::kif::CapRngDesc::new(m3::kif::CapType::Object, self.sel, 1),
+                m3::kif::CapRngDesc::new_single(m3::kif::CapType::Object, self.sel),
                 false,
             )
             .unwrap();
@@ -173,7 +173,8 @@ impl FileSession {
         self.child_sessions.push(sid);
         self.file_limit.borrow_mut().add(true);
 
-        data.out_caps(CapRngDesc::new(CapType::Object, sel, 2));
+        // FIXME: Does this unwrap never panic?
+        data.out_caps(CapRngDesc::new(CapType::Object, sel, 2).unwrap());
 
         Ok(nsess)
     }
@@ -203,7 +204,7 @@ impl FileSession {
             &mut self.load_limit,
         )?;
 
-        data.out_caps(m3::kif::CapRngDesc::new(CapType::Object, sel, 1));
+        data.out_caps(m3::kif::CapRngDesc::new_single(CapType::Object, sel));
         data.out_args().push(0);
         data.out_args().push(len);
 
@@ -225,7 +226,7 @@ impl FileSession {
         if self.cur_sel != m3::kif::INVALID_SEL {
             m3::tiles::Activity::own()
                 .revoke(
-                    m3::kif::CapRngDesc::new(m3::kif::CapType::Object, self.cur_sel, 1),
+                    m3::kif::CapRngDesc::new_single(m3::kif::CapType::Object, self.cur_sel),
                     false,
                 )
                 .unwrap();

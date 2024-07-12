@@ -273,7 +273,7 @@ fn create_sess(t: &mut dyn WvTester) {
         t,
         syscalls::revoke(
             Activity::own().sel(),
-            CapRngDesc::new(CapType::Object, srv, 1),
+            CapRngDesc::new_single(CapType::Object, srv),
             true
         )
     );
@@ -400,7 +400,7 @@ fn create_activity(t: &mut dyn WvTester) {
     }
     wv_assert_ok!(
         t,
-        Activity::own().revoke(CapRngDesc::new(CapType::Object, sels, 1), false)
+        Activity::own().revoke(CapRngDesc::new_single(CapType::Object, sels), false)
     );
 }
 
@@ -415,7 +415,7 @@ fn create_sem(t: &mut dyn WvTester) {
 
     wv_assert_ok!(
         t,
-        Activity::own().revoke(CapRngDesc::new(CapType::Object, sel, 1), false)
+        Activity::own().revoke(CapRngDesc::new_single(CapType::Object, sel), false)
     );
 }
 
@@ -480,7 +480,7 @@ fn alloc_ep(t: &mut dyn WvTester) {
     wv_assert!(t, ep < ep_count);
     wv_assert_ok!(
         t,
-        Activity::own().revoke(CapRngDesc::new(CapType::Object, sel, 1), false)
+        Activity::own().revoke(CapRngDesc::new_single(CapType::Object, sel), false)
     );
 
     // specific EP
@@ -493,7 +493,7 @@ fn alloc_ep(t: &mut dyn WvTester) {
     wv_assert_eq!(t, ep, ep_count - 2);
     wv_assert_ok!(
         t,
-        Activity::own().revoke(CapRngDesc::new(CapType::Object, sel, 1), false)
+        Activity::own().revoke(CapRngDesc::new_single(CapType::Object, sel), false)
     );
 
     // specific, but invalid EP
@@ -795,7 +795,7 @@ fn derive_kmem(t: &mut dyn WvTester) {
         // activity is still using the kmem
         wv_assert_err!(
             t,
-            Activity::own().revoke(CapRngDesc::new(CapType::Object, kmem.sel(), 1), false),
+            Activity::own().revoke(CapRngDesc::new_single(CapType::Object, kmem.sel()), false),
             Code::NotRevocable
         );
     }
@@ -803,7 +803,7 @@ fn derive_kmem(t: &mut dyn WvTester) {
     // now we can revoke it
     wv_assert_ok!(
         t,
-        Activity::own().revoke(CapRngDesc::new(CapType::Object, kmem.sel(), 1), false)
+        Activity::own().revoke(CapRngDesc::new_single(CapType::Object, kmem.sel()), false)
     );
 }
 
@@ -871,7 +871,7 @@ fn derive_tile(t: &mut dyn WvTester) {
         // activity is still using the Tile
         wv_assert_err!(
             t,
-            Activity::own().revoke(CapRngDesc::new(CapType::Object, tile.sel(), 1), false),
+            Activity::own().revoke(CapRngDesc::new_single(CapType::Object, tile.sel()), false),
             Code::NotRevocable
         );
     }
@@ -879,7 +879,7 @@ fn derive_tile(t: &mut dyn WvTester) {
     // now we can revoke it
     wv_assert_ok!(
         t,
-        Activity::own().revoke(CapRngDesc::new(CapType::Object, tile.sel(), 1), false)
+        Activity::own().revoke(CapRngDesc::new_single(CapType::Object, tile.sel()), false)
     );
 }
 
@@ -1088,8 +1088,8 @@ fn exchange(t: &mut dyn WvTester) {
 
     let sel = SelSpace::get().alloc_sel();
     let csel = sel;
-    let unused = CapRngDesc::new(CapType::Object, sel, 1);
-    let used = CapRngDesc::new(CapType::Object, 0, 1);
+    let unused = CapRngDesc::new_single(CapType::Object, sel);
+    let used = CapRngDesc::new_single(CapType::Object, 0);
 
     // invalid activity sel
     wv_assert_err!(
@@ -1125,7 +1125,7 @@ fn delegate(t: &mut dyn WvTester) {
     let m3fs = wv_require_ok!(M3FS::new(1, "m3fs-clone"));
     let m3fs = m3fs.borrow();
     let sess = m3fs.as_any().downcast_ref::<M3FS>().unwrap().sess();
-    let crd = CapRngDesc::new(CapType::Object, SEL_ACT, 1);
+    let crd = CapRngDesc::new_single(CapType::Object, SEL_ACT);
 
     // invalid activity selector
     wv_assert_err!(
@@ -1147,8 +1147,8 @@ fn obtain(t: &mut dyn WvTester) {
     let m3fs = m3fs.borrow();
     let sess = m3fs.as_any().downcast_ref::<M3FS>().unwrap().sess();
     let sel = SelSpace::get().alloc_sel();
-    let crd = CapRngDesc::new(CapType::Object, sel, 1);
-    let inval = CapRngDesc::new(CapType::Object, SEL_ACT, 1);
+    let crd = CapRngDesc::new_single(CapType::Object, sel);
+    let inval = CapRngDesc::new_single(CapType::Object, SEL_ACT);
 
     // invalid activity selector
     wv_assert_err!(
@@ -1171,10 +1171,10 @@ fn obtain(t: &mut dyn WvTester) {
 }
 
 fn revoke(t: &mut dyn WvTester) {
-    let crd_tile = CapRngDesc::new(CapType::Object, SEL_TILE, 1);
-    let crd_act = CapRngDesc::new(CapType::Object, SEL_ACT, 1);
-    let crd_mem = CapRngDesc::new(CapType::Object, SEL_KMEM, 1);
-    let crd_inv = CapRngDesc::new(CapType::Object, CapSel::MAX, 2);
+    let crd_tile = CapRngDesc::new_single(CapType::Object, SEL_TILE);
+    let crd_act = CapRngDesc::new_single(CapType::Object, SEL_ACT);
+    let crd_mem = CapRngDesc::new_single(CapType::Object, SEL_KMEM);
+    let crd_inv = unsafe { CapRngDesc::new_unchecked(CapType::Object, CapSel::MAX, 2) };
 
     // invalid activity selector
     wv_assert_err!(t, syscalls::revoke(SEL_KMEM, crd_act, true), Code::InvArgs);
@@ -1231,7 +1231,7 @@ fn revoke_deep(t: &mut dyn WvTester) {
     }
 
     // Revoke the deep tree from the root.
-    let crd_root_mem = CapRngDesc::new(CapType::Object, root_mem.sel(), 1);
+    let crd_root_mem = CapRngDesc::new_single(CapType::Object, root_mem.sel());
     wv_assert_ok!(t, syscalls::revoke(act, crd_root_mem, false));
 
     // Test that all derived capabilities are removed.
@@ -1260,7 +1260,7 @@ fn revoke_wide(t: &mut dyn WvTester) {
     }
 
     // Revoke the wide tree from the root.
-    let crd_root_mem = CapRngDesc::new(CapType::Object, root_mem.sel(), 1);
+    let crd_root_mem = CapRngDesc::new_single(CapType::Object, root_mem.sel());
     wv_assert_ok!(t, syscalls::revoke(act, crd_root_mem, false));
 
     // Test that all derived capabilities are removed.

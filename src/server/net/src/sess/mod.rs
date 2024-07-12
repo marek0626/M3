@@ -21,7 +21,7 @@ use core::cmp;
 
 use base::io::LogFlags;
 
-use m3::cap::{SelSpace, Selector};
+use m3::cap::SelSpace;
 use m3::cell::RefCell;
 use m3::col::Vec;
 use m3::com::GateIStream;
@@ -99,7 +99,7 @@ impl SocketSession {
                 sbuf_slots,
                 sbuf_size,
             },
-            caps,
+            CapRngDesc::new(CapType::Object, caps, 4).unwrap(),
             iface,
         );
 
@@ -118,7 +118,7 @@ impl SocketSession {
         match res {
             Ok(sd) => {
                 // Send capabilities back to caller so it can connect to the created gates
-                xchg.out_caps(CapRngDesc::new(CapType::Object, caps + 2, 2));
+                xchg.out_caps(CapRngDesc::new(CapType::Object, caps + 2, 2).unwrap());
                 xchg.out_args().push(sd);
                 Ok(())
             },
@@ -139,7 +139,7 @@ impl SocketSession {
         ty: SocketType,
         protocol: u8,
         args: &SocketArgs,
-        caps: Selector,
+        caps: CapRngDesc,
         iface: &mut DriverInterface<'_>,
     ) -> Result<Sd, Error> {
         if ty == SocketType::Raw && !self.settings.raw {

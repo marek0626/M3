@@ -67,7 +67,7 @@ impl Capability {
 
     fn release(&mut self) {
         if (self.flags & CapFlags::KEEP_CAP).is_empty() {
-            let crd = kif::CapRngDesc::new(kif::CapType::Object, self.sel(), 1);
+            let crd = kif::CapRngDesc::new_single(kif::CapType::Object, self.sel());
             syscalls::revoke(kif::SEL_ACT, crd, true).ok();
         }
     }

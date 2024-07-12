@@ -83,7 +83,7 @@ pub fn exchange(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let r: syscalls::Exchange = get_request(&msg)?;
     drop(msg);
 
-    let other_crd = CapRngDesc::new(r.own.cap_type(), r.other, r.own.count());
+    let other_crd = CapRngDesc::new(r.own.cap_type(), r.other, r.own.count())?;
 
     sysc_log!(
         act,

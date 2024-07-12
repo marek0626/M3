@@ -131,7 +131,7 @@ impl Pager {
 
         // we only need to do that for clones
         if self.sess.is_owned() {
-            let crd = kif::CapRngDesc::new(kif::CapType::Object, act.sel(), 1);
+            let crd = kif::CapRngDesc::new_single(kif::CapType::Object, act.sel());
             self.sess
                 .delegate(crd, |os| os.push(opcodes::Pager::Init), |_| Ok(()))
         }
@@ -208,7 +208,7 @@ impl Pager {
         flags: MapFlags,
         sess: &ClientSession,
     ) -> Result<VirtAddr, Error> {
-        let crd = kif::CapRngDesc::new(kif::CapType::Object, sess.sel(), 1);
+        let crd = kif::CapRngDesc::new_single(kif::CapType::Object, sess.sel());
         let mut res = VirtAddr::default();
         self.sess.delegate(
             crd,
@@ -240,7 +240,7 @@ impl Pager {
         len: usize,
         prot: kif::Perm,
     ) -> Result<VirtAddr, Error> {
-        let crd = kif::CapRngDesc::new(kif::CapType::Object, mem, 1);
+        let crd = kif::CapRngDesc::new_single(kif::CapType::Object, mem);
         let mut res = VirtAddr::default();
         self.sess.delegate(
             crd,
