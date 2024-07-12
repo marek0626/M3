@@ -961,6 +961,13 @@ pub enum EPCategory {
     Custom,
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum InvalidateType {
+    None,
+    Default,
+    Force,
+}
+
 pub struct EPObject {
     cat: EPCategory,
     gate: RefCell<Option<GateObject>>,
@@ -1031,23 +1038,26 @@ impl EPObject {
         self.gate.borrow().is_some()
     }
 
-    pub fn deconfigure(&self, force: bool) -> Result<bool, Error> {
+    pub fn deconfigure(&self, invalidate: InvalidateType) -> Result<bool, Error> {
         let mut invalidated = false;
         if let Some(ref gate) = self.gate.borrow_mut().take() {
             let tile_id = self.tile_id();
 
             // invalidate receive and send EPs
-            match gate {
-                GateObject::Recv(_) | GateObject::Send(_) => {
+            match (invalidate, gate) {
+                // if no invalidation is requested and it's a memory EP, there is nothing to check
+                (InvalidateType::None, GateObject::Mem(_)) => {},
+
+                // otherwise we always invalidate and potentially even force-invalidate
+                _ => {
                     tilemng::tilemux(tile_id).invalidate_ep(
                         self.activity().unwrap().id(),
                         self.ep,
-                        force,
+                        invalidate == InvalidateType::Force,
                         true,
                     )?;
                     invalidated = true;
                 },
-                _ => {},
             }
 
             match gate {

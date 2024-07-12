@@ -24,8 +24,8 @@ use base::{build_vmsg, verror};
 use thread::AsyncRc;
 
 use crate::cap::{
-    Capability, EPCategory, EPObject, GateObject, KMemObject, MGateObject, RGateObject,
-    SGateObject, SemObject, ServObject, SessObject,
+    Capability, EPCategory, EPObject, GateObject, InvalidateType, KMemObject, MGateObject,
+    RGateObject, SGateObject, SemObject, ServObject, SessObject,
 };
 use crate::ktcu;
 use crate::platform;
@@ -278,7 +278,8 @@ pub fn activate_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         ));
     }
 
-    if let Err(e) = ep.deconfigure(false) {
+    // invalidation not required as there is nothing to check and we'll overwrite it anyway
+    if let Err(e) = ep.deconfigure(InvalidateType::None) {
         return Err(verror!(
             e.code(),
             "Invalidation of EP {}:{} failed",
@@ -332,7 +333,7 @@ pub fn activate_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let epid = ep.ep();
     let dst_tile = ep.tile_id();
 
-    if let Err(e) = ep.deconfigure(false) {
+    if let Err(e) = ep.deconfigure(InvalidateType::None) {
         return Err(verror!(
             e.code(),
             "Invalidation of EP {}:{} failed",
@@ -430,7 +431,7 @@ pub fn activate_sgate_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> 
     let epid = ep.ep();
     let dst_tile = ep.tile_id();
 
-    if let Err(e) = ep.deconfigure(false) {
+    if let Err(e) = ep.deconfigure(InvalidateType::None) {
         return Err(verror!(
             e.code(),
             "Invalidation of EP {}:{} failed",
@@ -487,12 +488,7 @@ pub fn invalidate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     let ep: AsyncRc<EPObject> = act.get_kobj(r.ep)?;
 
-    if let Err(e) = tilemng::tilemux(ep.tile_id()).invalidate_ep(
-        ep.activity().unwrap().id(),
-        ep.ep(),
-        !ep.is_rgate(),
-        true,
-    ) {
+    if let Err(e) = ep.deconfigure(InvalidateType::Default) {
         return Err(verror!(
             e.code(),
             "Invalidation of EP {}:{} failed",
