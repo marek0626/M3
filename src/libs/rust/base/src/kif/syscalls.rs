@@ -59,7 +59,8 @@ pub enum Operation {
     DeriveMem,
     DeriveKMem,
     DeriveTile,
-    DeriveSrv,
+    DeriveSrvReq,
+    DeriveSrvFin,
     GetSess,
     MGateRegion,
     RGateBuffer,
@@ -248,12 +249,21 @@ pub struct DeriveTile {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[repr(C)]
-pub struct DeriveSrv {
+pub struct DeriveSrvReq {
     pub srv: CapSel,
     pub dst_srv: CapSel,
     pub dst_sgate: CapSel,
     pub sessions: u32,
     pub event: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[repr(C)]
+pub struct DeriveSrvFin {
+    pub srv: CapSel,
+    pub result: Code,
+    pub sgate: CapSel,
+    pub creator: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -49,14 +49,6 @@ pub struct OpenReply {
     pub ident: u64,
 }
 
-/// The open reply message
-#[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
-pub struct DeriveCreatorReply {
-    pub creator: usize,
-    pub sgate_sel: CapSel,
-}
-
 /// The delegate/obtain reply message
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[repr(C)]

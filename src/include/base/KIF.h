@@ -178,7 +178,8 @@ struct KIF {
             DERIVE_MEM,
             DERIVE_KMEM,
             DERIVE_TILE,
-            DERIVE_SRV,
+            DERIVE_SRV_REQ,
+            DERIVE_SRV_FIN,
             GET_SESS,
             MGATE_REGION,
             RGATE_BUFFER,
@@ -350,12 +351,19 @@ struct KIF {
             xfer_t pts;
         } PACKED;
 
-        struct DeriveSrv : public DefaultRequest {
+        struct DeriveSrvReq : public DefaultRequest {
             xfer_t dst_srv;
             xfer_t dst_sgate;
             xfer_t srv_sel;
             xfer_t sessions;
             xfer_t event;
+        } PACKED;
+
+        struct DeriveSrvFin : public DefaultRequest {
+            xfer_t srv;
+            xfer_t result;
+            xfer_t sgate;
+            xfer_t creator;
         } PACKED;
 
         struct GetSession : public DefaultRequest {

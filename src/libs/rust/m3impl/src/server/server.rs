@@ -18,12 +18,14 @@
 
 use core::fmt;
 
+use base::kif::INVALID_SEL;
+
 use crate::cap::{CapFlags, Capability, SelSpace, Selector};
 use crate::com::{GateIStream, RecvGate};
 use crate::errors::{Code, Error};
 use crate::io::LogFlags;
 use crate::kif::{
-    service::{DeriveCreatorReply, ExchangeData, ExchangeReply, OpenReply, Request},
+    service::{ExchangeData, ExchangeReply, OpenReply, Request},
     CapRngDesc,
 };
 use crate::log;
@@ -257,7 +259,9 @@ impl Server {
         let req: Request<'_> = is.pop()?;
         match req {
             Request::Open { arg } => Self::handle_open(hdl, self.sel(), is, arg),
-            Request::DeriveCrt { sessions } => Self::handle_derive_crt(hdl, is, sessions),
+            Request::DeriveCrt { sessions } => {
+                Self::handle_derive_crt(hdl, self.sel(), is, sessions)
+            },
             Request::Obtain { sid, data } => {
                 self.handle_exchange(hdl, is, sid as SessId, &data, true)
             },
@@ -304,6 +308,7 @@ impl Server {
 
     fn handle_derive_crt<H, S>(
         hdl: &mut H,
+        sel: Selector,
         is: &mut GateIStream<'_>,
         sessions: u32,
     ) -> Result<(), Error>
@@ -318,12 +323,13 @@ impl Server {
             sessions
         );
 
-        let (nid, sgate) = hdl.sessions().derive_creator(is.rgate(), crt, sessions)?;
+        let res = hdl.sessions().derive_creator(is.rgate(), crt, sessions);
+        match res {
+            Ok((nid, sgate)) => syscalls::derive_srv_fin(sel, Code::Success, sgate, nid)?,
+            Err(e) => syscalls::derive_srv_fin(sel, e.code(), INVALID_SEL, 0)?,
+        }
 
-        reply_vmsg!(is, Code::Success, DeriveCreatorReply {
-            creator: nid,
-            sgate_sel: sgate,
-        })
+        is.reply_error(Code::Success)
     }
 
     fn handle_exchange<H, S>(

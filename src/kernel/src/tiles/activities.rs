@@ -64,6 +64,13 @@ pub const INVAL_ID: ActId = 0xFFFF;
 static EXIT_EVENT: Code = Code::Success;
 static EXIT_LISTENERS: StaticRefCell<Vec<ExitWait>> = StaticRefCell::new(Vec::new());
 
+pub struct DeriveSrv {
+    pub src_srv: CapSel,
+    pub dst_srv: CapSel,
+    pub dst_sgate: CapSel,
+    pub event: thread::Event,
+}
+
 pub struct Activity {
     id: ActId,
     name: String,
@@ -89,6 +96,7 @@ pub struct Activity {
     upcalls: RefCell<Box<SendQueue>>,
 
     cur_sysc: RefCell<OwnedMessage>,
+    cur_derive_srv: RefCell<Option<DeriveSrv>>,
 }
 
 impl Activity {
@@ -119,6 +127,7 @@ impl Activity {
             upcalls: RefCell::from(SendQueue::new(QueueId::Activity(id), tile.tile())),
             tile: tile.downgrade(),
             cur_sysc: RefCell::from(OwnedMessage::default()),
+            cur_derive_srv: RefCell::from(None),
         }));
 
         {
@@ -367,6 +376,19 @@ impl Activity {
         self.cur_sysc.borrow_mut().reply(reply)
     }
 
+    pub fn start_derive(&self, derive: DeriveSrv) -> Result<(), Error> {
+        if self.cur_derive_srv.borrow().is_some() {
+            return Err(Error::new(Code::Exists));
+        }
+
+        *self.cur_derive_srv.borrow_mut() = Some(derive);
+        Ok(())
+    }
+
+    pub fn finish_derive(&self) -> Option<DeriveSrv> {
+        self.cur_derive_srv.borrow_mut().take()
+    }
+
     fn fetch_exit(&self, sels: &[u64]) -> Option<(CapSel, Code)> {
         for sel in sels {
             if let Ok(wv) = self
@@ -473,14 +495,11 @@ impl Activity {
         self.send_upcall::<kif::upcalls::ActivityWait>(&buf, &msg);
     }
 
-    pub fn upcall_derive_srv(&self, event: u64, result: Result<(), VerboseError>) {
+    pub fn upcall_derive_srv(&self, event: u64, result: Code) {
         let mut buf = MsgBuf::borrow_def();
         let msg = kif::upcalls::DeriveSrv {
             event,
-            error: match result {
-                Ok(_) => Code::Success,
-                Err(e) => e.code(),
-            },
+            error: result,
         };
         build_vmsg!(buf, kif::upcalls::Operation::DeriveSrv, msg);
 

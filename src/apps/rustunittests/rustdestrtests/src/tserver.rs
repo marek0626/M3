@@ -25,7 +25,7 @@ use m3::com::{
     recv_msg, GateIStream, RGateArgs, RecvGate, SGateArgs, Semaphore, SendCap, SendGate,
 };
 use m3::errors::{Code, Error};
-use m3::kif::service::{DeriveCreatorReply, Request};
+use m3::kif::service::Request;
 use m3::kif::{self, CapRngDesc, CapType};
 use m3::mem::MsgBuf;
 use m3::server::{
@@ -36,8 +36,8 @@ use m3::syscalls;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ActivityArgs, ChildActivity, OwnActivity, RunningActivity, Tile};
 use m3::{
-    build_vmsg, reply_vmsg, send_vmsg, wv_assert, wv_assert_eq, wv_assert_err, wv_assert_ok,
-    wv_require_ok, wv_run_test,
+    build_vmsg, send_vmsg, wv_assert, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok,
+    wv_run_test,
 };
 
 pub fn run(t: &mut dyn WvTester) {
@@ -344,24 +344,26 @@ fn server_derive_main() -> Result<(), Error> {
     let req: Request<'_> = wv_require_ok!(is.pop());
     wv_assert!(t, matches!(req, Request::DeriveCrt { sessions: _ }));
 
-    // now first revoke the service cap
+    // now first revoke the derived service caps
     wv_assert_ok!(
         t,
         syscalls::revoke(
             Activity::own().sel(),
             CapRngDesc::new(CapType::Object, srv_sel, 1),
-            true,
+            false,
         )
     );
 
-    // and then reply
-    wv_assert_ok!(
+    // finish the derive_srv call (which fails now as we revoked the service)
+    let scap = wv_require_ok!(SendCap::new(&rgate));
+    wv_assert_err!(
         t,
-        reply_vmsg!(is, Code::Success, DeriveCreatorReply {
-            creator: 1,
-            sgate_sel: kif::INVALID_SEL,
-        })
+        syscalls::derive_srv_fin(srv_sel, Code::Success, scap.sel(), 0),
+        Code::InvCap
     );
+
+    // and then reply
+    wv_assert_ok!(t, is.reply_error(Code::Success));
 
     Ok(())
 }
@@ -395,7 +397,7 @@ fn testderive(t: &mut dyn WvTester) {
     let sels = SelSpace::get().alloc_sels(2);
     wv_assert_ok!(
         t,
-        syscalls::derive_srv(our_sel, sels + 0, sels + 1, 1, 0xDEAD_BEEF)
+        syscalls::derive_srv_req(our_sel, sels + 0, sels + 1, 1, 0xDEAD_BEEF)
     );
 
     // wait for upcall
@@ -404,7 +406,7 @@ fn testderive(t: &mut dyn WvTester) {
     // this should be a derive service upcall
     let _opcode: kif::upcalls::Operation = wv_require_ok!(is.pop());
     let resp: kif::upcalls::DeriveSrv = wv_require_ok!(is.pop());
-    wv_assert_eq!(t, resp.error, Code::ObjectGone);
+    wv_assert_eq!(t, resp.error, Code::InvCap);
 
     wv_assert_eq!(t, sact.wait(), Ok(Code::Success));
 }

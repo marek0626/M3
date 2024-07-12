@@ -884,24 +884,24 @@ fn derive_srv(t: &mut dyn WvTester) {
     // invalid service selector
     wv_assert_err!(
         t,
-        syscalls::derive_srv(SEL_KMEM, serv_sel, sgate_sel, 1, 0),
+        syscalls::derive_srv_req(SEL_KMEM, serv_sel, sgate_sel, 1, 0),
         Code::InvArgs
     );
     // invalid dest selector
     wv_assert_err!(
         t,
-        syscalls::derive_srv(srv.sel(), SEL_KMEM, sgate_sel, 1, 0),
+        syscalls::derive_srv_req(srv.sel(), SEL_KMEM, sgate_sel, 1, 0),
         Code::InvArgs
     );
     wv_assert_err!(
         t,
-        syscalls::derive_srv(srv.sel(), serv_sel, SEL_KMEM, 1, 0),
+        syscalls::derive_srv_req(srv.sel(), serv_sel, SEL_KMEM, 1, 0),
         Code::InvArgs
     );
     // invalid session count
     wv_assert_err!(
         t,
-        syscalls::derive_srv(srv.sel(), serv_sel, sgate_sel, 0, 0),
+        syscalls::derive_srv_req(srv.sel(), serv_sel, sgate_sel, 0, 0),
         Code::InvArgs
     );
 }

@@ -289,16 +289,27 @@ void Syscalls::derive_tile(capsel_t tile, capsel_t dst, Option<uint> eps, Option
     send_receive_throw(req_buf);
 }
 
-void Syscalls::derive_srv(capsel_t srv, capsel_t dst_srv, capsel_t dst_sgate, uint sessions,
-                          event_t event) {
+void Syscalls::derive_srv_req(capsel_t srv, capsel_t dst_srv, capsel_t dst_sgate, uint sessions,
+                              event_t event) {
     MsgBuf req_buf;
-    auto &req = req_buf.cast<KIF::Syscall::DeriveSrv>();
-    req.opcode = KIF::Syscall::DERIVE_SRV;
+    auto &req = req_buf.cast<KIF::Syscall::DeriveSrvReq>();
+    req.opcode = KIF::Syscall::DERIVE_SRV_REQ;
     req.srv_sel = srv;
     req.dst_srv = dst_srv;
     req.dst_sgate = dst_sgate;
     req.sessions = sessions;
     req.event = event;
+    send_receive_throw(req_buf);
+}
+
+void Syscalls::derive_srv_fin(capsel_t srv, Errors::Code result, capsel_t sgate, size_t creator) {
+    MsgBuf req_buf;
+    auto &req = req_buf.cast<KIF::Syscall::DeriveSrvFin>();
+    req.opcode = KIF::Syscall::DERIVE_SRV_FIN;
+    req.srv = srv;
+    req.result = static_cast<xfer_t>(result);
+    req.sgate = sgate;
+    req.creator = creator;
     send_receive_throw(req_buf);
 }
 

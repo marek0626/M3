@@ -18,16 +18,15 @@ use base::io::LogFlags;
 use base::kif::{self, syscalls};
 use base::log;
 use base::mem::{GlobAddr, MsgBuf};
-use base::serialize::M3Deserializer;
 use base::tcu;
 use base::{build_vmsg, verror};
 
 use thread::AsyncRc;
 
-use crate::cap::{Capability, KMemObject, MGateObject, ServObject, TileObject};
+use crate::cap::{Capability, KMemObject, MGateObject, SGateObject, ServObject, TileObject};
 use crate::mem;
 use crate::syscalls::{check_unused, get_request, reply_success, try_upgrade_kobj};
-use crate::tiles::Activity;
+use crate::tiles::{Activity, DeriveSrv};
 
 #[inline(never)]
 pub fn derive_tile_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
@@ -131,14 +130,14 @@ pub fn derive_mem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn derive_srv_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn derive_srv_req(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
-    let r: syscalls::DeriveSrv = get_request(&msg)?;
+    let r: syscalls::DeriveSrvReq = get_request(&msg)?;
     drop(msg);
 
     sysc_log!(
         act,
-        "derive_srv(dst_srv={}, dst_sgate={}, srv={}, sessions={}, event={})",
+        "derive_srv_req(dst_srv={}, dst_sgate={}, srv={}, sessions={}, event={})",
         r.dst_srv,
         r.dst_sgate,
         r.srv,
@@ -155,8 +154,17 @@ pub fn derive_srv_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     let srv: AsyncRc<ServObject> = act.get_kobj(r.srv)?;
 
-    // everything worked, send the reply
-    reply_success(&act);
+    act.start_derive(DeriveSrv {
+        src_srv: r.srv,
+        dst_srv: r.dst_srv,
+        dst_sgate: r.dst_sgate,
+        event: r.event,
+    })?;
+    // if that fails, undo the start
+    if let Err(e) = srv.set_derive_act(act.clone()) {
+        act.finish_derive().unwrap();
+        return Err(e.into());
+    }
 
     let mut smsg = MsgBuf::borrow_def();
     build_vmsg!(smsg, kif::service::Request::DeriveCrt {
@@ -172,69 +180,81 @@ pub fn derive_srv_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         label,
     );
 
-    let srv_weak = srv.clone().downgrade();
-    let act_weak = act.downgrade();
-    let res = ServObject::send_receive_async(srv, label, smsg);
+    if let Err(e) = ServObject::send(&srv, label, smsg) {
+        srv.fetch_derive_act().unwrap();
+        act.finish_derive().unwrap();
+        return Err(e.into());
+    }
 
-    // if the activity is gone, we can return an error here and will fail to send a reply in the
-    // syscall handler.
-    let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
+    reply_success(&act);
+    Ok(())
+}
 
-    // perform this operation in a closure to catch errors and in all cases reply via upcall. this
-    // is required because we have already replied to the syscall and cannot do that again as it
-    // happens in the syscall handler.
-    let finish = |act: &AsyncRc<Activity>| -> Result<(), VerboseError> {
-        let srv = try_upgrade_kobj(srv_weak, r.srv)?;
-        match res {
-            Err(e) => {
-                sysc_log!(act, "Service {} unreachable: {:?}", srv.name(), e.code());
-                Err(e.into())
-            },
+#[inline(never)]
+pub fn derive_srv_fin(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::DeriveSrvFin = get_request(&msg)?;
+    drop(msg);
 
-            Ok(rmsg) => {
-                let mut de = M3Deserializer::new(rmsg.as_words());
-                let err: Code = de.pop()?;
-                match err {
-                    Code::Success => {
-                        let reply: kif::service::DeriveCreatorReply = de.pop()?;
+    sysc_log!(
+        act,
+        "derive_srv_fin(srv={}, result={:?}, sgate={}, creator={})",
+        r.srv,
+        r.result,
+        r.sgate,
+        r.creator,
+    );
 
-                        sysc_log!(act, "derive_srv continue with creator={}", reply.creator);
+    let srv: AsyncRc<ServObject> = act.get_kobj(r.srv)?;
 
-                        // obtain SendGate from server (do that first because it can fail)
-                        let serv_act = srv.server_act();
-                        let mut serv_caps = serv_act.obj_caps().borrow_mut();
-                        let src_cap = serv_caps.get_mut(reply.sgate_sel);
-                        match src_cap {
-                            Err(_) => {
-                                sysc_log!(
-                                    act,
-                                    "Service gave invalid SendGate cap {}",
-                                    reply.sgate_sel
-                                )
-                            },
-                            Ok(c) => try_kmem_quota!(act.obj_caps().borrow_mut().obtain(
-                                r.dst_sgate,
-                                c,
-                                true
-                            )),
-                        }
+    let der_act = srv.fetch_derive_act()?;
+    let derive = der_act
+        .finish_derive()
+        .ok_or_else(|| Error::new(Code::InvState))?;
 
-                        // derive new service object
-                        let derived_srv = srv.derive(reply.creator);
-                        let cap = Capability::new(r.dst_srv, derived_srv);
-                        try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.srv));
-                        Ok(())
-                    },
-                    err => {
-                        sysc_log!(act, "Server {} denied derive: {:?}", srv.name(), err);
-                        Err(Error::new(err).into())
-                    },
-                }
-            },
+    let res = if r.result == Code::Success {
+        // don't return here via ? but catch the error and always sent the upcall with the result
+        let finish = || {
+            let src_srv: AsyncRc<ServObject> = der_act.get_kobj(derive.src_srv)?;
+
+            let mut obj_caps = act.obj_caps().borrow_mut();
+            let sgate_cap = obj_caps.get_mut(r.sgate)?;
+            // ensure that this is actually a send gate
+            sgate_cap.get::<AsyncRc<SGateObject>>()?;
+
+            // pass sgate to calling activity
+            try_kmem_quota!(der_act.obj_caps().borrow_mut().obtain(
+                derive.dst_sgate,
+                sgate_cap,
+                true
+            ));
+
+            // derive new service object and pass it to calling activity
+            let derived_srv = src_srv.derive(r.creator);
+            let cap = Capability::new(derive.dst_srv, derived_srv);
+            try_kmem_quota!(der_act
+                .obj_caps()
+                .borrow_mut()
+                .insert_as_child(cap, derive.src_srv));
+            Ok(())
+        };
+        match finish() {
+            Err(e) => e.code(),
+            Ok(_) => Code::Success,
         }
+    }
+    else {
+        r.result
     };
 
-    let res = finish(&act);
-    act.upcall_derive_srv(r.event, res);
+    // notify calling activity via upcall
+    der_act.upcall_derive_srv(derive.event, res);
+
+    // return Err here to get the error print from the syscall handler
+    if res != Code::Success {
+        return Err(Error::new(res).into());
+    }
+
+    reply_success(&act);
     Ok(())
 }

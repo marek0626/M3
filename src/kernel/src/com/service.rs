@@ -33,6 +33,15 @@ pub struct Service {
     name: String,
     rgate: AsyncWeak<RGateObject>,
     queue: RefCell<Box<SendQueue>>,
+    // note that we deliberately allow just one derive at a time here, because otherwise it's
+    // tricky to prevent memory DOS attacks on the kernel: since we cannot force the server to use
+    // the derive_srv_fin syscall, it could just reply to the service request and thereby allow
+    // applications to start another derive_srv without really finishing the old one. If we don't
+    // want to keep a thread around to handle the reply to the service request (where we could
+    // finish the current derive_srv_req before issuing a new one), the only other way is probably
+    // to check specifically for this reply in SendQueue::received_reply and finish it there, which
+    // does not seem worth it.
+    cur_derive: RefCell<Option<AsyncWeak<Activity>>>,
 }
 
 impl Service {
@@ -42,6 +51,7 @@ impl Service {
             rgate: rgate.downgrade(),
             queue: RefCell::from(SendQueue::new(QueueId::Serv(act.id()), act.tile_id())),
             act: act.downgrade(),
+            cur_derive: RefCell::from(None),
         })
     }
 
@@ -51,6 +61,24 @@ impl Service {
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn set_derive_act(&self, act: AsyncRc<Activity>) -> Result<(), Error> {
+        let mut cur_derive = self.cur_derive.borrow_mut();
+        if cur_derive.is_some() {
+            return Err(Error::new(Code::Exists));
+        }
+        *cur_derive = Some(act.downgrade());
+        Ok(())
+    }
+
+    pub fn fetch_derive_act(&self) -> Result<AsyncRc<Activity>, Error> {
+        let act = self
+            .cur_derive
+            .borrow_mut()
+            .take()
+            .ok_or_else(|| Error::new(Code::NotFound))?;
+        act.upgrade().ok_or_else(|| Error::new(Code::ObjectGone))
     }
 
     pub fn send(&self, lbl: tcu::Label, msg: &MsgBuf) -> Result<thread::Event, Error> {
@@ -64,6 +92,19 @@ impl Service {
 
     pub fn abort(&self) {
         self.queue.borrow_mut().abort();
+    }
+}
+
+impl Drop for Service {
+    fn drop(&mut self) {
+        // if there is still an open derive, notify the activity via upcall
+        if let Some(act_weak) = self.cur_derive.borrow_mut().take() {
+            if let Some(act) = act_weak.upgrade() {
+                if let Some(derive) = act.finish_derive() {
+                    act.upcall_derive_srv(derive.event, Code::ObjectGone);
+                }
+            }
+        }
     }
 }
 

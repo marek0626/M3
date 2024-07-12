@@ -467,8 +467,24 @@ impl ServObject {
         self.creator
     }
 
+    pub fn set_derive_act(&self, act: AsyncRc<Activity>) -> Result<(), Error> {
+        self.serv.set_derive_act(act)
+    }
+
+    pub fn fetch_derive_act(&self) -> Result<AsyncRc<Activity>, Error> {
+        self.serv.fetch_derive_act()
+    }
+
     pub fn derive(&self, creator: usize) -> AsyncRc<Self> {
         Self::new(self.serv.clone(), false, creator)
+    }
+
+    pub fn send(
+        srv: &AsyncRc<Self>,
+        lbl: Label,
+        msg: MsgBufRef<'_>,
+    ) -> Result<thread::Event, Error> {
+        srv.serv.send(lbl, &msg)
     }
 
     pub fn send_receive_async(
@@ -476,9 +492,8 @@ impl ServObject {
         lbl: Label,
         msg: MsgBufRef<'_>,
     ) -> Result<&'static tcu::Message, Error> {
-        let event = srv.serv.send(lbl, &msg)?;
+        let event = Self::send(&srv, lbl, msg)?;
         drop(srv);
-        drop(msg);
         SendQueue::receive_async(event)
     }
 
