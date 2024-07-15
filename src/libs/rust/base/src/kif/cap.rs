@@ -78,6 +78,13 @@ impl CapRngDesc {
     }
 
     /// Create a range descriptor without performing any bounds checking.
+    ///
+    /// # Safety
+    ///
+    /// The last element must still be representable.
+    /// Beware that the count value is shifted left.
+    /// This function is only intended for test cases where we want to test
+    /// that the kernel checks the range descriptor on deserialization.
     pub unsafe fn new_unchecked(ty: CapType, start: CapSel, count: CapSel) -> Self {
         Self {
             start,
