@@ -72,9 +72,9 @@ impl CapRngDesc {
     /// Create a new descriptor for a range of size one
     ///
     /// This construction cannot fail as such a range is always representable.
-    pub fn new_single(ty: CapType, start: CapSel) -> Self {
+    pub fn new_single(ty: CapType, sel: CapSel) -> Self {
         // Should be optimized by compiler.
-        Self::new(ty, start, 1).unwrap()
+        Self::new(ty, sel, 1).unwrap()
     }
 
     /// Create a range descriptor without performing any bounds checking.

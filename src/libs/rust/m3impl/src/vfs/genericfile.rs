@@ -142,6 +142,7 @@ pub struct GenericFile {
     fs_id: Option<usize>,
     fd: Fd,
     flags: OpenFlags,
+    // Selector of sgate has to be sess.sel() + 1.
     sess: ClientSession,
     sgate: RefCell<LazySGate>,
     memep: Option<EP>,
@@ -549,7 +550,6 @@ impl File for GenericFile {
     }
 
     fn delegate(&self, act: &ChildActivity) -> Result<Selector, Error> {
-        // FIXME: Does this unwrap never panic?
         let crd = CapRngDesc::new(CapType::Object, self.sess.sel(), 2).unwrap();
         self.sess.obtain_for(
             act.sel(),

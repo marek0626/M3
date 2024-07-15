@@ -168,6 +168,7 @@ impl NetEventChannel {
     /// selectors
     ///
     /// # Panics
+    ///
     /// Panics if `caps` does not range over exactly four capabilities.
     pub fn new_server(caps: CapRngDesc) -> Result<Rc<Self>, Error> {
         assert_eq!(caps.count(), 4);
@@ -215,8 +216,11 @@ impl NetEventChannel {
     /// selectors
     ///
     /// # Panics
+    ///
     /// Panics if `caps` does not range over exactly two capabilities.
     pub fn new_client(caps: CapRngDesc) -> Result<Rc<Self>, Error> {
+        assert_eq!(caps.count(), 2);
+
         let rgate = RecvGate::new_bind(caps.start())?;
         let rpl_gate = RecvGate::new(math::next_log2(REPLY_BUF_SIZE), math::next_log2(REPLY_SIZE))?;
 

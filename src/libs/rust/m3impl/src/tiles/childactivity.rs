@@ -307,8 +307,12 @@ impl ChildActivity {
 
     /// Obtains the given capability range of `self` to [`Activity::own`](Activity::own) using
     /// selectors `dst`..`dst`+`crd.count()`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a capability range descriptor cannot be formed from `dst`.
     pub fn obtain_to(&self, crd: CapRngDesc, dst: Selector) -> Result<(), Error> {
-        let own = CapRngDesc::new(crd.cap_type(), dst, crd.count())?;
+        let own = CapRngDesc::new(crd.cap_type(), dst, crd.count()).unwrap();
         syscalls::exchange(self.sel(), own, crd.start(), true)
     }
 

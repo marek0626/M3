@@ -173,7 +173,6 @@ impl PipesSession {
             }
         })?;
 
-        // FIXME: Does this unwrap never panic?
         xchg.out_caps(kif::CapRngDesc::new(kif::CapType::Object, sel, 2).unwrap());
 
         Ok(())
@@ -210,7 +209,6 @@ impl PipesSession {
             Ok(res)
         })?;
 
-        // FIXME: Does this unwrap never panic?
         xchg.out_caps(kif::CapRngDesc::new(kif::CapType::Object, sel, 2).unwrap());
 
         Ok(())

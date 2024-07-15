@@ -173,7 +173,6 @@ impl FileSession {
         self.child_sessions.push(sid);
         self.file_limit.borrow_mut().add(true);
 
-        // FIXME: Does this unwrap never panic?
         data.out_caps(CapRngDesc::new(CapType::Object, sel, 2).unwrap());
 
         Ok(nsess)

@@ -47,6 +47,7 @@ struct CachedEP {
 pub struct M3FS {
     id: usize,
     sess: ClientSession,
+    // Selector of sgate has to be sess.sel() + 1.
     sgate: Rc<SendGate>,
     eps: Vec<CachedEP>,
 }
@@ -246,7 +247,6 @@ impl FileSystem for M3FS {
     }
 
     fn delegate(&self, act: &ChildActivity) -> Result<Selector, Error> {
-        // FIXME: Does this unwrap never panic?
         let crd = kif::CapRngDesc::new(kif::CapType::Object, self.sess.sel(), 2).unwrap();
         self.sess.obtain_for(
             act.sel(),

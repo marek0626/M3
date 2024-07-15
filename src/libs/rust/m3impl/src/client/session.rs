@@ -179,7 +179,6 @@ impl ClientSession {
         POST: FnMut(&mut M3Deserializer<'_>) -> Result<(), Error>,
     {
         let caps = SelSpace::get().alloc_sels(count);
-        // FIXME: Does this unwrap never panic?
         let crd = kif::CapRngDesc::new(kif::CapType::Object, caps, count).unwrap();
         self.obtain_for(Activity::own().sel(), crd, pre, post)?;
         Ok(crd)
