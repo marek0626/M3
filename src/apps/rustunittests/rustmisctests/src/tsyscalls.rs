@@ -367,7 +367,7 @@ fn create_activity(t: &mut dyn WvTester) {
     wv_assert_err!(
         t,
         syscalls::create_activity(CapSel::MAX, "test", tile.sel(), kmem),
-        Code::InvArgs
+        Code::LastCapOverflow
     );
 
     // invalid name

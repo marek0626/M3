@@ -56,10 +56,12 @@ pub enum CapType {
 impl CapRngDesc {
     /// Creates a new capability range descriptor. `start` is the first capability selector and
     /// `start + count - 1` is the last one.
-    pub fn new(ty: CapType, start: CapSel, count: CapSel) -> Result<Self, CapRngError> {
+    pub fn new(ty: CapType, start: CapSel, count: CapSel) -> Result<Self, Error> {
         // Check that count can be shifted left by one without changing the
         // value.
-        let shifted = count.checked_mul(2).ok_or(CapRngError::CountTooLarge)?;
+        let shifted = count
+            .checked_mul(2)
+            .ok_or(Error::new(Code::CapCountTooLarge))?;
         UnsafeCapRngDesc {
             start,
             count_ty: shifted | (ty as u64),
@@ -111,34 +113,6 @@ impl fmt::Display for CapRngDesc {
     }
 }
 
-/// Possible errors while creating a [`CapRngDesc`]
-#[derive(Debug)]
-pub enum CapRngError {
-    /// The last capability in the range (if any) is not representable as an int
-    LastCapOverflow,
-    /// The provided count does not fit in the [`CapRngDesc`]
-    CountTooLarge,
-}
-
-impl fmt::Display for CapRngError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CapRngError::LastCapOverflow => {
-                write!(f, "last capability selector is not representable")
-            },
-            CapRngError::CountTooLarge => {
-                write!(f, "count is not representable in range descriptor")
-            },
-        }
-    }
-}
-
-impl From<CapRngError> for Error {
-    fn from(_: CapRngError) -> Self {
-        Error::new(Code::InvArgs)
-    }
-}
-
 /// Helper struct that binary data is deserialized into without validation
 ///
 /// [`CapRngDesc`] is created from this after validation
@@ -149,7 +123,7 @@ struct UnsafeCapRngDesc {
 }
 
 impl TryFrom<UnsafeCapRngDesc> for CapRngDesc {
-    type Error = CapRngError;
+    type Error = Error;
 
     fn try_from(desc: UnsafeCapRngDesc) -> Result<Self, Self::Error> {
         let unval = CapRngDesc {
@@ -161,7 +135,7 @@ impl TryFrom<UnsafeCapRngDesc> for CapRngDesc {
             // Try to compute last element without overflow.
             let last = unval.start().checked_add(c);
             if last.is_none() {
-                return Err(CapRngError::LastCapOverflow);
+                return Err(Error::new(Code::LastCapOverflow));
             }
         }
         // Guaranteed that the last capability selector is representable.
