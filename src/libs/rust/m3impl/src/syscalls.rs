@@ -327,11 +327,14 @@ pub fn derive_tile(
     send_receive_result(&buf)
 }
 
-/// Derives a new service object at `dst_srv` and a send gate to create sessions at `dst_sgate`
-/// from existing service `srv`, transferring `sessions` sessions to the new service object. A
-/// non-error reply just acknowledges that the request has been sent to the service. Upon the
-/// completion of the request, you will receive an upcall containing `event`.
-pub fn derive_srv(
+/// Requests a derive of the given service object.
+///
+/// The derive transfers `sessions` sessions to the new service object. The new service object will
+/// be created at `dst_srv` and a send gate to create sessions at `dst_sgate`. Note that this
+/// syscall merely requests the derivation, which returns success if the request has been sent to
+/// the server successfully. The result of the actual derivation will be sent via upcall containing
+/// `event`.
+pub fn derive_srv_req(
     srv: Selector,
     dst_srv: Selector,
     dst_sgate: Selector,
@@ -339,13 +342,44 @@ pub fn derive_srv(
     event: u64,
 ) -> Result<(), Error> {
     let mut buf = SYSC_BUF.borrow_mut();
-    build_vmsg!(buf, syscalls::Operation::DeriveSrv, syscalls::DeriveSrv {
-        dst_srv,
-        dst_sgate,
-        srv,
-        sessions,
-        event,
-    });
+    build_vmsg!(
+        buf,
+        syscalls::Operation::DeriveSrvReq,
+        syscalls::DeriveSrvReq {
+            dst_srv,
+            dst_sgate,
+            srv,
+            sessions,
+            event,
+        }
+    );
+    send_receive_result(&buf)
+}
+
+/// Finishes a service derivation
+///
+/// This syscall finishes the service derivation that was started via `derive_srv_req` and is
+/// supposed to be called by the server side. The selector `srv` denotes the service object that
+/// should be derived and `result` denotes the result of the operation. If [`Code::Success`],
+/// `sgate` and `creator` specify the new [`SendGate`] for the creator and its id. Otherwise, these
+/// two values are ignored and the derivation request has failed.
+pub fn derive_srv_fin(
+    srv: Selector,
+    result: Code,
+    sgate: Selector,
+    creator: usize,
+) -> Result<(), Error> {
+    let mut buf = SYSC_BUF.borrow_mut();
+    build_vmsg!(
+        buf,
+        syscalls::Operation::DeriveSrvFin,
+        syscalls::DeriveSrvFin {
+            srv,
+            result,
+            sgate,
+            creator,
+        }
+    );
     send_receive_result(&buf)
 }
 

@@ -22,7 +22,7 @@ pub mod loader;
 pub mod tilemng;
 mod tilemux;
 
-pub use self::activities::{Activity, ActivityFlags, State, INVAL_ID, KERNEL_ID};
+pub use self::activities::{Activity, ActivityFlags, DeriveSrv, State, INVAL_ID, KERNEL_ID};
 pub use self::actmng::ActivityMng;
 pub use self::tilemux::TileMux;
 

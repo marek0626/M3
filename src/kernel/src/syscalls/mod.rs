@@ -121,7 +121,8 @@ pub fn handle_async(msg: tcu::OwnedMessage) {
         o if o == Operation::DeriveTile.into() => derive::derive_tile_async(act),
         o if o == Operation::DeriveMem.into() => derive::derive_mem(act),
         o if o == Operation::DeriveKMem.into() => derive::derive_kmem(act),
-        o if o == Operation::DeriveSrv.into() => derive::derive_srv_async(act),
+        o if o == Operation::DeriveSrvReq.into() => derive::derive_srv_req(act),
+        o if o == Operation::DeriveSrvFin.into() => derive::derive_srv_fin(act),
 
         o if o == Operation::Exchange.into() => exchange::exchange(act),
         o if o == Operation::ExchangeSess.into() => exchange::exchange_over_sess_async(act),

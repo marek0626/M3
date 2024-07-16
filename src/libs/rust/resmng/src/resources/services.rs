@@ -111,7 +111,7 @@ impl Service {
     pub fn derive_async(&self, child: childs::Id, sessions: u32) -> Result<DerivedService, Error> {
         let dst = SelSpace::get().alloc_sels(2);
         let event = events::alloc_event();
-        syscalls::derive_srv(self.sel(), dst + 0, dst + 1, sessions, event)?;
+        syscalls::derive_srv_req(self.sel(), dst + 0, dst + 1, sessions, event)?;
 
         let reply = events::wait_for_async(child, event)?;
         let mut de = M3Deserializer::new(reply.as_words());
