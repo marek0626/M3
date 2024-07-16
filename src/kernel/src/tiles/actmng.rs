@@ -242,6 +242,12 @@ impl ActivityMng {
         // create root activity
         let tile = tile_weak.upgrade().unwrap();
         let kmem = KMemObject::new(args::get().kmem - cfg::FIXED_KMEM);
+        // safety: nobody has access to this object yet, so it's okay to keep a reference
+        let _kmem_clone = unsafe { kmem.inner().clone() };
+
+        let tile_weak = tile.clone().downgrade();
+        let kmem_weak = kmem.clone().downgrade();
+
         let act = Self::create_activity_async(
             "root".to_string(),
             tile,
@@ -250,6 +256,20 @@ impl ActivityMng {
             ActivityFlags::IS_ROOT,
         )
         .expect("Unable to create Activity for root");
+
+        let tile = tile_weak.upgrade().unwrap();
+        let kmem = kmem_weak.upgrade().unwrap();
+
+        // insert basic caps into cap space
+        act.obj_caps()
+            .borrow_mut()
+            .insert(Capability::new(kif::SEL_KMEM, kmem))?;
+        act.obj_caps()
+            .borrow_mut()
+            .insert(Capability::new(kif::SEL_TILE, tile.clone()))?;
+        act.obj_caps()
+            .borrow_mut()
+            .insert(Capability::new(kif::SEL_ACT, act.clone()))?;
 
         let mut sel = kif::FIRST_FREE_SEL;
 
@@ -283,12 +303,20 @@ impl ActivityMng {
         }
 
         // TILES
-        for tile in platform::user_tiles() {
-            let tile_obj = tilemng::tilemux(tile).new_tile_obj();
+        for tile_id in platform::user_tiles() {
+            // the tile for root is special, because we already reset it (causing a state change)
+            // and thus need to pass this object to userspace instead of a new one
+            let tile_obj = if tile_id == tile.tile() {
+                tile.clone()
+            }
+            else {
+                tilemng::tilemux(tile_id).new_tile_obj()
+            };
             let cap = Capability::new(sel, tile_obj);
             act.obj_caps().borrow_mut().insert(cap).unwrap();
             sel += 1;
         }
+        drop(tile);
 
         // memory
         let mut mem_ep = 1;

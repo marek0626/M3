@@ -13,7 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use base::cfg;
 use base::col::ToString;
 use base::errors::{Code, Error, VerboseError};
 use base::kif::INVALID_SEL;
@@ -22,6 +21,7 @@ use base::mem::{GlobAddr, GlobOff, MsgBuf, VirtAddr, VirtAddrRaw};
 use base::tcu;
 use base::util::Defer;
 use base::{build_vmsg, verror};
+use base::{cfg, kif};
 
 use thread::AsyncRc;
 
@@ -304,6 +304,8 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
 
     let name = r.name.to_string();
     let dst_sel = r.dst;
+    let tile_sel = r.tile;
+    let kmem_sel = r.kmem;
     drop(msg);
 
     let act_weak = act.downgrade();
@@ -330,13 +332,29 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
         (cleanup, nact)
     };
 
+    // TODO if something fails below we do not properly undo the steps above
+
     let act = try_upgrade_kobj(act_weak, INVALID_SEL)?;
 
-    // give activity cap to the parent
+    let mut parent_caps = act.obj_caps().borrow_mut();
+    let mut child_caps = nact.obj_caps().borrow_mut();
+
+    // obtain kmem and tile cap from parent
+    let kmem_parent = parent_caps.get_mut(kmem_sel)?;
+    child_caps.obtain(kif::SEL_KMEM, kmem_parent, true)?;
+    let tile_parent = parent_caps.get_mut(tile_sel)?;
+    child_caps.obtain(kif::SEL_TILE, tile_parent, true)?;
+
+    // give activity cap to the parent and obtain it to child
     let cap = Capability::new(dst_sel, nact.clone());
-    try_cap_insert!(act.obj_caps().borrow_mut().insert(cap));
+    try_cap_insert!(parent_caps.insert(cap));
+
     // Do not clean activity up after inserted in capability table.
     cleanup_act.cancel();
+
+    let act_parent = parent_caps.get_mut(dst_sel)?;
+    child_caps.obtain(kif::SEL_ACT, act_parent, true)?;
+    drop(child_caps);
 
     // create EP caps for the pager EPs
     if nact.tile_desc().has_virtmem() {
@@ -357,9 +375,10 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
                 .and_then(|s| s.checked_add(CapSel::try_from(i).unwrap()))
                 .ok_or_else(|| Error::new(Code::LastCapOverflow))?;
             let scap = Capability::new(sel as CapSel, ep);
-            try_cap_insert!(act.obj_caps().borrow_mut().insert_as_child(scap, dst_sel));
+            try_cap_insert!(parent_caps.insert_as_child(scap, dst_sel));
         }
     }
+    drop(parent_caps);
 
     let mut kreply = MsgBuf::borrow_def();
     build_vmsg!(kreply, Code::Success, syscalls::CreateActivityReply {

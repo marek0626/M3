@@ -1210,7 +1210,11 @@ impl fmt::Debug for KMemObject {
 impl Drop for KMemObject {
     fn drop(&mut self) {
         log!(LogFlags::KernKMem, "{:?} dropped", self);
-        assert!(self.left() == self.quota);
+        // don't complain for the first (root's kmem), because here we can't give all quota back as
+        // we might destroy the last reference to the kmem object before.
+        if self.id != 0 {
+            assert!(self.left() == self.quota);
+        }
     }
 }
 

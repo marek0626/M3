@@ -18,7 +18,7 @@ use base::cfg;
 use base::col::Treap;
 use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
-use base::kif::{CapRngDesc, CapSel, SEL_ACT, SEL_KMEM, SEL_TILE};
+use base::kif::{CapRngDesc, CapSel, SEL_ACT};
 use base::log;
 use base::mem::{size_of, GlobOff, VirtAddr};
 use base::rc::Rc;
@@ -186,6 +186,7 @@ impl CapTable {
         let act = self.activity();
         if !act
             .kmem()
+            .unwrap()
             .alloc(act, cap.sel(), cap.obj.size() + Capability::size())
         {
             return Err(Error::new(Code::NoSpace));
@@ -210,7 +211,7 @@ impl CapTable {
             return Err(Error::new(Code::InvArgs));
         }
         let act = self.activity();
-        if !act.kmem().alloc(act, sel, Capability::size()) {
+        if !act.kmem().unwrap().alloc(act, sel, Capability::size()) {
             return Err(Error::new(Code::NoSpace));
         }
 
@@ -514,14 +515,15 @@ impl Capability {
 
         let act = self.activity();
         let sel = self.sel();
-        if !self.derived {
-            // if it's not derived, we created the cap and thus will also free the kobject
-            act.kmem()
-                .free(act, sel, Capability::size() + self.obj.size());
-        }
-        else {
-            // give quota for cap back in every case
-            act.kmem().free(act, sel, Capability::size());
+        if let Some(kmem) = act.kmem() {
+            if !self.derived {
+                // if it's not derived, we created the cap and thus will also free the kobject
+                kmem.free(act, sel, Capability::size() + self.obj.size());
+            }
+            else {
+                // give quota for cap back in every case
+                kmem.free(act, sel, Capability::size());
+            }
         }
 
         match self.obj {
@@ -540,9 +542,7 @@ impl Capability {
             },
 
             KObject::Tile(tile) => {
-                // if the cap is derived, it doesn't own the kobj. if it's the activity's own Tile, the
-                // kobj always belongs to the parent (but derived is false).
-                if !self.derived && sel != SEL_TILE {
+                if !self.derived {
                     assert_eq!(Rc::strong_count(&tile), 1);
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
@@ -556,8 +556,8 @@ impl Capability {
             },
 
             KObject::KMem(k) => {
-                // see above
-                if !self.derived && sel != SEL_KMEM {
+                if !self.derived {
+                    assert_eq!(Rc::strong_count(&k), 1);
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
                         // TODO we cannot use these references across the async call below

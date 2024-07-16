@@ -32,7 +32,7 @@ use core::fmt;
 use thread::{AsyncRc, AsyncWeak};
 
 use crate::cap::{
-    CapTable, Capability, EPObject, IntoKObject, InvalidateType, KMemObject, KObject, TileObject,
+    CapTable, EPObject, IntoKObject, InvalidateType, KMemObject, KObject, TileObject,
 };
 use crate::com::{QueueId, SendQueue};
 use crate::ktcu;
@@ -82,9 +82,7 @@ pub struct Activity {
     tile_id: TileId,
 
     tile: AsyncWeak<TileObject>,
-    // we currently have to store a strong reference here, because the activity needs access to it
-    // until it is fully destructed to give back all the kmem quota it uses for its capabilities
-    kmem: Rc<KMemObject>,
+    kmem: AsyncWeak<KMemObject>,
 
     state: Cell<State>,
     exit_code: Cell<Option<Code>>,
@@ -110,16 +108,13 @@ impl Activity {
         kmem: AsyncRc<KMemObject>,
         flags: ActivityFlags,
     ) -> Result<AsyncRc<Self>, Error> {
-        let tile_clone = tile.clone();
         let act = AsyncRc::new(Rc::new(Activity {
             id,
             name,
             flags,
             eps_start,
             tile_id: tile.tile(),
-            // TODO this is not completely okay as it might delay the destruction of the kmem
-            // object beyond it's revocation.
-            kmem: unsafe { kmem.inner().clone() },
+            kmem: kmem.downgrade(),
             state: Cell::from(State::INIT),
             exit_code: Cell::from(None),
             first_sel: Cell::from(kif::FIRST_FREE_SEL),
@@ -128,7 +123,7 @@ impl Activity {
             eps: RefCell::from(Vec::new()),
             rbuf_phys: Cell::from(PhysAddr::default()),
             upcalls: RefCell::from(SendQueue::new(QueueId::Activity, tile.tile())),
-            tile: tile.downgrade(),
+            tile: tile.clone().downgrade(),
             cur_sysc: RefCell::from(OwnedMessage::default()),
             cur_derive_srv: RefCell::from(None),
         }));
@@ -137,26 +132,12 @@ impl Activity {
             act.obj_caps.borrow_mut().set_activity(&act);
             act.map_caps.borrow_mut().set_activity(&act);
 
-            // kmem cap
-            act.obj_caps().borrow_mut().insert(Capability::new(
-                kif::SEL_KMEM,
-                AsyncRc::new(act.kmem.clone()),
-            ))?;
-            // tile cap
-            act.obj_caps()
-                .borrow_mut()
-                .insert(Capability::new(kif::SEL_TILE, tile_clone.clone()))?;
-            // cap for own activity
-            act.obj_caps()
-                .borrow_mut()
-                .insert(Capability::new(kif::SEL_ACT, act.clone()))?;
-
             // alloc standard EPs
             tilemng::tilemux(act.tile_id()).alloc_eps(eps_start, STD_EPS_COUNT);
-            tile_clone.alloc(STD_EPS_COUNT);
+            tile.alloc(STD_EPS_COUNT);
 
             // add us to tile
-            tile_clone.add_activity();
+            tile.add_activity();
         }
 
         // some system calls are blocking, leading to a thread switch in the kernel. there is just
@@ -300,8 +281,8 @@ impl Activity {
         platform::tile_desc(self.tile_id())
     }
 
-    pub fn kmem(&self) -> &Rc<KMemObject> {
-        &self.kmem
+    pub fn kmem(&self) -> Option<AsyncRc<KMemObject>> {
+        self.kmem.upgrade()
     }
 
     pub fn rbuf_addr(&self) -> PhysAddr {
