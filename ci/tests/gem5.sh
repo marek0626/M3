@@ -239,7 +239,6 @@ if [ "$tests" = "" ]; then
     tests="$all"
 fi
 
-export M3_BUILD=bench
 for test in $tests; do
     for isa in $isas; do
         for bpe in $bpes; do
