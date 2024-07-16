@@ -31,7 +31,9 @@ use core::fmt;
 
 use thread::{AsyncRc, AsyncWeak};
 
-use crate::cap::{CapTable, Capability, EPObject, IntoKObject, KMemObject, KObject, TileObject};
+use crate::cap::{
+    CapTable, Capability, EPObject, IntoKObject, InvalidateType, KMemObject, KObject, TileObject,
+};
 use crate::com::{QueueId, SendQueue};
 use crate::ktcu;
 use crate::thread_startup_async;
@@ -585,7 +587,7 @@ impl Activity {
         for ep in &*act.eps.borrow_mut() {
             if let Some(ep) = ep.upgrade() {
                 // ignore failures here
-                ep.deconfigure(true).ok();
+                ep.deconfigure(InvalidateType::Force).ok();
             }
         }
 

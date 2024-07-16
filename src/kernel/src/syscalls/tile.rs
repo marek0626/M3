@@ -22,7 +22,7 @@ use base::{build_vmsg, verror};
 
 use thread::AsyncRc;
 
-use crate::cap::{Capability, MGateObject, TileObject};
+use crate::cap::{Capability, InvalidateType, MGateObject, TileObject};
 use crate::syscalls::{check_unused, get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::{tilemng, Activity, TileMux, INVAL_ID};
 use crate::{ktcu, platform};
@@ -187,7 +187,7 @@ pub fn tile_set_pmp(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     }
 
     // deconfigure the EP first to ensure that it is not already configured for another gate
-    if let Err(e) = ep_obj.deconfigure(false) {
+    if let Err(e) = ep_obj.deconfigure(InvalidateType::Default) {
         return Err(verror!(e.code(), "Unable to deconfigure PMP EP"));
     }
 

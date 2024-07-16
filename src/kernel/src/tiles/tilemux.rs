@@ -32,7 +32,8 @@ use core::cmp;
 use thread::{AsyncRc, AsyncWeak};
 
 use crate::cap::{
-    EPCategory, EPObject, EPQuota, GateObject, MGateObject, RGateObject, SGateObject, TileObject,
+    EPCategory, EPObject, EPQuota, GateObject, InvalidateType, MGateObject, RGateObject,
+    SGateObject, TileObject,
 };
 use crate::ktcu;
 use crate::mem;
@@ -252,7 +253,7 @@ impl TileMux {
         for ep in 0..tcu::PMEM_PROT_EPS as tcu::EpId {
             // cannot fail for memory EPs
             let ep_obj = self.pmp_ep(ep).unwrap();
-            ep_obj.deconfigure(false).unwrap();
+            ep_obj.deconfigure(InvalidateType::None).unwrap();
         }
 
         self.state = None;

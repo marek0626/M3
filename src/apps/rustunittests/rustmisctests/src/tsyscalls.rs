@@ -49,6 +49,7 @@ pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, activate_mgate);
     wv_run_test!(t, activate_sgate);
     wv_run_test!(t, activate_rgate);
+    wv_run_test!(t, invalidate);
     wv_run_test!(t, activity_ctrl);
     wv_run_test!(t, derive_mem);
     wv_run_test!(t, derive_kmem);
@@ -650,6 +651,31 @@ fn activate_rgate(t: &mut dyn WvTester) {
 
     EpMng::get().release(ep2, true);
     EpMng::get().release(ep1, true);
+}
+
+fn invalidate(t: &mut dyn WvTester) {
+    let ep = wv_require_ok!(EpMng::get().acquire(0));
+    let mcap = wv_require_ok!(MemCap::new(0x1000, Perm::RW));
+
+    let mut buf = [0u8; 8];
+    let mgate = wv_require_ok!(mcap.activate());
+    // we can't activate it again
+    wv_assert_err!(
+        t,
+        syscalls::activate_mgate(ep.sel(), mgate.sel()),
+        Code::Exists
+    );
+    wv_assert_ok!(t, mgate.read(&mut buf, 0));
+
+    let mcap = mgate.deactivate();
+    // now that it's deactivated, we can activate it again
+    let mgate = wv_require_ok!(mcap.activate());
+
+    let mcap = mgate.deactivate();
+    // also on a different EP
+    wv_assert_ok!(t, syscalls::activate_mgate(ep.sel(), mcap.sel()));
+
+    EpMng::get().release(ep, true);
 }
 
 fn derive_mem(t: &mut dyn WvTester) {
