@@ -202,7 +202,9 @@ impl ActivityMng {
 
         let tile_id = tilemng::find_tile(&tile_emem)
             .unwrap_or_else(|| tilemng::find_tile(&tile_imem).unwrap());
-        let tile = AsyncRc::new(tilemng::tilemux(tile_id).tile().clone());
+        let tile = tilemng::tilemux(tile_id).new_tile_obj();
+        // safety: nobody has access to this object yet, so it's okay to keep a reference
+        let _tile_clone = unsafe { tile.inner().clone() };
         let tile_desc = platform::tile_desc(tile_id);
 
         // allocate memory for tilemux itself
@@ -226,15 +228,19 @@ impl ActivityMng {
             Some(args::get().root_eps)
         };
 
+        let tile_weak = tile.clone().downgrade();
+
         // load and start tilemux
         loader::load_mux_async(tile_id, &mux_mem).expect("Unable to load TileMux");
         let mux_mgate = MGateObject::new(mux_mem, Perm::RWX, false);
         // note that we provide access to the entire ROOT memory pool via PMP down below and
         // therefore provide access to parts of this pool twice. that's currently required, because
         // TileMux reads PMP EP0 to discover the available memory.
-        TileMux::reset_async(tile_id, Some(mux_mgate), ep_count, true).expect("Tile reset failed");
+        TileMux::reset_async(tile_id, Some(tile), Some(mux_mgate), ep_count, true)
+            .expect("Tile reset failed");
 
         // create root activity
+        let tile = tile_weak.upgrade().unwrap();
         let kmem = KMemObject::new(args::get().kmem - cfg::FIXED_KMEM);
         let act = Self::create_activity_async(
             "root".to_string(),
@@ -278,8 +284,8 @@ impl ActivityMng {
 
         // TILES
         for tile in platform::user_tiles() {
-            let tile_obj = tilemng::tilemux(tile).tile().clone();
-            let cap = Capability::new(sel, AsyncRc::new(tile_obj));
+            let tile_obj = tilemng::tilemux(tile).new_tile_obj();
+            let cap = Capability::new(sel, tile_obj);
             act.obj_caps().borrow_mut().insert(cap).unwrap();
             sel += 1;
         }

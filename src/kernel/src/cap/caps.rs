@@ -543,6 +543,7 @@ impl Capability {
                 // if the cap is derived, it doesn't own the kobj. if it's the activity's own Tile, the
                 // kobj always belongs to the parent (but derived is false).
                 if !self.derived && sel != SEL_TILE {
+                    assert_eq!(Rc::strong_count(&tile), 1);
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
                         // TODO we cannot use these references across the async call below

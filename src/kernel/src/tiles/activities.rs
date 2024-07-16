@@ -110,6 +110,7 @@ impl Activity {
         kmem: AsyncRc<KMemObject>,
         flags: ActivityFlags,
     ) -> Result<AsyncRc<Self>, Error> {
+        let tile_clone = tile.clone();
         let act = AsyncRc::new(Rc::new(Activity {
             id,
             name,
@@ -136,8 +137,6 @@ impl Activity {
             act.obj_caps.borrow_mut().set_activity(&act);
             act.map_caps.borrow_mut().set_activity(&act);
 
-            let tile = act.tile.upgrade().unwrap();
-
             // kmem cap
             act.obj_caps().borrow_mut().insert(Capability::new(
                 kif::SEL_KMEM,
@@ -146,7 +145,7 @@ impl Activity {
             // tile cap
             act.obj_caps()
                 .borrow_mut()
-                .insert(Capability::new(kif::SEL_TILE, tile.clone()))?;
+                .insert(Capability::new(kif::SEL_TILE, tile_clone.clone()))?;
             // cap for own activity
             act.obj_caps()
                 .borrow_mut()
@@ -154,10 +153,10 @@ impl Activity {
 
             // alloc standard EPs
             tilemng::tilemux(act.tile_id()).alloc_eps(eps_start, STD_EPS_COUNT);
-            tile.alloc(STD_EPS_COUNT);
+            tile_clone.alloc(STD_EPS_COUNT);
 
             // add us to tile
-            tile.add_activity();
+            tile_clone.add_activity();
         }
 
         // some system calls are blocking, leading to a thread switch in the kernel. there is just
@@ -652,11 +651,11 @@ impl Drop for Activity {
 
         // free standard EPs
         tilemng::tilemux(self.tile_id()).free_eps(self.eps_start, STD_EPS_COUNT);
-        let tile = self.tile();
-        tile.free(STD_EPS_COUNT);
-
-        // remove us from tile
-        tile.rem_activity();
+        if let Some(tile) = self.tile.upgrade() {
+            tile.free(STD_EPS_COUNT);
+            // remove us from tile
+            tile.rem_activity();
+        }
 
         assert!(self.obj_caps.borrow().is_empty());
         assert!(self.map_caps.borrow().is_empty());
