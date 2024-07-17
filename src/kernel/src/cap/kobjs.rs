@@ -538,7 +538,7 @@ pub struct SessObject {
     srv: AsyncWeak<ServObject>,
     creator: usize,
     ident: u64,
-    pub auto_close: bool,
+    auto_close: bool,
 }
 
 impl SessObject {
