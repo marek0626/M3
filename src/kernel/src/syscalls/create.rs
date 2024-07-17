@@ -33,7 +33,7 @@ use crate::com::Service;
 use crate::mem;
 use crate::platform;
 use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
-use crate::tiles::{tilemng, Activity, ActivityFlags, ActivityMng, INVAL_ID};
+use crate::tiles::{tilemng, Activity, ActivityFlags, ActivityMng};
 
 #[inline(never)]
 pub fn create_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
@@ -306,6 +306,7 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
     let dst_sel = r.dst;
     let tile_sel = r.tile;
     let kmem_sel = r.kmem;
+    let act_id = act.id();
     drop(msg);
 
     let act_weak = act.downgrade();
@@ -325,9 +326,7 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
                 return;
             };
             drop(nact_weak);
-            let id = nact.id();
-            drop(nact);
-            ActivityMng::remove_activity_async(id, INVAL_ID);
+            nact.revoke_caps_async(act_id);
         });
         (cleanup, nact)
     };

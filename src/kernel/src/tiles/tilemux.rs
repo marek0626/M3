@@ -38,7 +38,7 @@ use crate::cap::{
 use crate::ktcu;
 use crate::mem;
 use crate::platform;
-use crate::tiles::{tilemng, Activity, INVAL_ID};
+use crate::tiles::{tilemng, INVAL_ID};
 
 struct TileState {
     // Note that we shouldn't even use EPObject (a kernel object) here, because it's actually a
@@ -600,7 +600,7 @@ impl TileMux {
             .map(|_| ())
     }
 
-    pub fn handle_call_async(tilemux: RefMut<'_, Self>, msg: tcu::OwnedMessage) {
+    pub fn handle_call(tilemux: RefMut<'_, Self>, msg: tcu::OwnedMessage) {
         use base::serialize::M3Deserializer;
 
         let mut de = M3Deserializer::new(msg.as_words());
@@ -610,11 +610,11 @@ impl TileMux {
         // This allows to move msg.
         let pos = de.pos();
         match op {
-            kif::tilemux::Calls::Exit => Self::handle_exit_async(tilemux, msg, pos).unwrap(),
+            kif::tilemux::Calls::Exit => Self::handle_exit(tilemux, msg, pos).unwrap(),
         }
     }
 
-    fn handle_exit_async(
+    fn handle_exit(
         tilemux: RefMut<'_, Self>,
         mut msg: tcu::OwnedMessage,
         pos: usize,
@@ -632,11 +632,12 @@ impl TileMux {
         log!(LogFlags::KernTMC, "TileMux[{}] received {:?}", tile_id, r);
 
         let has_act = tilemux.acts.contains(&r.act_id);
+        // drop tilemux here, because stop_app below needs access to it again
         drop(tilemux);
 
         if has_act {
             let act = ActivityMng::activity(r.act_id).unwrap();
-            Activity::stop_app_async(act, r.status, true, INVAL_ID);
+            act.stop_app(r.status);
         }
 
         let mut reply = MsgBuf::borrow_def();

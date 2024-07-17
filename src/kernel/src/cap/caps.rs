@@ -18,10 +18,9 @@ use base::cfg;
 use base::col::Treap;
 use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
-use base::kif::{CapRngDesc, CapSel, SEL_ACT};
+use base::kif::{CapRngDesc, CapSel};
 use base::log;
 use base::mem::{size_of, GlobOff, VirtAddr};
-use base::rc::Rc;
 use base::tcu::ActId;
 use core::cmp;
 use core::fmt;
@@ -31,7 +30,7 @@ use thread::AsyncRc;
 
 use crate::cap::{EPObject, GateEP, KObject, MapObject, SessObject, TileObject};
 use crate::ktcu;
-use crate::tiles::{tilemng, Activity, ActivityMng, State, INVAL_ID};
+use crate::tiles::{tilemng, Activity, State, INVAL_ID};
 
 use super::IntoKObject;
 
@@ -526,24 +525,23 @@ impl Capability {
             }
         }
 
+        if !self.derived {
+            assert_eq!(self.obj.ref_count(), 1);
+        }
+
         match self.obj {
             KObject::Activity(v) => {
-                // remove activity if we revoked the root capability and if it's not the own activity
-                if sel != SEL_ACT && self.parent.is_none() && !v.is_root() {
-                    ActivityMng::remove_activity_async(v.id(), revoker);
+                if !self.derived {
+                    v.revoke_caps_async(revoker);
                 }
             },
 
             KObject::EP(e) => {
                 EPObject::revoke(AsyncRc::new(e.clone()));
-                if !self.derived {
-                    assert_eq!(Rc::strong_count(&e), 1);
-                }
             },
 
             KObject::Tile(tile) => {
                 if !self.derived {
-                    assert_eq!(Rc::strong_count(&tile), 1);
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
                         // TODO we cannot use these references across the async call below
@@ -557,7 +555,6 @@ impl Capability {
 
             KObject::KMem(k) => {
                 if !self.derived {
-                    assert_eq!(Rc::strong_count(&k), 1);
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
                         // TODO we cannot use these references across the async call below
@@ -572,32 +569,20 @@ impl Capability {
             KObject::SGate(o) => {
                 o.invalidate_reply_eps();
                 Self::invalidate_ep(o.gate_ep_mut(), revoker, true);
-                if !self.derived {
-                    assert_eq!(Rc::strong_count(&o), 1);
-                }
             },
 
             KObject::RGate(o) => {
                 Self::invalidate_ep(o.gate_ep_mut(), INVAL_ID, false);
                 // notify potential send-gate activations blocked on this receive gate
                 thread::notify(o.get_event(), None);
-                if !self.derived {
-                    assert_eq!(Rc::strong_count(&o), 1);
-                }
             },
 
             KObject::MGate(o) => {
                 Self::invalidate_ep(o.gate_ep_mut(), INVAL_ID, false);
-                if !self.derived {
-                    assert_eq!(Rc::strong_count(&o), 1);
-                }
             },
 
             KObject::Serv(s) => {
                 s.abort();
-                if !self.derived {
-                    assert_eq!(Rc::strong_count(&s), 1);
-                }
             },
 
             KObject::Sess(s) => {
@@ -612,9 +597,6 @@ impl Capability {
                     // without releasing our reference the strong-count check below fails.
                     SessObject::close_async(AsyncRc::new(s), revoker);
                 }
-                else {
-                    assert_eq!(Rc::strong_count(&s), 1);
-                }
             },
 
             KObject::Map(ref m) => {
@@ -624,16 +606,10 @@ impl Capability {
                     let virt = VirtAddr::new((sel as GlobOff) << cfg::PAGE_BITS);
                     MapObject::unmap_async(act.id(), act.tile_id(), virt, self.len() as usize);
                 }
-                if !self.derived {
-                    assert_eq!(Rc::strong_count(m), 1);
-                }
             },
 
             KObject::Sem(s) => {
                 s.revoke();
-                if !self.derived {
-                    assert_eq!(Rc::strong_count(&s), 1);
-                }
             },
         }
     }

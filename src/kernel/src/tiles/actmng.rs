@@ -21,21 +21,20 @@ use base::io::LogFlags;
 use base::kif::{self, Perm};
 use base::log;
 use base::mem::{GlobAddr, GlobOff};
-use base::rc::Rc;
 use base::tcu::{self, ActId, TileId};
 use base::util::math;
 use base::vec;
 
-use thread::AsyncRc;
+use thread::{AsyncRc, AsyncWeak};
 
 use crate::args;
 use crate::cap::{Capability, KMemObject, MGateObject, RGateObject, TileObject};
 use crate::mem::{self, Allocation};
 use crate::platform;
-use crate::tiles::{loader, tilemng, Activity, ActivityFlags, State, TileMux};
+use crate::tiles::{loader, tilemng, Activity, ActivityFlags, TileMux};
 
 pub struct ActivityMng {
-    acts: Vec<Option<Rc<Activity>>>,
+    acts: Vec<AsyncWeak<Activity>>,
     count: usize,
     next_id: tcu::ActId,
 }
@@ -44,7 +43,7 @@ static INST: LazyStaticRefCell<ActivityMng> = LazyStaticRefCell::default();
 
 pub fn init() {
     INST.set(ActivityMng {
-        acts: vec![None; cfg::MAX_ACTS],
+        acts: vec![AsyncWeak::default(); cfg::MAX_ACTS],
         count: 0,
         next_id: 0,
     });
@@ -57,22 +56,20 @@ impl ActivityMng {
 
     #[inline(always)]
     pub fn activity(id: tcu::ActId) -> Option<AsyncRc<Activity>> {
-        INST.borrow().acts[id as usize]
-            .as_ref()
-            .map(|a| AsyncRc::new(a.clone()))
+        INST.borrow().acts[id as usize].upgrade()
     }
 
     fn get_id() -> Result<tcu::ActId, Error> {
         let mut actmng = INST.borrow_mut();
         for id in actmng.next_id..cfg::MAX_ACTS as tcu::ActId {
-            if actmng.acts[id as usize].is_none() {
+            if !actmng.acts[id as usize].can_upgrade() {
                 actmng.next_id = id + 1;
                 return Ok(id);
             }
         }
 
         for id in 0..actmng.next_id {
-            if actmng.acts[id as usize].is_none() {
+            if !actmng.acts[id as usize].can_upgrade() {
                 actmng.next_id = id + 1;
                 return Ok(id);
             }
@@ -92,6 +89,8 @@ impl ActivityMng {
         let tile_id = tile.tile();
 
         let act = Activity::new(name, id, tile, eps_start, kmem, flags)?;
+        // safety: nobody can access the object yet, so it's fine to keep a reference
+        let _act_clone = unsafe { act.inner().clone() };
 
         log!(
             LogFlags::KernActs,
@@ -105,9 +104,7 @@ impl ActivityMng {
         // we use the acts table to check whether the activity is still alive.
         {
             let mut actmng = INST.borrow_mut();
-            // safety: we need to keep another reference here to ensure that we decrement the
-            // activity count on activity removal.
-            actmng.acts[id as usize] = Some(unsafe { act.inner().clone() });
+            actmng.acts[id as usize] = act.clone().downgrade();
             actmng.count += 1;
         }
         tilemng::tilemux(tile_id).add_activity(id);
@@ -121,7 +118,7 @@ impl ActivityMng {
                 // capability table and thus nobody else will have removed it from the table yet.
                 tilemng::tilemux(tile_id).rem_activity(id);
                 let mut actmng = INST.borrow_mut();
-                actmng.acts[id as usize] = None;
+                actmng.acts[id as usize] = AsyncWeak::default();
                 actmng.count -= 1;
                 return Err(e);
             }
@@ -360,19 +357,13 @@ impl ActivityMng {
         Activity::start_app_async(act_weak.upgrade().unwrap())
     }
 
-    pub fn remove_activity_async(id: tcu::ActId, revoker: tcu::ActId) {
+    pub fn remove_activity(id: tcu::ActId) {
         let mut actmng = INST.borrow_mut();
-        let act: Option<Rc<Activity>> = actmng.acts[id as usize].take();
-
-        match act {
-            Some(ref v) => {
-                actmng.count -= 1;
-                drop(actmng);
-                tilemng::tilemux(v.tile_id()).rem_activity(v.id());
-                let act_ref = AsyncRc::new(v.clone());
-                Activity::force_stop_async(act_ref, v.state() != State::DEAD, revoker);
-            },
-            None => panic!("Removing nonexisting Activity with id {}", id),
-        };
+        if id != 0 {
+            // as this is called on Activity::drop, we should never be able to reach it here anymore
+            // (the exception is root, with id 0, which we force-remove)
+            assert!(actmng.acts[id as usize].upgrade().is_none());
+        }
+        actmng.count -= 1;
     }
 }

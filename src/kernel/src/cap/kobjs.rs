@@ -49,6 +49,24 @@ pub enum KObject {
     EP(Rc<EPObject>),
 }
 
+impl KObject {
+    pub fn ref_count(&self) -> usize {
+        match self {
+            KObject::SGate(o) => Rc::strong_count(o),
+            KObject::RGate(o) => Rc::strong_count(o),
+            KObject::MGate(o) => Rc::strong_count(o),
+            KObject::Map(o) => Rc::strong_count(o),
+            KObject::Serv(o) => Rc::strong_count(o),
+            KObject::Sess(o) => Rc::strong_count(o),
+            KObject::Activity(o) => Rc::strong_count(o),
+            KObject::Sem(o) => Rc::strong_count(o),
+            KObject::KMem(o) => Rc::strong_count(o),
+            KObject::Tile(o) => Rc::strong_count(o),
+            KObject::EP(o) => Rc::strong_count(o),
+        }
+    }
+}
+
 pub trait IntoKObject<T> {
     unsafe fn into_kobj(self) -> KObject;
 }

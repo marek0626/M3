@@ -516,55 +516,28 @@ impl Activity {
         ActivityMng::start_activity_async(id, tile_id)
     }
 
-    pub fn stop_app_async(act: AsyncRc<Activity>, exit_code: Code, is_self: bool, revoker: ActId) {
-        if act.state.get() == State::DEAD {
+    pub fn stop_app(&self, exit_code: Code) {
+        if self.state.get() == State::DEAD {
             return;
         }
 
         log!(
             LogFlags::KernActs,
             "Stopping Activity {} [id={}]",
-            act.name(),
-            act.id()
+            self.name(),
+            self.id()
         );
 
-        if is_self {
-            Self::exit_app_async(act, exit_code, false, revoker);
-        }
-        else if act.state.get() == State::RUNNING {
-            // devices always exit successfully
-            let exit_code = if act.tile_desc().is_device() {
-                Code::Success
-            }
-            else {
-                Code::Unspecified
-            };
-            Self::exit_app_async(act, exit_code, true, revoker);
-        }
-        else {
-            act.state.set(State::DEAD);
-            let act_weak = act.clone().downgrade();
-            ActivityMng::stop_activity_async(act, true).unwrap();
-
-            if let Some(act) = act_weak.upgrade() {
-                ktcu::drop_msgs(ktcu::KSYS_EP, act.id() as Label);
-                // ensure that we don't access the last syscall anymore (or reply)
-                act.cur_sysc.borrow_mut().invalidate();
-            }
-        }
-    }
-
-    fn exit_app_async(act: AsyncRc<Activity>, exit_code: Code, stop: bool, revoker: ActId) {
-        let mut tilemux = tilemng::tilemux(act.tile_id());
+        let mut tilemux = tilemng::tilemux(self.tile_id());
         // force-invalidate standard EPs
-        for ep in act.eps_start..act.eps_start + STD_EPS_COUNT as EpId {
+        for ep in self.eps_start..self.eps_start + STD_EPS_COUNT as EpId {
             // ignore failures
-            tilemux.invalidate_ep(act.id(), ep, true, false).ok();
+            tilemux.invalidate_ep(self.id(), ep, true, false).ok();
         }
         drop(tilemux);
 
         // force-invalidate all other EPs of this activity
-        for ep in &*act.eps.borrow_mut() {
+        for ep in &*self.eps.borrow_mut() {
             if let Some(ep) = ep.upgrade() {
                 // ignore failures here
                 ep.deconfigure(InvalidateType::Force).ok();
@@ -572,30 +545,28 @@ impl Activity {
         }
 
         // make sure that we don't get further syscalls by this activity
-        ktcu::drop_msgs(ktcu::KSYS_EP, act.id() as Label);
+        ktcu::drop_msgs(ktcu::KSYS_EP, self.id() as Label);
         // ensure that we don't access the last syscall anymore (or reply)
-        act.cur_sysc.borrow_mut().invalidate();
+        self.cur_sysc.borrow_mut().invalidate();
 
-        act.state.set(State::DEAD);
-        act.exit_code.set(Some(exit_code));
+        let old_state = self.state.get();
+        self.state.set(State::DEAD);
+        self.exit_code.set(Some(exit_code)); // TODO exit code when it wasn't running?
 
-        let act_weak = act.clone().downgrade();
-
-        Self::force_stop_async(act, stop, revoker);
-
-        if let Some(act) = act_weak.upgrade() {
-            EXIT_LISTENERS.borrow_mut().retain(|l| l.id != act.id());
+        if old_state == State::RUNNING {
+            EXIT_LISTENERS.borrow_mut().retain(|l| l.id != self.id());
 
             Self::send_exit_notify();
+        }
 
-            // if it's root, there is nobody waiting for it; just remove it
-            if act.is_root() {
-                ActivityMng::remove_activity_async(act.id(), revoker);
-            }
+        // if it's root, there is nobody waiting for it; just remove it
+        if self.is_root() {
+            ActivityMng::remove_activity(self.id());
+            thread::remove_thread();
         }
     }
 
-    fn revoke_caps_async(&self, revoker: ActId) {
+    pub fn revoke_caps_async(&self, revoker: ActId) {
         CapTable::revoke_all_async(&self.obj_caps, revoker);
         CapTable::revoke_all_async(&self.map_caps, revoker);
     }
@@ -607,19 +578,6 @@ impl Activity {
         }
         else {
             CapTable::revoke_async(self.map_caps(), crd, own, revoker)
-        }
-    }
-
-    pub fn force_stop_async(act: AsyncRc<Activity>, stop: bool, revoker: ActId) {
-        let act_weak = act.clone().downgrade();
-
-        ActivityMng::stop_activity_async(act, stop).unwrap();
-
-        if let Some(act_ref) = act_weak.upgrade() {
-            // TODO that's broken
-            let act = unsafe { act_ref.inner().clone() };
-            drop(act_ref);
-            act.revoke_caps_async(revoker);
         }
     }
 }
@@ -640,6 +598,9 @@ impl Drop for Activity {
 
         assert!(self.obj_caps.borrow().is_empty());
         assert!(self.map_caps.borrow().is_empty());
+
+        tilemng::tilemux(self.tile_id).rem_activity(self.id);
+        ActivityMng::remove_activity(self.id);
 
         // remove some thread from the pool as there is one activity less now
         thread::remove_thread();
