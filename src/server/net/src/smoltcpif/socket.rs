@@ -15,8 +15,8 @@
  */
 
 use base::io::LogFlags;
-use m3::cap::Selector;
 use m3::errors::{Code, Error};
+use m3::kif::CapRngDesc;
 use m3::log;
 use m3::mem::size_of;
 use m3::net::{
@@ -109,7 +109,7 @@ impl Socket {
         ty: SocketType,
         protocol: u8,
         args: &SocketArgs,
-        caps: Selector,
+        caps: CapRngDesc,
         iface: &mut DriverInterface<'_>,
     ) -> Result<Self, Error> {
         let socket = match ty {

@@ -142,6 +142,7 @@ pub struct GenericFile {
     fs_id: Option<usize>,
     fd: Fd,
     flags: OpenFlags,
+    // Selector of sgate has to be sess.sel() + 1.
     sess: ClientSession,
     sgate: RefCell<LazySGate>,
     memep: Option<EP>,
@@ -249,7 +250,7 @@ impl GenericFile {
             log!(LogFlags::LibFS, "GenFile[{}]::delegate_ep({})", self.fd, id);
 
             self.submit(true)?;
-            let crd = CapRngDesc::new(CapType::Object, ep_sel, 1);
+            let crd = CapRngDesc::new_single(CapType::Object, ep_sel);
             self.sess
                 .delegate(crd, |s| s.push(opcodes::File::SetDest), |_| Ok(()))?;
             self.delegated_ep = ep_sel;
@@ -332,7 +333,7 @@ impl GenericFile {
         )?);
         let _notify_sgate = Box::new(SendCap::new(&*notify_rgate)?);
 
-        let crd = CapRngDesc::new(CapType::Object, _notify_sgate.sel(), 1);
+        let crd = CapRngDesc::new_single(CapType::Object, _notify_sgate.sel());
         self.sess
             .delegate(crd, |s| s.push(opcodes::File::EnableNotify), |_| Ok(()))?;
 
@@ -549,7 +550,7 @@ impl File for GenericFile {
     }
 
     fn delegate(&self, act: &ChildActivity) -> Result<Selector, Error> {
-        let crd = CapRngDesc::new(CapType::Object, self.sess.sel(), 2);
+        let crd = CapRngDesc::new(CapType::Object, self.sess.sel(), 2).unwrap();
         self.sess.obtain_for(
             act.sel(),
             crd,

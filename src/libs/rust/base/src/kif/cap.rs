@@ -20,16 +20,26 @@ use core::fmt;
 
 use num_enum::{FromPrimitive, IntoPrimitive};
 
-use crate::serialize::{Deserialize, Serialize};
+use crate::{
+    errors::{Code, Error},
+    serialize::{Deserialize, Serialize},
+};
 
 /// A capability selector
 pub type CapSel = u64;
 
 /// A capability range descriptor, which describes a continuous range of capabilities
+///
+/// It is guaranteed that the last capability selector (if any) is not out of
+/// bounds.
+/// However, one past the last capability selector may overflow.
+/// Furthermore, the range might be of zero size.
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(try_from = "UnsafeCapRngDesc")]
 pub struct CapRngDesc {
     start: u64,
-    count: u64,
+    /// This is the count in the upper bits and the type in the lowest bit
+    count_ty: u64,
 }
 
 /// The capability types
@@ -46,16 +56,45 @@ pub enum CapType {
 impl CapRngDesc {
     /// Creates a new capability range descriptor. `start` is the first capability selector and
     /// `start + count - 1` is the last one.
-    pub fn new(ty: CapType, start: CapSel, count: CapSel) -> CapRngDesc {
-        CapRngDesc {
+    pub fn new(ty: CapType, start: CapSel, count: CapSel) -> Result<Self, Error> {
+        // Check that count can be shifted left by one without changing the
+        // value.
+        let shifted = count
+            .checked_mul(2)
+            .ok_or(Error::new(Code::CapCountTooLarge))?;
+        UnsafeCapRngDesc {
             start,
-            count: count << 1 | (ty as u64),
+            count_ty: shifted | (ty as u64),
+        }
+        .try_into()
+    }
+
+    /// Create a new descriptor for a range of size one
+    ///
+    /// This construction cannot fail as such a range is always representable.
+    pub fn new_single(ty: CapType, sel: CapSel) -> Self {
+        // Should be optimized by compiler.
+        Self::new(ty, sel, 1).unwrap()
+    }
+
+    /// Create a range descriptor without performing any bounds checking.
+    ///
+    /// # Safety
+    ///
+    /// The last element must still be representable.
+    /// Beware that the count value is shifted left.
+    /// This function is only intended for test cases where we want to test
+    /// that the kernel checks the range descriptor on deserialization.
+    pub unsafe fn new_unchecked(ty: CapType, start: CapSel, count: CapSel) -> Self {
+        Self {
+            start,
+            count_ty: count << 1 | (ty as u64),
         }
     }
 
     /// Returns the capability type
     pub fn cap_type(self) -> CapType {
-        CapType::from(self.count & 0x1)
+        CapType::from(self.count_ty & 0x1)
     }
 
     /// Returns the first capability selector
@@ -65,7 +104,7 @@ impl CapRngDesc {
 
     /// Returns the number of capability selectors
     pub fn count(self) -> CapSel {
-        self.count >> 1
+        self.count_ty >> 1
     }
 }
 
@@ -78,5 +117,35 @@ impl fmt::Display for CapRngDesc {
             self.start(),
             self.count()
         )
+    }
+}
+
+/// Helper struct that binary data is deserialized into without validation
+///
+/// [`CapRngDesc`] is created from this after validation
+#[derive(Deserialize)]
+struct UnsafeCapRngDesc {
+    start: u64,
+    count_ty: u64,
+}
+
+impl TryFrom<UnsafeCapRngDesc> for CapRngDesc {
+    type Error = Error;
+
+    fn try_from(desc: UnsafeCapRngDesc) -> Result<Self, Self::Error> {
+        let unval = CapRngDesc {
+            start: desc.start,
+            count_ty: desc.count_ty,
+        };
+        // Only when count > 0 overflows can occur.
+        if let Some(c) = unval.count().checked_sub(1) {
+            // Try to compute last element without overflow.
+            let last = unval.start().checked_add(c);
+            if last.is_none() {
+                return Err(Error::new(Code::LastCapOverflow));
+            }
+        }
+        // Guaranteed that the last capability selector is representable.
+        Ok(unval)
     }
 }

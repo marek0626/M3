@@ -87,6 +87,8 @@ struct Errors {
         SEEK_PIPE,
         UNSPECIFIED,
         INV_CAP,
+        LAST_CAP_OVERFLOW,
+        CAP_COUNT_TOO_LARGE,
         // networking
         INV_STATE,
         WOULD_BLOCK,

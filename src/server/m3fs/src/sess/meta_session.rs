@@ -139,7 +139,7 @@ impl MetaSession {
         let sel = serv.sel();
         let nsess = MetaSession::new(serv, self.file_limit.clone());
 
-        data.out_caps(CapRngDesc::new(CapType::Object, sel, 2));
+        data.out_caps(CapRngDesc::new(CapType::Object, sel, 2).unwrap());
 
         Ok(nsess)
     }
@@ -171,7 +171,7 @@ impl MetaSession {
         self.files.push(sid);
         self.file_limit.borrow_mut().add(true);
 
-        data.out_caps(CapRngDesc::new(CapType::Object, sel, 2));
+        data.out_caps(CapRngDesc::new(CapType::Object, sel, 2).unwrap());
 
         log!(
             LogFlags::FSSess,

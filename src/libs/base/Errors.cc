@@ -85,6 +85,8 @@ static const char *errmsgs[] = {
     "Invalid seek",
     "Unspecified error",
     "Invalid capability",
+    "Last cap would overflow",
+    "Cap count too large",
 
     /* Socket */
     "Invalid state",

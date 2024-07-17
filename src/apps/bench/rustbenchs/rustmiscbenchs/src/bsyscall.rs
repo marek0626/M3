@@ -106,7 +106,7 @@ fn create_mgate(t: &mut dyn WvTester) {
                 self.tester,
                 syscalls::revoke(
                     Activity::own().sel(),
-                    kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
+                    kif::CapRngDesc::new_single(kif::CapType::Object, SEL.get()),
                     true
                 )
             );
@@ -143,7 +143,7 @@ fn create_rgate(t: &mut dyn WvTester) {
                 self.tester,
                 syscalls::revoke(
                     Activity::own().sel(),
-                    kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
+                    kif::CapRngDesc::new_single(kif::CapType::Object, SEL.get()),
                     true
                 )
             );
@@ -183,7 +183,7 @@ fn create_sgate(t: &mut dyn WvTester) {
                 self.tester,
                 syscalls::revoke(
                     Activity::own().sel(),
-                    kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
+                    kif::CapRngDesc::new_single(kif::CapType::Object, SEL.get()),
                     true
                 )
             );
@@ -253,7 +253,8 @@ fn create_map(t: &mut dyn WvTester) {
                         kif::CapType::Mapping,
                         DEST.as_goff() / cfg::PAGE_SIZE as GlobOff,
                         2
-                    ),
+                    )
+                    .unwrap(),
                     true
                 )
             );
@@ -294,7 +295,7 @@ fn create_srv(t: &mut dyn WvTester) {
                 self.tester,
                 syscalls::revoke(
                     Activity::own().sel(),
-                    kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
+                    kif::CapRngDesc::new_single(kif::CapType::Object, SEL.get()),
                     true
                 )
             );
@@ -344,7 +345,7 @@ fn derive_mem(t: &mut dyn WvTester) {
                 self.tester,
                 syscalls::revoke(
                     Activity::own().sel(),
-                    kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
+                    kif::CapRngDesc::new_single(kif::CapType::Object, SEL.get()),
                     true
                 )
             );
@@ -384,7 +385,7 @@ fn exchange(t: &mut dyn WvTester) {
                 self.tester,
                 syscalls::exchange(
                     self.act.as_ref().unwrap().sel(),
-                    kif::CapRngDesc::new(kif::CapType::Object, kif::SEL_ACT, 1),
+                    kif::CapRngDesc::new_single(kif::CapType::Object, kif::SEL_ACT),
                     SEL.get(),
                     false,
                 )
@@ -396,7 +397,7 @@ fn exchange(t: &mut dyn WvTester) {
                 self.tester,
                 syscalls::revoke(
                     self.act.as_ref().unwrap().sel(),
-                    kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
+                    kif::CapRngDesc::new_single(kif::CapType::Object, SEL.get()),
                     true
                 )
             );
@@ -460,7 +461,7 @@ fn revoke_recv_gate(t: &mut dyn WvTester) {
                 self.tester,
                 syscalls::revoke(
                     Activity::own().sel(),
-                    kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
+                    kif::CapRngDesc::new_single(kif::CapType::Object, SEL.get()),
                     true
                 )
             );
@@ -495,7 +496,7 @@ fn revoke_send_gate(t: &mut dyn WvTester) {
                 self.tester,
                 syscalls::revoke(
                     Activity::own().sel(),
-                    kif::CapRngDesc::new(kif::CapType::Object, SEL.get(), 1),
+                    kif::CapRngDesc::new_single(kif::CapType::Object, SEL.get()),
                     true
                 )
             );
@@ -542,7 +543,7 @@ fn revoke_deep(t: &mut dyn WvTester) {
         }
 
         fn run(&mut self) {
-            let crd = kif::CapRngDesc::new(kif::CapType::Object, self.mcap.sel(), 1);
+            let crd = kif::CapRngDesc::new_single(kif::CapType::Object, self.mcap.sel());
             wv_assert_ok!(
                 self.tester,
                 syscalls::revoke(Activity::own().sel(), crd, false)
@@ -588,7 +589,7 @@ fn revoke_wide(t: &mut dyn WvTester) {
         }
 
         fn run(&mut self) {
-            let crd = kif::CapRngDesc::new(kif::CapType::Object, self.mcap.sel(), 1);
+            let crd = kif::CapRngDesc::new_single(kif::CapType::Object, self.mcap.sel());
             wv_assert_ok!(
                 self.tester,
                 syscalls::revoke(Activity::own().sel(), crd, false)

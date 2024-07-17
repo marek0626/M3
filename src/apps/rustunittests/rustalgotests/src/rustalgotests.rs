@@ -23,6 +23,7 @@ use m3::test::{DefaultWvTester, WvTester};
 use m3::{println, wv_run_suite};
 
 mod tboxlist;
+mod tcap;
 mod tdlist;
 mod tenvvars;
 mod tfloat;
@@ -40,6 +41,7 @@ pub fn main() -> Result<(), Error> {
     wv_run_suite!(tester, tmemmap::run);
     wv_run_suite!(tester, tserialize::run);
     wv_run_suite!(tester, ttreap::run);
+    wv_run_suite!(tester, tcap::run);
     println!("{}", tester);
     Ok(())
 }

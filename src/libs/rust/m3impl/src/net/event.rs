@@ -20,7 +20,7 @@ use base::build_vmsg;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
 
-use crate::cap::{CapFlags, Selector};
+use crate::cap::CapFlags;
 use crate::cell::RefCell;
 use crate::com::{LazyGate, RGateArgs, RecvCap, RecvGate, SGateArgs, SendCap};
 use crate::errors::{Code, Error};
@@ -166,7 +166,14 @@ pub struct NetEventChannel {
 impl NetEventChannel {
     /// Creates a new `NetEventChannel` for the server side with objects bound to the given
     /// selectors
-    pub fn new_server(caps: Selector) -> Result<Rc<Self>, Error> {
+    ///
+    /// # Panics
+    ///
+    /// Panics if `caps` does not range over exactly four capabilities.
+    pub fn new_server(caps: CapRngDesc) -> Result<Rc<Self>, Error> {
+        assert_eq!(caps.count(), 4);
+        let caps = caps.start();
+
         let rgate = RecvGate::new_with(
             RGateArgs::default()
                 .sel(caps + 0)
@@ -207,15 +214,21 @@ impl NetEventChannel {
 
     /// Creates a new `NetEventChannel` for the client side with objects bound to the given
     /// selectors
-    pub fn new_client(caps: Selector) -> Result<Rc<Self>, Error> {
-        let rgate = RecvGate::new_bind(caps + 0)?;
+    ///
+    /// # Panics
+    ///
+    /// Panics if `caps` does not range over exactly two capabilities.
+    pub fn new_client(caps: CapRngDesc) -> Result<Rc<Self>, Error> {
+        assert_eq!(caps.count(), 2);
+
+        let rgate = RecvGate::new_bind(caps.start())?;
         let rpl_gate = RecvGate::new(math::next_log2(REPLY_BUF_SIZE), math::next_log2(REPLY_SIZE))?;
 
         Ok(Rc::new(Self {
             side: NetEventSide::Client,
             rgate,
             rpl_gate,
-            sgate: RefCell::new(LazyGate::new(caps + 1)),
+            sgate: RefCell::new(LazyGate::new(caps.start() + 1)),
         }))
     }
 
@@ -330,9 +343,11 @@ impl Drop for NetEventChannel {
     fn drop(&mut self) {
         if self.side == NetEventSide::Server {
             // revoke client caps
+            // That the range arithmetic cannot overflow is guaranteed during
+            // construction of self.
             Activity::own()
                 .revoke(
-                    CapRngDesc::new(CapType::Object, self.rgate.sel() + 2, 2),
+                    CapRngDesc::new(CapType::Object, self.rgate.sel() + 2, 2).unwrap(),
                     false,
                 )
                 .unwrap();

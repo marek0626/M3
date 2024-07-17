@@ -90,6 +90,10 @@ pub enum Code {
     SeekPipe,
     Unspecified,
     InvCap,
+    /// The last capability in the range (if any) is not representable as an int
+    LastCapOverflow,
+    /// The provided count does not fit in the [`crate::kif::CapRngDesc`]
+    CapCountTooLarge,
     // networking
     InvState,
     WouldBlock,

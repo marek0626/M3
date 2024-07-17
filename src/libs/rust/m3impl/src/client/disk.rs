@@ -100,7 +100,7 @@ impl Disk {
     }
 
     pub fn delegate_mem(&self, mem: &MemCap, blocks: DiskBlockRange) -> Result<(), Error> {
-        let crd = CapRngDesc::new(CapType::Object, mem.sel(), 1);
+        let crd = CapRngDesc::new_single(CapType::Object, mem.sel());
         self.sess.delegate(
             crd,
             |slice_sink| {

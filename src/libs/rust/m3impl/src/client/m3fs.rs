@@ -47,6 +47,7 @@ struct CachedEP {
 pub struct M3FS {
     id: usize,
     sess: ClientSession,
+    // Selector of sgate has to be sess.sel() + 1.
     sgate: Rc<SendGate>,
     eps: Vec<CachedEP>,
 }
@@ -246,7 +247,7 @@ impl FileSystem for M3FS {
     }
 
     fn delegate(&self, act: &ChildActivity) -> Result<Selector, Error> {
-        let crd = kif::CapRngDesc::new(kif::CapType::Object, self.sess.sel(), 2);
+        let crd = kif::CapRngDesc::new(kif::CapType::Object, self.sess.sel(), 2).unwrap();
         self.sess.obtain_for(
             act.sel(),
             crd,
@@ -280,7 +281,7 @@ impl M3FS {
     fn delegate_ep(&self, sel: Selector) -> Result<usize, Error> {
         let mut id = 0;
         self.sess.delegate(
-            kif::CapRngDesc::new(kif::CapType::Object, sel, 1),
+            kif::CapRngDesc::new_single(kif::CapType::Object, sel),
             |os| os.push(opcodes::FileSystem::DelEP),
             |is| {
                 id = is.pop()?;

@@ -274,7 +274,7 @@ impl ChildActivity {
     /// Delegates the object capability with selector `sel` of [`Activity::own`](Activity::own) to
     /// `self`.
     pub fn delegate_obj(&self, sel: Selector) -> Result<(), Error> {
-        self.delegate(CapRngDesc::new(CapType::Object, sel, 1))
+        self.delegate(CapRngDesc::new_single(CapType::Object, sel))
     }
 
     /// Delegates the given capability range of [`Activity::own`](Activity::own) to `self`.
@@ -295,7 +295,7 @@ impl ChildActivity {
     /// Obtains the object capability with selector `sel` from `self` to
     /// [`Activity::own`](Activity::own).
     pub fn obtain_obj(&self, sel: Selector) -> Result<Selector, Error> {
-        self.obtain(CapRngDesc::new(CapType::Object, sel, 1))
+        self.obtain(CapRngDesc::new_single(CapType::Object, sel))
     }
 
     /// Obtains the given capability range of `self` to [`Activity::own`](Activity::own).
@@ -307,8 +307,12 @@ impl ChildActivity {
 
     /// Obtains the given capability range of `self` to [`Activity::own`](Activity::own) using
     /// selectors `dst`..`dst`+`crd.count()`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a capability range descriptor cannot be formed from `dst`.
     pub fn obtain_to(&self, crd: CapRngDesc, dst: Selector) -> Result<(), Error> {
-        let own = CapRngDesc::new(crd.cap_type(), dst, crd.count());
+        let own = CapRngDesc::new(crd.cap_type(), dst, crd.count()).unwrap();
         syscalls::exchange(self.sel(), own, crd.start(), true)
     }
 

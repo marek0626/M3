@@ -144,7 +144,10 @@ impl RoTSession {
         log!(LogFlags::RoTReqs, "[{}] rot::get_rot_certificate()", sid);
         let ctx = CTX.get();
         let sess = cli.get(sid).ok_or_else(|| Error::new(Code::InvArgs))?;
-        xchg.out_caps(CapRngDesc::new(CapType::Object, sess.rot_sig_cap.sel(), 1));
+        xchg.out_caps(CapRngDesc::new_single(
+            CapType::Object,
+            sess.rot_sig_cap.sel(),
+        ));
         xchg.out_args().push(0);
         xchg.out_args().push(ctx.rot_cert_size);
         Ok(())
@@ -158,7 +161,10 @@ impl RoTSession {
     ) -> Result<(), Error> {
         log!(LogFlags::RoTReqs, "[{}] rot::get_secret_mem()", sid);
         let sess = cli.get(sid).ok_or_else(|| Error::new(Code::InvArgs))?;
-        xchg.out_caps(CapRngDesc::new(CapType::Object, sess.secret_cap.sel(), 1));
+        xchg.out_caps(CapRngDesc::new_single(
+            CapType::Object,
+            sess.secret_cap.sel(),
+        ));
         xchg.out_args().push(0);
         xchg.out_args().push(ClientSecretArea::SIZE);
         Ok(())

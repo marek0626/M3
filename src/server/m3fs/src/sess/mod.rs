@@ -111,6 +111,7 @@ impl FSSession {
         sid: SessId,
         xchg: &mut CapExchange<'_>,
     ) -> Result<(), Error> {
+        // serv.sel() + 1 == _sgate.sel() must hold
         cli.add_connected(crt, |cli, serv, _sgate| match Self::get_sess(cli, sid)? {
             FSSession::Meta(meta) => meta.open_file(serv, xchg).map(FSSession::File),
             _ => Err(Error::new(Code::InvArgs)),
@@ -147,10 +148,9 @@ impl FSSession {
                     new_sel,
                     id
                 );
-                xchg.out_caps(m3::kif::CapRngDesc::new(
+                xchg.out_caps(m3::kif::CapRngDesc::new_single(
                     m3::kif::CapType::Object,
                     new_sel,
-                    1,
                 ));
                 xchg.out_args().push(id);
                 Ok(())
@@ -165,6 +165,7 @@ impl FSSession {
         sid: SessId,
         xchg: &mut CapExchange<'_>,
     ) -> Result<(), Error> {
+        // serv.sel() + 1 == _sgate.sel() must hold
         cli.add_connected(crt, |cli, serv, _sgate| match Self::get_sess(cli, sid)? {
             FSSession::File(file) => file.clone(serv, xchg).map(FSSession::File),
             FSSession::Meta(meta) => meta.clone(serv, xchg).map(FSSession::Meta),
@@ -183,10 +184,9 @@ impl FSSession {
                 let new_sel = SelSpace::get().alloc_sel();
                 log!(LogFlags::FSSess, "[{}] fs::set_dest(sel={})", sid, new_sel);
                 fs.set_ep(new_sel);
-                xchg.out_caps(m3::kif::CapRngDesc::new(
+                xchg.out_caps(m3::kif::CapRngDesc::new_single(
                     m3::kif::CapType::Object,
                     new_sel,
-                    1,
                 ));
                 Ok(())
             },

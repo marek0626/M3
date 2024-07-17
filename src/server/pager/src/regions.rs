@@ -286,11 +286,13 @@ impl Drop for Region {
         if self.mem.is_some() && self.flags.contains(RegionFlags::MAPPED) {
             syscalls::revoke(
                 self.owner,
+                // Unwrap cannot fail as start and size are shifted right.
                 CapRngDesc::new(
                     CapType::Mapping,
                     (self.virt().as_goff() >> cfg::PAGE_BITS as GlobOff) as Selector,
                     (self.size() >> cfg::PAGE_BITS as GlobOff) as Selector,
-                ),
+                )
+                .unwrap(),
                 true,
             )
             .ok();
