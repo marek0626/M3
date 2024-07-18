@@ -59,6 +59,8 @@ fn do_exchange(
             c1.count(),
         ));
     }
+
+    // No TOCTOU as we do not have an async call in-between.
     if !dst.obj_caps().borrow().range_unused(dst_rng) {
         return Err(verror!(
             Code::InvArgs,

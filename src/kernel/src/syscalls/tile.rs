@@ -23,7 +23,7 @@ use base::{build_vmsg, verror};
 use thread::AsyncRc;
 
 use crate::cap::{Capability, InvalidateType, MGateObject, TileObject};
-use crate::syscalls::{check_unused, get_request, reply_success, send_reply, try_upgrade_kobj};
+use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::{tilemng, Activity, TileMux, INVAL_ID};
 use crate::{ktcu, platform};
 
@@ -290,8 +290,6 @@ pub fn tile_mem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     sysc_log!(act, "tile_mem(dst={}, tile={})", r.dst, r.tile);
 
-    check_unused(&act.obj_caps().borrow(), r.dst)?;
-
     let mut act_caps = act.obj_caps().borrow_mut();
     let tile: AsyncRc<TileObject> = act_caps.get_kobj(r.tile)?;
     if tile.derived() {
@@ -307,7 +305,7 @@ pub fn tile_mem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let mem = tile.memory();
     let mgate = MGateObject::new(mem, kif::Perm::RWX, true);
     let cap = Capability::new(r.dst, mgate);
-    try_kmem_quota!(act_caps.insert_as_child(cap, r.tile));
+    try_cap_insert!(act_caps.insert_as_child(cap, r.tile));
 
     reply_success(&act);
     Ok(())

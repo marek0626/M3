@@ -180,6 +180,9 @@ impl CapTable {
         cap: Capability,
         parent: Option<NonNull<Capability>>,
     ) -> Result<(), Error> {
+        if self.caps.get(cap.sel_range()).is_some() {
+            return Err(Error::new(Code::InvArgs));
+        }
         let act = self.activity();
         if !act
             .kmem()
@@ -199,14 +202,17 @@ impl CapTable {
     }
 
     pub fn obtain(&mut self, sel: CapSel, cap: &mut Capability, child: bool) -> Result<(), Error> {
+        let mut nc: Capability = (*cap).clone();
+        nc.sels = SelRange::new(sel);
+        nc.derived = true;
+
+        if self.caps.get(nc.sel_range()).is_some() {
+            return Err(Error::new(Code::InvArgs));
+        }
         let act = self.activity();
         if !act.kmem().alloc(act, sel, Capability::size()) {
             return Err(Error::new(Code::NoSpace));
         }
-
-        let mut nc: Capability = (*cap).clone();
-        nc.sels = SelRange::new(sel);
-        nc.derived = true;
 
         let nc = self.do_insert(nc);
         log!(LogFlags::KernCaps, "Cloning cap {:?}", nc);
