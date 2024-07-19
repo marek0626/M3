@@ -28,7 +28,7 @@ use core::ptr::NonNull;
 
 use thread::AsyncRc;
 
-use crate::cap::{EPObject, GateEP, KObject, MapObject, TileObject};
+use crate::cap::{EPObject, GateEP, KMemObject, KObject, MapObject, TileObject};
 use crate::ktcu;
 use crate::tiles::{tilemng, Activity, INVAL_ID};
 
@@ -537,17 +537,15 @@ impl Capability {
             },
 
             KObject::EP(e) => {
-                EPObject::revoke(AsyncRc::new(e.clone()));
+                EPObject::revoke(AsyncRc::new(e));
             },
 
             KObject::Tile(tile) => {
                 if !self.derived {
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
-                        // TODO we cannot use these references across the async call below
-                        let tileobj = unsafe { parent.get_unchecked().clone() };
-                        if let KObject::Tile(p) = tileobj {
-                            TileObject::revoke_async(AsyncRc::new(tile), &p);
+                        if let Ok(parent) = parent.get::<AsyncRc<TileObject>>() {
+                            TileObject::revoke_async(AsyncRc::new(tile), parent);
                         }
                     }
                 }
@@ -557,10 +555,8 @@ impl Capability {
                 if !self.derived {
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
-                        // TODO we cannot use these references across the async call below
-                        let kmemobj = unsafe { parent.get_unchecked().clone() };
-                        if let KObject::KMem(p) = kmemobj {
-                            k.revoke(parent.activity(), parent.sel(), &p);
+                        if let Ok(par_kmem) = parent.get::<AsyncRc<KMemObject>>() {
+                            k.revoke(parent.activity(), parent.sel(), par_kmem);
                         }
                     }
                 }

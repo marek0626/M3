@@ -907,7 +907,7 @@ impl TileObject {
         self.ep_quota.left.set(total_eps);
     }
 
-    pub fn revoke_async(tile: AsyncRc<Self>, parent: &TileObject) {
+    pub fn revoke_async(tile: AsyncRc<Self>, parent: AsyncRc<TileObject>) {
         // same for time and pts: free the ones that are different
         let time = if tile.time_quota != parent.time_quota {
             Some(tile.time_quota)
@@ -924,22 +924,23 @@ impl TileObject {
 
         // note that we first let TileMux remove the quotas and afterwards give the EPQuota back to
         // our parent to avoid that someone can already spent the EPQuota for something new.
-        let tile = if time.is_some() || pts.is_some() {
+        let (tile, parent) = if time.is_some() || pts.is_some() {
             let tile_id = tile.tile();
             let tile_weak = tile.downgrade();
+            let parent_weak = parent.downgrade();
 
             TileMux::remove_quotas_async(tilemng::tilemux(tile_id), time, pts).ok();
 
             // if that fails, someone else removed the object in the meantime and we can stop here
             // (for example, child cap is revoked first, gets stuck in the async call below, and
             // the parent cap is revoked in the meantime)
-            match tile_weak.upgrade() {
-                Some(tile) => tile,
-                None => return,
+            match (tile_weak.upgrade(), parent_weak.upgrade()) {
+                (Some(tile), Some(parent)) => (tile, parent),
+                _ => return,
             }
         }
         else {
-            tile
+            (tile, parent)
         };
 
         // we free the EP quota if it's different from our parent's quota (only our own childs can
@@ -1199,7 +1200,7 @@ impl KMemObject {
         );
     }
 
-    pub fn revoke(&self, act: &Activity, sel: kif::CapSel, parent: &KMemObject) {
+    pub fn revoke(&self, act: &Activity, sel: kif::CapSel, parent: AsyncRc<KMemObject>) {
         // grant the kernel memory back to our parent
         parent.free(act, sel, self.left());
         assert!(self.left() == self.quota);
