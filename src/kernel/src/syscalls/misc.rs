@@ -30,7 +30,7 @@ use crate::cap::{
 use crate::ktcu;
 use crate::platform;
 use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
-use crate::tiles::{tilemng, Activity, ActivityMng, State, TileMux};
+use crate::tiles::{tilemng, Activity, TileMux};
 
 #[inline(never)]
 pub fn alloc_ep_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
@@ -564,16 +564,10 @@ pub fn activity_ctrl_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
         kif::syscalls::ActivityOp::Stop => {
             let is_self = r.act == kif::SEL_ACT;
+            let act_id = act.id();
             drop(act);
 
-            actcap.stop_app(Code::from(r.arg as u32));
-
-            // don't send stop to accelerators if the activity is already stopped
-            // note that we need this special case, because accelerators exit via
-            // activity_ctrl(STOP) and not via TileMux call.
-            if actcap.tile_desc().is_programmable() || actcap.state() != State::DEAD {
-                ActivityMng::stop_activity_async(actcap, !is_self)?;
-            }
+            Activity::stop_app_async(actcap, Code::from(r.arg as u32), act_id);
 
             if is_self {
                 // syscall message has already been invalidated

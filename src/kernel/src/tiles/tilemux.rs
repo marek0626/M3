@@ -38,7 +38,7 @@ use crate::cap::{
 use crate::ktcu;
 use crate::mem;
 use crate::platform;
-use crate::tiles::{tilemng, INVAL_ID};
+use crate::tiles::{tilemng, Activity, INVAL_ID};
 
 struct TileState {
     // Note that we shouldn't even use EPObject (a kernel object) here, because it's actually a
@@ -600,7 +600,7 @@ impl TileMux {
             .map(|_| ())
     }
 
-    pub fn handle_call(tilemux: RefMut<'_, Self>, msg: tcu::OwnedMessage) {
+    pub fn handle_call_async(tilemux: RefMut<'_, Self>, msg: tcu::OwnedMessage) {
         use base::serialize::M3Deserializer;
 
         let mut de = M3Deserializer::new(msg.as_words());
@@ -610,11 +610,11 @@ impl TileMux {
         // This allows to move msg.
         let pos = de.pos();
         match op {
-            kif::tilemux::Calls::Exit => Self::handle_exit(tilemux, msg, pos).unwrap(),
+            kif::tilemux::Calls::Exit => Self::handle_exit_async(tilemux, msg, pos).unwrap(),
         }
     }
 
-    fn handle_exit(
+    fn handle_exit_async(
         tilemux: RefMut<'_, Self>,
         mut msg: tcu::OwnedMessage,
         pos: usize,
@@ -637,7 +637,7 @@ impl TileMux {
 
         if has_act {
             let act = ActivityMng::activity(r.act_id).unwrap();
-            act.stop_app(r.status);
+            Activity::stop_app_async(act, r.status, r.act_id);
         }
 
         let mut reply = MsgBuf::borrow_def();
@@ -880,7 +880,7 @@ impl TileMux {
         msg: &R,
         check_init: bool,
     ) -> Result<thread::Event, Error> {
-        use crate::tiles::{ActivityMng, State};
+        use crate::tiles::ActivityMng;
 
         // if tilemux is not initialized, we cannot talk to it
         if check_init && !self.is_initialized() {
@@ -890,7 +890,7 @@ impl TileMux {
         // if the activity has no app anymore, don't send the notify
         if let Some(id) = act {
             if !ActivityMng::activity(id)
-                .map(|v| v.state() != State::DEAD)
+                .map(|v| !v.is_dead())
                 .unwrap_or(false)
             {
                 return Err(Error::new(Code::ObjectGone));

@@ -326,7 +326,7 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
                 return;
             };
             drop(nact_weak);
-            nact.revoke_caps_async(act_id);
+            Activity::stop_app_async(nact, Code::Unspecified, act_id);
         });
         (cleanup, nact)
     };

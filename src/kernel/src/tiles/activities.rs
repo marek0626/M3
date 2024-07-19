@@ -51,6 +51,7 @@ bitflags! {
 pub enum State {
     INIT,
     RUNNING,
+    STOPPING,
     DEAD,
 }
 
@@ -317,6 +318,10 @@ impl Activity {
         self.state.get()
     }
 
+    pub fn is_dead(&self) -> bool {
+        self.state.get() != State::INIT && self.state.get() != State::RUNNING
+    }
+
     pub fn is_root(&self) -> bool {
         self.flags.contains(ActivityFlags::IS_ROOT)
     }
@@ -516,59 +521,113 @@ impl Activity {
         ActivityMng::start_activity_async(id, tile_id)
     }
 
-    pub fn stop_app(&self, exit_code: Code) {
-        if self.state.get() == State::DEAD {
+    pub fn stop_app_async(act: AsyncRc<Activity>, exit_code: Code, revoker: ActId) {
+        if act.state.get() == State::DEAD {
             return;
         }
 
-        log!(
-            LogFlags::KernActs,
-            "Stopping Activity {} [id={}]",
-            self.name(),
-            self.id()
-        );
+        // safety: we use the pointer as an event while the activity still exists
+        let event = Rc::as_ptr(unsafe { act.inner() }) as usize as thread::Event;
 
-        let mut tilemux = tilemng::tilemux(self.tile_id());
-        // force-invalidate standard EPs
-        for ep in self.eps_start..self.eps_start + STD_EPS_COUNT as EpId {
-            // ignore failures
-            tilemux.invalidate_ep(self.id(), ep, true, false).ok();
+        if act.state.get() == State::STOPPING {
+            // if we're in the process of stopping the activity, just wait for that to finish. we
+            // want to wait here to ensure that it has been fully stopped and to prevent trouble
+            // when doing that with multiple threads concurrently. For example, if one thread
+            // already started, has removed a capability and is now waiting for the destruction
+            // of the kernel object (e.g., needs a response from TileMux), the second thread will
+            // not find the capability anymore and therefore could think that everything is done,
+            // but actually it isn't.
+            drop(act);
+            thread::wait_for(event);
         }
-        drop(tilemux);
+        else {
+            // mark the activity as "in the process of being stopped"
+            let old_state = act.state.get();
+            act.state.set(State::STOPPING);
 
-        // force-invalidate all other EPs of this activity
-        for ep in &*self.eps.borrow_mut() {
-            if let Some(ep) = ep.upgrade() {
-                // ignore failures here
-                ep.deconfigure(InvalidateType::Force).ok();
+            log!(
+                LogFlags::KernActs,
+                "Stopping Activity {} [id={}]",
+                act.name(),
+                act.id()
+            );
+
+            let mut tilemux = tilemng::tilemux(act.tile_id());
+            // force-invalidate standard EPs
+            for ep in act.eps_start..act.eps_start + STD_EPS_COUNT as EpId {
+                // ignore failures
+                tilemux.invalidate_ep(act.id(), ep, true, false).ok();
             }
-        }
+            drop(tilemux);
 
-        // make sure that we don't get further syscalls by this activity
-        ktcu::drop_msgs(ktcu::KSYS_EP, self.id() as Label);
-        // ensure that we don't access the last syscall anymore (or reply)
-        self.cur_sysc.borrow_mut().invalidate();
+            // force-invalidate all other EPs of this activity
+            for ep in &*act.eps.borrow_mut() {
+                if let Some(ep) = ep.upgrade() {
+                    // ignore failures here
+                    ep.deconfigure(InvalidateType::Force).ok();
+                }
+            }
 
-        let old_state = self.state.get();
-        self.state.set(State::DEAD);
-        self.exit_code.set(Some(exit_code)); // TODO exit code when it wasn't running?
+            // make sure that we don't get further syscalls by this activity
+            ktcu::drop_msgs(ktcu::KSYS_EP, act.id() as Label);
+            // ensure that we don't access the last syscall anymore (or reply)
+            act.cur_sysc.borrow_mut().invalidate();
 
-        if old_state == State::RUNNING {
-            EXIT_LISTENERS.borrow_mut().retain(|l| l.id != self.id());
+            let act = if !act.is_root() {
+                // keep a reference here to prevent that it's destructed during the call
+                // safety: that's okay because only one thread can stop/destroy an activity
+                let _clone = unsafe { act.inner().clone() };
+                let act_weak = act.clone().downgrade();
+                Self::revoke_caps_async(act, revoker);
+                act_weak.upgrade().unwrap()
+            }
+            else {
+                act
+            };
 
-            Self::send_exit_notify();
-        }
+            // don't send stop to accelerators if it exited by itself (which they do via
+            // activity_ctrl(STOP))
+            let act = if act.tile_desc().is_programmable()
+                || (act.state() == State::RUNNING && revoker != act.id())
+            {
+                // safety: as above
+                let _clone = unsafe { act.inner().clone() };
+                let act_weak = act.clone().downgrade();
+                // ignore failures here
+                let _ = ActivityMng::stop_activity_async(act);
+                act_weak.upgrade().unwrap()
+            }
+            else {
+                act
+            };
 
-        // if it's root, there is nobody waiting for it; just remove it
-        if self.is_root() {
-            ActivityMng::remove_activity(self.id());
-            thread::remove_thread();
+            // if it's root, there is nobody waiting for it; just remove it
+            if act.is_root() {
+                ActivityMng::remove_activity(act.id());
+                thread::remove_thread();
+            }
+
+            // change state before the notify
+            act.exit_code.set(Some(exit_code)); // TODO exit code when it wasn't running?
+            act.state.set(State::DEAD);
+
+            if old_state == State::RUNNING {
+                EXIT_LISTENERS.borrow_mut().retain(|l| l.id != act.id());
+                Self::send_exit_notify();
+            }
+
+            // now that it's completely dead, notify potential other threads that are waiting
+            thread::notify(event, None);
         }
     }
 
-    pub fn revoke_caps_async(&self, revoker: ActId) {
-        CapTable::revoke_all_async(&self.obj_caps, revoker);
-        CapTable::revoke_all_async(&self.map_caps, revoker);
+    pub fn revoke_caps_async(act: AsyncRc<Activity>, revoker: ActId) {
+        // TODO that's not okay
+        let act_ref = unsafe { act.inner().clone() };
+        drop(act);
+
+        CapTable::revoke_all_async(&act_ref.obj_caps, revoker);
+        CapTable::revoke_all_async(&act_ref.map_caps, revoker);
     }
 
     pub fn revoke_async(&self, crd: CapRngDesc, own: bool, revoker: ActId) -> Result<(), Error> {

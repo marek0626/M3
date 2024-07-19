@@ -175,8 +175,8 @@ impl ActivityMng {
         }
     }
 
-    pub fn stop_activity_async(act: AsyncRc<Activity>, stop: bool) -> Result<(), Error> {
-        if stop && platform::tile_desc(act.tile_id()).supports_tilemux() {
+    pub fn stop_activity_async(act: AsyncRc<Activity>) -> Result<(), Error> {
+        if platform::tile_desc(act.tile_id()).supports_tilemux() {
             let id = act.id();
             let tile_id = act.tile_id();
             drop(act);

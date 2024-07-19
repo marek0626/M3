@@ -210,7 +210,7 @@ fn workloop_async() -> ! {
 
         if let Some(msg) = ktcu::fetch_msg(ktcu::KPEX_EP) {
             let tile = tcu::TileId::new_from_raw(msg.header.label() as u16);
-            crate::tiles::TileMux::handle_call(crate::tiles::tilemng::tilemux(tile), msg);
+            crate::tiles::TileMux::handle_call_async(crate::tiles::tilemng::tilemux(tile), msg);
         }
 
         thread::try_yield();

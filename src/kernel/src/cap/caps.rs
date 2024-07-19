@@ -30,7 +30,7 @@ use thread::AsyncRc;
 
 use crate::cap::{EPObject, GateEP, KObject, MapObject, SessObject, TileObject};
 use crate::ktcu;
-use crate::tiles::{tilemng, Activity, State, INVAL_ID};
+use crate::tiles::{tilemng, Activity, INVAL_ID};
 
 use super::IntoKObject;
 
@@ -532,7 +532,7 @@ impl Capability {
         match self.obj {
             KObject::Activity(v) => {
                 if !self.derived {
-                    v.revoke_caps_async(revoker);
+                    Activity::stop_app_async(AsyncRc::new(v), Code::Unspecified, revoker);
                 }
             },
 
@@ -602,7 +602,7 @@ impl Capability {
             KObject::Map(ref m) => {
                 // TODO currently, it can happen that we've already stopped the activity, but still
                 // accept/continue a syscall that inserts something into the activity's table.
-                if m.mapped() && act.state() != State::DEAD {
+                if m.mapped() && !act.is_dead() {
                     let virt = VirtAddr::new((sel as GlobOff) << cfg::PAGE_BITS);
                     MapObject::unmap_async(act.id(), act.tile_id(), virt, self.len() as usize);
                 }
