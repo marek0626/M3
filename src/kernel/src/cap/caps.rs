@@ -401,8 +401,6 @@ impl Capability {
     ///
     /// Returns `true` when no more capabilities are found.
     fn revoke_single_async(mut cap: RefMut<'_, Self>, self_included: bool, revoker: ActId) -> bool {
-        log!(LogFlags::KernCaps, "Revoking cap {:?}", *cap);
-
         let mut is_child = false;
         // Loop to the first child.
         loop {
@@ -426,6 +424,8 @@ impl Capability {
         if !self_included && !is_child {
             return true;
         }
+
+        log!(LogFlags::KernCaps, "Revoking cap {:?}", *cap);
 
         // Unlink cap from derivation tree.
         // SAFETY: All references in the derivation tree must be valid.
