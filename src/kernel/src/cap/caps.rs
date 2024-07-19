@@ -28,7 +28,7 @@ use core::ptr::NonNull;
 
 use thread::AsyncRc;
 
-use crate::cap::{EPObject, GateEP, KObject, MapObject, SessObject, TileObject};
+use crate::cap::{EPObject, GateEP, KObject, MapObject, TileObject};
 use crate::ktcu;
 use crate::tiles::{tilemng, Activity, INVAL_ID};
 
@@ -592,10 +592,7 @@ impl Capability {
                 // sharing a session between multiple activities, but are at most "granting" the
                 // session to someone else if we don't want to use it ourself.
                 if self.derived {
-                    // release the Rc within the KObject before doing the async call, because the
-                    // server typically revokes its non-derived cap during the async call. That is,
-                    // without releasing our reference the strong-count check below fails.
-                    SessObject::close_async(AsyncRc::new(s), revoker);
+                    s.close(revoker);
                 }
             },
 

@@ -497,12 +497,8 @@ impl ServObject {
         Self::new(self.serv.clone(), false, creator)
     }
 
-    pub fn send(
-        srv: &AsyncRc<Self>,
-        lbl: Label,
-        msg: MsgBufRef<'_>,
-    ) -> Result<thread::Event, Error> {
-        srv.serv.send(lbl, &msg)
+    pub fn send(&self, lbl: Label, msg: MsgBufRef<'_>) -> Result<thread::Event, Error> {
+        self.serv.send(lbl, &msg)
     }
 
     pub fn send_receive_async(
@@ -568,9 +564,9 @@ impl SessObject {
         self.ident
     }
 
-    pub fn close_async(sess: AsyncRc<Self>, revoker: ActId) {
-        if sess.auto_close {
-            if let Some(serv) = sess.service() {
+    pub fn close(&self, revoker: ActId) {
+        if self.auto_close {
+            if let Some(serv) = self.service() {
                 // don't send the close, if the server is the revoker
                 if serv.server_act().id() == revoker {
                     return;
@@ -579,20 +575,19 @@ impl SessObject {
                 log!(
                     LogFlags::KernServ,
                     "Sending close(sess={:#x}) to service {} with creator {}",
-                    sess.ident(),
+                    self.ident(),
                     serv.name(),
-                    sess.creator,
+                    self.creator,
                 );
 
                 let mut smsg = MsgBuf::borrow_def();
-                build_vmsg!(smsg, service::Request::Close { sid: sess.ident });
+                build_vmsg!(smsg, service::Request::Close { sid: self.ident });
 
-                let creator = sess.creator as Label;
-                drop(sess);
+                let creator = self.creator as Label;
 
                 // this should never fail, because the close request fails only if the creator does not
                 // own the session. but we know here that the creator owns this session.
-                if let Err(e) = ServObject::send_receive_async(serv, creator, smsg) {
+                if let Err(e) = serv.send(creator, smsg) {
                     log!(LogFlags::Error, "Session-close request failed: {}", e);
                 }
             }
