@@ -22,8 +22,6 @@ use crate::ops::inodes;
 
 use base::const_assert;
 
-use core::u32;
-
 use m3::cell::Cell;
 use m3::mem::size_of;
 use m3::vfs::{FileInfo, FileMode};

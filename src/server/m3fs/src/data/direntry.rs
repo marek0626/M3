@@ -17,9 +17,8 @@
 use crate::buf::MetaBufferBlock;
 use crate::data::{InodeNo, DIR_ENTRY_LEN};
 
-use core::intrinsics::transmute;
+use core::ptr::slice_from_raw_parts;
 use core::slice;
-use core::u32;
 
 use m3::cell::Cell;
 use m3::libc;
@@ -35,21 +34,22 @@ pub struct DirEntry {
     name: [i8],
 }
 
-macro_rules! get_entry_mut {
-    ($buffer_off:expr) => {{
-        // TODO ensure that name_length and next are within bounds (in case FS image is corrupt)
-        let name_length = $buffer_off.add(size_of::<InodeNo>()) as *const u32;
-        let slice = [$buffer_off as usize, *name_length as usize + DIR_ENTRY_LEN];
-        transmute(slice)
-    }};
-}
-
 impl DirEntry {
+    unsafe fn get_entry_mut(buffer_off: *mut u8) -> *mut Self {
+        // TODO ensure that name_length and next are within bounds (in case FS image is corrupt)
+        let name_length = buffer_off.add(size_of::<InodeNo>()).cast::<u32>();
+        let size = *name_length as usize + DIR_ENTRY_LEN;
+        slice_from_raw_parts(buffer_off, size) as *mut Self
+    }
+
     /// Returns a reference to the directory entry stored at `off` in the given buffer
     pub fn from_buffer(block_data: &[u8], off: usize) -> &Self {
         unsafe {
             let buffer_off = block_data.as_ptr().add(off);
-            get_entry_mut!(buffer_off)
+            // SAFETY: The use of *mut during conversion does not require the
+            // block_data to me mutable.
+            // No mutable reference (&mut) was ever created.
+            &*Self::get_entry_mut(buffer_off.cast_mut())
         }
     }
 
@@ -58,7 +58,7 @@ impl DirEntry {
         block.mark_dirty();
         unsafe {
             let buffer_off = block.data_mut().as_mut_ptr().add(off);
-            get_entry_mut!(buffer_off)
+            &mut *Self::get_entry_mut(buffer_off)
         }
     }
 
@@ -73,7 +73,10 @@ impl DirEntry {
         unsafe {
             let buffer_off1 = block.data_mut().as_mut_ptr().add(off1);
             let buffer_off2 = block.data_mut().as_mut_ptr().add(off2);
-            (get_entry_mut!(buffer_off1), get_entry_mut!(buffer_off2))
+            (
+                &mut *Self::get_entry_mut(buffer_off1),
+                &mut *Self::get_entry_mut(buffer_off2),
+            )
         }
     }
 

@@ -25,6 +25,7 @@ use crate::io;
 use crate::machine;
 
 /// The serial line
+#[derive(Default)]
 pub struct Serial {}
 
 impl Serial {

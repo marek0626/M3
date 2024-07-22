@@ -160,11 +160,11 @@ macro_rules! impl_prim_int {
 
         impl num_traits::Bounded for $T {
             fn min_value() -> Self {
-                Self(<$R>::min_value())
+                Self(<$R>::MIN)
             }
 
             fn max_value() -> Self {
-                Self(<$R>::max_value())
+                Self(<$R>::MAX)
             }
         }
 

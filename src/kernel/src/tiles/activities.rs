@@ -126,7 +126,7 @@ impl Activity {
             map_caps: RefCell::from(CapTable::default()),
             eps: RefCell::from(Vec::new()),
             rbuf_phys: Cell::from(PhysAddr::default()),
-            upcalls: RefCell::from(SendQueue::new(QueueId::Activity(id), tile.tile())),
+            upcalls: RefCell::from(SendQueue::new(QueueId::Activity, tile.tile())),
             tile: tile.downgrade(),
             cur_sysc: RefCell::from(OwnedMessage::default()),
             cur_derive_srv: RefCell::from(None),

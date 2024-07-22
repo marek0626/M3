@@ -18,7 +18,6 @@ use crate::buf::MetaBufferBlockRef;
 use crate::data::{BlockNo, INodeRef};
 
 use core::fmt;
-use core::u32;
 
 use m3::cell::Cell;
 use m3::mem::size_of;

@@ -14,7 +14,7 @@
  */
 
 use log::{debug, trace, warn};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{btree_map, BTreeMap, HashMap};
 use std::fmt;
 use std::io::{self, BufRead, StdoutLock, Write};
 
@@ -143,12 +143,14 @@ impl<'n> Tile<'n> {
     }
 
     fn binary_switch(&mut self, sym: &'n symbols::Symbol, time: u64) {
-        if self.bins.get::<str>(&sym.bin).is_none() {
-            debug!("{}: new binary {}", time, sym.bin);
-            self.bins.insert(&sym.bin, Binary::new(&sym.bin));
-        }
-        else {
-            debug!("{}: switched to {}", time, sym.bin);
+        match self.bins.entry(&*sym.bin) {
+            btree_map::Entry::Vacant(entry) => {
+                debug!("{}: new binary {}", time, sym.bin);
+                entry.insert(Binary::new(&sym.bin));
+            },
+            btree_map::Entry::Occupied(_) => {
+                debug!("{}: switched to {}", time, sym.bin);
+            },
         }
         self.last_bin = &sym.bin;
     }
@@ -418,9 +420,9 @@ pub fn generate(
             let addr = maybe_addr.unwrap();
             if let Some(sym) = symbols::resolve(syms, addr) {
                 // detect tiles
-                if tiles.get(&tile).is_none() {
-                    tiles.insert(tile, Tile::new(Binary::new(&sym.name), tile));
-                }
+                tiles
+                    .entry(tile)
+                    .or_insert_with(|| Tile::new(Binary::new(&sym.name), tile));
                 let cur_tile = tiles.get_mut(&tile).unwrap();
 
                 // detect binary changes (e.g., tilemux to app)

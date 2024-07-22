@@ -27,7 +27,7 @@ use core::fmt;
 use core::intrinsics;
 use core::marker::PhantomData;
 use core::ops::Deref;
-use core::ptr::NonNull;
+use core::ptr::{slice_from_raw_parts, NonNull};
 use core::slice;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -574,7 +574,7 @@ impl Deref for OwnedMessage {
             let header = msg.cast::<Header>();
             let length = header.as_ref().length();
             // Add length information to pointer.
-            let msg: *const [()] = slice::from_raw_parts(msg.as_ptr(), length);
+            let msg: *const [()] = slice_from_raw_parts(msg.as_ptr(), length);
             &*(msg as *const Self::Target)
         }
         // TODO: Prevent the user from (safely) acknowledging the returned

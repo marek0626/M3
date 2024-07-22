@@ -29,8 +29,7 @@ use base::log;
 use base::mem::{self, VirtAddr};
 use base::tcu;
 use base::vec;
-use core::intrinsics::transmute;
-use core::ptr::NonNull;
+use core::ptr::{slice_from_raw_parts, NonNull};
 
 pub type Event = u64;
 
@@ -166,9 +165,11 @@ impl Thread {
         if mem::replace(&mut self.has_msg, false) {
             // safety: has_msg is true and we trust the TCU
             unsafe {
-                let head = self.msg.as_ptr() as *const tcu::Header;
-                let slice = [head as usize, (*head).length()];
-                Some(transmute(slice))
+                let header = self.msg.as_ptr().cast::<tcu::Header>();
+                let length = (*header).length();
+                // Add length information to pointer.
+                let msg: *const [()] = slice_from_raw_parts(self.msg.as_ptr().cast::<()>(), length);
+                Some(&*(msg as *const tcu::Message))
             }
         }
         else {
