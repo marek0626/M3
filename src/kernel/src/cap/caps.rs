@@ -183,6 +183,11 @@ impl CapTable {
             return Err(Error::new(Code::InvArgs));
         }
         let act = self.activity();
+        // prevent that we insert more capabilities into activities that are already in the
+        // process of being killed.
+        if act.is_dead() {
+            return Err(Error::new(Code::ObjectGone));
+        }
         if !act
             .kmem()
             .unwrap()
@@ -210,6 +215,9 @@ impl CapTable {
             return Err(Error::new(Code::InvArgs));
         }
         let act = self.activity();
+        if act.is_dead() {
+            return Err(Error::new(Code::ObjectGone));
+        }
         if !act.kmem().unwrap().alloc(act, sel, Capability::size()) {
             return Err(Error::new(Code::NoSpace));
         }
