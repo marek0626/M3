@@ -19,6 +19,7 @@ use base::kif::{self, syscalls};
 use base::log;
 use base::mem::{GlobAddr, MsgBuf};
 use base::tcu;
+use base::util::Defer;
 use base::{build_vmsg, verror};
 
 use thread::AsyncRc;
@@ -47,12 +48,26 @@ pub fn derive_tile_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let tile: AsyncRc<TileObject> = act.get_kobj(r.tile)?;
     let act_weak = act.downgrade();
 
+    let tile_weak = tile.clone().downgrade();
     let tile_new = TileObject::derive_async(tile, r.eps, r.time, r.pts)?;
+
+    let tile_new_clone = tile_new.clone();
+    let cleanup_tile = Defer::new(move || {
+        let Some(tile) = tile_weak.upgrade()
+        else {
+            return; // Tile already gone.
+        };
+        // TODO we cannot use these references across the async call below
+        let tile = unsafe { tile.inner() }.clone();
+        TileObject::revoke_async(tile_new_clone, &tile);
+    });
+
     let cap = Capability::new(r.dst, tile_new);
 
     // TODO we will leak the quota object in TileMux if this fails
     let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
     try_cap_insert!(act.obj_caps().borrow_mut().insert_as_child(cap, r.tile));
+    cleanup_tile.cancel();
 
     reply_success(&act);
     Ok(())
