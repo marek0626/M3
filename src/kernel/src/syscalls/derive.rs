@@ -57,9 +57,7 @@ pub fn derive_tile_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         else {
             return; // Tile already gone.
         };
-        // TODO we cannot use these references across the async call below
-        let tile = unsafe { tile.inner() }.clone();
-        TileObject::revoke_async(tile_new_clone, &tile);
+        TileObject::revoke_async(tile_new_clone, tile);
     });
 
     let cap = Capability::new(r.dst, tile_new);

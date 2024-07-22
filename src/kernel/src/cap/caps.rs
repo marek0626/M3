@@ -209,7 +209,7 @@ impl CapTable {
     pub fn obtain(&mut self, sel: CapSel, cap: &mut Capability, child: bool) -> Result<(), Error> {
         let mut nc: Capability = (*cap).clone();
         nc.sels = SelRange::new(sel);
-        nc.derived = true;
+        nc.origin = false;
 
         if self.caps.get(nc.sel_range()).is_some() {
             return Err(Error::new(Code::InvArgs));
@@ -297,7 +297,7 @@ pub struct Capability {
     parent: Option<NonNull<Capability>>,
     next: Option<NonNull<Capability>>,
     prev: Option<NonNull<Capability>>,
-    derived: bool,
+    origin: bool,
 }
 
 impl Capability {
@@ -326,7 +326,7 @@ impl Capability {
             parent: None,
             next: None,
             prev: None,
-            derived: false,
+            origin: true,
         }
     }
 
@@ -523,7 +523,7 @@ impl Capability {
         let act = self.activity();
         let sel = self.sel();
         if let Some(kmem) = act.kmem() {
-            if !self.derived {
+            if self.origin {
                 // if it's not derived, we created the cap and thus will also free the kobject
                 kmem.free(act, sel, Capability::size() + self.obj.size());
             }
@@ -533,13 +533,13 @@ impl Capability {
             }
         }
 
-        if !self.derived {
+        if self.origin {
             assert_eq!(self.obj.ref_count(), 1);
         }
 
         match self.obj {
             KObject::Activity(v) => {
-                if !self.derived {
+                if self.origin {
                     Activity::stop_app_async(AsyncRc::new(v), Code::Unspecified, revoker);
                 }
             },
@@ -549,7 +549,7 @@ impl Capability {
             },
 
             KObject::Tile(tile) => {
-                if !self.derived {
+                if self.origin {
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
                         if let Ok(parent) = parent.get::<AsyncRc<TileObject>>() {
@@ -560,7 +560,7 @@ impl Capability {
             },
 
             KObject::KMem(k) => {
-                if !self.derived {
+                if self.origin {
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
                         if let Ok(par_kmem) = parent.get::<AsyncRc<KMemObject>>() {
@@ -595,7 +595,7 @@ impl Capability {
                 // chain can remove the session for all. I think this is fine, because we are never
                 // sharing a session between multiple activities, but are at most "granting" the
                 // session to someone else if we don't want to use it ourself.
-                if self.derived {
+                if !self.origin {
                     s.close(revoker);
                 }
             },
