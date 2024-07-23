@@ -452,7 +452,7 @@ pub fn activate_sgate_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> 
         let event = rgate.get_event();
         let rg_weak = rgate.downgrade();
         let act_weak = act.downgrade();
-        thread::wait_for(event);
+        thread::wait_for_async(event);
 
         let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
         let rgate = try_upgrade_kobj(rg_weak, kif::INVALID_SEL)?;

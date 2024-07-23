@@ -211,7 +211,7 @@ fn workloop_async() -> ! {
             crate::tiles::TileMux::handle_call_async(crate::tiles::tilemng::tilemux(tile), msg);
         }
 
-        thread::try_yield();
+        thread::try_yield_async();
     }
 
     // do the tile deinit just once
@@ -237,7 +237,7 @@ fn workloop_async() -> ! {
             }
         }
 
-        thread::try_yield();
+        thread::try_yield_async();
     }
 
     // if we get back here, all activities and multiplexers on user tiles are shut down, so we can

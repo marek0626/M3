@@ -115,7 +115,7 @@ pub struct Thread {
 impl_boxitem!(Thread);
 
 extern "C" {
-    fn thread_switch(o: *mut Regs, n: *mut Regs);
+    fn thread_switch_async(o: *mut Regs, n: *mut Regs);
 }
 
 impl Thread {
@@ -312,7 +312,7 @@ pub fn alloc_event() -> Event {
     }
 }
 
-pub fn wait_for(event: Event) {
+pub fn wait_for_async(event: Event) {
     let mut tmng = TMNG.borrow_mut();
     let next = tmng.get_next().unwrap();
 
@@ -336,7 +336,7 @@ pub fn wait_for(event: Event) {
         let next_ptr = &mut tmng.current.regs as *mut _;
         drop(tmng);
 
-        thread_switch(&mut (*old).regs as *mut _, next_ptr);
+        thread_switch_async(&mut (*old).regs as *mut _, next_ptr);
     }
 }
 
@@ -344,7 +344,7 @@ pub fn notify(event: Event, msg: Option<&tcu::Message>) {
     TMNG.borrow_mut().notify(event, msg)
 }
 
-pub fn try_yield() {
+pub fn try_yield_async() {
     let mut tmng = TMNG.borrow_mut();
     match tmng.ready.pop_front() {
         None => {},
@@ -367,7 +367,7 @@ pub fn try_yield() {
                 let next_ptr = &mut tmng.current.regs as *mut _;
                 drop(tmng);
 
-                thread_switch(&mut (*old).regs as *mut _, next_ptr);
+                thread_switch_async(&mut (*old).regs as *mut _, next_ptr);
             }
         },
     }
@@ -377,7 +377,7 @@ pub fn try_yield() {
 ///
 /// Does nothing if no sleeping thread is available.
 /// The current thread object is leaked.
-pub fn stop() {
+pub fn stop_async() {
     let mut tmng = TMNG.borrow_mut();
     if let Some(next) = tmng.get_next() {
         log!(
@@ -395,7 +395,7 @@ pub fn stop() {
         drop(tmng);
 
         unsafe {
-            thread_switch(&mut cur.regs as *mut _, next_ptr);
+            thread_switch_async(&mut cur.regs as *mut _, next_ptr);
         }
     }
 }

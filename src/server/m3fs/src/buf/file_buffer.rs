@@ -171,7 +171,7 @@ impl FileBuffer {
                         "filebuffer: waiting for cached blocks <{:?}>",
                         head.blocks,
                     );
-                    thread::wait_for(head.unlock);
+                    thread::wait_for_async(head.unlock);
                 }
                 else {
                     // move element to back since it was touched
@@ -225,7 +225,7 @@ impl FileBuffer {
                     "filebuffer: waiting for eviction of blocks <{:?}>",
                     head.blocks,
                 );
-                thread::wait_for(head.unlock);
+                thread::wait_for_async(head.unlock);
             }
             else {
                 // remove from treap

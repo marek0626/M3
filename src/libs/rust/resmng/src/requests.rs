@@ -74,7 +74,7 @@ impl Requests {
             func(childs, res);
 
             if thread::ready_count() > 0 {
-                thread::try_yield();
+                thread::try_yield_async();
             }
 
             if childs.should_stop() {
@@ -86,7 +86,7 @@ impl Requests {
 
         if !thread::cur().is_main() {
             // leaking current thread object is ok bc we are in shutdown anyway
-            thread::stop();
+            thread::stop_async();
             // just in case there is no ready thread
             OwnActivity::exit(Ok(()));
         }

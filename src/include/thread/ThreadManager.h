@@ -26,7 +26,7 @@
 
 namespace m3 {
 
-extern "C" void thread_switch(Regs *o, Regs *n);
+extern "C" void thread_switch_async(Regs *o, Regs *n);
 
 class ThreadManager {
     friend class Thread;
@@ -126,7 +126,7 @@ private:
         LOG(LogFlags::LibThread, "Switching from {} to {}"_cf, _current->id(), t->id());
         auto old = _current;
         _current = t;
-        thread_switch(&old->_regs, &t->_regs);
+        thread_switch_async(&old->_regs, &t->_regs);
     }
 
     Thread *_current;
