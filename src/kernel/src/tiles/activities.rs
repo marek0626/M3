@@ -81,6 +81,7 @@ pub struct Activity {
     eps_start: EpId,
     // keep a copy of the tile id for performance reasons (does never change)
     tile_id: TileId,
+    parent: Option<(ActId, CapSel)>,
 
     tile: AsyncWeak<TileObject>,
     kmem: AsyncWeak<KMemObject>,
@@ -104,6 +105,7 @@ impl Activity {
     pub fn new(
         name: String,
         id: ActId,
+        parent: Option<(ActId, CapSel)>,
         tile: AsyncRc<TileObject>,
         eps_start: EpId,
         kmem: AsyncRc<KMemObject>,
@@ -114,6 +116,7 @@ impl Activity {
             name,
             flags,
             eps_start,
+            parent,
             tile_id: tile.tile(),
             kmem: kmem.downgrade(),
             state: Cell::from(State::INIT),
@@ -138,7 +141,9 @@ impl Activity {
             tile.alloc(STD_EPS_COUNT);
 
             // add us to tile
-            tile.add_activity();
+            if let Some((aid, sel)) = act.parent {
+                tile.add_activity(aid, sel);
+            }
         }
 
         // some system calls are blocking, leading to a thread switch in the kernel. there is just
@@ -652,7 +657,9 @@ impl Drop for Activity {
         if let Some(tile) = self.tile.upgrade() {
             tile.free(STD_EPS_COUNT);
             // remove us from tile
-            tile.rem_activity();
+            if let Some((aid, sel)) = self.parent {
+                tile.rem_activity(aid, sel);
+            }
         }
 
         assert!(self.obj_caps.borrow().is_empty());

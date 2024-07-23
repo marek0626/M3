@@ -313,12 +313,17 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
 
     // create activity, assure that they are dropped in reverse order
     let (cleanup_act, nact) = {
-        let nact =
-            match ActivityMng::create_activity_async(name, tile, eps, kmem, ActivityFlags::empty())
-            {
-                Ok(nact) => nact,
-                Err(e) => return Err(verror!(e.code(), "Unable to create Activity")),
-            };
+        let nact = match ActivityMng::create_activity_async(
+            name,
+            Some((act_id, dst_sel)),
+            tile,
+            eps,
+            kmem,
+            ActivityFlags::empty(),
+        ) {
+            Ok(nact) => nact,
+            Err(e) => return Err(verror!(e.code(), "Unable to create Activity")),
+        };
         let nact_weak = nact.clone().downgrade();
         let cleanup = Defer::new(move || {
             let Some(nact) = nact_weak.upgrade()

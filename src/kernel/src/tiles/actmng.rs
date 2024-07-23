@@ -18,7 +18,7 @@ use base::cfg;
 use base::col::{String, ToString, Vec};
 use base::errors::{Code, Error};
 use base::io::LogFlags;
-use base::kif::{self, Perm};
+use base::kif::{self, CapSel, Perm};
 use base::log;
 use base::mem::{GlobAddr, GlobOff};
 use base::tcu::{self, ActId, TileId};
@@ -80,6 +80,7 @@ impl ActivityMng {
 
     pub fn create_activity_async(
         name: String,
+        parent: Option<(ActId, CapSel)>,
         tile: AsyncRc<TileObject>,
         eps_start: tcu::EpId,
         kmem: AsyncRc<KMemObject>,
@@ -88,7 +89,7 @@ impl ActivityMng {
         let id: tcu::ActId = Self::get_id()?;
         let tile_id = tile.tile();
 
-        let act = Activity::new(name, id, tile, eps_start, kmem, flags)?;
+        let act = Activity::new(name, id, parent, tile, eps_start, kmem, flags)?;
         // safety: nobody can access the object yet, so it's fine to keep a reference
         let _act_clone = unsafe { act.inner().clone() };
 
@@ -247,6 +248,7 @@ impl ActivityMng {
 
         let act = Self::create_activity_async(
             "root".to_string(),
+            None,
             tile,
             tcu::FIRST_USER_EP,
             kmem,

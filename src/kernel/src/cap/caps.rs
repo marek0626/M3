@@ -512,7 +512,6 @@ impl Capability {
     fn can_revoke(&self) -> bool {
         match self.obj {
             KObject::KMem(ref k) => k.left() == k.quota(),
-            KObject::Tile(ref tile) => tile.activities() == 0,
             _ => true,
         }
     }
@@ -553,7 +552,7 @@ impl Capability {
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
                         if let Ok(parent) = parent.get::<AsyncRc<TileObject>>() {
-                            TileObject::revoke_async(AsyncRc::new(tile), parent);
+                            tile.revoke_async(parent, revoker);
                         }
                     }
                 }

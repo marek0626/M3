@@ -17,10 +17,12 @@ use base::cell::{Cell, Ref, RefCell, RefMut, StaticCell};
 use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{self, service, tilemux::QuotaId};
+use base::kif::{CapRngDesc, CapSel, CapType};
 use base::log;
 use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, MsgBufRef, PhysAddr, VirtAddr};
 use base::rc::Rc;
 use base::tcu::{ActId, EpId, Label, TileId};
+use base::vec::Vec;
 use base::{build_vmsg, verror};
 use base::{env, tcu};
 use thread::{AsyncRc, AsyncWeak};
@@ -32,7 +34,7 @@ use crate::com::{SendQueue, Service};
 use crate::ktcu;
 use crate::mem;
 use crate::platform;
-use crate::tiles::{tilemng, Activity, TileMux};
+use crate::tiles::{tilemng, Activity, ActivityMng, TileMux};
 
 #[derive(Clone)]
 pub enum KObject {
@@ -715,7 +717,7 @@ impl EPQuota {
 
 pub struct TileObject {
     tile: TileId,
-    cur_acts: Cell<u32>,
+    acts: RefCell<Vec<(ActId, CapSel)>>,
     ep_quota: Rc<EPQuota>,
     time_quota: QuotaId,
     pt_quota: QuotaId,
@@ -732,7 +734,7 @@ impl TileObject {
     ) -> AsyncRc<Self> {
         let res = AsyncRc::new(Rc::new(Self {
             tile,
-            cur_acts: Cell::from(0),
+            acts: RefCell::from(Vec::new()),
             ep_quota: ep_quota.clone(),
             time_quota,
             pt_quota,
@@ -813,8 +815,8 @@ impl TileObject {
         self.derived
     }
 
-    pub fn activities(&self) -> u32 {
-        self.cur_acts.get()
+    pub fn activities(&self) -> usize {
+        self.acts.borrow().len()
     }
 
     pub fn ep_quota(&self) -> &EPQuota {
@@ -833,13 +835,16 @@ impl TileObject {
         self.ep_quota.left() >= eps
     }
 
-    pub fn add_activity(&self) {
-        self.cur_acts.set(self.activities() + 1);
+    pub fn add_activity(&self, act: ActId, sel: CapSel) {
+        self.acts.borrow_mut().push((act, sel));
     }
 
-    pub fn rem_activity(&self) {
-        assert!(self.activities() > 0);
-        self.cur_acts.set(self.activities() - 1);
+    pub fn rem_activity(&self, act: ActId, sel: CapSel) {
+        // note that we might not find it in the list in case we triggered the activity revoke from
+        // below as this already removes itself in its drop implementation.
+        self.acts
+            .borrow_mut()
+            .retain(|(a, s)| !(*a == act && *s == sel));
     }
 
     pub fn memory(&self) -> mem::Allocation {
@@ -907,16 +912,45 @@ impl TileObject {
         self.ep_quota.left.set(total_eps);
     }
 
-    pub fn revoke_async(tile: AsyncRc<Self>, parent: AsyncRc<TileObject>) {
+    pub fn revoke_async(&self, parent: AsyncRc<TileObject>, revoker: ActId) {
+        let parent_weak = parent.downgrade();
+        // first revoke all activities that are using this tile
+        loop {
+            let res = self.acts.borrow_mut().pop();
+            match res {
+                Some((aid, sel)) => {
+                    if let Some(act) = ActivityMng::activity(aid) {
+                        // TODO that's not okay
+                        let act_ref = unsafe { act.inner().clone() };
+                        drop(act);
+                        // note that we deliberately revoke the activity from its parent to make it
+                        // behave as if the activity (the original, owned by the parent) was
+                        // derived from the tile object.
+                        act_ref.revoke_async(
+                            CapRngDesc::new_single(CapType::Object, sel),
+                            true,
+                            revoker,
+                        );
+                    }
+                },
+                None => break,
+            }
+        }
+
+        let Some(parent) = parent_weak.upgrade()
+        else {
+            return;
+        };
+
         // same for time and pts: free the ones that are different
-        let time = if tile.time_quota != parent.time_quota {
-            Some(tile.time_quota)
+        let time = if self.time_quota != parent.time_quota {
+            Some(self.time_quota)
         }
         else {
             None
         };
-        let pts = if tile.pt_quota != parent.pt_quota {
-            Some(tile.pt_quota)
+        let pts = if self.pt_quota != parent.pt_quota {
+            Some(self.pt_quota)
         }
         else {
             None
@@ -924,9 +958,8 @@ impl TileObject {
 
         // note that we first let TileMux remove the quotas and afterwards give the EPQuota back to
         // our parent to avoid that someone can already spent the EPQuota for something new.
-        let (tile, parent) = if time.is_some() || pts.is_some() {
-            let tile_id = tile.tile();
-            let tile_weak = tile.downgrade();
+        let parent = if time.is_some() || pts.is_some() {
+            let tile_id = self.tile();
             let parent_weak = parent.downgrade();
 
             TileMux::remove_quotas_async(tilemng::tilemux(tile_id), time, pts).ok();
@@ -934,21 +967,21 @@ impl TileObject {
             // if that fails, someone else removed the object in the meantime and we can stop here
             // (for example, child cap is revoked first, gets stuck in the async call below, and
             // the parent cap is revoked in the meantime)
-            match (tile_weak.upgrade(), parent_weak.upgrade()) {
-                (Some(tile), Some(parent)) => (tile, parent),
-                _ => return,
+            match parent_weak.upgrade() {
+                Some(parent) => parent,
+                None => return,
             }
         }
         else {
-            (tile, parent)
+            parent
         };
 
         // we free the EP quota if it's different from our parent's quota (only our own childs can
         // have the same EP quota, but they are already gone).
-        if !Rc::ptr_eq(&tile.ep_quota, &parent.ep_quota) {
+        if !Rc::ptr_eq(&self.ep_quota, &parent.ep_quota) {
             // grant the EPs back to our parent
-            parent.free(tile.ep_quota.left());
-            assert!(tile.ep_quota.left() == tile.ep_quota.total());
+            parent.free(self.ep_quota.left());
+            assert!(self.ep_quota.left() == self.ep_quota.total());
         }
     }
 }
@@ -959,12 +992,15 @@ impl fmt::Debug for TileObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Tile[id={}, eps={}, actitivies={}, derived={}]",
+            "Tile[id={}, eps={}, derived={}, acts=",
             self.tile,
             self.ep_quota.left(),
-            self.activities(),
             self.derived,
-        )
+        )?;
+        for (aid, sel) in self.acts.borrow().iter() {
+            write!(f, "({},{}),", aid, sel)?;
+        }
+        write!(f, "]")
     }
 }
 
