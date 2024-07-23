@@ -36,7 +36,7 @@ use crate::tiles::{tilemng, Activity, TileMux};
 use crate::platform;
 
 trait ELFLoader {
-    #[allow(m3_async::no_async_call)]
+    #[cfg_attr(dylint_lib = "m3_lints", allow(unneeded_async))]
     fn load_segment_async(
         &mut self,
         virt: VirtAddr,
@@ -46,7 +46,7 @@ trait ELFLoader {
         map: bool,
     ) -> Result<(), Error>;
 
-    #[allow(m3_async::no_async_call)]
+    #[cfg_attr(dylint_lib = "m3_lints", allow(unneeded_async))]
     fn zero_segment_async(
         &mut self,
         virt: VirtAddr,
@@ -54,12 +54,12 @@ trait ELFLoader {
         flags: PageFlags,
     ) -> Result<(), Error>;
 
-    #[allow(m3_async::no_async_call)]
+    #[cfg_attr(dylint_lib = "m3_lints", allow(unneeded_async))]
     fn map_heap_async(&mut self, _virt: VirtAddr) -> Result<(), Error> {
         Ok(())
     }
 
-    #[allow(m3_async::no_async_call)]
+    #[cfg_attr(dylint_lib = "m3_lints", allow(unneeded_async))]
     fn map_stack_async(&mut self) -> Result<(), Error> {
         Ok(())
     }
@@ -305,7 +305,7 @@ impl MetalELFLoader {
 }
 
 impl ELFLoader for MetalELFLoader {
-    #[allow(m3_async::no_async_call)]
+    #[cfg_attr(dylint_lib = "m3_lints", allow(unneeded_async))]
     fn load_segment_async(
         &mut self,
         virt: VirtAddr,
@@ -325,7 +325,7 @@ impl ELFLoader for MetalELFLoader {
         )
     }
 
-    #[allow(m3_async::no_async_call)]
+    #[cfg_attr(dylint_lib = "m3_lints", allow(unneeded_async))]
     fn zero_segment_async(
         &mut self,
         virt: VirtAddr,
