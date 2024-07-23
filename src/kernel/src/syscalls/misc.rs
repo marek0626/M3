@@ -29,7 +29,7 @@ use crate::cap::{
 };
 use crate::ktcu;
 use crate::platform;
-use crate::syscalls::{check_unused, get_request, reply_success, send_reply, try_upgrade_kobj};
+use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::{tilemng, Activity, TileMux};
 
 #[inline(never)]
@@ -47,7 +47,6 @@ pub fn alloc_ep_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.replies
     );
 
-    check_unused(&act.obj_caps().borrow(), r.dst)?;
     if r.replies > cfg::MAX_RB_SIZE {
         return Err(verror!(
             Code::InvArgs,
@@ -119,7 +118,7 @@ pub fn alloc_ep_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         dst_act.tile_weak().clone(),
     );
     let cap = Capability::new(r.dst, ep);
-    try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.act));
+    try_cap_insert!(act.obj_caps().borrow_mut().insert_as_child(cap, r.act));
 
     dst_act.tile().alloc(ep_count);
     tilemux.alloc_eps(epid, ep_count);
@@ -213,7 +212,6 @@ pub fn get_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     );
 
     let actcap: AsyncRc<Activity> = act.get_kobj(r.act)?;
-    check_unused(&actcap.obj_caps().borrow(), r.dst)?;
     if act.ptr_eq(&actcap) {
         return Err(verror!(
             Code::InvArgs,
@@ -249,7 +247,7 @@ pub fn get_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
             ));
         }
 
-        try_kmem_quota!(actcap
+        try_cap_insert!(actcap
             .obj_caps()
             .borrow_mut()
             .obtain(r.dst, csess.unwrap(), true));

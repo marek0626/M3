@@ -117,3 +117,50 @@ macro_rules! function {
         &name[0..name.len() - 3]
     }};
 }
+
+/// Very simple stand-in for a `defer` statement
+///
+/// Stores a function that is executed on drop.
+pub struct Defer<F: FnOnce()>(Option<F>);
+
+impl<F: FnOnce()> Defer<F> {
+    /// Create a new `Defer` with a deferred function that is executed on drop
+    ///
+    /// # Example
+    ///
+    ///
+    /// ```
+    /// # use crate::util::Defer;
+    /// {
+    ///     let guard = Defer::new(|| println!("Defer executed"));
+    ///     // Do computation here.
+    ///     // Deferred function is executed here.
+    /// }
+    /// ```
+    pub fn new(f: F) -> Self {
+        Self(Some(f))
+    }
+
+    /// Cancel the `Defer` and _never_ execute the stored function.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// {
+    ///     let guard = Defer::new(|| println!("Defer executed"));
+    ///     guard.cancel();
+    ///     // Deferred function is NOT executed.
+    /// }
+    /// ```
+    pub fn cancel(mut self) {
+        self.0.take();
+    }
+}
+
+impl<F: FnOnce()> Drop for Defer<F> {
+    fn drop(&mut self) {
+        if let Some(f) = self.0.take() {
+            f();
+        }
+    }
+}

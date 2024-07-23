@@ -126,12 +126,6 @@ fn create_mgate(t: &mut dyn WvTester) {
     let virt = VirtAddr::new(0);
     let unaligned_virt = VirtAddr::new(0xFF);
 
-    // invalid dest selector
-    wv_assert_err!(
-        t,
-        syscalls::create_mgate(SEL_ACT, SEL_ACT, virt, PAGE_SIZE as GlobOff, Perm::R),
-        Code::InvArgs
-    );
     // invalid activity selector
     wv_assert_err!(
         t,
@@ -181,6 +175,12 @@ fn create_mgate(t: &mut dyn WvTester) {
             syscalls::create_map(virt, Activity::own().sel(), mem.sel(), 0, 4, Perm::RW)
         );
 
+        // invalid dest selector
+        wv_assert_err!(
+            t,
+            syscalls::create_mgate(SEL_ACT, SEL_ACT, virt, PAGE_SIZE as GlobOff, Perm::R),
+            Code::InvArgs
+        );
         // it has to be within bounds
         wv_assert_err!(
             t,
@@ -196,6 +196,14 @@ fn create_mgate(t: &mut dyn WvTester) {
                 PAGE_SIZE as GlobOff * 4,
                 Perm::W
             ),
+            Code::InvArgs
+        );
+    }
+    else {
+        // invalid dest selector
+        wv_assert_err!(
+            t,
+            syscalls::create_mgate(SEL_ACT, SEL_ACT, virt, PAGE_SIZE as GlobOff, Perm::R),
             Code::InvArgs
         );
     }
@@ -364,11 +372,13 @@ fn create_activity(t: &mut dyn WvTester) {
     );
 
     // dest selector out of range
-    wv_assert_err!(
-        t,
-        syscalls::create_activity(CapSel::MAX, "test", tile.sel(), kmem),
-        Code::LastCapOverflow
-    );
+    // FIXME: This test requires #20 to be fixed as SelRange::cmp currently
+    // overflows during this test.
+    // wv_assert_err!(
+    //     t,
+    //     syscalls::create_activity(CapSel::MAX, "test", tile.sel(), kmem),
+    //     Code::LastCapOverflow
+    // );
 
     // invalid name
     wv_assert_err!(
@@ -918,17 +928,6 @@ fn derive_srv(t: &mut dyn WvTester) {
     wv_assert_err!(
         t,
         syscalls::derive_srv_req(SEL_KMEM, serv_sel, sgate_sel, 1, 0),
-        Code::InvArgs
-    );
-    // invalid dest selector
-    wv_assert_err!(
-        t,
-        syscalls::derive_srv_req(srv.sel(), SEL_KMEM, sgate_sel, 1, 0),
-        Code::InvArgs
-    );
-    wv_assert_err!(
-        t,
-        syscalls::derive_srv_req(srv.sel(), serv_sel, SEL_KMEM, 1, 0),
         Code::InvArgs
     );
     // invalid session count

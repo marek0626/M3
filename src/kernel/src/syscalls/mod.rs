@@ -24,7 +24,6 @@ use base::{build_vmsg, verror};
 
 use thread::{AsyncRc, AsyncWeak};
 
-use crate::cap::CapTable;
 use crate::tiles::{Activity, ActivityMng};
 
 #[macro_export]
@@ -38,10 +37,14 @@ macro_rules! sysc_log {
     )
 }
 
-macro_rules! try_kmem_quota {
+macro_rules! try_cap_insert {
     ($e:expr) => {
         if let Err(e) = $e {
-            return Err(verror!(e.code(), "Insufficient kernel memory quota"));
+            return Err(match e.code() {
+                Code::NoSpace => verror!(e.code(), "Insufficient kernel memory quota"),
+                Code::InvArgs => verror!(e.code(), "Selector already in use"),
+                _ => panic!("unexpected capability insert error code"),
+            });
         }
     };
 }
@@ -51,15 +54,6 @@ mod derive;
 mod exchange;
 mod misc;
 mod tile;
-
-fn check_unused(tbl: &CapTable, sel: CapSel) -> Result<(), VerboseError> {
-    if !tbl.unused(sel) {
-        Err(verror!(Code::InvArgs, "Selector {} already in use", sel))
-    }
-    else {
-        Ok(())
-    }
-}
 
 fn try_upgrade_kobj<T>(weak: AsyncWeak<T>, sel: CapSel) -> Result<AsyncRc<T>, VerboseError> {
     weak.upgrade().ok_or_else(|| {

@@ -19,13 +19,14 @@ use base::kif::{self, syscalls};
 use base::log;
 use base::mem::{GlobAddr, MsgBuf};
 use base::tcu;
+use base::util::Defer;
 use base::{build_vmsg, verror};
 
 use thread::AsyncRc;
 
 use crate::cap::{Capability, KMemObject, MGateObject, SGateObject, ServObject, TileObject};
 use crate::mem;
-use crate::syscalls::{check_unused, get_request, reply_success, try_upgrade_kobj};
+use crate::syscalls::{get_request, reply_success, try_upgrade_kobj};
 use crate::tiles::{Activity, DeriveSrv};
 
 #[inline(never)]
@@ -44,17 +45,29 @@ pub fn derive_tile_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.pts,
     );
 
-    check_unused(&act.obj_caps().borrow(), r.dst)?;
-
     let tile: AsyncRc<TileObject> = act.get_kobj(r.tile)?;
     let act_weak = act.downgrade();
 
+    let tile_weak = tile.clone().downgrade();
     let tile_new = TileObject::derive_async(tile, r.eps, r.time, r.pts)?;
+
+    let tile_new_clone = tile_new.clone();
+    let cleanup_tile = Defer::new(move || {
+        let Some(tile) = tile_weak.upgrade()
+        else {
+            return; // Tile already gone.
+        };
+        // TODO we cannot use these references across the async call below
+        let tile = unsafe { tile.inner() }.clone();
+        TileObject::revoke_async(tile_new_clone, &tile);
+    });
+
     let cap = Capability::new(r.dst, tile_new);
 
     // TODO we will leak the quota object in TileMux if this fails
     let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
-    try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.tile));
+    try_cap_insert!(act.obj_caps().borrow_mut().insert_as_child(cap, r.tile));
+    cleanup_tile.cancel();
 
     reply_success(&act);
     Ok(())
@@ -74,15 +87,13 @@ pub fn derive_kmem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.quota
     );
 
-    check_unused(&act.obj_caps().borrow(), r.dst)?;
-
     let kmem: AsyncRc<KMemObject> = act.get_kobj(r.kmem)?;
     if !kmem.has_quota(r.quota) {
         return Err(verror!(Code::NoSpace, "Insufficient quota"));
     }
 
     let cap = Capability::new(r.dst, KMemObject::new(r.quota));
-    try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.kmem));
+    try_cap_insert!(act.obj_caps().borrow_mut().insert_as_child(cap, r.kmem));
     assert!(kmem.alloc(&act, r.kmem, r.quota));
 
     reply_success(&act);
@@ -107,7 +118,6 @@ pub fn derive_mem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     );
 
     let tact: AsyncRc<Activity> = act.get_kobj(r.act)?;
-    check_unused(&tact.obj_caps().borrow(), r.dst)?;
 
     let cap = {
         let act_caps = act.obj_caps().borrow();
@@ -123,7 +133,7 @@ pub fn derive_mem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         Capability::new(r.dst, mgate_obj)
     };
 
-    try_kmem_quota!(tact.obj_caps().borrow_mut().insert_as_child(cap, r.src));
+    try_cap_insert!(tact.obj_caps().borrow_mut().insert_as_child(cap, r.src));
 
     reply_success(&act);
     Ok(())
@@ -144,9 +154,6 @@ pub fn derive_srv_req(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.sessions,
         r.event
     );
-
-    check_unused(&act.obj_caps().borrow(), r.dst_srv)?;
-    check_unused(&act.obj_caps().borrow(), r.dst_sgate)?;
 
     if r.sessions == 0 {
         return Err(verror!(Code::InvArgs, "Invalid session count"));
@@ -223,7 +230,7 @@ pub fn derive_srv_fin(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
             sgate_cap.get::<AsyncRc<SGateObject>>()?;
 
             // pass sgate to calling activity
-            try_kmem_quota!(der_act.obj_caps().borrow_mut().obtain(
+            try_cap_insert!(der_act.obj_caps().borrow_mut().obtain(
                 derive.dst_sgate,
                 sgate_cap,
                 true
@@ -232,7 +239,7 @@ pub fn derive_srv_fin(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
             // derive new service object and pass it to calling activity
             let derived_srv = src_srv.derive(r.creator);
             let cap = Capability::new(derive.dst_srv, derived_srv);
-            try_kmem_quota!(der_act
+            try_cap_insert!(der_act
                 .obj_caps()
                 .borrow_mut()
                 .insert_as_child(cap, derive.src_srv));

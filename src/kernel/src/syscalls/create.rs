@@ -15,11 +15,12 @@
 
 use base::cfg;
 use base::col::ToString;
-use base::errors::{Code, VerboseError};
+use base::errors::{Code, Error, VerboseError};
 use base::kif::INVALID_SEL;
 use base::kif::{syscalls, CapRngDesc, CapSel, CapType, PageFlags, Perm};
 use base::mem::{GlobAddr, GlobOff, MsgBuf, VirtAddr, VirtAddrRaw};
 use base::tcu;
+use base::util::Defer;
 use base::{build_vmsg, verror};
 
 use thread::AsyncRc;
@@ -31,8 +32,8 @@ use crate::cap::{
 use crate::com::Service;
 use crate::mem;
 use crate::platform;
-use crate::syscalls::{check_unused, get_request, reply_success, send_reply, try_upgrade_kobj};
-use crate::tiles::{tilemng, Activity, ActivityFlags, ActivityMng};
+use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
+use crate::tiles::{tilemng, Activity, ActivityFlags, ActivityMng, INVAL_ID};
 
 #[inline(never)]
 pub fn create_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
@@ -50,7 +51,6 @@ pub fn create_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.perms,
     );
 
-    check_unused(&act.obj_caps().borrow(), r.dst)?;
     if (r.addr.as_goff() & cfg::PAGE_MASK as GlobOff) != 0
         || (r.size & cfg::PAGE_MASK as GlobOff) != 0
     {
@@ -108,13 +108,13 @@ pub fn create_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     if platform::tile_desc(tgt_act.tile_id()).has_virtmem() {
         let map_caps = tgt_act.map_caps().borrow_mut();
-        try_kmem_quota!(act
+        try_cap_insert!(act
             .obj_caps()
             .borrow_mut()
             .insert_as_child_from(cap, map_caps, sel));
     }
     else {
-        try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(cap, r.act));
+        try_cap_insert!(act.obj_caps().borrow_mut().insert_as_child(cap, r.act));
     }
 
     reply_success(&act);
@@ -137,7 +137,6 @@ pub fn create_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     let mut act_caps = act.obj_caps().borrow_mut();
 
-    check_unused(&act_caps, r.dst)?;
     if r.msg_order.checked_add(r.order).is_none()
         || r.msg_order > r.order
         || r.order - r.msg_order >= 32
@@ -147,7 +146,7 @@ pub fn create_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     }
 
     let rgate = RGateObject::new(r.order, r.msg_order, false);
-    try_kmem_quota!(act_caps.insert(Capability::new(r.dst, rgate)));
+    try_cap_insert!(act_caps.insert(Capability::new(r.dst, rgate)));
 
     reply_success(&act);
     Ok(())
@@ -170,15 +169,13 @@ pub fn create_sgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     let mut act_caps = act.obj_caps().borrow_mut();
 
-    check_unused(&act_caps, r.dst)?;
-
     let cap = {
         let rgate: AsyncRc<RGateObject> = act_caps.get_kobj(r.rgate)?;
         let sgate = SGateObject::new(rgate.downgrade(), r.label, r.credits);
         Capability::new(r.dst, sgate)
     };
 
-    try_kmem_quota!(act_caps.insert_as_child(cap, r.rgate));
+    try_cap_insert!(act_caps.insert_as_child(cap, r.rgate));
 
     reply_success(&act);
     Ok(())
@@ -198,7 +195,6 @@ pub fn create_srv(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.name
     );
 
-    check_unused(&act.obj_caps().borrow(), r.dst)?;
     if r.name.is_empty() {
         return Err(verror!(Code::InvArgs, "Invalid server name"));
     }
@@ -216,7 +212,7 @@ pub fn create_srv(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         Capability::new(r.dst, serv_obj)
     };
 
-    try_kmem_quota!(act_caps.insert(cap));
+    try_cap_insert!(act_caps.insert(cap));
 
     drop(msg);
     reply_success(&act);
@@ -240,7 +236,6 @@ pub fn create_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     );
 
     let mut obj_caps = act.obj_caps().borrow_mut();
-    check_unused(&obj_caps, r.dst)?;
 
     let serv_cap = obj_caps.get(r.srv)?;
     // TODO maybe we should store that rather in the ServObject?
@@ -255,7 +250,7 @@ pub fn create_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let sess = SessObject::new(serv.downgrade(), r.creator, r.ident, r.auto_close);
     let cap = Capability::new(r.dst, sess);
 
-    try_kmem_quota!(obj_caps.insert_as_child(cap, r.srv));
+    try_cap_insert!(obj_caps.insert_as_child(cap, r.srv));
 
     reply_success(&act);
     Ok(())
@@ -275,18 +270,6 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
         r.kmem
     );
 
-    if !act
-        .obj_caps()
-        .borrow()
-        .range_unused(&CapRngDesc::new(CapType::Object, r.dst, 3)?)
-    {
-        return Err(verror!(
-            Code::InvArgs,
-            "Selectors {}..{} already in use",
-            r.dst,
-            r.dst + 2
-        ));
-    }
     if r.name.is_empty() {
         return Err(verror!(Code::InvArgs, "Invalid name"));
     }
@@ -325,18 +308,35 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
 
     let act_weak = act.downgrade();
 
-    // create activity
-    let nact =
-        match ActivityMng::create_activity_async(name, tile, eps, kmem, ActivityFlags::empty()) {
-            Ok(nact) => nact,
-            Err(e) => return Err(verror!(e.code(), "Unable to create Activity")),
-        };
+    // create activity, assure that they are dropped in reverse order
+    let (cleanup_act, nact) = {
+        let nact =
+            match ActivityMng::create_activity_async(name, tile, eps, kmem, ActivityFlags::empty())
+            {
+                Ok(nact) => nact,
+                Err(e) => return Err(verror!(e.code(), "Unable to create Activity")),
+            };
+        let nact_weak = nact.clone().downgrade();
+        let cleanup = Defer::new(move || {
+            let Some(nact) = nact_weak.upgrade()
+            else {
+                return;
+            };
+            drop(nact_weak);
+            let id = nact.id();
+            drop(nact);
+            ActivityMng::remove_activity_async(id, INVAL_ID);
+        });
+        (cleanup, nact)
+    };
 
     let act = try_upgrade_kobj(act_weak, INVALID_SEL)?;
 
     // give activity cap to the parent
     let cap = Capability::new(dst_sel, nact.clone());
-    try_kmem_quota!(act.obj_caps().borrow_mut().insert(cap));
+    try_cap_insert!(act.obj_caps().borrow_mut().insert(cap));
+    // Do not clean activity up after inserted in capability table.
+    cleanup_act.cancel();
 
     // create EP caps for the pager EPs
     if nact.tile_desc().has_virtmem() {
@@ -352,8 +352,12 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
                 0,
                 nact.tile_weak().clone(),
             );
-            let scap = Capability::new(dst_sel + 1 + i as CapSel, ep);
-            try_kmem_quota!(act.obj_caps().borrow_mut().insert_as_child(scap, dst_sel));
+            let sel = dst_sel
+                .checked_add(1)
+                .and_then(|s| s.checked_add(CapSel::try_from(i).unwrap()))
+                .ok_or_else(|| Error::new(Code::LastCapOverflow))?;
+            let scap = Capability::new(sel as CapSel, ep);
+            try_cap_insert!(act.obj_caps().borrow_mut().insert_as_child(scap, dst_sel));
         }
     }
 
@@ -375,11 +379,9 @@ pub fn create_sem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     sysc_log!(act, "create_sem(dst={}, value={})", r.dst, r.value);
 
-    check_unused(&act.obj_caps().borrow(), r.dst)?;
-
     let sem = SemObject::new(r.value);
     let cap = Capability::new(r.dst, sem);
-    try_kmem_quota!(act.obj_caps().borrow_mut().insert(cap));
+    try_cap_insert!(act.obj_caps().borrow_mut().insert(cap));
 
     reply_success(&act);
     Ok(())
@@ -454,6 +456,8 @@ pub fn create_map_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
                 (c.get::<AsyncRc<MapObject>>()?, None, true)
             },
             Err(_) => {
+                // TODO TOCTOU as multiple maps can race creating two mappings
+                // for the same range simultaniously.
                 let range = CapRngDesc::new(CapType::Mapping, r.dst, r.pages)?;
                 if !map_caps.range_unused(&range) {
                     return Err(verror!(
@@ -503,7 +507,7 @@ pub fn create_map_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
         if let Some(act) = act_weak.upgrade() {
             let cap = Capability::new_range(SelRange::new_range(r.dst, r.pages), map_obj);
-            try_kmem_quota!(dst_act.map_caps().borrow_mut().insert_as_child_from(
+            try_cap_insert!(dst_act.map_caps().borrow_mut().insert_as_child_from(
                 cap,
                 act.obj_caps().borrow_mut(),
                 r.mgate,
