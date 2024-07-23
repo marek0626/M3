@@ -324,6 +324,11 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
             Ok(nact) => nact,
             Err(e) => return Err(verror!(e.code(), "Unable to create Activity")),
         };
+
+        // keep another reference to prevent that the activity drops before the cleanup ran
+        // safety: that's okay, because the activity is not yet reachable by anyone
+        let nact_clone = unsafe { nact.inner().clone() };
+
         let nact_weak = nact.clone().downgrade();
         let cleanup = Defer::new(move || {
             let Some(nact) = nact_weak.upgrade()
@@ -332,6 +337,7 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
             };
             drop(nact_weak);
             Activity::stop_app_async(nact, Code::Unspecified, act_id);
+            drop(nact_clone);
         });
         (cleanup, nact)
     };
