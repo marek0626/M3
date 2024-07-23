@@ -604,7 +604,7 @@ pub fn activity_wait_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     // In any case, check whether a activity already exited. If event == 0, wait until that happened.
     // For event != 0, remember that we want to get notified and send an upcall on a activity's exit.
-    let res = Activity::wait_exit_async(act, r.event, &r.acts[0..r.act_count]);
+    let res = Activity::wait_exit_async(act, r.event, &r.acts[0..r.act_count])?;
 
     let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
 

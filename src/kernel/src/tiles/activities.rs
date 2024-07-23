@@ -381,36 +381,45 @@ impl Activity {
         self.cur_derive_srv.borrow_mut().take()
     }
 
-    fn fetch_exit(&self, sels: &[u64]) -> Option<(CapSel, Code)> {
+    fn fetch_exit(&self, sels: &[u64]) -> Result<Option<(CapSel, Code)>, Error> {
         for sel in sels {
-            if let Ok(wv) = self
+            match self
                 .obj_caps()
                 .borrow()
                 .get_kobj::<AsyncRc<Activity>>(*sel as CapSel)
             {
-                if wv.id() == self.id() {
-                    continue;
-                }
+                Err(e) => return Err(Error::new(e.code())),
+                Ok(wv) => {
+                    if wv.id() == self.id() {
+                        continue;
+                    }
 
-                if let Some(code) = wv.fetch_exit_code() {
-                    return Some((*sel, code));
-                }
+                    if let Some(code) = wv.fetch_exit_code() {
+                        return Ok(Some((*sel, code)));
+                    }
+                },
             }
         }
 
-        None
+        Ok(None)
     }
 
-    pub fn wait_exit_async(act: AsyncRc<Self>, event: u64, sels: &[u64]) -> Option<(CapSel, Code)> {
+    pub fn wait_exit_async(
+        act: AsyncRc<Self>,
+        event: u64,
+        sels: &[u64],
+    ) -> Result<Option<(CapSel, Code)>, Error> {
         let act_id = act.id();
         let act_weak = act.downgrade();
 
         let res = loop {
-            let act = act_weak.upgrade()?;
+            let act = act_weak
+                .upgrade()
+                .ok_or_else(|| Error::new(Code::ObjectGone))?;
 
             // independent of how we notify the activity, check for exits in case the activity we wait for
             // already exited.
-            if let Some((sel, code)) = act.fetch_exit(sels) {
+            if let Some((sel, code)) = act.fetch_exit(sels)? {
                 // if we want to be notified by upcall, do that
                 if event != 0 {
                     act.upcall_activity_wait(event, sel, code);
@@ -438,7 +447,7 @@ impl Activity {
         EXIT_LISTENERS.borrow_mut().retain(|l| l.id != act_id);
         match event {
             // sync wait
-            0 => res,
+            0 => Ok(res),
             // async wait
             _ => {
                 // if no one exited yet, remember us
@@ -450,7 +459,7 @@ impl Activity {
                     });
                 }
                 // in any case, the syscall replies "no result"
-                None
+                Ok(None)
             },
         }
     }
@@ -463,7 +472,7 @@ impl Activity {
         // send upcalls for the others
         EXIT_LISTENERS.borrow_mut().retain(|l| {
             let act = ActivityMng::activity(l.id).unwrap();
-            if let Some((sel, code)) = act.fetch_exit(&l.sels) {
+            if let Ok(Some((sel, code))) = act.fetch_exit(&l.sels) {
                 act.upcall_activity_wait(l.event, sel, code);
                 // remove us from the list since a activity exited
                 false
