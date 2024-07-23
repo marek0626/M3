@@ -148,6 +148,7 @@ impl Activity {
 
         // some system calls are blocking, leading to a thread switch in the kernel. there is just
         // one syscall per activity at a time, thus at most one additional thread per activity is required.
+        #[cfg_attr(dylint_lib = "m3_lints", allow(async_alias))]
         thread::add_thread(VirtAddr::from(thread_startup_async as *const ()), 0);
 
         Ok(act)

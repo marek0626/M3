@@ -339,6 +339,7 @@ pub fn main() -> Result<(), Error> {
 
     thread::init();
     for _ in 0..args.max_clients {
+        #[cfg_attr(dylint_lib = "m3_lints", allow(async_alias))]
         thread::add_thread(
             VirtAddr::from(workloop_async as *const ()),
             &mut wargs as *mut _ as usize,
