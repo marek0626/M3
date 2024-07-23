@@ -181,7 +181,7 @@ def build_all(tasks: [BuildTask], incremental: bool):
 
 def prepare(targets: [str], isas: [str], cache_dir: str, incremental: bool):
     # determine required submodules
-    mods = ['tools/ninjapie', 'cross/buildroot',
+    mods = ['tools/ninjapie', 'tools/lints', 'cross/buildroot',
             'src/libs/leveldb', 'src/libs/musl', 'src/libs/flac',
             'src/apps/bsdutils', 'src/libs/crypto/kecacc-xkcp']
     if 'riscv64' in isas:

@@ -47,11 +47,9 @@ check:
     - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:. -c ./b fmt-check -n'
     - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:. -c ./b clippy -n'
     - kubectl exec -n os -t m3-ci -- sh -c '
-        cd M3
-          && nix develop path:. -c ./tools/async-check.py src/kernel
-          && nix develop path:. -c ./tools/async-check.py src/libs/rust/resmng
-          && nix develop path:. -c ./tools/async-check.py src/server/root
-          && nix develop path:. -c ./tools/async-check.py src/server/pager
+        cd M3 &&
+          nix develop path:. -c ./tools/linter.py
+            src/kernel src/libs/rust/resmng src/server/root src/server/pager
         '
     - kubectl exec -n os -t m3-ci -- sh -c '
         cd M3
