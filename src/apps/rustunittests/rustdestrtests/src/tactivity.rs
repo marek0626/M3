@@ -29,6 +29,7 @@ use m3::{send_vmsg, syscalls, wv_assert_err, wv_assert_ok, wv_require_ok, wv_run
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, run_stop);
     wv_run_test!(t, kmem_revoke);
+    wv_run_test!(t, tile_revoke);
 }
 
 fn run_stop(t: &mut dyn WvTester) {
@@ -103,6 +104,26 @@ fn kmem_revoke(t: &mut dyn WvTester) {
         t,
         Activity::own().revoke(
             CapRngDesc::new_single(CapType::Object, child_kmem.sel()),
+            false
+        )
+    );
+
+    wv_assert_err!(t, syscalls::activity_wait(&[act.sel()], 0), Code::InvCap);
+}
+
+fn tile_revoke(t: &mut dyn WvTester) {
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let child_tile = wv_require_ok!(tile.derive(None, None, None));
+    let act = wv_require_ok!(ChildActivity::new_with(
+        child_tile.clone(),
+        ActivityArgs::new("test")
+    ));
+
+    // revoke tile to also revoke the activity
+    wv_assert_ok!(
+        t,
+        Activity::own().revoke(
+            CapRngDesc::new_single(CapType::Object, child_tile.sel()),
             false
         )
     );
