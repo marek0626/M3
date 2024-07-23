@@ -240,21 +240,12 @@ impl CapTable {
         self.caps.insert(*cap.sel_range(), cap)
     }
 
-    pub fn revoke_async(
-        tbl: &RefCell<Self>,
-        crd: CapRngDesc,
-        own: bool,
-        revoker: ActId,
-    ) -> Result<(), Error> {
+    pub fn revoke_async(tbl: &RefCell<Self>, crd: CapRngDesc, own: bool, revoker: ActId) {
         let mut sel = crd.start();
         while sel < crd.start() + crd.count() {
             let tbl_ref = tbl.borrow_mut();
             match RefMut::filter_map(tbl_ref, |t| t.get_mut(sel).ok()) {
                 Ok(cap) => {
-                    if !cap.can_revoke() {
-                        return Err(Error::new(Code::NotRevocable));
-                    }
-
                     let len = cap.len();
                     if Capability::revoke_single_async(cap, own, revoker) {
                         sel += len;
@@ -266,7 +257,6 @@ impl CapTable {
                 },
             }
         }
-        Ok(())
     }
 
     pub fn revoke_all_async(tbl: &RefCell<Self>, revoker: ActId) {
@@ -506,13 +496,6 @@ impl Capability {
             EPObject::revoke(ep);
 
             cgp.remove_ep();
-        }
-    }
-
-    fn can_revoke(&self) -> bool {
-        match self.obj {
-            KObject::KMem(ref k) => k.left() == k.quota(),
-            _ => true,
         }
     }
 

@@ -351,7 +351,8 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
 
     // give activity cap to the parent and obtain it to child
     let cap = Capability::new(dst_sel, nact.clone());
-    try_cap_insert!(parent_caps.insert(cap));
+    // inherit this cap from the kernel memory it uses to revoke it as soon as the kmem is revoked
+    try_cap_insert!(parent_caps.insert_as_child(cap, kmem_sel));
 
     // Do not clean activity up after inserted in capability table.
     cleanup_act.cancel();

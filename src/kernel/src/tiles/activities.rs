@@ -644,13 +644,13 @@ impl Activity {
         CapTable::revoke_all_async(&act_ref.map_caps, revoker);
     }
 
-    pub fn revoke_async(&self, crd: CapRngDesc, own: bool, revoker: ActId) -> Result<(), Error> {
+    pub fn revoke_async(&self, crd: CapRngDesc, own: bool, revoker: ActId) {
         // we can't use borrow_mut() here, because revoke might need to use borrow as well.
         if crd.cap_type() == CapType::Object {
-            CapTable::revoke_async(self.obj_caps(), crd, own, revoker)
+            CapTable::revoke_async(self.obj_caps(), crd, own, revoker);
         }
         else {
-            CapTable::revoke_async(self.map_caps(), crd, own, revoker)
+            CapTable::revoke_async(self.map_caps(), crd, own, revoker);
         }
     }
 }

@@ -46,6 +46,7 @@ pub fn derive_tile_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     );
 
     let tile: AsyncRc<TileObject> = act.get_kobj(r.tile)?;
+    let act_id = act.id();
     let act_weak = act.downgrade();
 
     let tile_weak = tile.clone().downgrade();
@@ -57,7 +58,7 @@ pub fn derive_tile_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         else {
             return; // Tile already gone.
         };
-        TileObject::revoke_async(tile_new_clone, tile);
+        TileObject::revoke_async(&tile_new_clone, tile, act_id);
     });
 
     let cap = Capability::new(r.dst, tile_new);

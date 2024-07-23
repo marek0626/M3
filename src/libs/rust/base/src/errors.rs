@@ -81,7 +81,6 @@ pub enum Code {
     CommitFailed,
     NoKernMem,
     NotFound,
-    NotRevocable,
     Timeout,
     ReadFailed,
     WriteFailed,
