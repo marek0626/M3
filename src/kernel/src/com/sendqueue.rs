@@ -21,7 +21,7 @@ use base::io::LogFlags;
 use base::log;
 use base::mem::MsgBuf;
 use base::msgqueue::{MsgQueue, MsgSender};
-use base::tcu::{self, ActId, TileId};
+use base::tcu;
 
 use crate::ktcu;
 
@@ -77,9 +77,9 @@ struct MetaData {
 
 #[derive(Copy, Clone, Debug)]
 pub enum QueueId {
-    TileMux(TileId),
-    Activity(ActId),
-    Serv(ActId),
+    TileMux,
+    Activity,
+    Serv,
 }
 
 struct KTCUSender {

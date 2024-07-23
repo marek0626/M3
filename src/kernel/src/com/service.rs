@@ -49,7 +49,7 @@ impl Service {
         Rc::new(Service {
             name,
             rgate: rgate.downgrade(),
-            queue: RefCell::from(SendQueue::new(QueueId::Serv(act.id()), act.tile_id())),
+            queue: RefCell::from(SendQueue::new(QueueId::Serv, act.tile_id())),
             act: act.downgrade(),
             cur_derive: RefCell::from(None),
         })

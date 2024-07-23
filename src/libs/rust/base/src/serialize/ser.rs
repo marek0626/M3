@@ -266,9 +266,10 @@ impl<'a, S: Sink> Serializer for &'a mut M3Serializer<S> {
     }
 
     #[inline(always)]
-    fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error>
+    fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: serde::Serialize,
+        T: ?Sized,
     {
         // only supported for primitive integers
         value.serialize(self)
@@ -297,19 +298,20 @@ impl<'a, S: Sink> Serializer for &'a mut M3Serializer<S> {
     }
 
     #[inline(always)]
-    fn serialize_newtype_struct<T: ?Sized>(
+    fn serialize_newtype_struct<T>(
         self,
         _name: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
         T: serde::Serialize,
+        T: ?Sized,
     {
         value.serialize(self)
     }
 
     #[inline(always)]
-    fn serialize_newtype_variant<T: ?Sized>(
+    fn serialize_newtype_variant<T>(
         self,
         _name: &'static str,
         idx: u32,
@@ -318,6 +320,7 @@ impl<'a, S: Sink> Serializer for &'a mut M3Serializer<S> {
     ) -> Result<Self::Ok, Self::Error>
     where
         T: serde::Serialize,
+        T: ?Sized,
     {
         self.serialize_u32(idx)?;
         value.serialize(self)
@@ -390,9 +393,10 @@ impl<'a, S: Sink> ser::SerializeSeq for &'a mut M3Serializer<S> {
     type Ok = ();
 
     #[inline(always)]
-    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: serde::Serialize,
+        T: ?Sized,
     {
         value.serialize(&mut **self)
     }
@@ -408,9 +412,10 @@ impl<'a, S: Sink> ser::SerializeTuple for &'a mut M3Serializer<S> {
     type Ok = ();
 
     #[inline(always)]
-    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: serde::Serialize,
+        T: ?Sized,
     {
         value.serialize(&mut **self)
     }
@@ -426,9 +431,10 @@ impl<'a, S: Sink> ser::SerializeTupleStruct for &'a mut M3Serializer<S> {
     type Ok = ();
 
     #[inline(always)]
-    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: serde::Serialize,
+        T: ?Sized,
     {
         value.serialize(&mut **self)
     }
@@ -444,9 +450,10 @@ impl<'a, S: Sink> ser::SerializeTupleVariant for &'a mut M3Serializer<S> {
     type Ok = ();
 
     #[inline(always)]
-    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: serde::Serialize,
+        T: ?Sized,
     {
         value.serialize(&mut **self)
     }
@@ -462,17 +469,19 @@ impl<'a, S: Sink> ser::SerializeMap for &'a mut M3Serializer<S> {
     type Ok = ();
 
     #[inline(always)]
-    fn serialize_key<T: ?Sized>(&mut self, _key: &T) -> Result<(), Self::Error>
+    fn serialize_key<T>(&mut self, _key: &T) -> Result<(), Self::Error>
     where
         T: serde::Serialize,
+        T: ?Sized,
     {
         unimplemented!()
     }
 
     #[inline(always)]
-    fn serialize_value<T: ?Sized>(&mut self, _value: &T) -> Result<(), Self::Error>
+    fn serialize_value<T>(&mut self, _value: &T) -> Result<(), Self::Error>
     where
         T: serde::Serialize,
+        T: ?Sized,
     {
         unimplemented!()
     }
@@ -488,13 +497,10 @@ impl<'a, S: Sink> ser::SerializeStruct for &'a mut M3Serializer<S> {
     type Ok = ();
 
     #[inline(always)]
-    fn serialize_field<T: ?Sized>(
-        &mut self,
-        _key: &'static str,
-        value: &T,
-    ) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, _key: &'static str, value: &T) -> Result<(), Self::Error>
     where
         T: serde::Serialize,
+        T: ?Sized,
     {
         value.serialize(&mut **self)
     }
@@ -510,13 +516,10 @@ impl<'a, S: Sink> ser::SerializeStructVariant for &'a mut M3Serializer<S> {
     type Ok = ();
 
     #[inline(always)]
-    fn serialize_field<T: ?Sized>(
-        &mut self,
-        _key: &'static str,
-        value: &T,
-    ) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, _key: &'static str, value: &T) -> Result<(), Self::Error>
     where
         T: serde::Serialize,
+        T: ?Sized,
     {
         value.serialize(&mut **self)
     }

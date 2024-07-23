@@ -34,6 +34,12 @@ impl KecAccState {
     }
 }
 
+impl Default for KecAccState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 const MAX_ADDR: *const u8 = (1 << 30) as *const u8;
 const MAX_SIZE: usize = 1 << 30;
 

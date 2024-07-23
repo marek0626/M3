@@ -292,7 +292,7 @@ fn collect_sess_crts(app: &config::AppConfig, crts: &mut Vec<config::SessCrtDesc
 fn parse_dual_name(dual: &mut config::DualName, n: String, v: String) -> Result<(), Error> {
     match n.as_ref() {
         "name" => {
-            dual.local = v.clone();
+            dual.local.clone_from(&v);
             dual.global = v
         },
         "lname" => dual.local = v,
@@ -347,10 +347,10 @@ fn parse_mount(p: &mut ConfigParser) -> Result<config::MountDesc, Error> {
         match p.parse_arg()? {
             None => break,
             Some((n, v)) => match n.as_ref() {
-                "fs" => fs = v.clone(),
+                "fs" => fs.clone_from(&v),
                 "path" => {
                     if v.ends_with('/') {
-                        path = v.clone();
+                        path.clone_from(&v);
                     }
                     else {
                         path = format!("{}/", v);

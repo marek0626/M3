@@ -35,22 +35,22 @@ impl<'a> Bitmap<'a> {
     /// word.
     pub fn is_word_set(&self, mut index: usize) -> bool {
         index /= Bitmap::word_size();
-        self.bytes[index] == core::u8::MAX
+        self.bytes[index] == u8::MAX
     }
 
     pub fn is_word_unset(&self, mut index: usize) -> bool {
         index /= Bitmap::word_size();
-        self.bytes[index] == core::u8::MIN
+        self.bytes[index] == u8::MIN
     }
 
     pub fn set_word(&mut self, mut index: usize) {
         index /= Bitmap::word_size();
-        self.bytes[index] = core::u8::MAX;
+        self.bytes[index] = u8::MAX;
     }
 
     pub fn unset_word(&mut self, mut index: usize) {
         index /= Bitmap::word_size();
-        self.bytes[index] = core::u8::MIN;
+        self.bytes[index] = u8::MIN;
     }
 
     fn get_word_bit_index(index: usize) -> (usize, usize) {
@@ -67,7 +67,7 @@ impl<'a> Bitmap<'a> {
 
     pub fn unset_bit(&mut self, index: usize) {
         let (word_index, bit_index) = Bitmap::get_word_bit_index(index);
-        self.bytes[word_index] &= core::u8::MAX ^ (1 << bit_index);
+        self.bytes[word_index] &= u8::MAX ^ (1 << bit_index);
     }
 
     pub fn is_bit_set(&self, index: usize) -> bool {

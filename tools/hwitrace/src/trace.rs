@@ -66,8 +66,8 @@ fn rocket_trace(
             if let Some(instr) = instrs.get(&addr) {
                 if instr.symbol != last_symbol || instr.binary != last_binary {
                     println!("\x1B[1m{}\x1B[0m - {}:", instr.binary, instr.symbol);
-                    last_symbol = instr.symbol.clone();
-                    last_binary = instr.binary.clone();
+                    last_symbol.clone_from(&instr.symbol);
+                    last_binary.clone_from(&instr.binary);
                 }
 
                 println!("{} {}", line, instr.disasm);
@@ -130,8 +130,8 @@ fn rv32_trace(
             if let Some(instr) = instrs.get(&(pc as usize)) {
                 if instr.symbol != last_symbol || instr.binary != last_binary {
                     println!("\x1B[1m{}\x1B[0m - {}:", instr.binary, instr.symbol);
-                    last_symbol = instr.symbol.clone();
-                    last_binary = instr.binary.clone();
+                    last_symbol.clone_from(&instr.symbol);
+                    last_binary.clone_from(&instr.binary);
                 }
 
                 let mut opname = instr

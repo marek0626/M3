@@ -171,7 +171,7 @@ impl TileMux {
             // safety: this is okay, because the TileObject is never destructed
             tile: unsafe { tile.inner().clone() },
             acts: Vec::new(),
-            queue: crate::com::SendQueue::new(crate::com::QueueId::TileMux(tile_id), tile_id),
+            queue: crate::com::SendQueue::new(crate::com::QueueId::TileMux, tile_id),
             state: None,
             mux_type: kif::syscalls::MuxType::None,
             shutdown: false,
