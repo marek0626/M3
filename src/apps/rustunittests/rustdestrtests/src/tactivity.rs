@@ -18,14 +18,17 @@
 
 use m3::cap::Selector;
 use m3::com::{recv_msg, RecvGate, SGateArgs, SendCap, SendGate};
+use m3::errors::Code;
+use m3::kif::{CapRngDesc, CapType};
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ActivityArgs, ChildActivity, OwnActivity, RunningActivity, Tile};
 use m3::time::TimeDuration;
 
-use m3::{send_vmsg, wv_assert_ok, wv_require_ok, wv_run_test};
+use m3::{send_vmsg, syscalls, wv_assert_err, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, run_stop);
+    wv_run_test!(t, kmem_revoke);
 }
 
 fn run_stop(t: &mut dyn WvTester) {
@@ -82,4 +85,27 @@ fn run_stop(t: &mut dyn WvTester) {
         // increase by one ns to attempt interrupts at many points in the instruction stream
         wait_time += TimeDuration::from_nanos(1);
     }
+}
+
+fn kmem_revoke(t: &mut dyn WvTester) {
+    let own_kmem = Activity::own().kmem();
+    let cur_quota = wv_require_ok!(own_kmem.quota());
+    let child_kmem = wv_require_ok!(own_kmem.derive(cur_quota.remaining() / 2));
+
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let act = wv_require_ok!(ChildActivity::new_with(
+        tile.clone(),
+        ActivityArgs::new("test").kmem(child_kmem.clone())
+    ));
+
+    // revoke kernel memory to also revoke the activity
+    wv_assert_ok!(
+        t,
+        Activity::own().revoke(
+            CapRngDesc::new_single(CapType::Object, child_kmem.sel()),
+            false
+        )
+    );
+
+    wv_assert_err!(t, syscalls::activity_wait(&[act.sel()], 0), Code::InvCap);
 }
