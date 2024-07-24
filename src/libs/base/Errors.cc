@@ -75,10 +75,9 @@ static const char *errmsgs[] = {
     "Commit failed",
     "Out of kernel memory",
     "Not found",
-    "Not revocable",
     "Timeout",
-    /* 50 */
     "Read failed",
+    /* 50 */
     "Write failed",
     "UTF-8 error",
     "Bad file descriptor",

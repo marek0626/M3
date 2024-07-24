@@ -78,7 +78,6 @@ struct Errors {
         COMMIT_FAILED,
         NO_KMEM,
         NOT_FOUND,
-        NOT_REVOCABLE,
         TIMEOUT,
         READ_FAILED,
         WRITE_FAILED,

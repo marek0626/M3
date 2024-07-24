@@ -226,14 +226,7 @@ pub fn revoke_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     let act_weak = act.downgrade();
 
-    if let Err(e) = actcap.revoke_async(r.crd, r.own, act_id) {
-        return Err(verror!(
-            e.code(),
-            "Revoke of {} with Activity {} failed",
-            r.crd,
-            act_id
-        ));
-    }
+    actcap.revoke_async(r.crd, r.own, act_id);
 
     if let Some(act) = act_weak.upgrade() {
         reply_success(&act);

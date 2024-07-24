@@ -18,24 +18,23 @@ use base::cfg;
 use base::col::{String, ToString, Vec};
 use base::errors::{Code, Error};
 use base::io::LogFlags;
-use base::kif::{self, Perm};
+use base::kif::{self, CapSel, Perm};
 use base::log;
 use base::mem::{GlobAddr, GlobOff};
-use base::rc::Rc;
 use base::tcu::{self, ActId, TileId};
 use base::util::math;
 use base::vec;
 
-use thread::AsyncRc;
+use thread::{AsyncRc, AsyncWeak};
 
 use crate::args;
 use crate::cap::{Capability, KMemObject, MGateObject, RGateObject, TileObject};
 use crate::mem::{self, Allocation};
 use crate::platform;
-use crate::tiles::{loader, tilemng, Activity, ActivityFlags, State, TileMux};
+use crate::tiles::{loader, tilemng, Activity, ActivityFlags, TileMux};
 
 pub struct ActivityMng {
-    acts: Vec<Option<Rc<Activity>>>,
+    acts: Vec<AsyncWeak<Activity>>,
     count: usize,
     next_id: tcu::ActId,
 }
@@ -44,7 +43,7 @@ static INST: LazyStaticRefCell<ActivityMng> = LazyStaticRefCell::default();
 
 pub fn init() {
     INST.set(ActivityMng {
-        acts: vec![None; cfg::MAX_ACTS],
+        acts: vec![AsyncWeak::default(); cfg::MAX_ACTS],
         count: 0,
         next_id: 0,
     });
@@ -57,22 +56,20 @@ impl ActivityMng {
 
     #[inline(always)]
     pub fn activity(id: tcu::ActId) -> Option<AsyncRc<Activity>> {
-        INST.borrow().acts[id as usize]
-            .as_ref()
-            .map(|a| AsyncRc::new(a.clone()))
+        INST.borrow().acts[id as usize].upgrade()
     }
 
     fn get_id() -> Result<tcu::ActId, Error> {
         let mut actmng = INST.borrow_mut();
         for id in actmng.next_id..cfg::MAX_ACTS as tcu::ActId {
-            if actmng.acts[id as usize].is_none() {
+            if !actmng.acts[id as usize].can_upgrade() {
                 actmng.next_id = id + 1;
                 return Ok(id);
             }
         }
 
         for id in 0..actmng.next_id {
-            if actmng.acts[id as usize].is_none() {
+            if !actmng.acts[id as usize].can_upgrade() {
                 actmng.next_id = id + 1;
                 return Ok(id);
             }
@@ -83,6 +80,7 @@ impl ActivityMng {
 
     pub fn create_activity_async(
         name: String,
+        parent: Option<(ActId, CapSel)>,
         tile: AsyncRc<TileObject>,
         eps_start: tcu::EpId,
         kmem: AsyncRc<KMemObject>,
@@ -91,7 +89,9 @@ impl ActivityMng {
         let id: tcu::ActId = Self::get_id()?;
         let tile_id = tile.tile();
 
-        let act = Activity::new(name, id, tile, eps_start, kmem, flags)?;
+        let act = Activity::new(name, id, parent, tile, eps_start, kmem, flags)?;
+        // safety: nobody can access the object yet, so it's fine to keep a reference
+        let _act_clone = unsafe { act.inner().clone() };
 
         log!(
             LogFlags::KernActs,
@@ -105,9 +105,7 @@ impl ActivityMng {
         // we use the acts table to check whether the activity is still alive.
         {
             let mut actmng = INST.borrow_mut();
-            // safety: we need to keep another reference here to ensure that we decrement the
-            // activity count on activity removal.
-            actmng.acts[id as usize] = Some(unsafe { act.inner().clone() });
+            actmng.acts[id as usize] = act.clone().downgrade();
             actmng.count += 1;
         }
         tilemng::tilemux(tile_id).add_activity(id);
@@ -121,7 +119,7 @@ impl ActivityMng {
                 // capability table and thus nobody else will have removed it from the table yet.
                 tilemng::tilemux(tile_id).rem_activity(id);
                 let mut actmng = INST.borrow_mut();
-                actmng.acts[id as usize] = None;
+                actmng.acts[id as usize] = AsyncWeak::default();
                 actmng.count -= 1;
                 return Err(e);
             }
@@ -178,8 +176,8 @@ impl ActivityMng {
         }
     }
 
-    pub fn stop_activity_async(act: AsyncRc<Activity>, stop: bool) -> Result<(), Error> {
-        if stop && platform::tile_desc(act.tile_id()).supports_tilemux() {
+    pub fn stop_activity_async(act: AsyncRc<Activity>) -> Result<(), Error> {
+        if platform::tile_desc(act.tile_id()).supports_tilemux() {
             let id = act.id();
             let tile_id = act.tile_id();
             drop(act);
@@ -202,7 +200,9 @@ impl ActivityMng {
 
         let tile_id = tilemng::find_tile(&tile_emem)
             .unwrap_or_else(|| tilemng::find_tile(&tile_imem).unwrap());
-        let tile = AsyncRc::new(tilemng::tilemux(tile_id).tile().clone());
+        let tile = tilemng::tilemux(tile_id).new_tile_obj();
+        // safety: nobody has access to this object yet, so it's okay to keep a reference
+        let _tile_clone = unsafe { tile.inner().clone() };
         let tile_desc = platform::tile_desc(tile_id);
 
         // allocate memory for tilemux itself
@@ -226,24 +226,49 @@ impl ActivityMng {
             Some(args::get().root_eps)
         };
 
+        let tile_weak = tile.clone().downgrade();
+
         // load and start tilemux
         loader::load_mux_async(tile_id, &mux_mem).expect("Unable to load TileMux");
         let mux_mgate = MGateObject::new(mux_mem, Perm::RWX, false);
         // note that we provide access to the entire ROOT memory pool via PMP down below and
         // therefore provide access to parts of this pool twice. that's currently required, because
         // TileMux reads PMP EP0 to discover the available memory.
-        TileMux::reset_async(tile_id, Some(mux_mgate), ep_count, true).expect("Tile reset failed");
+        TileMux::reset_async(tile_id, Some(tile), Some(mux_mgate), ep_count, true)
+            .expect("Tile reset failed");
 
         // create root activity
+        let tile = tile_weak.upgrade().unwrap();
         let kmem = KMemObject::new(args::get().kmem - cfg::FIXED_KMEM);
+        // safety: nobody has access to this object yet, so it's okay to keep a reference
+        let _kmem_clone = unsafe { kmem.inner().clone() };
+
+        let tile_weak = tile.clone().downgrade();
+        let kmem_weak = kmem.clone().downgrade();
+
         let act = Self::create_activity_async(
             "root".to_string(),
+            None,
             tile,
             tcu::FIRST_USER_EP,
             kmem,
             ActivityFlags::IS_ROOT,
         )
         .expect("Unable to create Activity for root");
+
+        let tile = tile_weak.upgrade().unwrap();
+        let kmem = kmem_weak.upgrade().unwrap();
+
+        // insert basic caps into cap space
+        act.obj_caps()
+            .borrow_mut()
+            .insert(Capability::new(kif::SEL_KMEM, kmem))?;
+        act.obj_caps()
+            .borrow_mut()
+            .insert(Capability::new(kif::SEL_TILE, tile.clone()))?;
+        act.obj_caps()
+            .borrow_mut()
+            .insert(Capability::new(kif::SEL_ACT, act.clone()))?;
 
         let mut sel = kif::FIRST_FREE_SEL;
 
@@ -277,12 +302,20 @@ impl ActivityMng {
         }
 
         // TILES
-        for tile in platform::user_tiles() {
-            let tile_obj = tilemng::tilemux(tile).tile().clone();
-            let cap = Capability::new(sel, AsyncRc::new(tile_obj));
+        for tile_id in platform::user_tiles() {
+            // the tile for root is special, because we already reset it (causing a state change)
+            // and thus need to pass this object to userspace instead of a new one
+            let tile_obj = if tile_id == tile.tile() {
+                tile.clone()
+            }
+            else {
+                tilemng::tilemux(tile_id).new_tile_obj()
+            };
+            let cap = Capability::new(sel, tile_obj);
             act.obj_caps().borrow_mut().insert(cap).unwrap();
             sel += 1;
         }
+        drop(tile);
 
         // memory
         let mut mem_ep = 1;
@@ -326,19 +359,13 @@ impl ActivityMng {
         Activity::start_app_async(act_weak.upgrade().unwrap())
     }
 
-    pub fn remove_activity_async(id: tcu::ActId, revoker: tcu::ActId) {
+    pub fn remove_activity(id: tcu::ActId) {
         let mut actmng = INST.borrow_mut();
-        let act: Option<Rc<Activity>> = actmng.acts[id as usize].take();
-
-        match act {
-            Some(ref v) => {
-                actmng.count -= 1;
-                drop(actmng);
-                tilemng::tilemux(v.tile_id()).rem_activity(v.id());
-                let act_ref = AsyncRc::new(v.clone());
-                Activity::force_stop_async(act_ref, v.state() != State::DEAD, revoker);
-            },
-            None => panic!("Removing nonexisting Activity with id {}", id),
-        };
+        if id != 0 {
+            // as this is called on Activity::drop, we should never be able to reach it here anymore
+            // (the exception is root, with id 0, which we force-remove)
+            assert!(actmng.acts[id as usize].upgrade().is_none());
+        }
+        actmng.count -= 1;
     }
 }

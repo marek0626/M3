@@ -13,7 +13,7 @@
  * General Public License version 2 for more details.
  */
 
-use base::errors::{Code, Error, VerboseError};
+use base::errors::{Code, VerboseError};
 use base::kif::{self, syscalls};
 use base::mem::MsgBuf;
 use base::quota::Quota;
@@ -22,7 +22,7 @@ use base::{build_vmsg, verror};
 
 use thread::AsyncRc;
 
-use crate::cap::{Capability, InvalidateType, MGateObject, TileObject};
+use crate::cap::{Capability, MGateObject, TileObject};
 use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::{tilemng, Activity, TileMux, INVAL_ID};
 use crate::{ktcu, platform};
@@ -170,31 +170,19 @@ pub fn tile_set_pmp(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     let mut tilemux = tilemng::tilemux(tile.tile());
 
-    // invalidate EP if requested
-    if r.mgate == kif::INVALID_SEL {
+    let mgate: Option<AsyncRc<MGateObject>> = if r.mgate != kif::INVALID_SEL {
+        Some(act_caps.get_kobj(r.mgate)?)
+    }
+    else {
+        // invalidate EP if requested
         if let Err(e) = tilemux.invalidate_ep(INVAL_ID, r.ep, true, false) {
             return Err(verror!(e.code(), "Unable to invalidate PMP EP"));
         }
-    }
 
-    let ep_obj = tilemux
-        .pmp_ep(r.ep)
-        .ok_or_else(|| Error::new(Code::InvState))?;
+        None
+    };
 
-    // if overwrite is disabled, the EP needs to be invalid
-    if r.mgate != kif::INVALID_SEL && ep_obj.is_configured() && !r.overwrite {
-        return Err(verror!(Code::Exists, "PMP EP is already set"));
-    }
-
-    // deconfigure the EP first to ensure that it is not already configured for another gate
-    if let Err(e) = ep_obj.deconfigure(InvalidateType::Default) {
-        return Err(verror!(e.code(), "Unable to deconfigure PMP EP"));
-    }
-
-    if r.mgate != kif::INVALID_SEL {
-        let mgate: AsyncRc<MGateObject> = act_caps.get_kobj(r.mgate)?;
-        tilemux.configure_pmp_ep(r.ep, &mgate)?;
-    }
+    tilemux.reconfigure_pmp_ep(r.ep, mgate, r.overwrite)?;
 
     reply_success(&act);
     Ok(())
@@ -223,7 +211,6 @@ pub fn tile_reset_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         ));
     }
 
-    let tile_id = tile.tile();
     let mux_mem = if r.mux_mem == kif::INVALID_SEL {
         None
     }
@@ -243,12 +230,12 @@ pub fn tile_reset_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
                 .clone(),
         )
     };
-    drop(tile);
     drop(act_caps);
 
     let act_weak = act.downgrade();
 
-    TileMux::reset_async(tile_id, mux_mem, r.ep_count, false)?;
+    let tile_id = tile.tile();
+    TileMux::reset_async(tile_id, Some(tile), mux_mem, r.ep_count, false)?;
 
     if let Some(act) = act_weak.upgrade() {
         reply_success(&act);

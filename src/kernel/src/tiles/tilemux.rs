@@ -41,13 +41,17 @@ use crate::platform;
 use crate::tiles::{tilemng, Activity, INVAL_ID};
 
 struct TileState {
+    // Note that we shouldn't even use EPObject (a kernel object) here, because it's actually a
+    // kernel-internal object that is not exposed via capabilities to user space. However, as we
+    // need to link MemGate to the EPObject it's activated on for PMP EPs, we need an EPObject.
+    // We therefore should never leak this object to the outside.
     pmp: Vec<Rc<EPObject>>,
     eps_region: Option<mem::Allocation>,
     eps: BitArray,
 }
 
 impl TileState {
-    fn new(tile: &Rc<TileObject>, ep_count: Option<usize>) -> Result<Self, Error> {
+    fn new(tile: &AsyncRc<TileObject>, ep_count: Option<usize>) -> Result<Self, Error> {
         // create PMP EPObjects for this Tile
         let mut pmp = Vec::new();
         for ep in 0..tcu::PMEM_PROT_EPS as EpId {
@@ -56,7 +60,7 @@ impl TileState {
                 AsyncWeak::default(),
                 ep,
                 0,
-                AsyncRc::new(tile.clone()).downgrade(),
+                tile.clone().downgrade(),
             );
             // safety: this is okay, because these EPObjects are never destructed
             pmp.push(unsafe { epobj.inner().clone() });
@@ -148,6 +152,11 @@ impl Drop for TileState {
 }
 
 pub struct TileMux {
+    // note that we shouldn't even use TileObject (a kernel object) here, because it's actually a
+    // kernel-internal object that is not exposed via capabilities to user space. However, as we
+    // need to link MemGate to the EPObject it's activated on for PMP EPs, we need to store
+    // EPObjects in TileState and therefore also need a valid TileObject (referenced in EPObject).
+    // we therefore should never leak this object to the outside.
     tile: Rc<TileObject>,
     acts: Vec<ActId>,
     queue: base::boxed::Box<crate::com::SendQueue>,
@@ -195,9 +204,9 @@ impl TileMux {
         self.acts.retain(|id| *id != act);
     }
 
-    fn init_state(&mut self, ep_count: Option<usize>) {
+    fn init_state(&mut self, tile: &AsyncRc<TileObject>, ep_count: Option<usize>) {
         assert!(self.state.is_none());
-        self.state = Some(TileState::new(&self.tile, ep_count).unwrap());
+        self.state = Some(TileState::new(tile, ep_count).unwrap());
 
         let desc = platform::tile_desc(self.tile_id());
         if desc.supports_tilemux() {
@@ -261,71 +270,79 @@ impl TileMux {
     }
 
     pub fn reset_async(
-        tile: TileId,
+        tile_id: TileId,
+        tile: Option<AsyncRc<TileObject>>,
         mux_mem: Option<AsyncRc<MGateObject>>,
         ep_count: Option<usize>,
         root: bool,
     ) -> Result<(), Error> {
-        if tilemng::tilemux(tile).has_activities() {
+        if tilemng::tilemux(tile_id).has_activities() {
             return Err(Error::new(Code::InvState));
         }
 
         let start = {
-            let mut tilemux = tilemng::tilemux(tile);
+            let mut tilemux = tilemng::tilemux(tile_id);
 
             // reset can only be used in two ways: off -> on and on -> off
             let start = !tilemux.is_initialized();
             log!(
                 LogFlags::KernTiles,
                 "Resetting tile {} (start={})",
-                tile,
+                tile_id,
                 start
             );
 
             // should we start and therefore initialize the tile?
             if start {
-                tilemux.init_state(ep_count);
+                let tile = tile.unwrap();
+                tilemux.init_state(&tile, ep_count);
+                drop(tile);
                 tilemux.shutdown = false;
 
-                if platform::tile_desc(tile).is_programmable() {
+                if platform::tile_desc(tile_id).is_programmable() {
                     // here we need a multiplexer and therefore memory
                     if mux_mem.is_none() {
                         return Err(Error::new(Code::InvArgs));
                     }
 
                     let mux_mem = mux_mem.unwrap();
+                    let mux_tile_id = mux_mem.tile_id();
+                    let mux_offset = mux_mem.offset();
 
                     // use the given memory gate for the first PMP EP (for the multiplexer)
-                    if platform::tile_desc(tile).has_virtmem() {
-                        tilemux.configure_pmp_ep(0, &mux_mem)?;
+                    if platform::tile_desc(tile_id).has_virtmem() {
+                        tilemux.reconfigure_pmp_ep(0, Some(mux_mem), true)?;
                     }
 
                     if env::boot().platform == env::Platform::Hw {
-                        if platform::tile_desc(tile).isa() != TileISA::RISCV32 {
+                        if platform::tile_desc(tile_id).isa() != TileISA::RISCV32 {
                             // write trampoline to 0x1000_0000 to jump to TileMux's entry point
                             let trampoline: u64 = 0x0000_0000_0000_306f; // j _start (+0x3000)
-                            ktcu::write_slice(mux_mem.tile_id(), mux_mem.offset(), &[trampoline]);
+                            ktcu::write_slice(mux_tile_id, mux_offset, &[trampoline]);
                         }
                     }
                     // accelerators with co-processors run straccmux and don't do the jump, because
                     // everything is tightly packed at the beginning of the SPM
-                    else if platform::tile_desc(tile).isa() == TileISA::RISCV32
-                        && !platform::tile_desc(tile).attr().contains(TileAttr::COREACC)
+                    else if platform::tile_desc(tile_id).isa() == TileISA::RISCV32
+                        && !platform::tile_desc(tile_id)
+                            .attr()
+                            .contains(TileAttr::COREACC)
                     {
                         let trampoline: [u32; 2] = [
                             0x0001_22b7, // lui t0, 0x12 = 0x12000
                             0x0000_8282, // jr  t0
                         ];
-                        ktcu::write_slice(mux_mem.tile_id(), mux_mem.offset(), &trampoline);
+                        ktcu::write_slice(mux_tile_id, mux_offset, &trampoline);
                     }
                 }
             }
             else {
+                drop(tile);
                 // to ensure that we don't send more requests to this tilemux instance (e.g., in
                 // other kernel threads), we mark it as shutdown and therefore not available.
                 tilemux.shutdown = true;
                 // give tilemux the chance to shutdown properly
-                if platform::tile_desc(tile).is_programmable() {
+                if platform::tile_desc(tile_id).is_programmable() {
                     Self::shutdown_async(tilemux).unwrap();
                 }
             }
@@ -333,20 +350,20 @@ impl TileMux {
         };
 
         // reset the tile and start/stop it
-        ktcu::reset_tile(tile, start)?;
+        ktcu::reset_tile(tile_id, start)?;
 
-        let mut tilemux = tilemng::tilemux(tile);
+        let mut tilemux = tilemng::tilemux(tile_id);
         if start {
             // for root, it has to be TileMux and we don't support async calls yet, because there
             // are no other threads yet to switch to.
             if root {
                 tilemux.mux_type = kif::syscalls::MuxType::TileMux;
             }
-            else if !platform::tile_desc(tile).supports_tilemux() {
+            else if !platform::tile_desc(tile_id).supports_tilemux() {
                 tilemux.mux_type = kif::syscalls::MuxType::None;
             }
             else {
-                tilemng::tilemux(tile).mux_type = Self::info_async(tilemux)?;
+                tilemng::tilemux(tile_id).mux_type = Self::info_async(tilemux)?;
             }
         }
         else {
@@ -356,8 +373,14 @@ impl TileMux {
         Ok(())
     }
 
-    pub fn tile(&self) -> &Rc<TileObject> {
-        &self.tile
+    pub fn new_tile_obj(&self) -> AsyncRc<TileObject> {
+        TileObject::new(
+            self.tile_id(),
+            EPQuota::new(self.tile.ep_quota().total()),
+            self.tile.time_quota_id(),
+            self.tile.pt_quota_id(),
+            false,
+        )
     }
 
     pub fn tile_id(&self) -> TileId {
@@ -372,23 +395,35 @@ impl TileMux {
         self.state.as_ref().map(|state| state.eps.size())
     }
 
-    pub fn pmp_ep(&self, ep: EpId) -> Option<AsyncRc<EPObject>> {
+    fn pmp_ep(&self, ep: EpId) -> Option<AsyncRc<EPObject>> {
         self.state
             .as_ref()
             .map(|state| AsyncRc::new(state.pmp[ep as usize].clone()))
     }
 
-    pub fn configure_pmp_ep(
+    pub fn reconfigure_pmp_ep(
         &mut self,
         ep: tcu::EpId,
-        mg: &AsyncRc<MGateObject>,
+        mg: Option<AsyncRc<MGateObject>>,
+        overwrite: bool,
     ) -> Result<(), Error> {
-        self.config_mem_ep(ep, INVAL_ID, mg, mg.tile_id())?;
-
-        // remember that the MemGate is activated on this EP for the case that the MemGate gets
-        // revoked. If so, the EP is automatically invalidated.
         let ep_obj = self.pmp_ep(ep).ok_or_else(|| Error::new(Code::InvState))?;
-        mg.set_ep(&ep_obj, GateObject::Mem(mg.clone().downgrade()));
+
+        // if overwrite is disabled, the EP needs to be invalid
+        if mg.is_some() && ep_obj.is_configured() && !overwrite {
+            return Err(Error::new(Code::Exists));
+        }
+
+        // deconfigure the EP first to ensure that it is not already configured for another gate
+        ep_obj.deconfigure(InvalidateType::Default)?;
+
+        if let Some(mg) = mg {
+            self.config_mem_ep(ep, INVAL_ID, &mg, mg.tile_id())?;
+
+            // remember that the MemGate is activated on this EP for the case that the MemGate gets
+            // revoked. If so, the EP is automatically invalidated.
+            mg.set_ep(&ep_obj, GateObject::Mem(mg.clone().downgrade()));
+        }
         Ok(())
     }
 
@@ -597,11 +632,12 @@ impl TileMux {
         log!(LogFlags::KernTMC, "TileMux[{}] received {:?}", tile_id, r);
 
         let has_act = tilemux.acts.contains(&r.act_id);
+        // drop tilemux here, because stop_app below needs access to it again
         drop(tilemux);
 
         if has_act {
             let act = ActivityMng::activity(r.act_id).unwrap();
-            Activity::stop_app_async(act, r.status, true, INVAL_ID);
+            Activity::stop_app_async(act, r.status, r.act_id);
         }
 
         let mut reply = MsgBuf::borrow_def();
@@ -844,7 +880,7 @@ impl TileMux {
         msg: &R,
         check_init: bool,
     ) -> Result<thread::Event, Error> {
-        use crate::tiles::{ActivityMng, State};
+        use crate::tiles::ActivityMng;
 
         // if tilemux is not initialized, we cannot talk to it
         if check_init && !self.is_initialized() {
@@ -854,7 +890,7 @@ impl TileMux {
         // if the activity has no app anymore, don't send the notify
         if let Some(id) = act {
             if !ActivityMng::activity(id)
-                .map(|v| v.state() != State::DEAD)
+                .map(|v| !v.is_dead())
                 .unwrap_or(false)
             {
                 return Err(Error::new(Code::ObjectGone));

@@ -13,7 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use base::cfg;
 use base::col::ToString;
 use base::errors::{Code, Error, VerboseError};
 use base::kif::INVALID_SEL;
@@ -22,6 +21,7 @@ use base::mem::{GlobAddr, GlobOff, MsgBuf, VirtAddr, VirtAddrRaw};
 use base::tcu;
 use base::util::Defer;
 use base::{build_vmsg, verror};
+use base::{cfg, kif};
 
 use thread::AsyncRc;
 
@@ -33,7 +33,7 @@ use crate::com::Service;
 use crate::mem;
 use crate::platform;
 use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
-use crate::tiles::{tilemng, Activity, ActivityFlags, ActivityMng, INVAL_ID};
+use crate::tiles::{tilemng, Activity, ActivityFlags, ActivityMng};
 
 #[inline(never)]
 pub fn create_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
@@ -304,18 +304,31 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
 
     let name = r.name.to_string();
     let dst_sel = r.dst;
+    let tile_sel = r.tile;
+    let kmem_sel = r.kmem;
+    let act_id = act.id();
     drop(msg);
 
     let act_weak = act.downgrade();
 
     // create activity, assure that they are dropped in reverse order
     let (cleanup_act, nact) = {
-        let nact =
-            match ActivityMng::create_activity_async(name, tile, eps, kmem, ActivityFlags::empty())
-            {
-                Ok(nact) => nact,
-                Err(e) => return Err(verror!(e.code(), "Unable to create Activity")),
-            };
+        let nact = match ActivityMng::create_activity_async(
+            name,
+            Some((act_id, dst_sel)),
+            tile,
+            eps,
+            kmem,
+            ActivityFlags::empty(),
+        ) {
+            Ok(nact) => nact,
+            Err(e) => return Err(verror!(e.code(), "Unable to create Activity")),
+        };
+
+        // keep another reference to prevent that the activity drops before the cleanup ran
+        // safety: that's okay, because the activity is not yet reachable by anyone
+        let nact_clone = unsafe { nact.inner().clone() };
+
         let nact_weak = nact.clone().downgrade();
         let cleanup = Defer::new(move || {
             let Some(nact) = nact_weak.upgrade()
@@ -323,20 +336,36 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
                 return;
             };
             drop(nact_weak);
-            let id = nact.id();
-            drop(nact);
-            ActivityMng::remove_activity_async(id, INVAL_ID);
+            Activity::stop_app_async(nact, Code::Unspecified, act_id);
+            drop(nact_clone);
         });
         (cleanup, nact)
     };
 
+    // TODO if something fails below we do not properly undo the steps above
+
     let act = try_upgrade_kobj(act_weak, INVALID_SEL)?;
 
-    // give activity cap to the parent
+    let mut parent_caps = act.obj_caps().borrow_mut();
+    let mut child_caps = nact.obj_caps().borrow_mut();
+
+    // obtain kmem and tile cap from parent
+    let kmem_parent = parent_caps.get_mut(kmem_sel)?;
+    child_caps.obtain(kif::SEL_KMEM, kmem_parent, true)?;
+    let tile_parent = parent_caps.get_mut(tile_sel)?;
+    child_caps.obtain(kif::SEL_TILE, tile_parent, true)?;
+
+    // give activity cap to the parent and obtain it to child
     let cap = Capability::new(dst_sel, nact.clone());
-    try_cap_insert!(act.obj_caps().borrow_mut().insert(cap));
+    // inherit this cap from the kernel memory it uses to revoke it as soon as the kmem is revoked
+    try_cap_insert!(parent_caps.insert_as_child(cap, kmem_sel));
+
     // Do not clean activity up after inserted in capability table.
     cleanup_act.cancel();
+
+    let act_parent = parent_caps.get_mut(dst_sel)?;
+    child_caps.obtain(kif::SEL_ACT, act_parent, true)?;
+    drop(child_caps);
 
     // create EP caps for the pager EPs
     if nact.tile_desc().has_virtmem() {
@@ -357,9 +386,10 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
                 .and_then(|s| s.checked_add(CapSel::try_from(i).unwrap()))
                 .ok_or_else(|| Error::new(Code::LastCapOverflow))?;
             let scap = Capability::new(sel as CapSel, ep);
-            try_cap_insert!(act.obj_caps().borrow_mut().insert_as_child(scap, dst_sel));
+            try_cap_insert!(parent_caps.insert_as_child(scap, dst_sel));
         }
     }
+    drop(parent_caps);
 
     let mut kreply = MsgBuf::borrow_def();
     build_vmsg!(kreply, Code::Success, syscalls::CreateActivityReply {

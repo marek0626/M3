@@ -794,27 +794,6 @@ fn derive_kmem(t: &mut dyn WvTester) {
             wv_assert_eq!(t, nquota, before);
         }
     }
-
-    let kmem = wv_require_ok!(Activity::own().kmem().derive(quota / 2));
-    {
-        let tile = wv_require_ok!(Tile::get("compat"));
-        let _act = wv_require_ok!(ChildActivity::new_with(
-            tile,
-            ActivityArgs::new("test").kmem(kmem.clone())
-        ));
-        // activity is still using the kmem
-        wv_assert_err!(
-            t,
-            Activity::own().revoke(CapRngDesc::new_single(CapType::Object, kmem.sel()), false),
-            Code::NotRevocable
-        );
-    }
-
-    // now we can revoke it
-    wv_assert_ok!(
-        t,
-        Activity::own().revoke(CapRngDesc::new_single(CapType::Object, kmem.sel()), false)
-    );
 }
 
 fn derive_tile(t: &mut dyn WvTester) {
@@ -875,22 +854,6 @@ fn derive_tile(t: &mut dyn WvTester) {
     else {
         m3::println!("Skipping time transfer test due to insufficient time");
     }
-
-    {
-        let _act = wv_require_ok!(ChildActivity::new(tile.clone(), "test"));
-        // activity is still using the Tile
-        wv_assert_err!(
-            t,
-            Activity::own().revoke(CapRngDesc::new_single(CapType::Object, tile.sel()), false),
-            Code::NotRevocable
-        );
-    }
-
-    // now we can revoke it
-    wv_assert_ok!(
-        t,
-        Activity::own().revoke(CapRngDesc::new_single(CapType::Object, tile.sel()), false)
-    );
 }
 
 struct DummyHandler {
