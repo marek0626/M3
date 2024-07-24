@@ -43,6 +43,7 @@ macro_rules! try_cap_insert {
             return Err(match e.code() {
                 Code::NoSpace => verror!(e.code(), "Insufficient kernel memory quota"),
                 Code::InvArgs => verror!(e.code(), "Selector already in use"),
+                Code::ObjectGone => verror!(e.code(), "Activity is dead"),
                 _ => panic!("unexpected capability insert error code"),
             });
         }
