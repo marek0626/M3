@@ -26,7 +26,7 @@ use base::mem::{size_of, GlobAddr, GlobOff, PhysAddr, VirtAddr};
 use base::tcu;
 use base::util::math;
 
-use thread::{AsyncRc, AsyncWeak};
+use thread::{StrongRc, TempRc};
 
 use crate::cap::{Capability, MapObject, SelRange};
 use crate::ktcu;
@@ -65,37 +65,25 @@ trait ELFLoader {
     }
 }
 
-pub fn init_activity_async(act: AsyncRc<Activity>) -> Result<i32, Error> {
-    let mut loader = ActivityELFLoader(act.clone().downgrade());
+pub fn init_activity_async(act: StrongRc<Activity>) -> Result<i32, Error> {
+    let mut loader = ActivityELFLoader(act.clone());
 
     let root = act.is_root();
     let desc = platform::tile_desc(act.tile_id());
 
     // put mapping for env into cap table (so that we can access it in create_mgate later)
     let env_phys = if desc.has_virtmem() {
-        let id = act.id();
-        let tile_id = act.tile_id();
-        let act_weak = act.downgrade();
-
         let env_addr = TileMux::translate_async(
-            tilemng::tilemux(tile_id),
-            id,
+            tilemng::tilemux(act.tile_id()),
+            act.id(),
             desc.env_space().0,
             kif::PageFlags::RW,
         )?;
 
-        if !act_weak.can_upgrade() {
-            return Err(Error::new(Code::ObjectGone));
-        }
-
         let flags = PageFlags::from(kif::Perm::RW);
         loader.load_segment_async(desc.env_space().0, env_addr, PAGE_SIZE, flags, false)?;
 
-        if !act_weak.can_upgrade() {
-            return Err(Error::new(Code::ObjectGone));
-        }
-
-        ktcu::glob_to_phys_remote(tile_id, env_addr, flags)?
+        ktcu::glob_to_phys_remote(act.tile_id(), env_addr, flags)?
     }
     else {
         desc.env_space().0.as_phys(desc)
@@ -156,7 +144,7 @@ fn load_root_async(mut loader: ActivityELFLoader, env_phys: PhysAddr) -> Result<
         load_mod_async(&mut loader, app)?
     };
 
-    let act = loader.0.upgrade().unwrap();
+    let act = &loader.0;
     let mut env_off = size_of::<env::BaseEnv>();
     let argv_addr = write_arguments(
         &["root"],
@@ -340,7 +328,7 @@ impl ELFLoader for MetalELFLoader {
     }
 }
 
-struct ActivityELFLoader(AsyncWeak<Activity>);
+struct ActivityELFLoader(StrongRc<Activity>);
 
 impl ELFLoader for ActivityELFLoader {
     fn load_segment_async(
@@ -351,54 +339,31 @@ impl ELFLoader for ActivityELFLoader {
         flags: PageFlags,
         map: bool,
     ) -> Result<(), Error> {
-        let act = self
-            .0
-            .upgrade()
-            .ok_or_else(|| Error::new(Code::ObjectGone))?;
-        let tile_id = act.tile_id();
+        let tile_id = self.0.tile_id();
 
-        if act.tile_desc().has_virtmem() {
+        if self.0.tile_desc().has_virtmem() {
             let dst_sel = (virt >> PAGE_BITS).as_raw() as kif::CapSel;
             let pages = math::round_up(size, PAGE_SIZE) >> PAGE_BITS;
 
             let phys_align = GlobAddr::new_with(phys.tile(), phys.offset() & !PAGE_MASK as GlobOff);
             let map_obj = MapObject::new(phys_align, flags);
-            // keep one original to ensure that it's not removed during the async call
-            // safety: it's okay to keep the Rc here across the async call, because the object
-            // was not inserted into the capability space yet and thus cannot be revoked
-            let _map_obj_clone = unsafe { map_obj.inner().clone() };
-            let id = act.id();
-            drop(act);
 
-            let map_obj = if map {
-                let map_obj_weak = map_obj.clone().downgrade();
-
+            if map {
                 MapObject::map_async(
-                    map_obj,
-                    id,
+                    TempRc::new(map_obj.clone()),
+                    self.0.id(),
                     tile_id,
                     virt & VirtAddr::from(!PAGE_MASK),
                     phys_align,
                     pages,
                     flags,
                 )?;
-
-                // this can never fail as we hold another reference above (_map_obj_clone)
-                map_obj_weak.upgrade().unwrap()
             }
-            else {
-                map_obj
-            };
 
-            let act = self
-                .0
-                .upgrade()
-                .ok_or_else(|| Error::new(Code::ObjectGone))?;
-            let res = act.map_caps().borrow_mut().insert(Capability::new_range(
+            self.0.map_caps().borrow_mut().insert(Capability::new_range(
                 SelRange::new_range(dst_sel as kif::CapSel, pages as kif::CapSel),
                 map_obj,
-            ));
-            res
+            ))
         }
         else {
             MetalELFLoader::new(GlobAddr::new_with(tile_id, 0), 0)
@@ -412,13 +377,8 @@ impl ELFLoader for ActivityELFLoader {
         size: usize,
         flags: PageFlags,
     ) -> Result<(), Error> {
-        let act = self
-            .0
-            .upgrade()
-            .ok_or_else(|| Error::new(Code::ObjectGone))?;
-        let tile_id = act.tile_id();
-        let tile_desc = act.tile_desc();
-        drop(act);
+        let tile_id = self.0.tile_id();
+        let tile_desc = self.0.tile_desc();
 
         let phys = if tile_desc.has_virtmem() {
             let mem = mem::borrow_mut().allocate(
@@ -427,10 +387,6 @@ impl ELFLoader for ActivityELFLoader {
                 PAGE_SIZE as GlobOff,
             )?;
             self.load_segment_async(virt, mem.global(), size, flags, true)?;
-
-            if !self.0.can_upgrade() {
-                return Err(Error::new(Code::ObjectGone));
-            }
 
             ktcu::glob_to_phys_remote(tile_id, mem.global(), flags)?
         }
@@ -442,12 +398,7 @@ impl ELFLoader for ActivityELFLoader {
     }
 
     fn map_heap_async(&mut self, virt: VirtAddr) -> Result<(), Error> {
-        let act = self
-            .0
-            .upgrade()
-            .ok_or_else(|| Error::new(Code::ObjectGone))?;
-        let tile_desc = act.tile_desc();
-        drop(act);
+        let tile_desc = self.0.tile_desc();
 
         if tile_desc.has_virtmem() {
             let phys = mem::borrow_mut().allocate(
@@ -456,20 +407,12 @@ impl ELFLoader for ActivityELFLoader {
                 PAGE_SIZE as GlobOff,
             )?;
             self.load_segment_async(virt, phys.global(), MOD_HEAP_SIZE, PageFlags::RW, true)?;
-            if !self.0.can_upgrade() {
-                return Err(Error::new(Code::ObjectGone));
-            }
         }
         Ok(())
     }
 
     fn map_stack_async(&mut self) -> Result<(), Error> {
-        let act = self
-            .0
-            .upgrade()
-            .ok_or_else(|| Error::new(Code::ObjectGone))?;
-        let tile_desc = act.tile_desc();
-        drop(act);
+        let tile_desc = self.0.tile_desc();
 
         if tile_desc.has_virtmem() {
             let (virt, size) = tile_desc.stack_space();
@@ -479,9 +422,6 @@ impl ELFLoader for ActivityELFLoader {
                 PAGE_SIZE as GlobOff,
             )?;
             self.load_segment_async(virt, phys.global(), size, PageFlags::RW, true)?;
-            if !self.0.can_upgrade() {
-                return Err(Error::new(Code::ObjectGone));
-            }
         }
         Ok(())
     }

@@ -13,40 +13,50 @@
  * General Public License version 2 for more details.
  */
 
-//! This module provides the types `AsyncRc` and `AsyncWeak` to help dealing with destructible
-//! objects and async calls via `crate::wait_for`.
+//! This module provides the types `StrongRc`, `TempRc`, and `WeakRc` to help dealing with
+//! destructible objects and async calls via `crate::wait_for`.
 //!
-//! When performing async calls, we might not want to hold strong references (`Rc`) to objects
-//! during such calls to ensure the objects stays valid, because:
+//! When accessing objects and performing async calls, we might not want to keep these objects
+//! alive via strong references (`Rc` or `StrongRc`) across the async call, because:
 //! 1. We lack a generic way to check whether involved objects were destroyed during async calls.
 //!    Using other means like calling a method on the object is possible, but easy to forget and
 //!    forces objects to be "invalidatible".
 //! 2. It leads to unpredictable delays for object destructions. For example, a revoke could leave
 //!    many resources around even though it reported completion to userspace.
 //!
-//! This module provides an alternative via the `AsyncRc` and `AsyncWeak` types: guard access to
-//! objects via `AsyncRc` and enforce that we either drop them before an async call or convert them
-//! to `AsyncWeak`. Similarly, `AsyncLock` prevents that async calls are done while it is held.
+//! This module provides an alternative via the `StrongRc`, `TempRc`, and `WeakRc` types: objects
+//! are stored as `StrongRc`, but temporary access to them is only provided via `TempRc`. In
+//! contrast to `StrongRc`, `TempRc` cannot be hold across async calls, but needs to be downgraded
+//! to `WeakRc` before the call. This forces us to check its validity after the call by needing to
+//! upgrading it back to an `TempRc`, which fails if the object was destroyed in the meantime.
+//! Similarly, `AsyncLock` prevents that async calls are done while it is held.
 
+use core::cell::Cell;
+use core::fmt;
+use core::intrinsics;
+use core::marker::PhantomData;
+use core::mem::ManuallyDrop;
 use core::ops::Deref;
+use core::ptr::{self, NonNull};
+use core::{hint, mem};
 
 use base::backtrace;
+use base::boxed::Box;
 use base::cell::{StaticCell, StaticRefCell};
 use base::io::LogFlags;
 use base::log;
 use base::mem::VirtAddr;
-use base::rc::{Rc, Weak};
 
-/// Log increments/decrements for `AsyncRc`s
+/// Log increments/decrements for `TempRc`s
 const LOGGING: bool = false;
-/// Enable (costly) debug infrastructure for `AsyncRc` to show where they were constructed
+/// Enable (costly) debug infrastructure for `TempRc` to show where they were constructed
 const DEBUG: bool = false;
 /// For DEBUG: the maximum length of each backtrace
 const MAX_TRACE_LEN: usize = 8;
 /// For DEBUG: the maximum number of backtraces to store
 const MAX_TRACES: usize = 8;
 
-static OWNED_REFS: StaticCell<u64> = StaticCell::new(0);
+static TEMP_REFS: StaticCell<u64> = StaticCell::new(0);
 static REF_TRACES: StaticRefCell<Traces> = StaticRefCell::new(Traces::new());
 
 #[derive(Copy, Clone)]
@@ -84,21 +94,21 @@ impl Traces {
     }
 }
 
-fn inc_owned_refs() {
-    OWNED_REFS.set(OWNED_REFS.get() + 1);
+fn inc_temp_refs() {
+    TEMP_REFS.set(TEMP_REFS.get() + 1);
     if LOGGING {
-        log!(LogFlags::Info, "owned-refs ++ -> {}", OWNED_REFS.get());
+        log!(LogFlags::Info, "temp-refs ++ -> {}", TEMP_REFS.get());
     }
     if DEBUG {
         REF_TRACES.borrow_mut().push();
     }
 }
 
-fn dec_owned_refs() {
-    assert!(OWNED_REFS.get() > 0);
-    OWNED_REFS.set(OWNED_REFS.get() - 1);
+fn dec_temp_refs() {
+    assert!(TEMP_REFS.get() > 0);
+    TEMP_REFS.set(TEMP_REFS.get() - 1);
     if LOGGING {
-        log!(LogFlags::Info, "owned-refs -- -> {}", OWNED_REFS.get());
+        log!(LogFlags::Info, "temp-refs -- -> {}", TEMP_REFS.get());
     }
     if DEBUG {
         REF_TRACES.borrow_mut().pop();
@@ -106,11 +116,11 @@ fn dec_owned_refs() {
 }
 
 pub(crate) fn check_async_call() {
-    if OWNED_REFS.get() != 0 {
+    if TEMP_REFS.get() != 0 {
         log!(
             LogFlags::Error,
-            "Async call with {} owned reference(s)",
-            OWNED_REFS.get()
+            "Async call with {} temporary reference(s)",
+            TEMP_REFS.get()
         );
         if DEBUG {
             let traces = REF_TRACES.borrow();
@@ -133,103 +143,557 @@ pub(crate) fn check_async_call() {
     }
 }
 
-/// A weak reference that can be held across async calls
+/// Holds the value
 ///
-/// The `AsyncWeak` type can only be constructed from an `AsyncRc` and can, in contrast to
-/// `AsyncRc` be hold across async calls. Afterwards, it can be upgraded back into an `AsyncRc`, if
-/// the object has not been destroyed in the meantime.
-pub struct AsyncWeak<T> {
-    obj: Weak<T>,
+/// `StrongRc` directly links to this struct, whereas `WeakRc` links to this struct indirectly
+/// via `WeakRcLink`.
+struct RcBox<T> {
+    strong: Cell<usize>,
+    // links back to us; will be invalidated if `Self` is dropped
+    weak_link: NonNull<WeakRcLink<T>>,
+    value: T,
 }
 
-impl<T> Default for AsyncWeak<T> {
-    fn default() -> Self {
-        Self {
-            obj: Default::default(),
+/// Helper to allow accessing the weak count without making any assertions about the data field.
+struct WeakRcInner<'a> {
+    strong: &'a Cell<usize>,
+    weak: &'a Cell<usize>,
+}
+
+#[doc(hidden)]
+trait StrongInnerPtr {
+    fn strong_ref(&self) -> &Cell<usize>;
+
+    #[inline]
+    fn strong(&self) -> usize {
+        self.strong_ref().get()
+    }
+
+    #[inline]
+    fn inc_strong(&self) {
+        let strong = self.strong();
+
+        // We insert an `assume` here to hint LLVM at an otherwise
+        // missed optimization.
+        // SAFETY: The reference count will never be zero when this is
+        // called.
+        unsafe {
+            hint::assert_unchecked(strong != 0);
+        }
+
+        let strong = strong.wrapping_add(1);
+        self.strong_ref().set(strong);
+
+        // We want to abort on overflow instead of dropping the value.
+        // Checking for overflow after the store instead of before
+        // allows for slightly better code generation.
+        if intrinsics::unlikely(strong == 0) {
+            intrinsics::abort();
+        }
+    }
+
+    #[inline]
+    fn dec_strong(&self) {
+        self.strong_ref().set(self.strong() - 1);
+    }
+}
+
+#[doc(hidden)]
+trait WeakRcInnerPtr {
+    fn weak_ref(&self) -> &Cell<usize>;
+
+    #[inline]
+    fn weak(&self) -> usize {
+        self.weak_ref().get()
+    }
+
+    #[inline]
+    fn inc_weak(&self) {
+        let weak = self.weak();
+
+        // We insert an `assume` here to hint LLVM at an otherwise
+        // missed optimization.
+        // SAFETY: The reference count will never be zero when this is
+        // called.
+        unsafe {
+            hint::assert_unchecked(weak != 0);
+        }
+
+        let weak = weak.wrapping_add(1);
+        self.weak_ref().set(weak);
+
+        // We want to abort on overflow instead of dropping the value.
+        // Checking for overflow after the store instead of before
+        // allows for slightly better code generation.
+        if intrinsics::unlikely(weak == 0) {
+            intrinsics::abort();
+        }
+    }
+
+    #[inline]
+    fn dec_weak(&self) {
+        self.weak_ref().set(self.weak() - 1);
+    }
+}
+
+impl<T> StrongInnerPtr for RcBox<T> {
+    #[inline(always)]
+    fn strong_ref(&self) -> &Cell<usize> {
+        &self.strong
+    }
+}
+
+impl<T> WeakRcInnerPtr for RcBox<T> {
+    #[inline(always)]
+    fn weak_ref(&self) -> &Cell<usize> {
+        // safety: the weak_link is always valid while the StrongRc exists
+        unsafe { &(*self.weak_link.as_ptr()).weak }
+    }
+}
+
+impl<'a> StrongInnerPtr for WeakRcInner<'a> {
+    #[inline(always)]
+    fn strong_ref(&self) -> &Cell<usize> {
+        self.strong
+    }
+}
+
+impl<'a> WeakRcInnerPtr for WeakRcInner<'a> {
+    #[inline(always)]
+    fn weak_ref(&self) -> &Cell<usize> {
+        self.weak
+    }
+}
+
+impl<T> WeakRcInnerPtr for WeakRcLink<T> {
+    #[inline(always)]
+    fn weak_ref(&self) -> &Cell<usize> {
+        &self.weak
+    }
+}
+
+#[allow(clippy::useless_transmute)]
+fn dangling<T>() -> NonNull<T> {
+    // safety: same as in core::rc
+    unsafe { NonNull::new_unchecked(mem::transmute(usize::MAX)) }
+}
+
+fn is_dangling<T>(ptr: *const T) -> bool {
+    ptr.cast::<()>() as usize == usize::MAX
+}
+
+/// A link to `RcBox` used for `WeakRc`
+///
+/// The link is valid if the `RcBox` exists
+struct WeakRcLink<T> {
+    ptr: NonNull<RcBox<T>>,
+    weak: Cell<usize>,
+}
+
+impl<T> WeakRcLink<T> {
+    /// Returns `None` when the pointer is dangling and there is no allocated `RcBox`
+    #[inline]
+    fn inner(&self) -> Option<WeakRcInner<'_>> {
+        if is_dangling(self.ptr.as_ptr()) {
+            None
+        }
+        else {
+            // We are careful to *not* create a reference covering the "data" field, as
+            // the field may be mutated concurrently (for example, if the last `Rc`
+            // is dropped, the data field will be dropped in-place).
+            Some(unsafe {
+                let ptr = self.ptr.as_ptr();
+                WeakRcInner {
+                    strong: &(*ptr).strong,
+                    weak: &self.weak,
+                }
+            })
         }
     }
 }
 
-impl<T> Clone for AsyncWeak<T> {
-    fn clone(&self) -> Self {
-        Self {
-            obj: self.obj.clone(),
-        }
-    }
-}
+/// Allows to upgrade a weak type into a strong type
+pub trait Upgradable<T> {
+    /// The type `upgrade` converts to
+    type Strong: Downgradable<T>;
 
-impl<T> AsyncWeak<T> {
     /// Returns true if the reference is valid so that `upgrade` will succeed
-    pub fn can_upgrade(&self) -> bool {
-        self.obj.strong_count() > 0
-    }
+    fn can_upgrade(&self) -> bool;
 
-    /// Tries to upgrade the reference into a `AsyncRc`
+    /// Tries to upgrade the reference into a `Self::Strong`
     ///
     /// This can fail if the underlying object was destroyed, in which case `None` is returned.
-    pub fn upgrade(&self) -> Option<AsyncRc<T>> {
-        self.obj.upgrade().map(|o| AsyncRc::new(o))
-    }
+    fn upgrade(&self) -> Option<Self::Strong>;
 }
 
-/// A strong reference for in-between async calls
+/// Allow to downgrade a strong type into a weak type
+pub trait Downgradable<T> {
+    /// The type `downgrade_asyn` converts to
+    type Weak: Upgradable<T>;
+
+    /// Downgrades into a `WeakRc` that can be stored somewhere
+    fn downgrade_store(self) -> WeakRc<T>;
+    /// Downgrades into a weak reference that can be kept across an async call
+    fn downgrade_asyn(self) -> Self::Weak;
+}
+
+/// A weak reference that can be held across async calls
 ///
-/// An `AsyncRc` provides access to an underlying object of type `T`, but holding an `AsyncRc` does
-/// not allow async calls (that is, `crate::wait_for` will panic). Performing an async call
-/// requires to either drop all `AsyncRc`s or convert them into `AsyncWeak`s. The latter allows to
-/// upgrade them back into `AsyncRc`s after the async call, but in a checked way. That is, if the
-/// object was destroyed in the meantime, the upgrade will fail.
-pub struct AsyncRc<T> {
-    obj: Rc<T>,
+/// The `WeakRc` type can only be constructed from an `StrongRc`/`TempRc` and can, in contrast
+/// to `TempRc` be hold across async calls. Afterwards, it can be upgraded into an `TempRc`, if
+/// the object has not been destroyed in the meantime.
+pub struct WeakRc<T> {
+    link: NonNull<WeakRcLink<T>>,
 }
 
-impl<T> AsyncRc<T> {
-    // Creates a new `AsyncRc` from given reference-counted object
-    pub fn new(obj: Rc<T>) -> Self {
-        inc_owned_refs();
-        Self { obj }
+impl<T> WeakRc<T> {
+    /// Returns `None` when all strong references are gone.
+    #[inline]
+    fn strong_inner(&self) -> Option<WeakRcInner<'_>> {
+        if is_dangling(self.link.as_ptr()) {
+            None
+        }
+        else {
+            unsafe { (*self.link.as_ptr()).inner() }
+        }
     }
 
-    /// Returns a reference to the inner `Rc`
-    ///
-    /// # Safety
-    ///
-    /// If the inner T can be destroyed, the caller cannot keep the Rc across async calls.
-    pub unsafe fn inner(&self) -> &Rc<T> {
-        &self.obj
+    /// Returns `None` if this weak is dangling (was never attached to an `StrongRc`)
+    #[inline]
+    fn weak_inner(&self) -> Option<&WeakRcLink<T>> {
+        if is_dangling(self.link.as_ptr()) {
+            None
+        }
+        else {
+            unsafe { Some(&(*self.link.as_ptr())) }
+        }
+    }
+}
+
+impl<T> Upgradable<T> for WeakRc<T> {
+    type Strong = TempRc<T>;
+
+    fn can_upgrade(&self) -> bool {
+        match self.strong_inner() {
+            Some(inner) => inner.strong() > 0,
+            None => false,
+        }
+    }
+
+    fn upgrade(&self) -> Option<Self::Strong> {
+        let inner = self.strong_inner()?;
+
+        if inner.strong() == 0 {
+            None
+        }
+        else {
+            unsafe {
+                inner.inc_strong();
+                Some(TempRc::new(StrongRc {
+                    ptr: (*self.link.as_ptr()).ptr,
+                    phantom: PhantomData,
+                }))
+            }
+        }
+    }
+}
+
+impl<T> Default for WeakRc<T> {
+    fn default() -> Self {
+        Self { link: dangling() }
+    }
+}
+
+impl<T> Clone for WeakRc<T> {
+    fn clone(&self) -> Self {
+        if let Some(inner) = self.weak_inner() {
+            inner.inc_weak();
+        }
+        Self { link: self.link }
+    }
+}
+
+impl<T> Drop for WeakRc<T> {
+    fn drop(&mut self) {
+        let Some(inner) = self.weak_inner()
+        else {
+            return;
+        };
+
+        inner.dec_weak();
+        if inner.weak() == 0 {
+            unsafe {
+                drop(Box::from_raw(self.link.as_ptr()));
+            }
+        }
+    }
+}
+
+/// A strong reference
+///
+/// In contrast to `TempRc`, `StrongRc` can be held across async calls and should therefore not be
+/// used for temporary access to the internal object, but for storing the object.
+pub struct StrongRc<T> {
+    ptr: NonNull<RcBox<T>>,
+    phantom: PhantomData<RcBox<T>>,
+}
+
+impl<T> StrongRc<T> {
+    // Creates a new `StrongRc` from given object
+    pub fn new(value: T) -> Self {
+        unsafe {
+            let rcbox = NonNull::new_unchecked(Box::into_raw(Box::new(RcBox {
+                strong: Cell::new(1),
+                weak_link: NonNull::dangling(),
+                value,
+            })));
+
+            // There is an implicit weak pointer owned by all the strong pointers, which ensures
+            // that the weak destructor never frees the allocation while the strong destructor is
+            // running, even if the weak pointer is stored inside the strong one.
+            (*rcbox.as_ptr()).weak_link =
+                NonNull::new_unchecked(Box::into_raw(Box::new(WeakRcLink {
+                    ptr: rcbox,
+                    weak: Cell::new(1),
+                })));
+
+            Self {
+                ptr: rcbox,
+                phantom: PhantomData,
+            }
+        }
+    }
+
+    /// Provides a raw pointer to the data
+    pub fn as_ptr(this: &Self) -> *const T {
+        let ptr: *mut RcBox<T> = NonNull::as_ptr(this.ptr);
+
+        // SAFETY: This cannot go through Deref::deref or Rc::inner because
+        // this is required to retain raw/mut provenance such that e.g. `get_mut` can
+        // write through the pointer after the Rc is recovered through `from_raw`.
+        unsafe { ptr::addr_of_mut!((*ptr).value) }
+    }
+
+    /// Gets the number of weak (`WeakRc`) pointers to this allocation
+    pub fn weak_count(this: &Self) -> usize {
+        this.inner().weak() - 1
+    }
+
+    /// Gets the number of strong (`StrongRc` and `TempRc`) pointers to this allocation
+    pub fn strong_count(this: &Self) -> usize {
+        this.inner().strong()
     }
 
     /// Returns true if the underlying pointers of `self` and `other` are equal
-    pub fn ptr_eq(&self, other: &AsyncRc<T>) -> bool {
-        Rc::ptr_eq(&self.obj, &other.obj)
+    pub fn ptr_eq(&self, other: &StrongRc<T>) -> bool {
+        ptr::addr_eq(self.ptr.as_ptr(), other.ptr.as_ptr())
     }
 
-    /// Downgrades this `AsyncRc` into a `AsyncWeak`
-    pub fn downgrade(self) -> AsyncWeak<T> {
+    #[inline(always)]
+    fn inner(&self) -> &RcBox<T> {
+        // This unsafety is ok because while this Rc is alive we're guaranteed
+        // that the inner pointer is valid.
+        unsafe { self.ptr.as_ref() }
+    }
+}
+
+impl<T> Downgradable<T> for StrongRc<T> {
+    type Weak = StrongRc<T>;
+
+    fn downgrade_store(self) -> WeakRc<T> {
+        self.inner().inc_weak();
+        // Make sure we do not create a dangling Weak
+        debug_assert!(!is_dangling(self.ptr.as_ptr()));
         // count will be decreased in drop of self
-        AsyncWeak {
-            obj: Rc::downgrade(&self.obj),
+        WeakRc {
+            link: self.inner().weak_link,
+        }
+    }
+
+    fn downgrade_asyn(self) -> Self::Weak {
+        self
+    }
+}
+
+impl<T> Upgradable<T> for StrongRc<T> {
+    type Strong = Self;
+
+    fn can_upgrade(&self) -> bool {
+        true
+    }
+
+    fn upgrade(&self) -> Option<Self> {
+        Some(self.clone())
+    }
+}
+
+impl<T> Clone for StrongRc<T> {
+    fn clone(&self) -> Self {
+        self.inner().inc_strong();
+        Self {
+            ptr: self.ptr,
+            phantom: PhantomData,
         }
     }
 }
 
-impl<T> Clone for AsyncRc<T> {
-    fn clone(&self) -> Self {
-        Self::new(self.obj.clone())
-    }
-}
-
-impl<T> Drop for AsyncRc<T> {
+impl<T> Drop for StrongRc<T> {
     fn drop(&mut self) {
-        dec_owned_refs();
+        unsafe {
+            self.inner().dec_strong();
+            if self.inner().strong() == 0 {
+                let weak = &mut *self.ptr.as_mut().weak_link.as_mut();
+
+                // invalidate back link to us in WeakRcLink
+                weak.ptr = dangling();
+                // now that all strong references are gone, remove the additional weak reference to
+                // destroy the WeakRcLink as soon as all weak refs are gone as well.
+                weak.dec_weak();
+
+                // destroy WeakRcLink if there are no references anymore
+                if weak.weak() == 0 {
+                    drop(Box::from_raw(self.inner().weak_link.as_ptr()));
+                }
+
+                // destroy RcBox
+                drop(Box::from_raw(self.ptr.as_ptr()));
+            }
+        }
     }
 }
 
-impl<T> Deref for AsyncRc<T> {
+impl<T: fmt::Display> fmt::Display for StrongRc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&**self, f)
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for StrongRc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&**self, f)
+    }
+}
+
+impl<T> Deref for StrongRc<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        self.obj.deref()
+        &self.inner().value
+    }
+}
+
+/// A temporary reference for in-between async calls
+///
+/// An `TempRc` provides access to an underlying object of type `T`, but holding an `TempRc` does
+/// not allow async calls (that is, `crate::wait_for` will panic). Performing an async call
+/// requires to either drop all `TempRc`s or convert them into `WeakRc`s. The latter allows to
+/// upgrade them back into `TempRc`s after the async call, but in a checked way. That is, if the
+/// object was destroyed in the meantime, the upgrade will fail.
+pub struct TempRc<T> {
+    inner: StrongRc<T>,
+}
+
+impl<T> TempRc<T> {
+    // Creates a new `TempRc` from given strong reference
+    pub fn new(value: StrongRc<T>) -> Self {
+        inc_temp_refs();
+        Self { inner: value }
+    }
+
+    /// Provides a raw pointer to the data
+    pub fn as_ptr(this: &Self) -> *const T {
+        StrongRc::as_ptr(&this.inner)
+    }
+
+    /// Returns true if the underlying pointers of `self` and `other` are equal
+    pub fn ptr_eq(this: &Self, other: &Self) -> bool {
+        this.inner.ptr_eq(&other.inner)
+    }
+
+    /// Gets the number of weak (`WeakRc`) pointers to this allocation
+    pub fn weak_count(this: &Self) -> usize {
+        StrongRc::weak_count(&this.inner)
+    }
+
+    /// Gets the number of strong (`StrongRc` and `TempRc`) pointers to this allocation
+    pub fn strong_count(this: &Self) -> usize {
+        StrongRc::strong_count(&this.inner)
+    }
+
+    /// Turns this `TempRc` into a `StrongRc`
+    ///
+    /// # Safety
+    ///
+    /// In contrast to `into_strong`, this method turns it into a `StrongRc` regardless of whether
+    /// there are other references. The `StrongRc` can be held across async calls, preventing that
+    /// the inner object can be destructed.
+    pub unsafe fn into_strong_unchecked(this: Self) -> StrongRc<T> {
+        dec_temp_refs();
+        let man = ManuallyDrop::new(this);
+        // safety: we don't access `man` afterwards
+        unsafe { ptr::read(&man.inner) }
+    }
+
+    /// Turns this `TempRc` into a `StrongRc` if there is only one reference
+    ///
+    /// With only one reference, we own the internal object, implying that no one else has a
+    /// reference that allows him to take it away from us. Therefore, we can also turn it into a
+    /// `StrongRc`.
+    ///
+    /// If there is just one reference, `Ok(StrongRc)` is returned. Otherwise `Err(Self)` is
+    /// returned.
+    pub fn into_strong(this: Self) -> Result<StrongRc<T>, Self> {
+        if StrongRc::strong_count(&this.inner) == 1 {
+            // safety: we have only one reference, so it's safe to turn this into a StrongRc
+            Ok(unsafe { Self::into_strong_unchecked(this) })
+        }
+        else {
+            Err(this)
+        }
+    }
+}
+
+impl<T> Downgradable<T> for TempRc<T> {
+    type Weak = WeakRc<T>;
+
+    fn downgrade_store(self) -> WeakRc<T> {
+        self.inner.clone().downgrade_store()
+    }
+
+    fn downgrade_asyn(self) -> Self::Weak {
+        self.downgrade_store()
+    }
+}
+
+impl<T> Clone for TempRc<T> {
+    fn clone(&self) -> Self {
+        Self::new(self.inner.clone())
+    }
+}
+
+impl<T> Drop for TempRc<T> {
+    fn drop(&mut self) {
+        dec_temp_refs();
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for TempRc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&**self, f)
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for TempRc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&**self, f)
+    }
+}
+
+impl<T> Deref for TempRc<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner.deref()
     }
 }
 
@@ -241,7 +705,7 @@ pub struct AsyncLock;
 impl AsyncLock {
     /// Creates a new `AsyncLock`
     pub fn new() -> Self {
-        inc_owned_refs();
+        inc_temp_refs();
         Self
     }
 }
@@ -254,6 +718,6 @@ impl Default for AsyncLock {
 
 impl Drop for AsyncLock {
     fn drop(&mut self) {
-        dec_owned_refs();
+        dec_temp_refs();
     }
 }

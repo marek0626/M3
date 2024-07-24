@@ -22,15 +22,15 @@ use base::serialize::M3Deserializer;
 use base::tcu;
 use base::{build_vmsg, verror};
 
-use thread::AsyncRc;
+use thread::{Downgradable, TempRc, Upgradable};
 
 use crate::cap::{ServObject, SessObject};
 use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::Activity;
 
 fn do_exchange(
-    act1: &AsyncRc<Activity>,
-    act2: &AsyncRc<Activity>,
+    act1: &TempRc<Activity>,
+    act2: &TempRc<Activity>,
     c1: &CapRngDesc,
     c2: &CapRngDesc,
     obtain: bool,
@@ -80,7 +80,7 @@ fn do_exchange(
 }
 
 #[inline(never)]
-pub fn exchange(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn exchange(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::Exchange = get_request(&msg)?;
     drop(msg);
@@ -96,7 +96,7 @@ pub fn exchange(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.obtain
     );
 
-    let actcap: AsyncRc<Activity> = act.get_kobj(r.act)?;
+    let actcap: TempRc<Activity> = act.get_kobj(r.act)?;
     do_exchange(&act, &actcap, &r.own, &other_crd, r.obtain)?;
 
     reply_success(&act);
@@ -104,7 +104,7 @@ pub fn exchange(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn exchange_over_sess_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn exchange_over_sess_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::ExchangeSess = get_request(&msg)?;
     drop(msg);
@@ -119,7 +119,7 @@ pub fn exchange_over_sess_async(act: AsyncRc<Activity>) -> Result<(), VerboseErr
         r.crd
     );
 
-    let sess: AsyncRc<SessObject> = act.get_kobj(r.sess)?;
+    let sess: TempRc<SessObject> = act.get_kobj(r.sess)?;
 
     let mut smsg = MsgBuf::borrow_def();
     let data = service::ExchangeData {
@@ -157,8 +157,8 @@ pub fn exchange_over_sess_async(act: AsyncRc<Activity>) -> Result<(), VerboseErr
     );
     drop(sess);
 
-    let serv_weak = serv.clone().downgrade();
-    let act_weak = act.downgrade();
+    let serv_weak = serv.clone().downgrade_asyn();
+    let act_weak = act.downgrade_asyn();
     let res = ServObject::send_receive_async(serv, label, smsg);
     let act = try_upgrade_kobj(act_weak, INVALID_SEL)?;
     let serv = try_upgrade_kobj(serv_weak, INVALID_SEL)?;
@@ -185,7 +185,7 @@ pub fn exchange_over_sess_async(act: AsyncRc<Activity>) -> Result<(), VerboseErr
         reply.data.caps
     );
 
-    let actcap: AsyncRc<Activity> = act.get_kobj(r.act)?;
+    let actcap: TempRc<Activity> = act.get_kobj(r.act)?;
     do_exchange(
         &actcap,
         &serv.server_act(),
@@ -204,7 +204,7 @@ pub fn exchange_over_sess_async(act: AsyncRc<Activity>) -> Result<(), VerboseErr
 }
 
 #[inline(never)]
-pub fn revoke_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn revoke_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::Revoke = get_request(&msg)?;
     drop(msg);
@@ -216,15 +216,15 @@ pub fn revoke_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     }
 
     let actcap = {
-        let actcap: AsyncRc<Activity> = act.get_kobj(r.act)?;
+        let actcap: TempRc<Activity> = act.get_kobj(r.act)?;
         // TODO this does not work; we probably need to do the revoke in two phases: 1. remove all
         // links and collect the objects to destroy (sync) and 2. destroy the objects (async)
-        unsafe { actcap.inner().clone() }
+        unsafe { TempRc::into_strong_unchecked(actcap) }
     };
 
     let act_id = act.id();
 
-    let act_weak = act.downgrade();
+    let act_weak = act.downgrade_asyn();
 
     actcap.revoke_async(r.crd, r.own, act_id);
 

@@ -26,7 +26,7 @@ use core::cmp;
 use core::fmt;
 use core::ptr::NonNull;
 
-use thread::AsyncRc;
+use thread::{StrongRc, TempRc};
 
 use crate::cap::{EPObject, GateEP, KMemObject, KObject, MapObject, TileObject};
 use crate::ktcu;
@@ -296,16 +296,16 @@ impl Capability {
         128 + crate::slab::HEADER_SIZE
     }
 
-    pub fn new<T>(sel: CapSel, obj: AsyncRc<T>) -> Self
+    pub fn new<T>(sel: CapSel, obj: StrongRc<T>) -> Self
     where
-        AsyncRc<T>: IntoKObject<T>,
+        StrongRc<T>: IntoKObject<T>,
     {
         Self::new_range(SelRange::new(sel), obj)
     }
 
-    pub fn new_range<T>(sels: SelRange, obj: AsyncRc<T>) -> Self
+    pub fn new_range<T>(sels: SelRange, obj: StrongRc<T>) -> Self
     where
-        AsyncRc<T>: IntoKObject<T>,
+        StrongRc<T>: IntoKObject<T>,
     {
         Capability {
             sels,
@@ -522,19 +522,19 @@ impl Capability {
         match self.obj {
             KObject::Activity(v) => {
                 if self.origin {
-                    Activity::stop_app_async(AsyncRc::new(v), Code::Unspecified, revoker);
+                    Activity::stop_app_async(TempRc::new(v), Code::Unspecified, revoker);
                 }
             },
 
             KObject::EP(e) => {
-                EPObject::revoke(AsyncRc::new(e));
+                EPObject::revoke(TempRc::new(e));
             },
 
             KObject::Tile(tile) => {
                 if self.origin {
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
-                        if let Ok(parent) = parent.get::<AsyncRc<TileObject>>() {
+                        if let Ok(parent) = parent.get::<TempRc<TileObject>>() {
                             tile.revoke_async(parent, revoker);
                         }
                     }
@@ -545,7 +545,7 @@ impl Capability {
                 if self.origin {
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
-                        if let Ok(par_kmem) = parent.get::<AsyncRc<KMemObject>>() {
+                        if let Ok(par_kmem) = parent.get::<TempRc<KMemObject>>() {
                             k.revoke(parent.activity(), parent.sel(), par_kmem);
                         }
                     }

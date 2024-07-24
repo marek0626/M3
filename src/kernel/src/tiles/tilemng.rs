@@ -17,7 +17,9 @@ use base::cell::{LazyStaticRefCell, RefMut, StaticCell};
 use base::col::Vec;
 use base::kif;
 use base::tcu::TileId;
+use thread::TempRc;
 
+use crate::cap::{MGateObject, TileObject};
 use crate::ktcu;
 use crate::platform;
 use crate::tiles::TileMux;
@@ -62,7 +64,10 @@ pub fn deinit_async() {
     for tile in platform::user_tiles() {
         // ignore the tiles that are already shut down
         if tilemux(tile).is_initialized() {
-            TileMux::reset_async(tile, None, None, None, false).ok();
+            TileMux::reset_async::<TempRc<TileObject>, TempRc<MGateObject>>(
+                tile, None, None, None, false,
+            )
+            .ok();
         }
     }
 

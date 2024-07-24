@@ -21,7 +21,7 @@ use base::mem::{GlobAddr, MsgBuf};
 use base::tcu;
 use base::{build_vmsg, verror};
 
-use thread::AsyncRc;
+use thread::{Downgradable, TempRc, Upgradable};
 
 use crate::cap::{Capability, KMemObject, MGateObject, SGateObject, ServObject, TileObject};
 use crate::mem;
@@ -29,7 +29,7 @@ use crate::syscalls::{get_request, reply_success, try_upgrade_kobj};
 use crate::tiles::{Activity, DeriveSrv};
 
 #[inline(never)]
-pub fn derive_tile_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn derive_tile_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::DeriveTile = get_request(&msg)?;
     drop(msg);
@@ -44,11 +44,11 @@ pub fn derive_tile_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.pts,
     );
 
-    let tile: AsyncRc<TileObject> = act.get_kobj(r.tile)?;
+    let tile: TempRc<TileObject> = act.get_kobj(r.tile)?;
     let act_id = act.id();
-    let act_weak = act.downgrade();
+    let act_weak = act.downgrade_asyn();
 
-    let tile_weak = tile.clone().downgrade();
+    let tile_weak = tile.clone().downgrade_asyn();
     let tile_new = TileObject::derive_async(tile, r.eps, r.time, r.pts)?;
     let tile_new_clone = tile_new.clone();
 
@@ -75,7 +75,7 @@ pub fn derive_tile_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn derive_kmem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn derive_kmem(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::DeriveKMem = get_request(&msg)?;
     drop(msg);
@@ -88,7 +88,7 @@ pub fn derive_kmem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.quota
     );
 
-    let kmem: AsyncRc<KMemObject> = act.get_kobj(r.kmem)?;
+    let kmem: TempRc<KMemObject> = act.get_kobj(r.kmem)?;
     if !kmem.has_quota(r.quota) {
         return Err(verror!(Code::NoSpace, "Insufficient quota"));
     }
@@ -102,7 +102,7 @@ pub fn derive_kmem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn derive_mem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn derive_mem(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::DeriveMem = get_request(&msg)?;
     drop(msg);
@@ -118,11 +118,11 @@ pub fn derive_mem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.perms
     );
 
-    let tact: AsyncRc<Activity> = act.get_kobj(r.act)?;
+    let tact: TempRc<Activity> = act.get_kobj(r.act)?;
 
     let cap = {
         let act_caps = act.obj_caps().borrow();
-        let mgate: AsyncRc<MGateObject> = act_caps.get_kobj(r.src)?;
+        let mgate: TempRc<MGateObject> = act_caps.get_kobj(r.src)?;
         if r.offset.checked_add(r.size).is_none() || r.offset + r.size > mgate.size() || r.size == 0
         {
             return Err(verror!(Code::InvArgs, "Size or offset invalid"));
@@ -141,7 +141,7 @@ pub fn derive_mem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn derive_srv_req(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn derive_srv_req(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::DeriveSrvReq = get_request(&msg)?;
     drop(msg);
@@ -160,7 +160,7 @@ pub fn derive_srv_req(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         return Err(verror!(Code::InvArgs, "Invalid session count"));
     }
 
-    let srv: AsyncRc<ServObject> = act.get_kobj(r.srv)?;
+    let srv: TempRc<ServObject> = act.get_kobj(r.srv)?;
 
     act.start_derive(DeriveSrv {
         src_srv: r.srv,
@@ -199,7 +199,7 @@ pub fn derive_srv_req(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn derive_srv_fin(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn derive_srv_fin(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::DeriveSrvFin = get_request(&msg)?;
     drop(msg);
@@ -213,7 +213,7 @@ pub fn derive_srv_fin(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.creator,
     );
 
-    let srv: AsyncRc<ServObject> = act.get_kobj(r.srv)?;
+    let srv: TempRc<ServObject> = act.get_kobj(r.srv)?;
 
     let der_act = srv.fetch_derive_act()?;
     let derive = der_act
@@ -223,12 +223,12 @@ pub fn derive_srv_fin(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let res = if r.result == Code::Success {
         // don't return here via ? but catch the error and always sent the upcall with the result
         let finish = || -> Result<(), VerboseError> {
-            let src_srv: AsyncRc<ServObject> = der_act.get_kobj(derive.src_srv)?;
+            let src_srv: TempRc<ServObject> = der_act.get_kobj(derive.src_srv)?;
 
             let mut obj_caps = act.obj_caps().borrow_mut();
             let sgate_cap = obj_caps.get_mut(r.sgate)?;
             // ensure that this is actually a send gate
-            sgate_cap.get::<AsyncRc<SGateObject>>()?;
+            sgate_cap.get::<TempRc<SGateObject>>()?;
 
             // pass sgate to calling activity
             try_cap_insert!(der_act.obj_caps().borrow_mut().obtain(

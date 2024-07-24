@@ -22,7 +22,7 @@ use base::tcu;
 use base::{build_vmsg, verror};
 use base::{cfg, kif};
 
-use thread::AsyncRc;
+use thread::{Downgradable, TempRc, Upgradable};
 
 use crate::cap::{
     Capability, EPCategory, EPObject, KMemObject, MGateObject, MapObject, RGateObject, SGateObject,
@@ -35,7 +35,7 @@ use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::{tilemng, Activity, ActivityFlags, ActivityMng};
 
 #[inline(never)]
-pub fn create_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn create_mgate(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::CreateMGate = get_request(&msg)?;
     drop(msg);
@@ -59,7 +59,7 @@ pub fn create_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         ));
     }
 
-    let tgt_act: AsyncRc<Activity> = act.get_kobj(r.act)?;
+    let tgt_act: TempRc<Activity> = act.get_kobj(r.act)?;
 
     let sel = (r.addr.as_goff() / cfg::PAGE_SIZE as GlobOff) as CapSel;
     let glob = if platform::tile_desc(tgt_act.tile_id()).has_virtmem() {
@@ -70,7 +70,7 @@ pub fn create_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
         let map_caps = tgt_act.map_caps().borrow();
         let map_cap = map_caps.get(sel)?;
-        let map_obj: AsyncRc<MapObject> = map_cap.get()?;
+        let map_obj: TempRc<MapObject> = map_cap.get()?;
 
         // TODO think about the flags in MapObject again
         let map_perms = Perm::from_bits_truncate(map_obj.flags().bits() as u32);
@@ -121,7 +121,7 @@ pub fn create_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn create_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn create_rgate(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::CreateRGate = get_request(&msg)?;
     drop(msg);
@@ -152,7 +152,7 @@ pub fn create_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn create_sgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn create_sgate(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::CreateSGate = get_request(&msg)?;
     drop(msg);
@@ -169,8 +169,8 @@ pub fn create_sgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let mut act_caps = act.obj_caps().borrow_mut();
 
     let cap = {
-        let rgate: AsyncRc<RGateObject> = act_caps.get_kobj(r.rgate)?;
-        let sgate = SGateObject::new(rgate.downgrade(), r.label, r.credits);
+        let rgate: TempRc<RGateObject> = act_caps.get_kobj(r.rgate)?;
+        let sgate = SGateObject::new(rgate.downgrade_store(), r.label, r.credits);
         Capability::new(r.dst, sgate)
     };
 
@@ -181,7 +181,7 @@ pub fn create_sgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn create_srv(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn create_srv(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::CreateSrv<'_> = get_request(&msg)?;
 
@@ -201,7 +201,7 @@ pub fn create_srv(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let mut act_caps = act.obj_caps().borrow_mut();
 
     let cap = {
-        let rgate: AsyncRc<RGateObject> = act_caps.get_kobj(r.rgate)?;
+        let rgate: TempRc<RGateObject> = act_caps.get_kobj(r.rgate)?;
         if !rgate.activated() {
             return Err(verror!(Code::InvArgs, "RGate is not activated"));
         }
@@ -219,7 +219,7 @@ pub fn create_srv(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn create_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn create_sess(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::CreateSess = get_request(&msg)?;
     drop(msg);
@@ -245,8 +245,8 @@ pub fn create_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         ));
     }
 
-    let serv: AsyncRc<ServObject> = serv_cap.get()?;
-    let sess = SessObject::new(serv.downgrade(), r.creator, r.ident, r.auto_close);
+    let serv: TempRc<ServObject> = serv_cap.get()?;
+    let sess = SessObject::new(serv.downgrade_store(), r.creator, r.ident, r.auto_close);
     let cap = Capability::new(r.dst, sess);
 
     try_cap_insert!(obj_caps.insert_as_child(cap, r.srv));
@@ -256,7 +256,7 @@ pub fn create_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn create_activity_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::CreateActivity<'_> = get_request(&msg)?;
 
@@ -273,7 +273,7 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
         return Err(verror!(Code::InvArgs, "Invalid name"));
     }
 
-    let tile: AsyncRc<TileObject> = act.get_kobj(r.tile)?;
+    let tile: TempRc<TileObject> = act.get_kobj(r.tile)?;
     if !tile.has_quota(tcu::STD_EPS_COUNT) {
         return Err(verror!(
             Code::InvArgs,
@@ -283,7 +283,7 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
         ));
     }
 
-    let kmem: AsyncRc<KMemObject> = act.get_kobj(r.kmem)?;
+    let kmem: TempRc<KMemObject> = act.get_kobj(r.kmem)?;
     // TODO kmem quota stuff
 
     // find contiguous space for standard EPs
@@ -308,7 +308,7 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
     let act_id = act.id();
     drop(msg);
 
-    let act_weak = act.downgrade();
+    let act_weak = act.downgrade_asyn();
 
     // create activity, assure that they are dropped in reverse order
     let nact = match ActivityMng::create_activity_async(
@@ -354,7 +354,7 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
     } {
         Ok(a) => a,
         Err(e) => {
-            Activity::stop_app_async(nact, Code::Unspecified, act_id);
+            Activity::stop_app_async(TempRc::new(nact), Code::Unspecified, act_id);
             return Err(e);
         },
     };
@@ -368,7 +368,7 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
 
     // create EP caps for the pager EPs
     if nact.tile_desc().has_virtmem() {
-        let nact_weak = nact.clone().downgrade();
+        let nact_weak = nact.clone().downgrade_store();
         for (i, ep) in [eps + tcu::PG_SEP_OFF, eps + tcu::PG_REP_OFF]
             .iter()
             .enumerate()
@@ -401,7 +401,7 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
 }
 
 #[inline(never)]
-pub fn create_sem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn create_sem(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::CreateSem = get_request(&msg)?;
     drop(msg);
@@ -417,7 +417,7 @@ pub fn create_sem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn create_map_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn create_map_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::CreateMap = get_request(&msg)?;
     drop(msg);
@@ -433,12 +433,12 @@ pub fn create_map_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.perms
     );
 
-    let dst_act: AsyncRc<Activity> = act.get_kobj(r.act)?;
+    let dst_act: TempRc<Activity> = act.get_kobj(r.act)?;
     if !platform::tile_desc(dst_act.tile_id()).has_virtmem() {
         return Err(verror!(Code::InvArgs, "Tile has no virtual-memory support"));
     }
 
-    let mgate: AsyncRc<MGateObject> = act.get_kobj(r.mgate)?;
+    let mgate: TempRc<MGateObject> = act.get_kobj(r.mgate)?;
     if (mgate.addr().raw() & cfg::PAGE_MASK as GlobOff) != 0
         || (mgate.size() & cfg::PAGE_MASK as GlobOff) != 0
     {
@@ -482,7 +482,7 @@ pub fn create_map_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
                     ));
                 }
 
-                (c.get::<AsyncRc<MapObject>>()?, None, true)
+                (c.get::<TempRc<MapObject>>()?, None, true)
             },
             Err(_) => {
                 // TODO TOCTOU as multiple maps can race creating two mappings
@@ -498,20 +498,17 @@ pub fn create_map_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
                 // ensure that we keep a copy to not lose it during the async call
                 let map_obj = MapObject::new(phys, PageFlags::from(r.perms));
-                // safety: it's okay to keep the Rc here across the async call, because the object
-                // was not inserted into the capability space yet and thus cannot be revoked
-                let map_clone = unsafe { map_obj.inner().clone() };
-                (map_obj, Some(map_clone), false)
+                (TempRc::new(map_obj.clone()), Some(map_obj), false)
             },
         }
     };
 
-    let dst_act_weak = dst_act.clone().downgrade();
+    let dst_act_weak = dst_act.clone().downgrade_asyn();
 
     // drop before async call
     let (act_id, act_tile) = (dst_act.id(), dst_act.tile_id());
-    let act_weak = act.downgrade();
-    let map_obj_weak = map_obj.clone().downgrade();
+    let act_weak = act.downgrade_asyn();
+    let map_obj_weak = map_obj.clone().downgrade_asyn();
     drop(dst_act);
 
     // create/update the PTEs
@@ -533,8 +530,10 @@ pub fn create_map_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         // already unmapped again.
         let dst_act = try_upgrade_kobj(dst_act_weak, r.act)?;
         let map_obj = try_upgrade_kobj(map_obj_weak, INVALID_SEL)?;
+        drop(_map_obj_clone);
 
         if let Some(act) = act_weak.upgrade() {
+            let map_obj = TempRc::into_strong(map_obj).unwrap();
             let cap = Capability::new_range(SelRange::new_range(r.dst, r.pages), map_obj);
             try_cap_insert!(dst_act.map_caps().borrow_mut().insert_as_child_from(
                 cap,

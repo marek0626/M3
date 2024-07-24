@@ -21,7 +21,7 @@ use base::mem::{GlobOff, MsgBuf, PhysAddr, PhysAddrRaw};
 use base::tcu;
 use base::{build_vmsg, verror};
 
-use thread::AsyncRc;
+use thread::{Downgradable, TempRc, Upgradable};
 
 use crate::cap::{
     Capability, EPCategory, EPObject, GateObject, InvalidateType, KMemObject, MGateObject,
@@ -33,7 +33,7 @@ use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::{tilemng, Activity, TileMux};
 
 #[inline(never)]
-pub fn alloc_ep_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn alloc_ep_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::AllocEP = get_request(&msg)?;
     drop(msg);
@@ -56,7 +56,7 @@ pub fn alloc_ep_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     }
 
     let ep_count = 1 + r.replies as usize;
-    let dst_act: AsyncRc<Activity> = act.get_kobj(r.act)?;
+    let dst_act: TempRc<Activity> = act.get_kobj(r.act)?;
     if !dst_act.tile().has_quota(ep_count) {
         return Err(verror!(
             Code::NoSpace,
@@ -69,9 +69,9 @@ pub fn alloc_ep_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     let mut tilemux = tilemng::tilemux(dst_act.tile_id());
 
     let (act, dst_act, epid) = if tilemux.mux_type() == kif::syscalls::MuxType::Accel {
-        let act_weak = act.downgrade();
+        let act_weak = act.downgrade_asyn();
         let dst_act_id = dst_act.id();
-        let dst_act_weak = dst_act.downgrade();
+        let dst_act_weak = dst_act.downgrade_asyn();
 
         let epid = TileMux::request_ep_async(tilemux, dst_act_id, r.epid, r.replies)?;
 
@@ -112,7 +112,7 @@ pub fn alloc_ep_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     let ep = EPObject::new(
         EPCategory::Custom,
-        dst_act.clone().downgrade(),
+        dst_act.clone().downgrade_store(),
         epid,
         r.replies,
         dst_act.tile_weak().clone(),
@@ -133,7 +133,7 @@ pub fn alloc_ep_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn mgate_region(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn mgate_region(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::MGateRegion = get_request(&msg)?;
     drop(msg);
@@ -141,7 +141,7 @@ pub fn mgate_region(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     sysc_log!(act, "mgate_addr(mgate={})", r.mgate);
 
     let act_caps = act.obj_caps().borrow();
-    let mgate: AsyncRc<MGateObject> = act_caps.get_kobj(r.mgate)?;
+    let mgate: TempRc<MGateObject> = act_caps.get_kobj(r.mgate)?;
 
     let mut kreply = MsgBuf::borrow_def();
     build_vmsg!(kreply, Code::Success, kif::syscalls::MGateRegionReply {
@@ -154,7 +154,7 @@ pub fn mgate_region(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn rgate_buffer(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn rgate_buffer(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::RGateBuffer = get_request(&msg)?;
     drop(msg);
@@ -162,7 +162,7 @@ pub fn rgate_buffer(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     sysc_log!(act, "rgate_buffer(rgate={})", r.rgate);
 
     let act_caps = act.obj_caps().borrow();
-    let rgate: AsyncRc<RGateObject> = act_caps.get_kobj(r.rgate)?;
+    let rgate: TempRc<RGateObject> = act_caps.get_kobj(r.rgate)?;
 
     let mut kreply = MsgBuf::borrow_def();
     build_vmsg!(kreply, Code::Success, kif::syscalls::RGateBufferReply {
@@ -175,7 +175,7 @@ pub fn rgate_buffer(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn kmem_quota(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn kmem_quota(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::KMemQuota = get_request(&msg)?;
     drop(msg);
@@ -183,7 +183,7 @@ pub fn kmem_quota(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     sysc_log!(act, "kmem_quota(kmem={})", r.kmem);
 
     let act_caps = act.obj_caps().borrow();
-    let kmem: AsyncRc<KMemObject> = act_caps.get_kobj(r.kmem)?;
+    let kmem: TempRc<KMemObject> = act_caps.get_kobj(r.kmem)?;
 
     let mut kreply = MsgBuf::borrow_def();
     build_vmsg!(kreply, Code::Success, kif::syscalls::KMemQuotaReply {
@@ -197,7 +197,7 @@ pub fn kmem_quota(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn get_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn get_sess(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::GetSess = get_request(&msg)?;
     drop(msg);
@@ -211,8 +211,8 @@ pub fn get_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.sid
     );
 
-    let actcap: AsyncRc<Activity> = act.get_kobj(r.act)?;
-    if act.ptr_eq(&actcap) {
+    let actcap: TempRc<Activity> = act.get_kobj(r.act)?;
+    if TempRc::ptr_eq(&act, &actcap) {
         return Err(verror!(
             Code::InvArgs,
             "Cannot get session for own Activity"
@@ -222,14 +222,14 @@ pub fn get_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     // get service cap
     let mut act_caps = act.obj_caps().borrow_mut();
     let srvcap = act_caps.get_mut(r.srv)?;
-    let creator = srvcap.get::<AsyncRc<ServObject>>()?.creator();
+    let creator = srvcap.get::<TempRc<ServObject>>()?.creator();
 
     // find root service cap
     let srv_root = srvcap.get_root();
 
     // walk through the childs to find the session with given id (only root cap can create sessions)
     let csess = srv_root.find_child(|c| {
-        if let Ok(s) = c.get::<AsyncRc<SessObject>>() {
+        if let Ok(s) = c.get::<TempRc<SessObject>>() {
             if s.ident() == r.sid {
                 return true;
             }
@@ -238,7 +238,7 @@ pub fn get_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     });
     if let Some(s) = csess
         .as_ref()
-        .and_then(|c| c.get::<AsyncRc<SessObject>>().ok())
+        .and_then(|c| c.get::<TempRc<SessObject>>().ok())
     {
         if s.creator() != creator {
             return Err(verror!(
@@ -261,14 +261,14 @@ pub fn get_sess(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn activate_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn activate_mgate(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::ActivateMGate = get_request(&msg)?;
     drop(msg);
 
     sysc_log!(act, "activate_mgate(ep={}, gate={})", r.ep, r.gate,);
 
-    let ep: AsyncRc<EPObject> = act.get_kobj(r.ep)?;
+    let ep: TempRc<EPObject> = act.get_kobj(r.ep)?;
     if ep.replies() != 0 {
         return Err(verror!(
             Code::InvArgs,
@@ -286,7 +286,7 @@ pub fn activate_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         ));
     }
 
-    let mg: AsyncRc<MGateObject> = act.get_kobj(r.gate)?;
+    let mg: TempRc<MGateObject> = act.get_kobj(r.gate)?;
 
     if mg.gate_ep().get_ep().is_some() {
         return Err(verror!(Code::Exists, "MemGate is already activated"));
@@ -302,14 +302,14 @@ pub fn activate_mgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         return Err(verror!(e.code(), "Unable to configure mem EP"));
     }
 
-    mg.set_ep(&ep, GateObject::Mem(mg.clone().downgrade()));
+    mg.set_ep(&ep, GateObject::Mem(mg.clone().downgrade_store()));
 
     reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn activate_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn activate_rgate(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::ActivateRGate = get_request(&msg)?;
     drop(msg);
@@ -323,7 +323,7 @@ pub fn activate_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.rbuf_off,
     );
 
-    let ep: AsyncRc<EPObject> = act.get_kobj(r.ep)?;
+    let ep: TempRc<EPObject> = act.get_kobj(r.ep)?;
 
     // activity that is currently active on the endpoint
     let ep_act = ep.activity().unwrap();
@@ -340,7 +340,7 @@ pub fn activate_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         ));
     }
 
-    let rg: AsyncRc<RGateObject> = act.get_kobj(r.gate)?;
+    let rg: TempRc<RGateObject> = act.get_kobj(r.gate)?;
     if rg.activated() {
         return Err(verror!(Code::Exists, "RecvGate is already activated"));
     }
@@ -357,7 +357,7 @@ pub fn activate_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
             + cfg::DEF_RBUF_SIZE as PhysAddrRaw
     }
     else if dst_desc.has_virtmem() {
-        let rbuf: AsyncRc<MGateObject> = act.get_kobj(r.rbuf_mem)?;
+        let rbuf: TempRc<MGateObject> = act.get_kobj(r.rbuf_mem)?;
         if r.rbuf_off >= rbuf.size() || r.rbuf_off + rg.size() as GlobOff > rbuf.size() {
             return Err(verror!(Code::InvArgs, "Invalid receive buffer memory"));
         }
@@ -404,21 +404,21 @@ pub fn activate_rgate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         return Err(verror!(e.code(), "Unable to configure recv EP"));
     }
 
-    rg.set_ep(&ep, GateObject::Recv(rg.clone().downgrade()));
+    rg.set_ep(&ep, GateObject::Recv(rg.clone().downgrade_store()));
 
     reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn activate_sgate_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn activate_sgate_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::ActivateSGate = get_request(&msg)?;
     drop(msg);
 
     sysc_log!(act, "activate_sgate(ep={}, gate={})", r.ep, r.gate,);
 
-    let ep: AsyncRc<EPObject> = act.get_kobj(r.ep)?;
+    let ep: TempRc<EPObject> = act.get_kobj(r.ep)?;
     if ep.replies() != 0 {
         return Err(verror!(
             Code::InvArgs,
@@ -438,7 +438,7 @@ pub fn activate_sgate_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> 
         ));
     }
 
-    let sg: AsyncRc<SGateObject> = act.get_kobj(r.gate)?;
+    let sg: TempRc<SGateObject> = act.get_kobj(r.gate)?;
     if sg.gate_ep().get_ep().is_some() {
         return Err(verror!(Code::Exists, "SendGate is already activated"));
     }
@@ -447,11 +447,11 @@ pub fn activate_sgate_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> 
 
     let (act, ep, sg) = if !rgate.activated() {
         sysc_log!(act, "activate: waiting for rgate {:?}", *rgate);
-        let ep_weak = ep.downgrade();
-        let sg_weak = sg.downgrade();
+        let ep_weak = ep.downgrade_asyn();
+        let sg_weak = sg.downgrade_asyn();
         let event = rgate.get_event();
-        let rg_weak = rgate.downgrade();
-        let act_weak = act.downgrade();
+        let rg_weak = rgate.downgrade_asyn();
+        let act_weak = act.downgrade_asyn();
         thread::wait_for_async(event);
 
         let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
@@ -470,21 +470,21 @@ pub fn activate_sgate_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> 
         return Err(verror!(e.code(), "Unable to configure send EP"));
     }
 
-    sg.set_ep(&ep, GateObject::Send(sg.clone().downgrade()));
+    sg.set_ep(&ep, GateObject::Send(sg.clone().downgrade_store()));
 
     reply_success(&act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn invalidate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn invalidate(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::Invalidate = get_request(&msg)?;
     drop(msg);
 
     sysc_log!(act, "invalidate(ep={})", r.ep);
 
-    let ep: AsyncRc<EPObject> = act.get_kobj(r.ep)?;
+    let ep: TempRc<EPObject> = act.get_kobj(r.ep)?;
 
     if let Err(e) = ep.deconfigure(InvalidateType::Default) {
         return Err(verror!(
@@ -500,14 +500,14 @@ pub fn invalidate(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn sem_ctrl_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn sem_ctrl_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::SemCtrl = get_request(&msg)?;
     drop(msg);
 
     sysc_log!(act, "sem_ctrl(sem={}, op={:?})", r.sem, r.op);
 
-    let sem: AsyncRc<SemObject> = act.get_kobj(r.sem)?;
+    let sem: TempRc<SemObject> = act.get_kobj(r.sem)?;
 
     let act = match r.op {
         kif::syscalls::SemOp::Up => {
@@ -516,7 +516,7 @@ pub fn sem_ctrl_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         },
 
         kif::syscalls::SemOp::Down => {
-            let act_weak = act.downgrade();
+            let act_weak = act.downgrade_asyn();
 
             let res = SemObject::down_async(sem);
 
@@ -534,7 +534,7 @@ pub fn sem_ctrl_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn activity_ctrl_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn activity_ctrl_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::ActivityCtrl = get_request(&msg)?;
     drop(msg);
@@ -547,12 +547,12 @@ pub fn activity_ctrl_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         r.arg
     );
 
-    let actcap: AsyncRc<Activity> = act.get_kobj(r.act)?;
-    let act_weak = act.clone().downgrade();
+    let actcap: TempRc<Activity> = act.get_kobj(r.act)?;
+    let act_weak = act.clone().downgrade_asyn();
 
     match r.op {
         kif::syscalls::ActivityOp::Start => {
-            if act.ptr_eq(&actcap) {
+            if TempRc::ptr_eq(&act, &actcap) {
                 return Err(verror!(Code::InvArgs, "Activity can't start itself"));
             }
             drop(act);
@@ -583,7 +583,7 @@ pub fn activity_ctrl_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn activity_wait_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn activity_wait_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::ActivityWait = get_request(&msg)?;
     drop(msg);
@@ -600,7 +600,7 @@ pub fn activity_wait_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
         exitcode: Code::Success,
     };
 
-    let act_weak = act.clone().downgrade();
+    let act_weak = act.clone().downgrade_asyn();
 
     // In any case, check whether a activity already exited. If event == 0, wait until that happened.
     // For event != 0, remember that we want to get notified and send an upcall on a activity's exit.
@@ -622,7 +622,7 @@ pub fn activity_wait_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     Ok(())
 }
 
-pub fn reset_stats(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn reset_stats(act: TempRc<Activity>) -> Result<(), VerboseError> {
     sysc_log!(act, "reset_stats()",);
 
     for tile in platform::user_tiles() {
@@ -634,7 +634,7 @@ pub fn reset_stats(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     Ok(())
 }
 
-pub fn noop(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn noop(act: TempRc<Activity>) -> Result<(), VerboseError> {
     sysc_log!(act, "noop()",);
 
     reply_success(&act);
