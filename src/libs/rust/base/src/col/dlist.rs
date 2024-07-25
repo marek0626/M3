@@ -95,7 +95,7 @@ impl<'a, T> DListIterMut<'a, T> {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```plain
     /// before insert: 1 3 4 5
     ///                  ^
     /// after insert : 1 2 3 4 5
@@ -127,7 +127,7 @@ impl<'a, T> DListIterMut<'a, T> {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```plain
     /// before insert: 1 2 4 5
     ///                  ^
     /// after insert : 1 2 3 4 5
@@ -164,7 +164,7 @@ impl<'a, T> DListIterMut<'a, T> {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```plain
     /// before remove: 1 2 3 4 5
     ///                  ^
     /// after remove : 1 3 4 5

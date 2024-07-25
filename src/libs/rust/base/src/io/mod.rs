@@ -38,7 +38,10 @@ use core::fmt;
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
+/// use base::io::LogFlags;
+/// use base::log;
+///
 /// log!(LogFlags::KernEPs, "my log entry: {}, {}", 1, "test");
 /// ```
 #[macro_export]

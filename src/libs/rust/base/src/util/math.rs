@@ -49,8 +49,9 @@ const fn _next_log2(size: usize, shift: u32) -> u32 {
 /// # Examples
 ///
 /// ```
-/// assert_eq!(util::next_log2(4), 2);
-/// assert_eq!(util::next_log2(5), 3);
+/// use base::util::math::next_log2;
+/// assert_eq!(next_log2(4), 2);
+/// assert_eq!(next_log2(5), 3);
 /// ```
 pub const fn next_log2(size: usize) -> u32 {
     _next_log2(size, (mem::size_of::<usize>() * 8 - 2) as u32)
@@ -61,7 +62,8 @@ pub const fn next_log2(size: usize) -> u32 {
 /// # Examples
 ///
 /// ```
-/// assert_eq!(util::round_up(0x123, 0x1000), 0x1000);
+/// use base::util::math::round_up;
+/// assert_eq!(round_up(0x123, 0x1000), 0x1000);
 /// ```
 pub fn round_up<T: PrimInt>(value: T, align: T) -> T {
     (value + align - T::one()) & !(align - T::one())
@@ -72,7 +74,8 @@ pub fn round_up<T: PrimInt>(value: T, align: T) -> T {
 /// # Examples
 ///
 /// ```
-/// assert_eq!(util::round_dn(0x123, 0x1000), 0x0);
+/// use base::util::math::round_dn;
+/// assert_eq!(round_dn(0x123, 0x1000), 0x0);
 /// ```
 pub fn round_dn<T: PrimInt>(value: T, align: T) -> T {
     value & !(align - T::one())

@@ -43,11 +43,12 @@ pub trait BoxItem {
 /// The macro expects a `$t` like:
 ///
 /// ```
-/// struct $t {
-///     ...
-///     next: Option<NonNull<$t>>,
-///     prev: Option<NonNull<$t>>,
-///     ...
+/// use core::ptr::NonNull;
+/// struct Foo {
+///     // ...
+///     next: Option<NonNull<Foo>>,
+///     prev: Option<NonNull<Foo>>,
+///     // ...
 /// }
 /// ```
 #[macro_export]
@@ -114,7 +115,7 @@ impl<'a, T: BoxItem> BoxListIterMut<'a, T> {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```plain
     /// before remove: 1 2 3 4 5
     ///                  ^
     /// after remove : 1 3 4 5
