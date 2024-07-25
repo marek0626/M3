@@ -745,3 +745,86 @@ impl Drop for AsyncLock {
         dec_temp_refs();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct DropMarker<'a>(&'a Cell<bool>);
+    impl<'a> DropMarker<'a> {
+        fn new(r: &'a Cell<bool>) -> Self {
+            r.set(false);
+            Self(r)
+        }
+    }
+    impl<'a> Drop for DropMarker<'a> {
+        fn drop(&mut self) {
+            self.0.set(true);
+        }
+    }
+
+    #[test]
+    fn single_strong() {
+        let dropped = Cell::from(false);
+        let rc = StrongRc::new(DropMarker::new(&dropped));
+        assert_eq!(StrongRc::strong_count(&rc), 1);
+        assert_eq!(StrongRc::weak_count(&rc), 0);
+        assert_eq!(dropped.get(), false);
+        drop(rc);
+        assert_eq!(dropped.get(), true);
+    }
+
+    #[test]
+    fn multiple_strong() {
+        let dropped = Cell::from(false);
+        let rc = StrongRc::new(DropMarker::new(&dropped));
+        let clone = rc.clone();
+        assert_eq!(StrongRc::strong_count(&rc), 2);
+        assert_eq!(StrongRc::weak_count(&rc), 0);
+        assert_eq!(dropped.get(), false);
+        drop(rc);
+        assert_eq!(StrongRc::strong_count(&clone), 1);
+        assert_eq!(dropped.get(), false);
+        drop(clone);
+        assert_eq!(dropped.get(), true);
+    }
+
+    #[test]
+    fn strong_then_weak() {
+        let dropped = Cell::from(false);
+        let rc = StrongRc::new(DropMarker::new(&dropped));
+        let weak = rc.clone().downgrade_store();
+        assert_eq!(StrongRc::strong_count(&rc), 1);
+        assert_eq!(StrongRc::weak_count(&rc), 1);
+        assert_eq!(weak.can_upgrade(), true);
+        assert_eq!(dropped.get(), false);
+        drop(rc);
+        assert_eq!(weak.can_upgrade(), false);
+        assert_eq!(dropped.get(), true);
+    }
+
+    #[test]
+    fn weak_then_strong() {
+        let dropped = Cell::from(false);
+        let rc = StrongRc::new(DropMarker::new(&dropped));
+        let weak = rc.clone().downgrade_store();
+        assert_eq!(StrongRc::strong_count(&rc), 1);
+        assert_eq!(StrongRc::weak_count(&rc), 1);
+        assert_eq!(weak.can_upgrade(), true);
+        assert_eq!(dropped.get(), false);
+        drop(weak);
+        assert_eq!(StrongRc::strong_count(&rc), 1);
+        assert_eq!(StrongRc::weak_count(&rc), 0);
+        assert_eq!(dropped.get(), false);
+        drop(rc);
+        assert_eq!(dropped.get(), true);
+    }
+
+    #[test]
+    fn invalid_weak() {
+        let weak: WeakRc<u64> = WeakRc::default();
+        assert_eq!(weak.can_upgrade(), false);
+        assert!(weak.upgrade().is_none());
+        drop(weak);
+    }
+}
