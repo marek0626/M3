@@ -16,6 +16,7 @@
  * General Public License version 2 for more details.
  */
 
+#![feature(try_blocks)]
 #![no_std]
 
 mod args;

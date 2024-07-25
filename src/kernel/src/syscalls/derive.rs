@@ -19,7 +19,6 @@ use base::kif::{self, syscalls};
 use base::log;
 use base::mem::{GlobAddr, MsgBuf};
 use base::tcu;
-use base::util::Defer;
 use base::{build_vmsg, verror};
 
 use thread::AsyncRc;
@@ -51,22 +50,25 @@ pub fn derive_tile_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     let tile_weak = tile.clone().downgrade();
     let tile_new = TileObject::derive_async(tile, r.eps, r.time, r.pts)?;
-
     let tile_new_clone = tile_new.clone();
-    let cleanup_tile = Defer::new(move || {
-        let Some(tile) = tile_weak.upgrade()
-        else {
-            return; // Tile already gone.
-        };
-        TileObject::revoke_async(&tile_new_clone, tile, act_id);
-    });
 
-    let cap = Capability::new(r.dst, tile_new);
+    let act = match try {
+        let cap = Capability::new(r.dst, tile_new);
 
-    // TODO we will leak the quota object in TileMux if this fails
-    let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
-    try_cap_insert!(act.obj_caps().borrow_mut().insert_as_child(cap, r.tile));
-    cleanup_tile.cancel();
+        // TODO we will leak the quota object in TileMux if this fails
+        let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
+        try_cap_insert!(act.obj_caps().borrow_mut().insert_as_child(cap, r.tile));
+
+        act
+    } {
+        Ok(a) => a,
+        Err(e) => {
+            if let Some(tile) = tile_weak.upgrade() {
+                TileObject::revoke_async(&tile_new_clone, tile, act_id);
+            };
+            return Err(e);
+        },
+    };
 
     reply_success(&act);
     Ok(())
@@ -220,7 +222,7 @@ pub fn derive_srv_fin(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     let res = if r.result == Code::Success {
         // don't return here via ? but catch the error and always sent the upcall with the result
-        let finish = || {
+        let finish = || -> Result<(), VerboseError> {
             let src_srv: AsyncRc<ServObject> = der_act.get_kobj(derive.src_srv)?;
 
             let mut obj_caps = act.obj_caps().borrow_mut();
