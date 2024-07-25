@@ -23,7 +23,9 @@ use base::{build_vmsg, verror};
 
 use thread::{Downgradable, TempRc, Upgradable};
 
-use crate::cap::{Capability, KMemObject, MGateObject, SGateObject, ServObject, TileObject};
+use crate::cap::{
+    Capability, KMemObject, MGateObject, SGateObject, SelRange, ServObject, TileObject,
+};
 use crate::mem;
 use crate::syscalls::{get_request, reply_success, try_upgrade_kobj};
 use crate::tiles::{Activity, DeriveSrv};
@@ -53,7 +55,9 @@ pub fn derive_tile_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let tile_new_clone = tile_new.clone();
 
     let act = match try {
-        let cap = Capability::new(r.dst, tile_new);
+        // safety: we need to keep one additional reference to properly cleanup above, which is okay
+        // because we're removing it again in the cancel call below
+        let cap = unsafe { Capability::new_range_unchecked(SelRange::new(r.dst), tile_new) };
 
         // TODO we will leak the quota object in TileMux if this fails
         let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;

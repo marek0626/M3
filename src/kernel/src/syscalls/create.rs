@@ -323,12 +323,6 @@ pub fn create_activity_async(act: TempRc<Activity>) -> Result<(), VerboseError> 
         Err(e) => return Err(verror!(e.code(), "Unable to create Activity")),
     };
 
-    // // keep another reference to prevent that the activity drops before the cleanup ran
-    // // safety: that's okay, because the activity is not yet reachable by anyone
-    // let nact_clone = unsafe { nact.inner().clone() };
-
-    // let nact_weak = nact.clone().downgrade();
-
     // TODO if something fails below we do not properly undo the steps above
 
     let act = match try {
@@ -344,7 +338,10 @@ pub fn create_activity_async(act: TempRc<Activity>) -> Result<(), VerboseError> 
         child_caps.obtain(kif::SEL_TILE, tile_parent, true)?;
 
         // give activity cap to the parent and obtain it to child
-        let cap = Capability::new(dst_sel, nact.clone());
+        // safety: we need to keep another reference here in case the insert fails to properly destruct
+        // it via Activity::stop_app_async (and not drop it immediately). that's okay, because we'll
+        // get rid of the additional reference in the cancel call below
+        let cap = unsafe { Capability::new_range_unchecked(SelRange::new(dst_sel), nact.clone()) };
         // inherit this cap from the kernel memory it uses to revoke it as soon as the kmem is revoked
         try_cap_insert!(parent_caps.insert_as_child(cap, kmem_sel));
         // Do not clean activity up after inserted in capability table.
@@ -360,11 +357,12 @@ pub fn create_activity_async(act: TempRc<Activity>) -> Result<(), VerboseError> 
     };
 
     let mut parent_caps = act.obj_caps().borrow_mut();
-    let mut child_caps = nact.obj_caps().borrow_mut();
+    let nact: TempRc<Activity> = parent_caps.get_kobj(dst_sel).unwrap();
 
     let act_parent = parent_caps.get_mut(dst_sel)?;
-    child_caps.obtain(kif::SEL_ACT, act_parent, true)?;
-    drop(child_caps);
+    nact.obj_caps()
+        .borrow_mut()
+        .obtain(kif::SEL_ACT, act_parent, true)?;
 
     // create EP caps for the pager EPs
     if nact.tile_desc().has_virtmem() {

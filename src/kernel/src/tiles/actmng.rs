@@ -28,7 +28,7 @@ use base::vec;
 use thread::{Downgradable, StrongRc, TempRc, Upgradable, WeakRc};
 
 use crate::args;
-use crate::cap::{Capability, KMemObject, MGateObject, RGateObject, TileObject};
+use crate::cap::{Capability, KMemObject, MGateObject, RGateObject, SelRange, TileObject};
 use crate::mem::{self, Allocation};
 use crate::platform;
 use crate::tiles::{loader, tilemng, Activity, ActivityFlags, TileMux};
@@ -232,12 +232,20 @@ impl ActivityMng {
             .insert(Capability::new(kif::SEL_KMEM, kmem))?;
         act.obj_caps()
             .borrow_mut()
-            .insert(Capability::new(kif::SEL_TILE, tile.clone()))?;
-        act.obj_caps()
-            .borrow_mut()
-            .insert(Capability::new(kif::SEL_ACT, act.clone()))?;
+            .insert(Capability::new(kif::SEL_TILE, tile))?;
+        // safety: since this is root, whose caps are not revoked anyway, we are living without the
+        // unique check here
+        unsafe {
+            act.obj_caps()
+                .borrow_mut()
+                .insert(Capability::new_range_unchecked(
+                    SelRange::new(kif::SEL_ACT),
+                    act.clone(),
+                ))?;
+        }
 
         let mut sel = kif::FIRST_FREE_SEL;
+        let tile: TempRc<TileObject> = act.get_kobj(kif::SEL_TILE).unwrap();
 
         // boot info
         {
@@ -272,14 +280,20 @@ impl ActivityMng {
         for tile_id in platform::user_tiles() {
             // the tile for root is special, because we already reset it (causing a state change)
             // and thus need to pass this object to userspace instead of a new one
-            let tile_obj = if tile_id == tile.tile() {
-                tile.clone()
+            if tile_id == tile.tile() {
+                // safety: as above (it's root)
+                unsafe {
+                    let cap = Capability::new_range_unchecked(
+                        SelRange::new(sel),
+                        TempRc::into_strong_unchecked(tile.clone()),
+                    );
+                    act.obj_caps().borrow_mut().insert(cap).unwrap();
+                }
             }
             else {
-                tilemng::tilemux(tile_id).new_tile_obj()
-            };
-            let cap = Capability::new(sel, tile_obj);
-            act.obj_caps().borrow_mut().insert(cap).unwrap();
+                let cap = Capability::new(sel, tilemng::tilemux(tile_id).new_tile_obj());
+                act.obj_caps().borrow_mut().insert(cap).unwrap();
+            }
             sel += 1;
         }
         drop(tile);

@@ -307,6 +307,17 @@ impl Capability {
     where
         StrongRc<T>: IntoKObject<T>,
     {
+        // ensure that there are no other references to the kobject when inserting it
+        assert_eq!(StrongRc::strong_count(&obj), 1);
+
+        // safety: we did the check
+        unsafe { Self::new_range_unchecked(sels, obj) }
+    }
+
+    pub unsafe fn new_range_unchecked<T>(sels: SelRange, obj: StrongRc<T>) -> Self
+    where
+        StrongRc<T>: IntoKObject<T>,
+    {
         Capability {
             sels,
             // safety: as we directly keep the KObject in the capability, the conversion is okay
