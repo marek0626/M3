@@ -410,3 +410,238 @@ impl<T: PartialEq> PartialEq for DList<T> {
 
 impl<T: Eq> Eq for DList<T> {
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn gen_list<T: Clone>(items: &[T]) -> DList<T> {
+        let mut l: DList<T> = DList::new();
+        for i in items {
+            l.push_back((*i).clone());
+        }
+        l
+    }
+
+    #[test]
+    fn create() {
+        let l: DList<u32> = DList::new();
+        assert_eq!(l.len(), 0);
+        assert_eq!(l.iter().next(), None);
+    }
+
+    #[test]
+    fn basics() {
+        let mut l = gen_list(&[23, 42, 57]);
+
+        assert_eq!(l.front(), Some(&23));
+        assert_eq!(l.back(), Some(&57));
+
+        assert_eq!(l.front_mut(), Some(&mut 23));
+        assert_eq!(l.back_mut(), Some(&mut 57));
+    }
+
+    #[test]
+    // TODO peek_prev makes miri complain
+    #[cfg(not(miri))]
+    fn iter() {
+        let mut l = gen_list(&[23, 42, 57]);
+
+        {
+            let mut it = l.iter_mut();
+            let e = it.next().unwrap();
+            assert_eq!(e, &mut 23);
+            assert_eq!(it.peek_prev(), None);
+            *e = 32;
+
+            let e = it.next().unwrap();
+            assert_eq!(e, &mut 42);
+            assert_eq!(it.peek_prev(), Some(&mut 32));
+            *e = 24;
+
+            let e = it.next().unwrap();
+            assert_eq!(e, &mut 57);
+            assert_eq!(it.peek_prev(), Some(&mut 24));
+            *e = 75;
+        }
+
+        assert_eq!(l, gen_list(&[32, 24, 75]));
+    }
+
+    #[test]
+    fn iter_insert_before() {
+        {
+            let mut l = gen_list(&[23, 42, 57]);
+            {
+                let mut it = l.iter_mut();
+                it.insert_before(21);
+            }
+            assert_eq!(l, gen_list(&[21, 23, 42, 57]));
+        }
+
+        {
+            let mut l = gen_list(&[23, 42, 57]);
+            {
+                let mut it = l.iter_mut();
+                assert_eq!(it.next(), Some(&mut 23));
+                it.insert_before(21);
+            }
+            assert_eq!(l, gen_list(&[21, 23, 42, 57]));
+        }
+
+        {
+            let mut l = gen_list(&[23, 42, 57]);
+            {
+                let mut it = l.iter_mut();
+                assert_eq!(it.next(), Some(&mut 23));
+                assert_eq!(it.next(), Some(&mut 42));
+                it.insert_before(21);
+            }
+            assert_eq!(l, gen_list(&[23, 21, 42, 57]));
+        }
+
+        {
+            let mut l = gen_list(&[23, 42, 57]);
+            {
+                let mut it = l.iter_mut();
+                assert_eq!(it.next(), Some(&mut 23));
+                assert_eq!(it.next(), Some(&mut 42));
+                assert_eq!(it.next(), Some(&mut 57));
+                it.insert_before(21);
+            }
+            assert_eq!(l, gen_list(&[23, 42, 21, 57]));
+        }
+
+        {
+            let mut l = gen_list(&[23, 42, 57]);
+            {
+                let mut it = l.iter_mut();
+                assert_eq!(it.next(), Some(&mut 23));
+                assert_eq!(it.next(), Some(&mut 42));
+                assert_eq!(it.next(), Some(&mut 57));
+                assert_eq!(it.next(), None);
+                it.insert_before(21);
+            }
+            assert_eq!(l, gen_list(&[23, 42, 21, 57]));
+        }
+
+        {
+            let mut l = gen_list(&[23, 42, 57]);
+            {
+                let mut it = l.iter_mut();
+                assert_eq!(it.next(), Some(&mut 23));
+                it.insert_before(1);
+                it.insert_before(2);
+                it.insert_before(3);
+            }
+            assert_eq!(l, gen_list(&[1, 2, 3, 23, 42, 57]));
+        }
+    }
+
+    #[test]
+    fn iter_insert_after() {
+        let mut l = gen_list(&[23, 42, 57]);
+
+        {
+            let mut it = l.iter_mut();
+            let e = it.next();
+            assert_eq!(e, Some(&mut 23));
+            it.insert_after(104);
+            it.insert_before(44);
+            it.insert_before(45);
+        }
+
+        assert_eq!(l, gen_list(&[23, 44, 45, 104, 42, 57]));
+    }
+
+    #[test]
+    fn iter_remove() {
+        {
+            let mut l = gen_list(&[23, 42, 57]);
+
+            {
+                let mut it = l.iter_mut();
+                assert_eq!(it.remove(), None);
+
+                let e = it.next();
+                assert_eq!(e, Some(&mut 23));
+                assert_eq!(it.remove(), Some(23));
+
+                let e = it.next();
+                assert_eq!(e, Some(&mut 42));
+                assert_eq!(it.remove(), Some(42));
+
+                let e = it.next();
+                assert_eq!(e, Some(&mut 57));
+                assert_eq!(it.remove(), Some(57));
+
+                let e = it.next();
+                assert_eq!(e, None);
+                assert_eq!(it.remove(), None);
+            }
+
+            assert!(l.is_empty());
+        }
+
+        {
+            let mut l = gen_list(&[1, 2, 3]);
+
+            {
+                let mut it = l.iter_mut();
+                assert_eq!(it.next(), Some(&mut 1));
+                assert_eq!(it.next(), Some(&mut 2));
+                assert_eq!(it.remove(), Some(2));
+                assert_eq!(it.remove(), Some(1));
+                assert_eq!(it.remove(), None);
+                assert_eq!(it.next(), Some(&mut 3));
+            }
+
+            assert_eq!(l, gen_list(&[3]));
+        }
+    }
+
+    #[test]
+    fn objects() {
+        #[derive(Debug, Eq, PartialEq)]
+        struct Foo {
+            a: u32,
+            b: u32,
+            c: u32,
+        }
+
+        let mut l: DList<Foo> = DList::new();
+        l.push_back(Foo { a: 1, b: 2, c: 3 });
+        assert_eq!(l.len(), 1);
+
+        {
+            let mut it = l.iter();
+            assert_eq!(it.next(), Some(&Foo { a: 1, b: 2, c: 3 }));
+            assert_eq!(it.next(), None);
+        }
+
+        assert_eq!(l.pop_front(), Some(Foo { a: 1, b: 2, c: 3 }));
+        assert_eq!(l.pop_front(), None);
+    }
+
+    #[test]
+    fn push_back() {
+        let mut l = DList::new();
+
+        l.push_back(1);
+        l.push_back(2);
+        l.push_back(3);
+
+        assert_eq!(l, gen_list(&[1, 2, 3]));
+    }
+
+    #[test]
+    fn push_front() {
+        let mut l = DList::new();
+
+        l.push_front(1);
+        l.push_front(2);
+        l.push_front(3);
+
+        assert_eq!(l, gen_list(&[3, 2, 1]));
+    }
+}
