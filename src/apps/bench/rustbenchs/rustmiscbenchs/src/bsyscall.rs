@@ -114,7 +114,7 @@ fn create_mgate(t: &mut dyn WvTester) {
     }
 
     let addr = VirtAddr::from(math::round_dn(
-        &create_mgate as *const _ as usize,
+        create_mgate as *const () as usize,
         cfg::PAGE_SIZE,
     ));
     wv_perf!(
