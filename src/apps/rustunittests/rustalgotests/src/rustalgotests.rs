@@ -29,7 +29,6 @@ mod tenvvars;
 mod tfloat;
 mod tmemmap;
 mod tserialize;
-mod ttreap;
 
 #[no_mangle]
 pub fn main() -> Result<(), Error> {
@@ -40,7 +39,6 @@ pub fn main() -> Result<(), Error> {
     wv_run_suite!(tester, tfloat::run);
     wv_run_suite!(tester, tmemmap::run);
     wv_run_suite!(tester, tserialize::run);
-    wv_run_suite!(tester, ttreap::run);
     wv_run_suite!(tester, tcap::run);
     println!("{}", tester);
     Ok(())
