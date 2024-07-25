@@ -201,7 +201,7 @@ impl MetaBuffer {
             let block = unsafe { &mut (*self.blocks[id].as_ptr()) };
 
             if block.locked {
-                thread::wait_for(block.unlock);
+                thread::wait_for_async(block.unlock);
             }
             else {
                 // move element to back since it was touched

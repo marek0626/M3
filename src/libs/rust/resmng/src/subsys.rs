@@ -74,7 +74,6 @@ pub trait ChildStarter {
     }
 
     /// Creates a new activity for the given child and starts it
-    #[allow(m3_async::no_async_call)]
     fn start_async(
         &mut self,
         reqs: &Requests,

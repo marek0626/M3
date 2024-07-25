@@ -46,6 +46,7 @@ pub trait RunningActivity {
     }
 
     /// Starts an asynchronous wait for the activity, using the given event for the upcall.
+    #[cfg_attr(dylint_lib = "m3_lints", allow(unneeded_async))]
     fn wait_async(&self, event: u64) -> Result<Code, Error> {
         syscalls::activity_wait(&[self.activity().sel()], event).map(|r| r.1)
     }

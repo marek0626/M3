@@ -18,8 +18,8 @@
 
 #include <base/Asm.h>
 
-# void thread_switch(m3::Thread::Regs *old, m3::Thread::Regs *new)
-BEGIN_FUNC(thread_switch)
+# void thread_switch_async(m3::Thread::Regs *old, m3::Thread::Regs *new)
+BEGIN_FUNC(thread_switch_async)
     # save registers
     smw ra, 1*WS(a0)
     smw sp, 2*WS(a0)
@@ -56,4 +56,4 @@ BEGIN_FUNC(thread_switch)
     lmw a0, 0(a1)
 
     ret
-END_FUNC(thread_switch)
+END_FUNC(thread_switch_async)

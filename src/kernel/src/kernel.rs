@@ -16,8 +16,7 @@
  * General Public License version 2 for more details.
  */
 
-#![feature(register_tool)]
-#![register_tool(m3_async)]
+#![feature(try_blocks)]
 #![no_std]
 
 mod args;
@@ -148,7 +147,7 @@ fn extend_heap() {
 }
 
 #[no_mangle]
-#[allow(m3_async::async_call)]
+#[cfg_attr(dylint_lib = "m3_lints", allow(unexpected_async))]
 pub extern "C" fn env_run() {
     unsafe { __m3_init_libc(0, ptr::null(), ptr::null(), false) };
     create_heap();
@@ -213,7 +212,7 @@ fn workloop_async() -> ! {
             crate::tiles::TileMux::handle_call_async(crate::tiles::tilemng::tilemux(tile), msg);
         }
 
-        thread::try_yield();
+        thread::try_yield_async();
     }
 
     // do the tile deinit just once
@@ -221,6 +220,7 @@ fn workloop_async() -> ! {
         // with all activities gone, we should only have the main thread left; add another thread for
         // the asynchronous tile reset
         assert_eq!(thread::thread_count(), 0);
+        #[cfg_attr(dylint_lib = "m3_lints", allow(async_alias))]
         thread::add_thread(VirtAddr::from(thread_startup_async as *const ()), 0);
 
         // trigger the shutdown of tiles
@@ -238,7 +238,7 @@ fn workloop_async() -> ! {
             }
         }
 
-        thread::try_yield();
+        thread::try_yield_async();
     }
 
     // if we get back here, all activities and multiplexers on user tiles are shut down, so we can

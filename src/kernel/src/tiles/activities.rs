@@ -148,6 +148,7 @@ impl Activity {
 
         // some system calls are blocking, leading to a thread switch in the kernel. there is just
         // one syscall per activity at a time, thus at most one additional thread per activity is required.
+        #[cfg_attr(dylint_lib = "m3_lints", allow(async_alias))]
         thread::add_thread(VirtAddr::from(thread_startup_async as *const ()), 0);
 
         Ok(act)
@@ -439,7 +440,7 @@ impl Activity {
             // wait until someone exits
             let event = &EXIT_EVENT as *const _ as thread::Event;
             drop(act);
-            thread::wait_for(event);
+            thread::wait_for_async(event);
         };
 
         // ensure that we are removed from the list in any case. we might have started to wait
@@ -552,7 +553,7 @@ impl Activity {
             // not find the capability anymore and therefore could think that everything is done,
             // but actually it isn't.
             drop(act);
-            thread::wait_for(event);
+            thread::wait_for_async(event);
         }
         else {
             // mark the activity as "in the process of being stopped"

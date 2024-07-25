@@ -191,7 +191,7 @@ impl SendQueue {
     }
 
     pub fn receive_async(event: thread::Event) -> Result<&'static tcu::Message, Error> {
-        thread::wait_for(event);
+        thread::wait_for_async(event);
         thread::fetch_msg().ok_or_else(|| Error::new(Code::RecvGone))
     }
 

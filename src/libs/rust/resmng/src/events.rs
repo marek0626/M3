@@ -35,7 +35,7 @@ pub fn wait_for_async(child: Id, event: thread::Event) -> Result<&'static tcu::M
     // remember that the child waits for this event in case we remove it in the meantime
     CHILD_EVENTS.borrow_mut().set(child, Some(event));
 
-    thread::wait_for(event);
+    thread::wait_for_async(event);
 
     // waiting done, remove it again (this potentially adds an entry into the Treap again)
     CHILD_EVENTS.borrow_mut().set(child, None);

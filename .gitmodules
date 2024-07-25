@@ -31,3 +31,6 @@
 [submodule "linux"]
 	path = src/m3lx/linux
 	url = https://github.com/Barkhausen-Institut/linux-bench.git
+[submodule "tools/lints"]
+	path = tools/lints
+	url = https://github.com/Barkhausen-Institut/m3-lints.git

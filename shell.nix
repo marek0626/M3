@@ -23,7 +23,7 @@ let
 
     # building the M3 system and applications
     # we want to have clang 15 for clang-format (the clang package is still at 11.1.0)
-    m3Inputs = [ rustup ninja llvmPackages_15.clang-unwrapped libxml2 python311Packages.autopep8 ];
+    m3Inputs = [ rustup ninja llvmPackages_15.clang-unwrapped libxml2 python311Packages.autopep8 pkg-config ];
 
     # building M³Linux
     m3lxInputs = [ flex bison dtc ncurses ];

@@ -642,7 +642,7 @@ impl SemObject {
             let event = sem.get_event();
             let tmp_weak = sem.downgrade();
 
-            thread::wait_for(event);
+            thread::wait_for_async(event);
 
             let sem = tmp_weak
                 .upgrade()

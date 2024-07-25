@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+
+import argparse
+import os
+import sys
+import subprocess
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Helper script for linting multiple crates using the m3-lints crate"
+    )
+    parser.add_argument(
+        "crates",
+        metavar="CRATE",
+        nargs="+",
+        help="paths to crates that should be checked",
+    )
+    args = parser.parse_args()
+
+    lints_path = os.path.join(os.path.abspath(os.path.dirname(sys.argv[0])), "lints")
+
+    subprocess.run(
+        ("cargo", "install", "cargo-dylint@3.1.2", "dylint-link@3.1.2"), check=True
+    )
+
+    for crate in args.crates:
+        subprocess.run(
+            (
+                "cargo",
+                "dylint",
+                f"--path={lints_path}",
+                "--",
+                "-Z",
+                "build-std=core,alloc,std,panic_abort",
+            ),
+            cwd=crate,
+            check=True,
+        )
+
+
+if __name__ == "__main__":
+    main()

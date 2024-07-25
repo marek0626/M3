@@ -18,8 +18,8 @@
 
 #include <base/Asm.h>
 
-# void thread_switch(m3::Thread::Regs *old, m3::Thread::Regs *new)
-BEGIN_FUNC(thread_switch)
+# void thread_switch_async(m3::Thread::Regs *old, m3::Thread::Regs *new)
+BEGIN_FUNC(thread_switch_async)
     # save registers
     mov     %rbx,  0(%rdi)
     mov     %rsp,  8(%rdi)
@@ -44,4 +44,4 @@ BEGIN_FUNC(thread_switch)
     mov     64(%rsi), %rdi              # load rdi (necessary for startup)
 
     ret
-END_FUNC(thread_switch)
+END_FUNC(thread_switch_async)

@@ -19,7 +19,6 @@ use base::kif::INVALID_SEL;
 use base::kif::{syscalls, CapRngDesc, CapSel, CapType, PageFlags, Perm};
 use base::mem::{GlobAddr, GlobOff, MsgBuf, VirtAddr, VirtAddrRaw};
 use base::tcu;
-use base::util::Defer;
 use base::{build_vmsg, verror};
 use base::{cfg, kif};
 
@@ -312,56 +311,56 @@ pub fn create_activity_async(act: AsyncRc<Activity>) -> Result<(), VerboseError>
     let act_weak = act.downgrade();
 
     // create activity, assure that they are dropped in reverse order
-    let (cleanup_act, nact) = {
-        let nact = match ActivityMng::create_activity_async(
-            name,
-            Some((act_id, dst_sel)),
-            tile,
-            eps,
-            kmem,
-            ActivityFlags::empty(),
-        ) {
-            Ok(nact) => nact,
-            Err(e) => return Err(verror!(e.code(), "Unable to create Activity")),
-        };
-
-        // keep another reference to prevent that the activity drops before the cleanup ran
-        // safety: that's okay, because the activity is not yet reachable by anyone
-        let nact_clone = unsafe { nact.inner().clone() };
-
-        let nact_weak = nact.clone().downgrade();
-        let cleanup = Defer::new(move || {
-            let Some(nact) = nact_weak.upgrade()
-            else {
-                return;
-            };
-            drop(nact_weak);
-            Activity::stop_app_async(nact, Code::Unspecified, act_id);
-            drop(nact_clone);
-        });
-        (cleanup, nact)
+    let nact = match ActivityMng::create_activity_async(
+        name,
+        Some((act_id, dst_sel)),
+        tile,
+        eps,
+        kmem,
+        ActivityFlags::empty(),
+    ) {
+        Ok(nact) => nact,
+        Err(e) => return Err(verror!(e.code(), "Unable to create Activity")),
     };
+
+    // // keep another reference to prevent that the activity drops before the cleanup ran
+    // // safety: that's okay, because the activity is not yet reachable by anyone
+    // let nact_clone = unsafe { nact.inner().clone() };
+
+    // let nact_weak = nact.clone().downgrade();
 
     // TODO if something fails below we do not properly undo the steps above
 
-    let act = try_upgrade_kobj(act_weak, INVALID_SEL)?;
+    let act = match try {
+        let act = try_upgrade_kobj(act_weak.clone(), INVALID_SEL)?;
+
+        let mut parent_caps = act.obj_caps().borrow_mut();
+        let mut child_caps = nact.obj_caps().borrow_mut();
+
+        // obtain kmem and tile cap from parent
+        let kmem_parent = parent_caps.get_mut(kmem_sel)?;
+        child_caps.obtain(kif::SEL_KMEM, kmem_parent, true)?;
+        let tile_parent = parent_caps.get_mut(tile_sel)?;
+        child_caps.obtain(kif::SEL_TILE, tile_parent, true)?;
+
+        // give activity cap to the parent and obtain it to child
+        let cap = Capability::new(dst_sel, nact.clone());
+        // inherit this cap from the kernel memory it uses to revoke it as soon as the kmem is revoked
+        try_cap_insert!(parent_caps.insert_as_child(cap, kmem_sel));
+        // Do not clean activity up after inserted in capability table.
+
+        drop(parent_caps);
+        act
+    } {
+        Ok(a) => a,
+        Err(e) => {
+            Activity::stop_app_async(nact, Code::Unspecified, act_id);
+            return Err(e);
+        },
+    };
 
     let mut parent_caps = act.obj_caps().borrow_mut();
     let mut child_caps = nact.obj_caps().borrow_mut();
-
-    // obtain kmem and tile cap from parent
-    let kmem_parent = parent_caps.get_mut(kmem_sel)?;
-    child_caps.obtain(kif::SEL_KMEM, kmem_parent, true)?;
-    let tile_parent = parent_caps.get_mut(tile_sel)?;
-    child_caps.obtain(kif::SEL_TILE, tile_parent, true)?;
-
-    // give activity cap to the parent and obtain it to child
-    let cap = Capability::new(dst_sel, nact.clone());
-    // inherit this cap from the kernel memory it uses to revoke it as soon as the kmem is revoked
-    try_cap_insert!(parent_caps.insert_as_child(cap, kmem_sel));
-
-    // Do not clean activity up after inserted in capability table.
-    cleanup_act.cancel();
 
     let act_parent = parent_caps.get_mut(dst_sel)?;
     child_caps.obtain(kif::SEL_ACT, act_parent, true)?;

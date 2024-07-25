@@ -163,22 +163,25 @@ impl Session {
         let event = serv.queue.send(&smsg_buf);
         drop(smsg_buf);
 
-        event.and_then(|event| {
-            let reply = events::wait_for_async(child, event)?;
+        match event {
+            Ok(event) => {
+                let reply = events::wait_for_async(child, event)?;
 
-            let mut de = M3Deserializer::new(reply.as_words());
-            let res: Code = de.pop()?;
-            if res != Code::Success {
-                return Err(Error::new(res));
-            }
+                let mut de = M3Deserializer::new(reply.as_words());
+                let res: Code = de.pop()?;
+                if res != Code::Success {
+                    return Err(Error::new(res));
+                }
 
-            let reply: kif::service::OpenReply = de.pop()?;
-            Ok(Session {
-                sel,
-                ident: reply.ident,
-                serv: sid,
-            })
-        })
+                let reply: kif::service::OpenReply = de.pop()?;
+                Ok(Session {
+                    sel,
+                    ident: reply.ident,
+                    serv: sid,
+                })
+            },
+            Err(e) => Err(e),
+        }
     }
 
     pub fn sel(&self) -> Selector {
