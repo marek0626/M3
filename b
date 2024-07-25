@@ -744,7 +744,7 @@ case "$cmd" in
 
     test)
         errors=0
-        dirs="src/libs/rust/thread"
+        dirs="src/libs/rust/thread src/libs/rust/base"
         tgt=$(rustup show 2>/dev/null | grep 'Default host:' | gawk '{ print($3) }')
         export RUST_BACKTRACE=1
         for d in $dirs; do
