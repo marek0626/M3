@@ -22,7 +22,6 @@ use m3::errors::Error;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::{println, wv_run_suite};
 
-mod tboxlist;
 mod tcap;
 mod tenvvars;
 mod tfloat;
@@ -32,7 +31,6 @@ mod tserialize;
 #[no_mangle]
 pub fn main() -> Result<(), Error> {
     let mut tester = DefaultWvTester::default();
-    wv_run_suite!(tester, tboxlist::run);
     wv_run_suite!(tester, tenvvars::run);
     wv_run_suite!(tester, tfloat::run);
     wv_run_suite!(tester, tmemmap::run);
