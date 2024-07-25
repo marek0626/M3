@@ -272,12 +272,14 @@ impl<T> WeakRcInnerPtr for WeakRcLink<T> {
     }
 }
 
+#[inline(always)]
 #[allow(clippy::useless_transmute)]
 fn dangling<T>() -> NonNull<T> {
     // safety: same as in core::rc
     unsafe { NonNull::new_unchecked(mem::transmute(usize::MAX)) }
 }
 
+#[inline(always)]
 fn is_dangling<T>(ptr: *const T) -> bool {
     ptr.cast::<()>() as usize == usize::MAX
 }
@@ -399,12 +401,14 @@ impl<T> Upgradable<T> for WeakRc<T> {
 }
 
 impl<T> Default for WeakRc<T> {
+    #[inline(always)]
     fn default() -> Self {
         Self { link: dangling() }
     }
 }
 
 impl<T> Clone for WeakRc<T> {
+    #[inline(always)]
     fn clone(&self) -> Self {
         if let Some(inner) = self.weak_inner() {
             inner.inc_weak();
@@ -465,6 +469,7 @@ impl<T> StrongRc<T> {
     }
 
     /// Provides a raw pointer to the data
+    #[inline(always)]
     pub fn as_ptr(this: &Self) -> *const T {
         let ptr: *mut RcBox<T> = NonNull::as_ptr(this.ptr);
 
@@ -475,16 +480,19 @@ impl<T> StrongRc<T> {
     }
 
     /// Gets the number of weak (`WeakRc`) pointers to this allocation
+    #[inline(always)]
     pub fn weak_count(this: &Self) -> usize {
         this.inner().weak() - 1
     }
 
     /// Gets the number of strong (`StrongRc` and `TempRc`) pointers to this allocation
+    #[inline(always)]
     pub fn strong_count(this: &Self) -> usize {
         this.inner().strong()
     }
 
     /// Returns true if the underlying pointers of `self` and `other` are equal
+    #[inline(always)]
     pub fn ptr_eq(&self, other: &StrongRc<T>) -> bool {
         ptr::addr_eq(self.ptr.as_ptr(), other.ptr.as_ptr())
     }
@@ -500,6 +508,7 @@ impl<T> StrongRc<T> {
 impl<T> Downgradable<T> for StrongRc<T> {
     type Weak = StrongRc<T>;
 
+    #[inline(always)]
     fn downgrade_store(self) -> WeakRc<T> {
         self.inner().inc_weak();
         // Make sure we do not create a dangling Weak
@@ -510,6 +519,7 @@ impl<T> Downgradable<T> for StrongRc<T> {
         }
     }
 
+    #[inline(always)]
     fn downgrade_asyn(self) -> Self::Weak {
         self
     }
@@ -518,16 +528,19 @@ impl<T> Downgradable<T> for StrongRc<T> {
 impl<T> Upgradable<T> for StrongRc<T> {
     type Strong = Self;
 
+    #[inline(always)]
     fn can_upgrade(&self) -> bool {
         true
     }
 
+    #[inline(always)]
     fn upgrade(&self) -> Option<Self> {
         Some(self.clone())
     }
 }
 
 impl<T> Clone for StrongRc<T> {
+    #[inline(always)]
     fn clone(&self) -> Self {
         self.inner().inc_strong();
         Self {
@@ -577,6 +590,7 @@ impl<T: fmt::Debug> fmt::Debug for StrongRc<T> {
 impl<T> Deref for StrongRc<T> {
     type Target = T;
 
+    #[inline(always)]
     fn deref(&self) -> &Self::Target {
         &self.inner().value
     }
@@ -595,27 +609,32 @@ pub struct TempRc<T> {
 
 impl<T> TempRc<T> {
     // Creates a new `TempRc` from given strong reference
+    #[inline(always)]
     pub fn new(value: StrongRc<T>) -> Self {
         inc_temp_refs();
         Self { inner: value }
     }
 
     /// Provides a raw pointer to the data
+    #[inline(always)]
     pub fn as_ptr(this: &Self) -> *const T {
         StrongRc::as_ptr(&this.inner)
     }
 
     /// Returns true if the underlying pointers of `self` and `other` are equal
+    #[inline(always)]
     pub fn ptr_eq(this: &Self, other: &Self) -> bool {
         this.inner.ptr_eq(&other.inner)
     }
 
     /// Gets the number of weak (`WeakRc`) pointers to this allocation
+    #[inline(always)]
     pub fn weak_count(this: &Self) -> usize {
         StrongRc::weak_count(&this.inner)
     }
 
     /// Gets the number of strong (`StrongRc` and `TempRc`) pointers to this allocation
+    #[inline(always)]
     pub fn strong_count(this: &Self) -> usize {
         StrongRc::strong_count(&this.inner)
     }
@@ -656,22 +675,26 @@ impl<T> TempRc<T> {
 impl<T> Downgradable<T> for TempRc<T> {
     type Weak = WeakRc<T>;
 
+    #[inline(always)]
     fn downgrade_store(self) -> WeakRc<T> {
         self.inner.clone().downgrade_store()
     }
 
+    #[inline(always)]
     fn downgrade_asyn(self) -> Self::Weak {
         self.downgrade_store()
     }
 }
 
 impl<T> Clone for TempRc<T> {
+    #[inline(always)]
     fn clone(&self) -> Self {
         Self::new(self.inner.clone())
     }
 }
 
 impl<T> Drop for TempRc<T> {
+    #[inline(always)]
     fn drop(&mut self) {
         dec_temp_refs();
     }
@@ -692,6 +715,7 @@ impl<T: fmt::Debug> fmt::Debug for TempRc<T> {
 impl<T> Deref for TempRc<T> {
     type Target = T;
 
+    #[inline(always)]
     fn deref(&self) -> &Self::Target {
         self.inner.deref()
     }
