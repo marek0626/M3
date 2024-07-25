@@ -149,3 +149,77 @@ impl TryFrom<UnsafeCapRngDesc> for CapRngDesc {
         Ok(unval)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cap_rng_desc_single() {
+        for sel in [0, 1, 1234, CapSel::MAX] {
+            let single = CapRngDesc::new_single(CapType::Object, sel);
+            assert_eq!(single.start(), sel);
+            assert_eq!(single.count(), 1);
+            assert_eq!(single.cap_type(), CapType::Object);
+        }
+    }
+
+    #[test]
+    fn cap_rng_desc_new() {
+        // Test an ordinary range.
+        let rng = CapRngDesc::new(CapType::Mapping, 4321, 6);
+        assert!(rng.is_ok());
+        if let Ok(rng) = rng {
+            assert_eq!(rng.start(), 4321);
+            assert_eq!(rng.count(), 6);
+            assert_eq!(rng.cap_type(), CapType::Mapping);
+        }
+
+        // Test and empty range.
+        let rng = CapRngDesc::new(CapType::Object, 4321, 0);
+        assert!(rng.is_ok());
+        if let Ok(rng) = rng {
+            assert_eq!(rng.count(), 0);
+        }
+
+        // Test a range of maximum size.
+        let rng = CapRngDesc::new(CapType::Object, 0, CapSel::MAX >> 1);
+        assert!(rng.is_ok());
+        if let Ok(rng) = rng {
+            assert_eq!(rng.start(), 0);
+            assert_eq!(rng.count(), CapSel::MAX >> 1);
+            assert_eq!(rng.cap_type(), CapType::Object);
+        }
+
+        // Test a range at the end.
+        let rng = CapRngDesc::new(CapType::Object, CapSel::MAX, 1);
+        assert!(rng.is_ok());
+        if let Ok(rng) = rng {
+            assert_eq!(rng.start(), CapSel::MAX);
+            assert_eq!(rng.count(), 1);
+            assert_eq!(rng.cap_type(), CapType::Object);
+        }
+
+        // Test capability count.
+        assert_eq!(
+            CapRngDesc::new(CapType::Mapping, 1337, (CapSel::MAX >> 1) + 1)
+                .map(|_| ())
+                .map_err(|e| e.code()),
+            Err(Code::CapCountTooLarge)
+        );
+        assert_eq!(
+            CapRngDesc::new(CapType::Mapping, 0, CapSel::MAX)
+                .map(|_| ())
+                .map_err(|e| e.code()),
+            Err(Code::CapCountTooLarge)
+        );
+
+        // Test overflow.
+        assert_eq!(
+            CapRngDesc::new(CapType::Object, CapSel::MAX, 2)
+                .map(|_| ())
+                .map_err(|e| e.code()),
+            Err(Code::LastCapOverflow)
+        );
+    }
+}

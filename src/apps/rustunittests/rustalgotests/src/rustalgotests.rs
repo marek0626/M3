@@ -22,7 +22,6 @@ use m3::errors::Error;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::{println, wv_run_suite};
 
-mod tcap;
 mod tenvvars;
 mod tfloat;
 mod tserialize;
@@ -33,7 +32,6 @@ pub fn main() -> Result<(), Error> {
     wv_run_suite!(tester, tenvvars::run);
     wv_run_suite!(tester, tfloat::run);
     wv_run_suite!(tester, tserialize::run);
-    wv_run_suite!(tester, tcap::run);
     println!("{}", tester);
     Ok(())
 }
