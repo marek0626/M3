@@ -131,28 +131,30 @@ impl<'de> Deserialize<'de> for Code {
     }
 }
 
-// we only use this implementation in debug mode, because it adds a bit of some overhead, errors
+// We only use this implementation in debug mode, because it adds a bit of some overhead, errors
 // are sometimes used for non-exceptional situations and the backtraces are typically only useful
 // in debug mode anyway.
+//
+// We also disable backtraces with miri as it involves inline assembly.
 
-#[cfg(debug_assertions)]
+#[cfg(all(debug_assertions, not(miri)))]
 use crate::boxed::Box;
-#[cfg(debug_assertions)]
+#[cfg(all(debug_assertions, not(miri)))]
 use crate::mem::VirtAddr;
 
-#[cfg(debug_assertions)]
+#[cfg(all(debug_assertions, not(miri)))]
 const MAX_BT_LEN: usize = 16;
 
 /// The struct that stores information about an occurred error
 #[derive(Clone, Copy)]
-#[cfg(debug_assertions)]
+#[cfg(all(debug_assertions, not(miri)))]
 pub struct ErrorInfo {
     code: Code,
     bt_len: usize,
     bt: [VirtAddr; MAX_BT_LEN],
 }
 
-#[cfg(debug_assertions)]
+#[cfg(all(debug_assertions, not(miri)))]
 impl ErrorInfo {
     /// Creates a new object for given error code
     ///
@@ -174,12 +176,12 @@ impl ErrorInfo {
 
 /// The error struct that is passed around
 #[derive(Clone)]
-#[cfg(debug_assertions)]
+#[cfg(all(debug_assertions, not(miri)))]
 pub struct Error {
     info: Box<ErrorInfo>,
 }
 
-#[cfg(debug_assertions)]
+#[cfg(all(debug_assertions, not(miri)))]
 impl Error {
     /// Creates a new object for given error code
     ///
@@ -211,12 +213,12 @@ impl Error {
 
 // simple and fast implementation for release mode
 
-#[cfg(not(debug_assertions))]
+#[cfg(any(not(debug_assertions), miri))]
 pub struct Error {
     code: Code,
 }
 
-#[cfg(not(debug_assertions))]
+#[cfg(any(not(debug_assertions), miri))]
 impl Error {
     /// Creates a new object for given error code
     ///
