@@ -483,6 +483,17 @@ impl<T> StrongRc<T> {
         }
     }
 
+    /// Invalidates all weak references
+    ///
+    /// Note that weak references that are created afterwards will always be invalid as well.
+    pub fn invalidate_weak(&mut self) {
+        unsafe {
+            let weak = &mut *self.ptr.as_mut().weak_link.as_mut();
+            // invalidate back link to us in WeakRcLink
+            weak.ptr = dangling();
+        }
+    }
+
     #[inline(always)]
     fn inner(&self) -> &RcBox<T> {
         // This unsafety is ok because while this Rc is alive we're guaranteed
@@ -849,5 +860,23 @@ mod tests {
         assert_eq!(weak.can_upgrade(), false);
         assert!(weak.upgrade().is_none());
         drop(weak);
+    }
+
+    #[test]
+    fn invalidate_weaks() {
+        let dropped = Cell::from(false);
+        let mut rc = StrongRc::new(DropMarker::new(&dropped));
+        let weak = rc.clone().downgrade_store();
+        assert_eq!(weak.can_upgrade(), true);
+        rc.invalidate_weak();
+        assert_eq!(weak.can_upgrade(), false);
+        // new weaks are also invalid
+        let new_weak1 = weak.clone();
+        // another invalidate has no effect
+        rc.invalidate_weak();
+        let new_weak2 = rc.clone().downgrade_store();
+        assert_eq!(new_weak1.can_upgrade(), false);
+        assert_eq!(new_weak2.can_upgrade(), false);
+        assert_eq!(dropped.get(), false);
     }
 }
