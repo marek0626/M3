@@ -339,6 +339,21 @@ pub trait Downgradable<T> {
     fn downgrade_asyn(self) -> Self::Weak;
 }
 
+/// A reference that is not weak (strong or temporary)
+pub trait NonWeak<T>: Deref<Target = T> + Upgradable<T> + Downgradable<T> + Clone {
+    /// Gets the number of weak (`WeakRc`) pointers to this allocation
+    fn weak_count(this: &Self) -> usize;
+
+    /// Gets the number of strong (`StrongRc` and `TempRc`) pointers to this allocation
+    fn strong_count(this: &Self) -> usize;
+
+    /// Returns true if the underlying pointers of `this` and `other` are equal
+    fn ptr_eq(this: &Self, other: &Self) -> bool;
+
+    /// Provides a raw pointer to the data
+    fn as_ptr(this: &Self) -> *const T;
+}
+
 /// A weak reference that can be held across async calls
 ///
 /// The `WeakRc` type can only be constructed from an `StrongRc`/`TempRc` and can, in contrast
@@ -468,35 +483,6 @@ impl<T> StrongRc<T> {
         }
     }
 
-    /// Provides a raw pointer to the data
-    #[inline(always)]
-    pub fn as_ptr(this: &Self) -> *const T {
-        let ptr: *mut RcBox<T> = NonNull::as_ptr(this.ptr);
-
-        // SAFETY: This cannot go through Deref::deref or Rc::inner because
-        // this is required to retain raw/mut provenance such that e.g. `get_mut` can
-        // write through the pointer after the Rc is recovered through `from_raw`.
-        unsafe { ptr::addr_of_mut!((*ptr).value) }
-    }
-
-    /// Gets the number of weak (`WeakRc`) pointers to this allocation
-    #[inline(always)]
-    pub fn weak_count(this: &Self) -> usize {
-        this.inner().weak() - 1
-    }
-
-    /// Gets the number of strong (`StrongRc` and `TempRc`) pointers to this allocation
-    #[inline(always)]
-    pub fn strong_count(this: &Self) -> usize {
-        this.inner().strong()
-    }
-
-    /// Returns true if the underlying pointers of `self` and `other` are equal
-    #[inline(always)]
-    pub fn ptr_eq(&self, other: &StrongRc<T>) -> bool {
-        ptr::addr_eq(self.ptr.as_ptr(), other.ptr.as_ptr())
-    }
-
     #[inline(always)]
     fn inner(&self) -> &RcBox<T> {
         // This unsafety is ok because while this Rc is alive we're guaranteed
@@ -596,6 +582,33 @@ impl<T> Deref for StrongRc<T> {
     }
 }
 
+impl<T> NonWeak<T> for StrongRc<T> {
+    #[inline(always)]
+    fn weak_count(this: &Self) -> usize {
+        this.inner().weak() - 1
+    }
+
+    #[inline(always)]
+    fn strong_count(this: &Self) -> usize {
+        this.inner().strong()
+    }
+
+    #[inline(always)]
+    fn ptr_eq(this: &Self, other: &Self) -> bool {
+        ptr::addr_eq(this.ptr.as_ptr(), other.ptr.as_ptr())
+    }
+
+    #[inline(always)]
+    fn as_ptr(this: &Self) -> *const T {
+        let ptr: *mut RcBox<T> = NonNull::as_ptr(this.ptr);
+
+        // SAFETY: This cannot go through Deref::deref or Rc::inner because
+        // this is required to retain raw/mut provenance such that e.g. `get_mut` can
+        // write through the pointer after the Rc is recovered through `from_raw`.
+        unsafe { ptr::addr_of_mut!((*ptr).value) }
+    }
+}
+
 /// A temporary reference for in-between async calls
 ///
 /// An `TempRc` provides access to an underlying object of type `T`, but holding an `TempRc` does
@@ -613,30 +626,6 @@ impl<T> TempRc<T> {
     pub fn new(value: StrongRc<T>) -> Self {
         inc_temp_refs();
         Self { inner: value }
-    }
-
-    /// Provides a raw pointer to the data
-    #[inline(always)]
-    pub fn as_ptr(this: &Self) -> *const T {
-        StrongRc::as_ptr(&this.inner)
-    }
-
-    /// Returns true if the underlying pointers of `self` and `other` are equal
-    #[inline(always)]
-    pub fn ptr_eq(this: &Self, other: &Self) -> bool {
-        this.inner.ptr_eq(&other.inner)
-    }
-
-    /// Gets the number of weak (`WeakRc`) pointers to this allocation
-    #[inline(always)]
-    pub fn weak_count(this: &Self) -> usize {
-        StrongRc::weak_count(&this.inner)
-    }
-
-    /// Gets the number of strong (`StrongRc` and `TempRc`) pointers to this allocation
-    #[inline(always)]
-    pub fn strong_count(this: &Self) -> usize {
-        StrongRc::strong_count(&this.inner)
     }
 
     /// Turns this `TempRc` into a `StrongRc`
@@ -686,6 +675,18 @@ impl<T> Downgradable<T> for TempRc<T> {
     }
 }
 
+impl<T> Upgradable<T> for TempRc<T> {
+    type Strong = TempRc<T>;
+
+    fn can_upgrade(&self) -> bool {
+        true
+    }
+
+    fn upgrade(&self) -> Option<Self::Strong> {
+        Some(self.clone())
+    }
+}
+
 impl<T> Clone for TempRc<T> {
     #[inline(always)]
     fn clone(&self) -> Self {
@@ -718,6 +719,28 @@ impl<T> Deref for TempRc<T> {
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
         self.inner.deref()
+    }
+}
+
+impl<T> NonWeak<T> for TempRc<T> {
+    #[inline(always)]
+    fn weak_count(this: &Self) -> usize {
+        StrongRc::weak_count(&this.inner)
+    }
+
+    /// Gets the number of strong (`StrongRc` and `TempRc`) pointers to this allocation
+    fn strong_count(this: &Self) -> usize {
+        StrongRc::strong_count(&this.inner)
+    }
+
+    #[inline(always)]
+    fn ptr_eq(this: &Self, other: &Self) -> bool {
+        StrongRc::ptr_eq(&this.inner, &other.inner)
+    }
+
+    #[inline(always)]
+    fn as_ptr(this: &Self) -> *const T {
+        StrongRc::as_ptr(&this.inner)
     }
 }
 

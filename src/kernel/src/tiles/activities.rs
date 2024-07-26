@@ -28,7 +28,7 @@ use bitflags::bitflags;
 use core::cell::Ref;
 use core::fmt;
 
-use thread::{Downgradable, StrongRc, TempRc, Upgradable, WeakRc};
+use thread::{Downgradable, NonWeak, StrongRc, TempRc, Upgradable, WeakRc};
 
 use crate::cap::{
     CapTable, EPObject, IntoKObject, InvalidateType, KMemObject, KObject, TileObject,

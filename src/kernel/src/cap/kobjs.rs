@@ -25,7 +25,8 @@ use base::tcu::{ActId, EpId, Label, TileId};
 use base::vec::Vec;
 use base::{build_vmsg, verror};
 use base::{env, tcu};
-use thread::{Downgradable, StrongRc, TempRc, Upgradable, WeakRc};
+
+use thread::{Downgradable, NonWeak, StrongRc, TempRc, Upgradable, WeakRc};
 
 use core::fmt;
 use core::ops::Deref;

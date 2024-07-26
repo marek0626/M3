@@ -26,7 +26,7 @@ use core::cmp;
 use core::fmt;
 use core::ptr::NonNull;
 
-use thread::{StrongRc, TempRc};
+use thread::{NonWeak, StrongRc, TempRc};
 
 use crate::cap::{EPObject, GateEP, KMemObject, KObject, MapObject, TileObject};
 use crate::ktcu;

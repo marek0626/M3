@@ -21,7 +21,7 @@ use base::mem::{GlobOff, MsgBuf, PhysAddr, PhysAddrRaw};
 use base::tcu;
 use base::{build_vmsg, verror};
 
-use thread::{Downgradable, TempRc, Upgradable};
+use thread::{Downgradable, NonWeak, TempRc, Upgradable};
 
 use crate::cap::{
     Capability, EPCategory, EPObject, GateObject, InvalidateType, KMemObject, MGateObject,
