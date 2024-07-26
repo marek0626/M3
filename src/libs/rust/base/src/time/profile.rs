@@ -107,22 +107,22 @@ impl<T: Duration> fmt::Display for Results<T> {
 ///
 /// Simple usage:
 ///
-/// ```
-/// use base::profile;
+/// ```no_run
+/// use base::time::{CycleInstant, Profiler};
 ///
-/// let mut prof = profile::Profiler::default();
-/// println!("{}", prof.run::<CycleInstant, _>(|| /* my benchmark */));
+/// let mut prof = Profiler::default();
+/// println!("{}", prof.run::<CycleInstant, _>(|| { /* my benchmark */ }));
 /// ```
 ///
 /// Advanced usage:
 ///
-/// ```
-/// use base::profile;
+/// ```no_run
+/// use base::time::{CycleInstant, Runner, Profiler};
 ///
 /// #[derive(Default)]
 /// struct Tester();
 ///
-/// impl profile::Runner for Tester {
+/// impl Runner for Tester {
 ///     fn run(&mut self) {
 ///         // my benchmark
 ///     }
@@ -131,7 +131,7 @@ impl<T: Duration> fmt::Display for Results<T> {
 ///     }
 /// }
 ///
-/// let mut prof = profile::Profiler::default().repeats(10).warmup(2);
+/// let mut prof = Profiler::default().repeats(10).warmup(2);
 /// println!("{}", prof.runner::<CycleInstant, _>(&mut Tester::default()));
 /// ```
 pub struct Profiler {

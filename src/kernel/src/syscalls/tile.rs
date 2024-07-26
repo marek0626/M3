@@ -20,7 +20,7 @@ use base::quota::Quota;
 use base::tcu;
 use base::{build_vmsg, verror};
 
-use thread::AsyncRc;
+use thread::{Downgradable, TempRc, Upgradable};
 
 use crate::cap::{Capability, MGateObject, TileObject};
 use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
@@ -28,20 +28,20 @@ use crate::tiles::{tilemng, Activity, TileMux, INVAL_ID};
 use crate::{ktcu, platform};
 
 #[inline(never)]
-pub fn tile_quota_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_quota_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::TileQuota = get_request(&msg)?;
     drop(msg);
 
     sysc_log!(act, "tile_quota(tile={})", r.tile);
 
-    let tile: AsyncRc<TileObject> = act.get_kobj(r.tile)?;
+    let tile: TempRc<TileObject> = act.get_kobj(r.tile)?;
 
-    let tile_weak = tile.clone().downgrade();
+    let tile_weak = tile.clone().downgrade_asyn();
     let tile_id = tile.tile();
     let time_quota_id = tile.time_quota_id();
     let pt_quota_id = tile.pt_quota_id();
-    let act_weak = act.downgrade();
+    let act_weak = act.downgrade_asyn();
     drop(tile);
 
     let (time, pts) = if platform::tile_desc(tile_id).supports_tilemux() {
@@ -88,7 +88,7 @@ pub fn tile_quota_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn tile_set_quota_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_set_quota_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::TileSetQuota = get_request(&msg)?;
     drop(msg);
@@ -101,7 +101,7 @@ pub fn tile_set_quota_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> 
         r.pts
     );
 
-    let tile: AsyncRc<TileObject> = act.get_kobj(r.tile)?;
+    let tile: TempRc<TileObject> = act.get_kobj(r.tile)?;
 
     if tile.derived() {
         return Err(verror!(
@@ -118,7 +118,7 @@ pub fn tile_set_quota_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> 
 
     let tilemux = tilemng::tilemux(tile.tile());
     let quota_id = tile.time_quota_id();
-    let act_weak = act.downgrade();
+    let act_weak = act.downgrade_asyn();
     drop(tile);
 
     // the root tile object has always the same id for the time quota and the pts quota
@@ -131,7 +131,7 @@ pub fn tile_set_quota_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> 
 }
 
 #[inline(never)]
-pub fn tile_set_pmp(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_set_pmp(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::TileSetPMP = get_request(&msg)?;
     drop(msg);
@@ -146,7 +146,7 @@ pub fn tile_set_pmp(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     );
 
     let act_caps = act.obj_caps().borrow();
-    let tile: AsyncRc<TileObject> = act_caps.get_kobj(r.tile)?;
+    let tile: TempRc<TileObject> = act_caps.get_kobj(r.tile)?;
     if tile.derived() {
         return Err(verror!(
             Code::NoPerm,
@@ -170,7 +170,7 @@ pub fn tile_set_pmp(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 
     let mut tilemux = tilemng::tilemux(tile.tile());
 
-    let mgate: Option<AsyncRc<MGateObject>> = if r.mgate != kif::INVALID_SEL {
+    let mgate: Option<TempRc<MGateObject>> = if r.mgate != kif::INVALID_SEL {
         Some(act_caps.get_kobj(r.mgate)?)
     }
     else {
@@ -189,7 +189,7 @@ pub fn tile_set_pmp(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn tile_reset_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_reset_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::TileReset = get_request(&msg)?;
     drop(msg);
@@ -203,7 +203,7 @@ pub fn tile_reset_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     );
 
     let act_caps = act.obj_caps().borrow();
-    let tile: AsyncRc<TileObject> = act_caps.get_kobj(r.tile)?;
+    let tile: TempRc<TileObject> = act_caps.get_kobj(r.tile)?;
     if tile.derived() {
         return Err(verror!(
             Code::NoPerm,
@@ -224,15 +224,11 @@ pub fn tile_reset_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
             ));
         }
 
-        Some(
-            act_caps
-                .get_kobj::<AsyncRc<MGateObject>>(r.mux_mem)?
-                .clone(),
-        )
+        Some(act_caps.get_kobj::<TempRc<MGateObject>>(r.mux_mem)?.clone())
     };
     drop(act_caps);
 
-    let act_weak = act.downgrade();
+    let act_weak = act.downgrade_asyn();
 
     let tile_id = tile.tile();
     TileMux::reset_async(tile_id, Some(tile), mux_mem, r.ep_count, false)?;
@@ -244,7 +240,7 @@ pub fn tile_reset_async(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn tile_info(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_info(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::TileInfo = get_request(&msg)?;
     drop(msg);
@@ -252,7 +248,7 @@ pub fn tile_info(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     sysc_log!(act, "tile_info(tile={})", r.tile);
 
     let act_caps = act.obj_caps().borrow();
-    let tile: AsyncRc<TileObject> = act_caps.get_kobj(r.tile)?;
+    let tile: TempRc<TileObject> = act_caps.get_kobj(r.tile)?;
 
     let tilemux = tilemng::tilemux(tile.tile());
     let ty = tilemux.mux_type();
@@ -270,7 +266,7 @@ pub fn tile_info(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn tile_mem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_mem(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::TileMem = get_request(&msg)?;
     drop(msg);
@@ -278,7 +274,7 @@ pub fn tile_mem(act: AsyncRc<Activity>) -> Result<(), VerboseError> {
     sysc_log!(act, "tile_mem(dst={}, tile={})", r.dst, r.tile);
 
     let mut act_caps = act.obj_caps().borrow_mut();
-    let tile: AsyncRc<TileObject> = act_caps.get_kobj(r.tile)?;
+    let tile: TempRc<TileObject> = act_caps.get_kobj(r.tile)?;
     if tile.derived() {
         return Err(verror!(
             Code::NoPerm,

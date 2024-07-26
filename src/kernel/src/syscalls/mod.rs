@@ -22,7 +22,7 @@ use base::serialize::{Deserialize, M3Deserializer};
 use base::tcu::{self, OwnedMessage};
 use base::{build_vmsg, verror};
 
-use thread::{AsyncRc, AsyncWeak};
+use thread::{Downgradable, TempRc, Upgradable, WeakRc};
 
 use crate::tiles::{Activity, ActivityMng};
 
@@ -44,7 +44,7 @@ macro_rules! try_cap_insert {
                 Code::NoSpace => verror!(e.code(), "Insufficient kernel memory quota"),
                 Code::InvArgs => verror!(e.code(), "Selector already in use"),
                 Code::ObjectGone => verror!(e.code(), "Activity is dead"),
-                _ => panic!("unexpected capability insert error code: {:?}", e.code()),
+                _ => panic!("unexpected capability insert error code"),
             })?;
         }
     };
@@ -56,7 +56,7 @@ mod exchange;
 mod misc;
 mod tile;
 
-fn try_upgrade_kobj<T>(weak: AsyncWeak<T>, sel: CapSel) -> Result<AsyncRc<T>, VerboseError> {
+fn try_upgrade_kobj<T>(weak: WeakRc<T>, sel: CapSel) -> Result<TempRc<T>, VerboseError> {
     weak.upgrade().ok_or_else(|| {
         if sel != kif::INVALID_SEL {
             verror!(
@@ -74,18 +74,18 @@ fn try_upgrade_kobj<T>(weak: AsyncWeak<T>, sel: CapSel) -> Result<AsyncRc<T>, Ve
     })
 }
 
-fn send_reply(act: &AsyncRc<Activity>, rep: &mem::MsgBuf) {
+fn send_reply(act: &TempRc<Activity>, rep: &mem::MsgBuf) {
     // Ignore errors as they should not occur with well-behaved applications.
     act.reply_syscall(rep).ok();
 }
 
-fn reply_result(act: &AsyncRc<Activity>, error: Code) {
+fn reply_result(act: &TempRc<Activity>, error: Code) {
     let mut rep_buf = mem::MsgBuf::borrow_def();
     build_vmsg!(rep_buf, kif::DefaultReply { error });
     send_reply(act, &rep_buf);
 }
 
-fn reply_success(act: &AsyncRc<Activity>) {
+fn reply_success(act: &TempRc<Activity>) {
     reply_result(act, Code::Success);
 }
 
@@ -99,7 +99,7 @@ pub fn handle_async(msg: tcu::OwnedMessage) {
     use kif::syscalls::Operation;
 
     let act = ActivityMng::activity(msg.header.label() as tcu::ActId).unwrap();
-    let act_weak = act.clone().downgrade();
+    let act_weak = act.clone().downgrade_asyn();
     let opcode = msg.as_words()[0];
     act.set_syscall(msg);
 

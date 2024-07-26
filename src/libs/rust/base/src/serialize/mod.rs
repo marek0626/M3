@@ -86,3 +86,163 @@ pub unsafe fn str_slice_from(s: &[u64], len: usize) -> &'static str {
     let slice = core::slice::from_raw_parts(s.as_ptr() as *const u8, len);
     core::str::from_utf8(slice).unwrap()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::vec;
+
+    #[test]
+    fn basics() {
+        let mut vec = vec![];
+        let mut ser = M3Serializer::new(VecSink::new(&mut vec));
+        ser.push(1u8);
+        ser.push(2i8);
+        ser.push(3u16);
+        ser.push(4i16);
+        ser.push(5u32);
+        ser.push(6i32);
+        ser.push(7u64);
+        ser.push(8i64);
+        ser.push(9.5f32);
+        ser.push(10.8f64);
+        ser.push('a');
+        ser.push(true);
+        ser.push(());
+
+        let mut de = M3Deserializer::new(&vec);
+        assert_eq!(de.pop::<u8>(), Ok(1u8));
+        assert_eq!(de.pop::<i8>(), Ok(2i8));
+        assert_eq!(de.pop::<u16>(), Ok(3u16));
+        assert_eq!(de.pop::<i16>(), Ok(4i16));
+        assert_eq!(de.pop::<u32>(), Ok(5u32));
+        assert_eq!(de.pop::<i32>(), Ok(6i32));
+        assert_eq!(de.pop::<u64>(), Ok(7u64));
+        assert_eq!(de.pop::<i64>(), Ok(8i64));
+        assert_eq!(de.pop::<f32>(), Ok(9.5f32));
+        assert_eq!(de.pop::<f64>(), Ok(10.8f64));
+        assert_eq!(de.pop::<char>(), Ok('a'));
+        assert_eq!(de.pop::<bool>(), Ok(true));
+        assert_eq!(de.pop::<()>(), Ok(()));
+    }
+
+    #[test]
+    fn strings() {
+        let mut vec = vec![];
+        let mut ser = M3Serializer::new(VecSink::new(&mut vec));
+        ser.push("foo");
+        ser.push(String::from("bar"));
+
+        let mut de = M3Deserializer::new(&vec);
+        assert_eq!(de.pop::<&str>(), Ok("foo"));
+        assert_eq!(de.pop::<String>(), Ok(String::from("bar")));
+    }
+
+    #[test]
+    fn sequences() {
+        let mut vec = vec![];
+        let mut ser = M3Serializer::new(VecSink::new(&mut vec));
+        ser.push((1, 2, 3));
+        ser.push(vec![4, 5, 6]);
+
+        let mut de = M3Deserializer::new(&vec);
+        assert_eq!(de.pop::<(_, _, _)>(), Ok((1, 2, 3)));
+        assert_eq!(de.pop::<Vec<_>>(), Ok(vec![4, 5, 6]));
+    }
+
+    #[test]
+    fn structs() {
+        #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
+        struct Foo {
+            a: u32,
+            b: bool,
+            c: String,
+        }
+
+        #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
+        struct FooUnit;
+
+        #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
+        struct FooTupleStruct(u32, bool, u8);
+
+        let mut vec = vec![];
+        let mut ser = M3Serializer::new(VecSink::new(&mut vec));
+        ser.push(Foo {
+            a: 1,
+            b: true,
+            c: String::from("test"),
+        });
+        ser.push(FooUnit);
+        ser.push(FooTupleStruct(4, true, 16));
+
+        let mut de = M3Deserializer::new(&vec);
+        assert_eq!(
+            de.pop::<Foo>(),
+            Ok(Foo {
+                a: 1,
+                b: true,
+                c: String::from("test")
+            })
+        );
+        assert_eq!(de.pop::<FooUnit>(), Ok(FooUnit));
+        assert_eq!(de.pop::<FooTupleStruct>(), Ok(FooTupleStruct(4, true, 16)));
+    }
+
+    #[test]
+    fn enums() {
+        #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
+        enum Bar {
+            A,
+            B,
+        }
+
+        #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
+        enum Zoo {
+            A(u32),
+            B(bool),
+        }
+
+        #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
+        enum ZooTupleVariant {
+            A(u32, u64),
+            B(bool, u8),
+        }
+
+        #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
+        enum Zar {
+            A { a: u8, b: usize },
+            B { c: String },
+        }
+
+        let mut vec = vec![];
+        let mut ser = M3Serializer::new(VecSink::new(&mut vec));
+        ser.push(Bar::A);
+        ser.push(Bar::B);
+        ser.push(Zoo::A(2));
+        ser.push(Zoo::B(false));
+        ser.push(ZooTupleVariant::A(0, 10));
+        ser.push(ZooTupleVariant::B(true, 255));
+        ser.push(Zar::A { a: 4, b: 6 });
+        ser.push(Zar::B {
+            c: String::from("zar"),
+        });
+
+        let mut de = M3Deserializer::new(&vec);
+        assert_eq!(de.pop::<Bar>(), Ok(Bar::A));
+        assert_eq!(de.pop::<Bar>(), Ok(Bar::B));
+        assert_eq!(de.pop::<Zoo>(), Ok(Zoo::A(2)));
+        assert_eq!(de.pop::<Zoo>(), Ok(Zoo::B(false)));
+        assert_eq!(de.pop::<ZooTupleVariant>(), Ok(ZooTupleVariant::A(0, 10)));
+        assert_eq!(
+            de.pop::<ZooTupleVariant>(),
+            Ok(ZooTupleVariant::B(true, 255))
+        );
+        assert_eq!(de.pop::<Zar>(), Ok(Zar::A { a: 4, b: 6 }));
+        assert_eq!(
+            de.pop::<Zar>(),
+            Ok(Zar::B {
+                c: String::from("zar")
+            })
+        );
+    }
+}

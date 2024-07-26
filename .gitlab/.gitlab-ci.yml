@@ -58,7 +58,16 @@ check:
         '
   resource_group: pod
 
-test:
+test-host:
+  stage: test
+  rules:
+    - if: '$CI_MERGE_REQUEST_LABELS !~ /:no-ci:|:no-ci-tests:/'
+  script:
+    - kubectl exec -n os -t m3-ci -- sh -c "./bootstrap.sh $CI_COMMIT_SHA"
+    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:. -c ./b test -n'
+  resource_group: pod
+
+test-gem5:
   stage: test
   allow_failure: true
   rules:

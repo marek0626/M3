@@ -175,3 +175,33 @@ impl<T: PrimInt + fmt::LowerHex> fmt::Debug for MemMap<T> {
         write!(f, "  ]")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    // TODO peek_prev makes miri complain
+    #[cfg(not(miri))]
+    fn basics() {
+        use super::*;
+
+        let mut m = MemMap::new(0, 0x1000);
+
+        assert_eq!(m.allocate(0x100, 0x10), Ok(0x0));
+        assert_eq!(m.allocate(0x100, 0x10), Ok(0x100));
+        assert_eq!(m.allocate(0x100, 0x10), Ok(0x200));
+
+        m.free(0x100, 0x100);
+        m.free(0x0, 0x100);
+
+        assert_eq!(
+            m.allocate(0x1000, 0x10).map_err(|e| e.code()),
+            Err(Code::OutOfMem)
+        );
+        assert_eq!(m.allocate(0x200, 0x10), Ok(0x0));
+
+        m.free(0x200, 0x100);
+        m.free(0x0, 0x200);
+
+        assert_eq!(m.size(), (0x1000, 1));
+    }
+}

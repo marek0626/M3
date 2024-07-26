@@ -22,16 +22,16 @@ use base::rc::Rc;
 use base::tcu;
 use core::fmt;
 
-use thread::{AsyncRc, AsyncWeak};
+use thread::{Downgradable, TempRc, Upgradable, WeakRc};
 
 use crate::cap::RGateObject;
 use crate::com::{QueueId, SendQueue};
 use crate::tiles::Activity;
 
 pub struct Service {
-    act: AsyncWeak<Activity>,
+    act: WeakRc<Activity>,
     name: String,
-    rgate: AsyncWeak<RGateObject>,
+    rgate: WeakRc<RGateObject>,
     queue: RefCell<Box<SendQueue>>,
     // note that we deliberately allow just one derive at a time here, because otherwise it's
     // tricky to prevent memory DOS attacks on the kernel: since we cannot force the server to use
@@ -41,21 +41,21 @@ pub struct Service {
     // finish the current derive_srv_req before issuing a new one), the only other way is probably
     // to check specifically for this reply in SendQueue::received_reply and finish it there, which
     // does not seem worth it.
-    cur_derive: RefCell<Option<AsyncWeak<Activity>>>,
+    cur_derive: RefCell<Option<WeakRc<Activity>>>,
 }
 
 impl Service {
-    pub fn new(act: AsyncRc<Activity>, name: String, rgate: AsyncRc<RGateObject>) -> Rc<Self> {
+    pub fn new(act: TempRc<Activity>, name: String, rgate: TempRc<RGateObject>) -> Rc<Self> {
         Rc::new(Service {
             name,
-            rgate: rgate.downgrade(),
+            rgate: rgate.downgrade_store(),
             queue: RefCell::from(SendQueue::new(QueueId::Serv, act.tile_id())),
-            act: act.downgrade(),
+            act: act.downgrade_store(),
             cur_derive: RefCell::from(None),
         })
     }
 
-    pub fn activity(&self) -> AsyncRc<Activity> {
+    pub fn activity(&self) -> TempRc<Activity> {
         self.act.upgrade().unwrap()
     }
 
@@ -63,16 +63,16 @@ impl Service {
         &self.name
     }
 
-    pub fn set_derive_act(&self, act: AsyncRc<Activity>) -> Result<(), Error> {
+    pub fn set_derive_act(&self, act: TempRc<Activity>) -> Result<(), Error> {
         let mut cur_derive = self.cur_derive.borrow_mut();
         if cur_derive.is_some() {
             return Err(Error::new(Code::Exists));
         }
-        *cur_derive = Some(act.downgrade());
+        *cur_derive = Some(act.downgrade_store());
         Ok(())
     }
 
-    pub fn fetch_derive_act(&self) -> Result<AsyncRc<Activity>, Error> {
+    pub fn fetch_derive_act(&self) -> Result<TempRc<Activity>, Error> {
         let act = self
             .cur_derive
             .borrow_mut()

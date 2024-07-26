@@ -24,12 +24,11 @@ use base::kif::{self, TileAttr, TileISA};
 use base::log;
 use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, VirtAddr};
 use base::quota;
-use base::rc::Rc;
 use base::tcu::{self, ActId, EpId, TileId};
 
 use core::cmp;
 
-use thread::{AsyncRc, AsyncWeak};
+use thread::{Downgradable, StrongRc, TempRc, WeakRc};
 
 use crate::cap::{
     EPCategory, EPObject, EPQuota, GateObject, InvalidateType, MGateObject, RGateObject,
@@ -45,25 +44,24 @@ struct TileState {
     // kernel-internal object that is not exposed via capabilities to user space. However, as we
     // need to link MemGate to the EPObject it's activated on for PMP EPs, we need an EPObject.
     // We therefore should never leak this object to the outside.
-    pmp: Vec<Rc<EPObject>>,
+    pmp: Vec<StrongRc<EPObject>>,
     eps_region: Option<mem::Allocation>,
     eps: BitArray,
 }
 
 impl TileState {
-    fn new(tile: &AsyncRc<TileObject>, ep_count: Option<usize>) -> Result<Self, Error> {
+    fn new(tile: &TempRc<TileObject>, ep_count: Option<usize>) -> Result<Self, Error> {
         // create PMP EPObjects for this Tile
         let mut pmp = Vec::new();
         for ep in 0..tcu::PMEM_PROT_EPS as EpId {
             let epobj = EPObject::new(
                 EPCategory::PMP,
-                AsyncWeak::default(),
+                WeakRc::default(),
                 ep,
                 0,
-                tile.clone().downgrade(),
+                tile.clone().downgrade_store(),
             );
-            // safety: this is okay, because these EPObjects are never destructed
-            pmp.push(unsafe { epobj.inner().clone() });
+            pmp.push(epobj);
         }
 
         assert!(platform::tile_desc(tile.tile()).has_internal_eps() == ep_count.is_none());
@@ -157,7 +155,7 @@ pub struct TileMux {
     // need to link MemGate to the EPObject it's activated on for PMP EPs, we need to store
     // EPObjects in TileState and therefore also need a valid TileObject (referenced in EPObject).
     // we therefore should never leak this object to the outside.
-    tile: Rc<TileObject>,
+    tile: StrongRc<TileObject>,
     acts: Vec<ActId>,
     queue: base::boxed::Box<crate::com::SendQueue>,
     state: Option<TileState>,
@@ -177,8 +175,7 @@ impl TileMux {
         );
 
         TileMux {
-            // safety: this is okay, because the TileObject is never destructed
-            tile: unsafe { tile.inner().clone() },
+            tile,
             acts: Vec::new(),
             queue: crate::com::SendQueue::new(crate::com::QueueId::TileMux, tile_id),
             state: None,
@@ -204,7 +201,7 @@ impl TileMux {
         self.acts.retain(|id| *id != act);
     }
 
-    fn init_state(&mut self, tile: &AsyncRc<TileObject>, ep_count: Option<usize>) {
+    fn init_state(&mut self, tile: &TempRc<TileObject>, ep_count: Option<usize>) {
         assert!(self.state.is_none());
         self.state = Some(TileState::new(tile, ep_count).unwrap());
 
@@ -271,8 +268,8 @@ impl TileMux {
 
     pub fn reset_async(
         tile_id: TileId,
-        tile: Option<AsyncRc<TileObject>>,
-        mux_mem: Option<AsyncRc<MGateObject>>,
+        tile: Option<TempRc<TileObject>>,
+        mux_mem: Option<TempRc<MGateObject>>,
         ep_count: Option<usize>,
         root: bool,
     ) -> Result<(), Error> {
@@ -373,7 +370,7 @@ impl TileMux {
         Ok(())
     }
 
-    pub fn new_tile_obj(&self) -> AsyncRc<TileObject> {
+    pub fn new_tile_obj(&self) -> StrongRc<TileObject> {
         TileObject::new(
             self.tile_id(),
             EPQuota::new(self.tile.ep_quota().total()),
@@ -395,16 +392,16 @@ impl TileMux {
         self.state.as_ref().map(|state| state.eps.size())
     }
 
-    fn pmp_ep(&self, ep: EpId) -> Option<AsyncRc<EPObject>> {
+    fn pmp_ep(&self, ep: EpId) -> Option<TempRc<EPObject>> {
         self.state
             .as_ref()
-            .map(|state| AsyncRc::new(state.pmp[ep as usize].clone()))
+            .map(|state| TempRc::new(state.pmp[ep as usize].clone()))
     }
 
     pub fn reconfigure_pmp_ep(
         &mut self,
         ep: tcu::EpId,
-        mg: Option<AsyncRc<MGateObject>>,
+        mg: Option<TempRc<MGateObject>>,
         overwrite: bool,
     ) -> Result<(), Error> {
         let ep_obj = self.pmp_ep(ep).ok_or_else(|| Error::new(Code::InvState))?;
@@ -422,7 +419,7 @@ impl TileMux {
 
             // remember that the MemGate is activated on this EP for the case that the MemGate gets
             // revoked. If so, the EP is automatically invalidated.
-            mg.set_ep(&ep_obj, GateObject::Mem(mg.clone().downgrade()));
+            mg.set_ep(&ep_obj, GateObject::Mem(mg.clone().downgrade_store()));
         }
         Ok(())
     }
@@ -476,12 +473,7 @@ impl TileMux {
         }
     }
 
-    pub fn config_snd_ep(
-        &mut self,
-        ep: EpId,
-        act: ActId,
-        obj: &AsyncRc<SGateObject>,
-    ) -> Result<(), Error> {
+    pub fn config_snd_ep(&mut self, ep: EpId, act: ActId, obj: &SGateObject) -> Result<(), Error> {
         let rgate = obj.rgate().ok_or_else(|| Error::new(Code::ObjectGone))?;
         assert!(rgate.activated());
 
@@ -506,7 +498,7 @@ impl TileMux {
         ep: EpId,
         act: ActId,
         reply_eps: Option<EpId>,
-        obj: &AsyncRc<RGateObject>,
+        obj: &RGateObject,
     ) -> Result<(), Error> {
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {
             let act = self.ep_activity_id(act);
@@ -529,7 +521,7 @@ impl TileMux {
         &mut self,
         ep: EpId,
         act: ActId,
-        obj: &AsyncRc<MGateObject>,
+        obj: &MGateObject,
         tile_id: TileId,
     ) -> Result<(), Error> {
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {

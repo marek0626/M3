@@ -25,7 +25,8 @@ use base::tcu::{ActId, EpId, Label, TileId};
 use base::vec::Vec;
 use base::{build_vmsg, verror};
 use base::{env, tcu};
-use thread::{AsyncRc, AsyncWeak};
+
+use thread::{Downgradable, NonWeak, StrongRc, TempRc, Upgradable, WeakRc};
 
 use core::fmt;
 use core::ops::Deref;
@@ -38,33 +39,33 @@ use crate::tiles::{tilemng, Activity, ActivityMng, TileMux};
 
 #[derive(Clone)]
 pub enum KObject {
-    RGate(Rc<RGateObject>),
-    SGate(Rc<SGateObject>),
-    MGate(Rc<MGateObject>),
-    Map(Rc<MapObject>),
-    Serv(Rc<ServObject>),
-    Sess(Rc<SessObject>),
-    Sem(Rc<SemObject>),
-    Activity(Rc<Activity>),
-    KMem(Rc<KMemObject>),
-    Tile(Rc<TileObject>),
-    EP(Rc<EPObject>),
+    RGate(StrongRc<RGateObject>),
+    SGate(StrongRc<SGateObject>),
+    MGate(StrongRc<MGateObject>),
+    Map(StrongRc<MapObject>),
+    Serv(StrongRc<ServObject>),
+    Sess(StrongRc<SessObject>),
+    Sem(StrongRc<SemObject>),
+    Activity(StrongRc<Activity>),
+    KMem(StrongRc<KMemObject>),
+    Tile(StrongRc<TileObject>),
+    EP(StrongRc<EPObject>),
 }
 
 impl KObject {
     pub fn ref_count(&self) -> usize {
         match self {
-            KObject::SGate(o) => Rc::strong_count(o),
-            KObject::RGate(o) => Rc::strong_count(o),
-            KObject::MGate(o) => Rc::strong_count(o),
-            KObject::Map(o) => Rc::strong_count(o),
-            KObject::Serv(o) => Rc::strong_count(o),
-            KObject::Sess(o) => Rc::strong_count(o),
-            KObject::Activity(o) => Rc::strong_count(o),
-            KObject::Sem(o) => Rc::strong_count(o),
-            KObject::KMem(o) => Rc::strong_count(o),
-            KObject::Tile(o) => Rc::strong_count(o),
-            KObject::EP(o) => Rc::strong_count(o),
+            KObject::SGate(o) => StrongRc::strong_count(o),
+            KObject::RGate(o) => StrongRc::strong_count(o),
+            KObject::MGate(o) => StrongRc::strong_count(o),
+            KObject::Map(o) => StrongRc::strong_count(o),
+            KObject::Serv(o) => StrongRc::strong_count(o),
+            KObject::Sess(o) => StrongRc::strong_count(o),
+            KObject::Activity(o) => StrongRc::strong_count(o),
+            KObject::Sem(o) => StrongRc::strong_count(o),
+            KObject::KMem(o) => StrongRc::strong_count(o),
+            KObject::Tile(o) => StrongRc::strong_count(o),
+            KObject::EP(o) => StrongRc::strong_count(o),
         }
     }
 }
@@ -76,12 +77,12 @@ pub trait IntoKObject<T> {
 #[macro_export]
 macro_rules! impl_from_kobj {
     ($ty:ty, $name:ident) => {
-        impl TryFrom<&KObject> for AsyncRc<$ty> {
+        impl TryFrom<&KObject> for TempRc<$ty> {
             type Error = base::errors::VerboseError;
 
             fn try_from(kobj: &KObject) -> Result<Self, Self::Error> {
                 match kobj {
-                    KObject::$name(s) => Ok(thread::AsyncRc::new(s.clone())),
+                    KObject::$name(s) => Ok(thread::TempRc::new(s.clone())),
                     _ => Err(base::verror!(
                         base::errors::Code::InvArgs,
                         concat!("Expected ", stringify!($name)),
@@ -90,9 +91,9 @@ macro_rules! impl_from_kobj {
             }
         }
 
-        impl IntoKObject<$ty> for AsyncRc<$ty> {
+        impl IntoKObject<$ty> for StrongRc<$ty> {
             unsafe fn into_kobj(self) -> KObject {
-                KObject::$name(self.inner().clone())
+                KObject::$name(self)
             }
         }
     };
@@ -137,13 +138,13 @@ impl KObject {
     }
 }
 
-fn fmt_kobj<T: fmt::Debug>(f: &mut fmt::Formatter<'_>, o: &Rc<T>) -> fmt::Result {
+fn fmt_kobj<T: fmt::Debug>(f: &mut fmt::Formatter<'_>, o: &StrongRc<T>) -> fmt::Result {
     write!(
         f,
         "{:?}; @{:#x}; refs={}",
         o,
-        Rc::as_ptr(o) as usize,
-        Rc::strong_count(o),
+        StrongRc::as_ptr(o) as usize,
+        StrongRc::strong_count(o),
     )
 }
 
@@ -166,33 +167,33 @@ impl fmt::Debug for KObject {
 }
 
 pub struct GateEP {
-    ep: AsyncWeak<EPObject>,
+    ep: WeakRc<EPObject>,
 }
 
 impl GateEP {
     fn new() -> Self {
         Self {
-            ep: AsyncWeak::default(),
+            ep: WeakRc::default(),
         }
     }
 
-    pub fn get_ep(&self) -> Option<AsyncRc<EPObject>> {
+    pub fn get_ep(&self) -> Option<TempRc<EPObject>> {
         self.ep.upgrade()
     }
 
-    pub fn set_ep(&mut self, o: AsyncRc<EPObject>) {
-        self.ep = o.downgrade();
+    pub fn set_ep(&mut self, o: TempRc<EPObject>) {
+        self.ep = o.downgrade_store();
     }
 
     pub fn remove_ep(&mut self) {
-        self.ep = AsyncWeak::default()
+        self.ep = WeakRc::default()
     }
 }
 
 pub enum GateObject {
-    Recv(AsyncWeak<RGateObject>),
-    Send(AsyncWeak<SGateObject>),
-    Mem(AsyncWeak<MGateObject>),
+    Recv(WeakRc<RGateObject>),
+    Send(WeakRc<SGateObject>),
+    Mem(WeakRc<MGateObject>),
 }
 
 pub struct BaseGate {
@@ -200,7 +201,7 @@ pub struct BaseGate {
 }
 
 impl BaseGate {
-    pub fn set_ep(&self, ep: &AsyncRc<EPObject>, gobj: GateObject) {
+    pub fn set_ep(&self, ep: &TempRc<EPObject>, gobj: GateObject) {
         self.gep.borrow_mut().set_ep(ep.clone());
         ep.set_gate(gobj);
     }
@@ -232,15 +233,15 @@ pub struct RGateObject {
 }
 
 impl RGateObject {
-    pub fn new(order: u32, msg_order: u32, serial: bool) -> AsyncRc<Self> {
-        AsyncRc::new(Rc::new(Self {
+    pub fn new(order: u32, msg_order: u32, serial: bool) -> StrongRc<Self> {
+        StrongRc::new(Self {
             base: BaseGate::default(),
             loc: Cell::from(None),
             addr: Cell::from(PhysAddr::default()),
             order,
             msg_order,
             serial,
-        }))
+        })
     }
 
     pub fn location(&self) -> Option<(TileId, EpId)> {
@@ -325,22 +326,22 @@ impl fmt::Debug for RGateObject {
 
 pub struct SGateObject {
     base: BaseGate,
-    rgate: AsyncWeak<RGateObject>,
+    rgate: WeakRc<RGateObject>,
     label: Label,
     credits: u32,
 }
 
 impl SGateObject {
-    pub fn new(rgate: AsyncWeak<RGateObject>, label: Label, credits: u32) -> AsyncRc<Self> {
-        AsyncRc::new(Rc::new(Self {
+    pub fn new(rgate: WeakRc<RGateObject>, label: Label, credits: u32) -> StrongRc<Self> {
+        StrongRc::new(Self {
             base: BaseGate::default(),
             rgate,
             label,
             credits,
-        }))
+        })
     }
 
-    pub fn rgate(&self) -> Option<AsyncRc<RGateObject>> {
+    pub fn rgate(&self) -> Option<TempRc<RGateObject>> {
         self.rgate.upgrade()
     }
 
@@ -395,13 +396,13 @@ pub struct MGateObject {
 }
 
 impl MGateObject {
-    pub fn new(mem: mem::Allocation, perms: kif::Perm, derived: bool) -> AsyncRc<Self> {
-        AsyncRc::new(Rc::new(Self {
+    pub fn new(mem: mem::Allocation, perms: kif::Perm, derived: bool) -> StrongRc<Self> {
+        StrongRc::new(Self {
             base: BaseGate::default(),
             mem,
             perms,
             derived,
-        }))
+        })
     }
 
     pub fn tile_id(&self) -> TileId {
@@ -467,19 +468,19 @@ pub struct ServObject {
 }
 
 impl ServObject {
-    pub fn new(serv: Rc<Service>, owner: bool, creator: usize) -> AsyncRc<Self> {
-        AsyncRc::new(Rc::new(Self {
+    pub fn new(serv: Rc<Service>, owner: bool, creator: usize) -> StrongRc<Self> {
+        StrongRc::new(Self {
             serv,
             owner,
             creator,
-        }))
+        })
     }
 
     pub fn name(&self) -> &str {
         self.serv.name()
     }
 
-    pub fn server_act(&self) -> AsyncRc<Activity> {
+    pub fn server_act(&self) -> TempRc<Activity> {
         self.serv.activity()
     }
 
@@ -487,15 +488,15 @@ impl ServObject {
         self.creator
     }
 
-    pub fn set_derive_act(&self, act: AsyncRc<Activity>) -> Result<(), Error> {
+    pub fn set_derive_act(&self, act: TempRc<Activity>) -> Result<(), Error> {
         self.serv.set_derive_act(act)
     }
 
-    pub fn fetch_derive_act(&self) -> Result<AsyncRc<Activity>, Error> {
+    pub fn fetch_derive_act(&self) -> Result<TempRc<Activity>, Error> {
         self.serv.fetch_derive_act()
     }
 
-    pub fn derive(&self, creator: usize) -> AsyncRc<Self> {
+    pub fn derive(&self, creator: usize) -> StrongRc<Self> {
         Self::new(self.serv.clone(), false, creator)
     }
 
@@ -504,7 +505,7 @@ impl ServObject {
     }
 
     pub fn send_receive_async(
-        srv: AsyncRc<Self>,
+        srv: TempRc<Self>,
         lbl: Label,
         msg: MsgBufRef<'_>,
     ) -> Result<&'static tcu::Message, Error> {
@@ -533,7 +534,7 @@ impl fmt::Debug for ServObject {
 }
 
 pub struct SessObject {
-    srv: AsyncWeak<ServObject>,
+    srv: WeakRc<ServObject>,
     creator: usize,
     ident: u64,
     auto_close: bool,
@@ -541,20 +542,20 @@ pub struct SessObject {
 
 impl SessObject {
     pub fn new(
-        srv: AsyncWeak<ServObject>,
+        srv: WeakRc<ServObject>,
         creator: usize,
         ident: u64,
         auto_close: bool,
-    ) -> AsyncRc<Self> {
-        AsyncRc::new(Rc::new(Self {
+    ) -> StrongRc<Self> {
+        StrongRc::new(Self {
             srv,
             creator,
             ident,
             auto_close,
-        }))
+        })
     }
 
-    pub fn service(&self) -> Option<AsyncRc<ServObject>> {
+    pub fn service(&self) -> Option<TempRc<ServObject>> {
         self.srv.upgrade()
     }
 
@@ -620,15 +621,15 @@ pub struct SemObject {
 }
 
 impl SemObject {
-    pub fn new(counter: u32) -> AsyncRc<Self> {
-        AsyncRc::new(Rc::new(Self {
+    pub fn new(counter: u32) -> StrongRc<Self> {
+        StrongRc::new(Self {
             counter: Cell::from(counter),
             waiters: Cell::from(0),
-        }))
+        })
     }
 
-    pub fn down_async(s: AsyncRc<Self>) -> Result<(), Error> {
-        let sem_weak = s.downgrade();
+    pub fn down_async(s: TempRc<Self>) -> Result<(), Error> {
+        let sem_weak = s.downgrade_asyn();
         loop {
             let sem = sem_weak
                 .upgrade()
@@ -640,7 +641,7 @@ impl SemObject {
 
             sem.waiters.set(sem.waiters.get() + 1);
             let event = sem.get_event();
-            let tmp_weak = sem.downgrade();
+            let tmp_weak = sem.downgrade_asyn();
 
             thread::wait_for_async(event);
 
@@ -731,15 +732,15 @@ impl TileObject {
         time_quota: QuotaId,
         pt_quota: QuotaId,
         derived: bool,
-    ) -> AsyncRc<Self> {
-        let res = AsyncRc::new(Rc::new(Self {
+    ) -> StrongRc<Self> {
+        let res = StrongRc::new(Self {
             tile,
             acts: RefCell::from(Vec::new()),
             ep_quota: ep_quota.clone(),
             time_quota,
             pt_quota,
             derived,
-        }));
+        });
         log!(
             LogFlags::KernTiles,
             "Tile[{}, {:#x}]: {} new TileObject with EPs={}, time={}, pts={}",
@@ -754,11 +755,11 @@ impl TileObject {
     }
 
     pub fn derive_async(
-        tile: AsyncRc<Self>,
+        tile: TempRc<Self>,
         eps: Option<usize>,
         time: Option<u64>,
         pts: Option<usize>,
-    ) -> Result<AsyncRc<Self>, VerboseError> {
+    ) -> Result<StrongRc<Self>, VerboseError> {
         // only allocate it from the tile here, but don't keep an Rc to the EPQuota
         if let Some(num) = eps {
             if !tile.has_quota(num) {
@@ -772,7 +773,7 @@ impl TileObject {
             let tilemux = tilemng::tilemux(tile_id);
             let time_quota_id = tile.time_quota_id();
             let pt_quota_id = tile.pt_quota_id();
-            let tile_weak = tile.downgrade();
+            let tile_weak = tile.downgrade_asyn();
 
             let res = TileMux::derive_quota_async(tilemux, time_quota_id, pt_quota_id, time, pts);
 
@@ -912,8 +913,8 @@ impl TileObject {
         self.ep_quota.left.set(total_eps);
     }
 
-    pub fn revoke_async(&self, parent: AsyncRc<TileObject>, revoker: ActId) {
-        let parent_weak = parent.downgrade();
+    pub fn revoke_async(&self, parent: TempRc<TileObject>, revoker: ActId) {
+        let parent_weak = parent.downgrade_asyn();
         // first revoke all activities that are using this tile
         loop {
             let res = self.acts.borrow_mut().pop();
@@ -921,12 +922,11 @@ impl TileObject {
                 Some((aid, sel)) => {
                     if let Some(act) = ActivityMng::activity(aid) {
                         // TODO that's not okay
-                        let act_ref = unsafe { act.inner().clone() };
-                        drop(act);
+                        let act_rc = unsafe { TempRc::into_strong_unchecked(act) };
                         // note that we deliberately revoke the activity from its parent to make it
                         // behave as if the activity (the original, owned by the parent) was
                         // derived from the tile object.
-                        act_ref.revoke_async(
+                        act_rc.revoke_async(
                             CapRngDesc::new_single(CapType::Object, sel),
                             true,
                             revoker,
@@ -960,7 +960,7 @@ impl TileObject {
         // our parent to avoid that someone can already spent the EPQuota for something new.
         let parent = if time.is_some() || pts.is_some() {
             let tile_id = self.tile();
-            let parent_weak = parent.downgrade();
+            let parent_weak = parent.downgrade_asyn();
 
             TileMux::remove_quotas_async(tilemng::tilemux(tile_id), time, pts).ok();
 
@@ -1021,25 +1021,25 @@ pub enum InvalidateType {
 pub struct EPObject {
     cat: EPCategory,
     gate: RefCell<Option<GateObject>>,
-    act: AsyncWeak<Activity>,
+    act: WeakRc<Activity>,
     ep: EpId,
     replies: usize,
     // keep a separate copy of the TileId, because this does never change and if we have a valid
     // reference to an EPObject, the TileObject is always valid as well.
     tile_id: TileId,
-    tile: AsyncWeak<TileObject>,
+    tile: WeakRc<TileObject>,
 }
 
 impl EPObject {
     pub fn new(
         cat: EPCategory,
-        act: AsyncWeak<Activity>,
+        act: WeakRc<Activity>,
         ep: EpId,
         replies: usize,
-        tile: AsyncWeak<TileObject>,
-    ) -> AsyncRc<Self> {
+        tile: WeakRc<TileObject>,
+    ) -> StrongRc<Self> {
         let maybe_act = act.upgrade();
-        let ep = AsyncRc::new(Rc::new(Self {
+        let ep = StrongRc::new(Self {
             cat,
             gate: RefCell::from(None),
             act,
@@ -1047,7 +1047,7 @@ impl EPObject {
             replies,
             tile_id: tile.upgrade().unwrap().tile(),
             tile,
-        }));
+        });
         if let Some(v) = maybe_act {
             v.add_ep(ep.clone());
         }
@@ -1058,7 +1058,7 @@ impl EPObject {
         self.tile_id
     }
 
-    pub fn activity(&self) -> Option<AsyncRc<Activity>> {
+    pub fn activity(&self) -> Option<TempRc<Activity>> {
         self.act.upgrade()
     }
 
@@ -1078,7 +1078,7 @@ impl EPObject {
         self.gate.replace(Some(g));
     }
 
-    pub fn revoke(ep: AsyncRc<Self>) {
+    pub fn revoke(ep: TempRc<Self>) {
         if let Some(v) = ep.act.upgrade() {
             v.rem_ep(&ep);
         }
@@ -1171,16 +1171,16 @@ pub struct KMemObject {
 }
 
 impl KMemObject {
-    pub fn new(quota: usize) -> AsyncRc<Self> {
+    pub fn new(quota: usize) -> StrongRc<Self> {
         static NEXT_ID: StaticCell<QuotaId> = StaticCell::new(0);
         let id = NEXT_ID.get();
         NEXT_ID.set(id + 1);
 
-        let kmem = AsyncRc::new(Rc::new(Self {
+        let kmem = StrongRc::new(Self {
             id,
             quota,
             left: Cell::from(quota),
-        }));
+        });
         log!(LogFlags::KernKMem, "{:?} created", *kmem);
         kmem
     }
@@ -1236,7 +1236,7 @@ impl KMemObject {
         );
     }
 
-    pub fn revoke(&self, act: &Activity, sel: kif::CapSel, parent: AsyncRc<KMemObject>) {
+    pub fn revoke(&self, act: &Activity, sel: kif::CapSel, parent: TempRc<KMemObject>) {
         // grant the kernel memory back to our parent
         parent.free(act, sel, self.left());
         assert!(self.left() == self.quota);
@@ -1275,12 +1275,12 @@ pub struct MapObject {
 }
 
 impl MapObject {
-    pub fn new(glob: GlobAddr, flags: kif::PageFlags) -> AsyncRc<Self> {
-        AsyncRc::new(Rc::new(Self {
+    pub fn new(glob: GlobAddr, flags: kif::PageFlags) -> StrongRc<Self> {
+        StrongRc::new(Self {
             glob: Cell::from(glob),
             flags: Cell::from(flags),
             mapped: Cell::from(false),
-        }))
+        })
     }
 
     pub fn mapped(&self) -> bool {
@@ -1296,7 +1296,7 @@ impl MapObject {
     }
 
     pub fn map_async(
-        map: AsyncRc<Self>,
+        map: TempRc<Self>,
         act_id: ActId,
         act_tile: TileId,
         virt: VirtAddr,
@@ -1304,7 +1304,7 @@ impl MapObject {
         pages: usize,
         flags: kif::PageFlags,
     ) -> Result<(), Error> {
-        let map_weak = map.downgrade();
+        let map_weak = map.downgrade_asyn();
         TileMux::map_async(tilemng::tilemux(act_tile), act_id, virt, glob, pages, flags).map(|_| {
             if let Some(map) = map_weak.upgrade() {
                 // TODO note that this is racy (in theory) with other map and unmap (revoke) calls.

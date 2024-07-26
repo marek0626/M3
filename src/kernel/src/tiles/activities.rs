@@ -22,14 +22,13 @@ use base::io::LogFlags;
 use base::kif::{self, CapRngDesc, CapSel, CapType, TileDesc};
 use base::log;
 use base::mem::{MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
-use base::rc::Rc;
 use base::tcu::{ActId, EpId, TileId, STD_EPS_COUNT, UPCALL_REP_OFF};
 use base::tcu::{Label, OwnedMessage};
 use bitflags::bitflags;
 use core::cell::Ref;
 use core::fmt;
 
-use thread::{AsyncRc, AsyncWeak};
+use thread::{Downgradable, NonWeak, StrongRc, TempRc, Upgradable, WeakRc};
 
 use crate::cap::{
     CapTable, EPObject, IntoKObject, InvalidateType, KMemObject, KObject, TileObject,
@@ -83,8 +82,8 @@ pub struct Activity {
     tile_id: TileId,
     parent: Option<(ActId, CapSel)>,
 
-    tile: AsyncWeak<TileObject>,
-    kmem: AsyncWeak<KMemObject>,
+    tile: WeakRc<TileObject>,
+    kmem: WeakRc<KMemObject>,
 
     state: Cell<State>,
     exit_code: Cell<Option<Code>>,
@@ -93,7 +92,7 @@ pub struct Activity {
     obj_caps: RefCell<CapTable>,
     map_caps: RefCell<CapTable>,
 
-    eps: RefCell<Vec<AsyncWeak<EPObject>>>,
+    eps: RefCell<Vec<WeakRc<EPObject>>>,
     rbuf_phys: Cell<PhysAddr>,
     upcalls: RefCell<Box<SendQueue>>,
 
@@ -106,19 +105,19 @@ impl Activity {
         name: String,
         id: ActId,
         parent: Option<(ActId, CapSel)>,
-        tile: AsyncRc<TileObject>,
+        tile: TempRc<TileObject>,
         eps_start: EpId,
-        kmem: AsyncRc<KMemObject>,
+        kmem: TempRc<KMemObject>,
         flags: ActivityFlags,
-    ) -> Result<AsyncRc<Self>, Error> {
-        let act = AsyncRc::new(Rc::new(Activity {
+    ) -> Result<StrongRc<Self>, Error> {
+        let act = StrongRc::new(Activity {
             id,
             name,
             flags,
             eps_start,
             parent,
             tile_id: tile.tile(),
-            kmem: kmem.downgrade(),
+            kmem: kmem.downgrade_store(),
             state: Cell::from(State::INIT),
             exit_code: Cell::from(None),
             first_sel: Cell::from(kif::FIRST_FREE_SEL),
@@ -127,10 +126,10 @@ impl Activity {
             eps: RefCell::from(Vec::new()),
             rbuf_phys: Cell::from(PhysAddr::default()),
             upcalls: RefCell::from(SendQueue::new(QueueId::Activity, tile.tile())),
-            tile: tile.clone().downgrade(),
+            tile: tile.clone().downgrade_store(),
             cur_sysc: RefCell::from(OwnedMessage::default()),
             cur_derive_srv: RefCell::from(None),
-        }));
+        });
 
         {
             act.obj_caps.borrow_mut().set_activity(&act);
@@ -154,42 +153,26 @@ impl Activity {
         Ok(act)
     }
 
-    pub fn init_async(act: AsyncRc<Self>) -> Result<(), Error> {
+    pub fn init_async(act: StrongRc<Self>) -> Result<(), Error> {
         use base::kif::PageFlags;
 
-        let act_weak = act.clone().downgrade();
-
-        loader::init_activity_async(act)?;
-
-        let act = act_weak
-            .upgrade()
-            .ok_or_else(|| Error::new(Code::ObjectGone))?;
+        loader::init_activity_async(act.clone())?;
 
         let desc = platform::tile_desc(act.tile_id());
         if !desc.is_device() {
             // get physical address of receive buffer
             let rbuf_virt = desc.rbuf_std_space().0;
-            let (act, rbuf_phys) = if desc.has_virtmem() {
-                let act_id = act.id();
-                let tile_id = act.tile_id();
-                let act_weak = act.downgrade();
-
+            let rbuf_phys = if desc.has_virtmem() {
                 let glob = crate::tiles::TileMux::translate_async(
-                    tilemng::tilemux(tile_id),
-                    act_id,
+                    tilemng::tilemux(act.tile_id()),
+                    act.id(),
                     rbuf_virt,
                     PageFlags::RW,
                 )?;
-
-                let act = act_weak
-                    .upgrade()
-                    .ok_or_else(|| Error::new(Code::ObjectGone))?;
-                let phys = ktcu::glob_to_phys_remote(act.tile_id(), glob, base::kif::PageFlags::RW)
-                    .unwrap();
-                (act, phys)
+                ktcu::glob_to_phys_remote(act.tile_id(), glob, base::kif::PageFlags::RW).unwrap()
             }
             else {
-                (act, rbuf_virt.as_phys(desc))
+                rbuf_virt.as_phys(desc)
             };
 
             act.init_eps(rbuf_phys)
@@ -224,7 +207,7 @@ impl Activity {
                 PhysAddr::new_raw(platform::tile_desc(self.tile_id()), 0xDEADBEEF),
             );
             let _rg_clone = rgate.clone(); // keep one strong reference
-            let sgate = SGateObject::new(rgate.downgrade(), self.id() as tcu::Label, 1);
+            let sgate = SGateObject::new(rgate.downgrade_store(), self.id() as tcu::Label, 1);
             tilemux.config_snd_ep(self.eps_start + tcu::SYSC_SEP_OFF, act, &sgate)?;
         }
 
@@ -272,11 +255,11 @@ impl Activity {
         self.id
     }
 
-    pub fn tile(&self) -> AsyncRc<TileObject> {
+    pub fn tile(&self) -> TempRc<TileObject> {
         self.tile.upgrade().unwrap()
     }
 
-    pub fn tile_weak(&self) -> &AsyncWeak<TileObject> {
+    pub fn tile_weak(&self) -> &WeakRc<TileObject> {
         &self.tile
     }
 
@@ -288,7 +271,7 @@ impl Activity {
         platform::tile_desc(self.tile_id())
     }
 
-    pub fn kmem(&self) -> Option<AsyncRc<KMemObject>> {
+    pub fn kmem(&self) -> Option<TempRc<KMemObject>> {
         self.kmem.upgrade()
     }
 
@@ -344,11 +327,11 @@ impl Activity {
         self.exit_code.replace(None)
     }
 
-    pub fn add_ep(&self, ep: AsyncRc<EPObject>) {
-        self.eps.borrow_mut().push(ep.downgrade());
+    pub fn add_ep(&self, ep: StrongRc<EPObject>) {
+        self.eps.borrow_mut().push(ep.downgrade_store());
     }
 
-    pub fn rem_ep(&self, ep: &AsyncRc<EPObject>) {
+    pub fn rem_ep(&self, ep: &TempRc<EPObject>) {
         self.eps
             .borrow_mut()
             .retain(|e| e.upgrade().unwrap().ep() != ep.ep());
@@ -387,7 +370,7 @@ impl Activity {
             match self
                 .obj_caps()
                 .borrow()
-                .get_kobj::<AsyncRc<Activity>>(*sel as CapSel)
+                .get_kobj::<TempRc<Activity>>(*sel as CapSel)
             {
                 Err(e) => return Err(Error::new(e.code())),
                 Ok(wv) => {
@@ -406,12 +389,12 @@ impl Activity {
     }
 
     pub fn wait_exit_async(
-        act: AsyncRc<Self>,
+        act: TempRc<Self>,
         event: u64,
         sels: &[u64],
     ) -> Result<Option<(CapSel, Code)>, Error> {
         let act_id = act.id();
-        let act_weak = act.downgrade();
+        let act_weak = act.downgrade_asyn();
 
         let res = loop {
             let act = act_weak
@@ -522,7 +505,7 @@ impl Activity {
             .unwrap();
     }
 
-    pub fn start_app_async(act: AsyncRc<Activity>) -> Result<(), Error> {
+    pub fn start_app_async(act: TempRc<Activity>) -> Result<(), Error> {
         if act.state.get() != State::INIT {
             return Ok(());
         }
@@ -536,13 +519,13 @@ impl Activity {
         ActivityMng::start_activity_async(id, tile_id)
     }
 
-    pub fn stop_app_async(act: AsyncRc<Activity>, exit_code: Code, revoker: ActId) {
+    pub fn stop_app_async(act: TempRc<Activity>, exit_code: Code, revoker: ActId) {
         if act.state.get() == State::DEAD {
             return;
         }
 
         // safety: we use the pointer as an event while the activity still exists
-        let event = Rc::as_ptr(unsafe { act.inner() }) as usize as thread::Event;
+        let event = TempRc::as_ptr(&act) as usize as thread::Event;
 
         if act.state.get() == State::STOPPING {
             // if we're in the process of stopping the activity, just wait for that to finish. we
@@ -589,10 +572,7 @@ impl Activity {
             act.cur_sysc.borrow_mut().invalidate();
 
             let act = if !act.is_root() {
-                // keep a reference here to prevent that it's destructed during the call
-                // safety: that's okay because only one thread can stop/destroy an activity
-                let _clone = unsafe { act.inner().clone() };
-                let act_weak = act.clone().downgrade();
+                let act_weak = act.clone().downgrade_asyn();
                 Self::revoke_caps_async(act, revoker);
                 act_weak.upgrade().unwrap()
             }
@@ -605,9 +585,7 @@ impl Activity {
             let act = if act.tile_desc().is_programmable()
                 || (act.state() == State::RUNNING && revoker != act.id())
             {
-                // safety: as above
-                let _clone = unsafe { act.inner().clone() };
-                let act_weak = act.clone().downgrade();
+                let act_weak = act.clone().downgrade_asyn();
                 // ignore failures here
                 let _ = ActivityMng::stop_activity_async(act);
                 act_weak.upgrade().unwrap()
@@ -636,13 +614,12 @@ impl Activity {
         }
     }
 
-    pub fn revoke_caps_async(act: AsyncRc<Activity>, revoker: ActId) {
+    pub fn revoke_caps_async(act: TempRc<Activity>, revoker: ActId) {
         // TODO that's not okay
-        let act_ref = unsafe { act.inner().clone() };
-        drop(act);
+        let act_rc = unsafe { TempRc::into_strong_unchecked(act) };
 
-        CapTable::revoke_all_async(&act_ref.obj_caps, revoker);
-        CapTable::revoke_all_async(&act_ref.map_caps, revoker);
+        CapTable::revoke_all_async(&act_rc.obj_caps, revoker);
+        CapTable::revoke_all_async(&act_rc.map_caps, revoker);
     }
 
     pub fn revoke_async(&self, crd: CapRngDesc, own: bool, revoker: ActId) {

@@ -161,7 +161,9 @@ impl Closure {
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
+/// use base::env;
+///
 /// for arg in env::args() {
 ///     println!("{}", arg);
 /// }
@@ -216,7 +218,9 @@ pub fn args() -> Args {
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
+/// use base::env;
+///
 /// for (key, val) in env::vars() {
 ///     println!("{}={}", key, val);
 /// }

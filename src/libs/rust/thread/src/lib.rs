@@ -17,6 +17,9 @@
  */
 
 #![no_std]
+#![allow(internal_features)]
+#![feature(core_intrinsics)]
+#![feature(hint_assert_unchecked)]
 
 use base::boxed::Box;
 use base::cell::{LazyStaticRefCell, Ref, StaticCell};
@@ -37,7 +40,7 @@ const MAX_MSG_SIZE: usize = 1024;
 
 mod refs;
 
-pub use refs::{AsyncLock, AsyncRc, AsyncWeak};
+pub use refs::{AsyncLock, Downgradable, NonWeak, StrongRc, TempRc, Upgradable, WeakRc};
 
 #[cfg(target_arch = "x86_64")]
 #[derive(Default)]

@@ -152,6 +152,7 @@ help() {
     echo "    doc:                     generate Rust documentation."
     echo "    fmt:                     run formatters for all C++, Rust, and Python code."
     echo "    fmt-check:               run formatters, but in check mode."
+    echo "    test:                    run Rust tests on host with miri."
     echo ""
     echo "  M³Linux (RISC-V only):"
     echo "    mklx ...:                (re)build Linux including bbl via buildroot. The"
@@ -738,6 +739,19 @@ case "$cmd" in
                                                -name "*.py" -or \
                                                -name "*.cc" -or \
                                                -name "*.h" \) -print0)
+        [ $errors -eq 0 ] || exit 1
+        ;;
+
+    test)
+        errors=0
+        dirs="src/libs/rust/thread src/libs/rust/base"
+        tgt=$(rustup show 2>/dev/null | grep 'Default host:' | gawk '{ print($3) }')
+        export RUST_BACKTRACE=1
+        for d in $dirs; do
+            (
+                cd "$d" && cargo miri test --target "$tgt" --target-dir "$root/build/rust"
+            ) || errors=$((errors + 1))
+        done
         [ $errors -eq 0 ] || exit 1
         ;;
 
