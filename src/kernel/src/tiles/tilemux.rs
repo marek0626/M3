@@ -27,7 +27,6 @@ use base::quota;
 use base::tcu::{self, ActId, EpId, TileId};
 
 use core::cmp;
-use core::ops::Deref;
 
 use thread::{Downgradable, StrongRc, TempRc, WeakRc};
 
@@ -51,10 +50,7 @@ struct TileState {
 }
 
 impl TileState {
-    fn new<T>(tile: &T, ep_count: Option<usize>) -> Result<Self, Error>
-    where
-        T: Deref<Target = TileObject> + Clone + Downgradable<TileObject>,
-    {
+    fn new(tile: &TempRc<TileObject>, ep_count: Option<usize>) -> Result<Self, Error> {
         // create PMP EPObjects for this Tile
         let mut pmp = Vec::new();
         for ep in 0..tcu::PMEM_PROT_EPS as EpId {
@@ -205,10 +201,7 @@ impl TileMux {
         self.acts.retain(|id| *id != act);
     }
 
-    fn init_state<T>(&mut self, tile: &T, ep_count: Option<usize>)
-    where
-        T: Deref<Target = TileObject> + Clone + Downgradable<TileObject>,
-    {
+    fn init_state(&mut self, tile: &TempRc<TileObject>, ep_count: Option<usize>) {
         assert!(self.state.is_none());
         self.state = Some(TileState::new(tile, ep_count).unwrap());
 
@@ -273,17 +266,13 @@ impl TileMux {
         self.mux_type = kif::syscalls::MuxType::None;
     }
 
-    pub fn reset_async<T, M>(
+    pub fn reset_async(
         tile_id: TileId,
-        tile: Option<T>,
-        mux_mem: Option<M>,
+        tile: Option<TempRc<TileObject>>,
+        mux_mem: Option<TempRc<MGateObject>>,
         ep_count: Option<usize>,
         root: bool,
-    ) -> Result<(), Error>
-    where
-        T: Deref<Target = TileObject> + Clone + Downgradable<TileObject>,
-        M: Deref<Target = MGateObject> + Clone + Downgradable<MGateObject>,
-    {
+    ) -> Result<(), Error> {
         if tilemng::tilemux(tile_id).has_activities() {
             return Err(Error::new(Code::InvState));
         }
@@ -409,15 +398,12 @@ impl TileMux {
             .map(|state| TempRc::new(state.pmp[ep as usize].clone()))
     }
 
-    pub fn reconfigure_pmp_ep<M>(
+    pub fn reconfigure_pmp_ep(
         &mut self,
         ep: tcu::EpId,
-        mg: Option<M>,
+        mg: Option<TempRc<MGateObject>>,
         overwrite: bool,
-    ) -> Result<(), Error>
-    where
-        M: Deref<Target = MGateObject> + Clone + Downgradable<MGateObject>,
-    {
+    ) -> Result<(), Error> {
         let ep_obj = self.pmp_ep(ep).ok_or_else(|| Error::new(Code::InvState))?;
 
         // if overwrite is disabled, the EP needs to be invalid

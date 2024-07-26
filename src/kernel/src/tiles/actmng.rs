@@ -206,12 +206,22 @@ impl ActivityMng {
 
         // load and start tilemux
         loader::load_mux_async(tile_id, &mux_mem).expect("Unable to load TileMux");
-        let mux_mgate = MGateObject::new(mux_mem, Perm::RWX, false);
         // note that we provide access to the entire ROOT memory pool via PMP down below and
         // therefore provide access to parts of this pool twice. that's currently required, because
         // TileMux reads PMP EP0 to discover the available memory.
-        TileMux::reset_async(tile_id, Some(tile.clone()), Some(mux_mgate), ep_count, true)
-            .expect("Tile reset failed");
+        let mux_mgate = MGateObject::new(mux_mem, Perm::RWX, false);
+        // ensure that the objects are not dropped during the async call
+        let _mux_mgate_clone = mux_mgate.clone();
+        let _tile_clone = tile.clone();
+        TileMux::reset_async(
+            tile_id,
+            Some(TempRc::new(tile.clone())),
+            Some(TempRc::new(mux_mgate)),
+            ep_count,
+            true,
+        )
+        .expect("Tile reset failed");
+        drop(_tile_clone);
 
         // create root activity
         let kmem = KMemObject::new(args::get().kmem - cfg::FIXED_KMEM);
