@@ -543,8 +543,12 @@ impl Capability {
                 EPObject::revoke(TempRc::new(e));
             },
 
-            KObject::Tile(tile) => {
+            KObject::Tile(mut tile) => {
                 if self.origin {
+                    // invalidate weak references before doing the async call to let all operations
+                    // with this tile fail
+                    tile.invalidate_weak();
+
                     if let Some(parent) = self.parent {
                         let parent = unsafe { &(*parent.as_ptr()) };
                         if let Ok(parent) = parent.get::<TempRc<TileObject>>() {
