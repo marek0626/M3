@@ -351,6 +351,8 @@ pub fn create_activity_async(act: TempRc<Activity>) -> Result<(), VerboseError> 
     } {
         Ok(a) => a,
         Err(e) => {
+            // ensure that it's not dropped during the call
+            let _clone = nact.clone();
             Activity::stop_app_async(TempRc::new(nact), Code::Unspecified, act_id);
             return Err(e);
         },

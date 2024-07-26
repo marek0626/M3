@@ -572,9 +572,6 @@ impl Activity {
             act.cur_sysc.borrow_mut().invalidate();
 
             let act = if !act.is_root() {
-                // keep a reference here to prevent that it's destructed during the call
-                // safety: that's okay because only one thread can stop/destroy an activity
-                let _clone = unsafe { TempRc::into_strong_unchecked(act.clone()) };
                 let act_weak = act.clone().downgrade_asyn();
                 Self::revoke_caps_async(act, revoker);
                 act_weak.upgrade().unwrap()
@@ -588,8 +585,6 @@ impl Activity {
             let act = if act.tile_desc().is_programmable()
                 || (act.state() == State::RUNNING && revoker != act.id())
             {
-                // safety: as above
-                let _clone = unsafe { TempRc::into_strong_unchecked(act.clone()) };
                 let act_weak = act.clone().downgrade_asyn();
                 // ignore failures here
                 let _ = ActivityMng::stop_activity_async(act);

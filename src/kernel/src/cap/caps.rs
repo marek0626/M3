@@ -533,6 +533,8 @@ impl Capability {
         match self.obj {
             KObject::Activity(v) => {
                 if self.origin {
+                    // ensure that it's not dropped during the call
+                    let _clone = v.clone();
                     Activity::stop_app_async(TempRc::new(v), Code::Unspecified, revoker);
                 }
             },
