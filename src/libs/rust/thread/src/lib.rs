@@ -23,7 +23,6 @@
 
 use base::boxed::Box;
 use base::cell::{LazyStaticRefCell, Ref, StaticCell};
-use base::cfg;
 use base::col::{ArrayVec, BoxList, Vec};
 use base::impl_boxitem;
 use base::io::LogFlags;
@@ -32,6 +31,7 @@ use base::log;
 use base::mem::{self, VirtAddr};
 use base::tcu;
 use base::vec;
+use base::{cfg, const_assert};
 use core::ptr::{slice_from_raw_parts, NonNull};
 
 pub type Event = u64;
@@ -104,7 +104,7 @@ fn alloc_id() -> u32 {
     NEXT_ID.get()
 }
 
-const MAX_EVENTS: usize = 1;
+const MAX_EVENTS: usize = 5;
 
 pub struct Thread {
     prev: Option<NonNull<Thread>>,
@@ -310,6 +310,13 @@ pub fn remove_thread() {
     TMNG.borrow_mut().sleep.pop_front().unwrap();
 }
 
+/// Use the bits of the address as an event.
+#[inline(always)]
+pub fn ptr_to_event<T>(ptr: NonNull<T>) -> Event {
+    const_assert!(usize::BITS <= Event::BITS);
+    ptr.as_ptr() as Event
+}
+
 pub fn alloc_event() -> Event {
     static NEXT_EVENT: StaticCell<Event> = StaticCell::new(0);
     // if we have no other threads available, don't use events
@@ -353,6 +360,27 @@ pub fn wait_for_async(event: Event) {
     let mut tmng = TMNG.borrow_mut();
     // Pop the event we just pushed in subscribe.
     tmng.current.unsubscribe(event);
+}
+
+/// Wait for the event and the `awaitables` too.
+pub fn wait_many_async(event: Event, awaitables: &[&dyn Awaitable]) {
+    let mut tmng = TMNG.borrow_mut();
+    for awaitable in awaitables {
+        if awaitable.ready() {
+            return;
+        }
+    }
+    for awaitable in awaitables {
+        tmng.current.subscribe(awaitable.event());
+    }
+    drop(tmng);
+
+    wait_for_async(event);
+
+    let mut tmng = TMNG.borrow_mut();
+    for awaitable in awaitables.iter().rev() {
+        tmng.current.unsubscribe(awaitable.event())
+    }
 }
 
 pub fn notify(event: Event, msg: Option<&tcu::Message>) {
@@ -413,4 +441,10 @@ pub fn stop_async() {
             thread_switch_async(&mut cur.regs as *mut _, next_ptr);
         }
     }
+}
+
+/// Something that can be awaited for until ready using an event.
+pub trait Awaitable {
+    fn ready(&self) -> bool;
+    fn event(&self) -> Event;
 }

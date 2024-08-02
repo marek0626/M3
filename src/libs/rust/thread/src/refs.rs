@@ -47,6 +47,10 @@ use base::io::LogFlags;
 use base::log;
 use base::mem::VirtAddr;
 
+use crate::notify;
+use crate::ptr_to_event;
+use crate::Awaitable;
+
 /// Log increments/decrements for `TempRc`s
 const LOGGING: bool = false;
 /// Enable (costly) debug infrastructure for `TempRc` to show where they were constructed
@@ -312,6 +316,12 @@ impl<T> WeakRcLink<T> {
             })
         }
     }
+
+    /// Notify all sleeping threads that wait for the address of `self`.
+    #[inline]
+    fn notify(&self) {
+        notify(ptr_to_event(self.into()), None);
+    }
 }
 
 /// Allows to upgrade a weak type into a strong type
@@ -415,6 +425,18 @@ impl<T> Upgradable<T> for WeakRc<T> {
     }
 }
 
+/// Get woken up when weak upgrades become disabled.
+impl<T> Awaitable for WeakRc<T> {
+    fn ready(&self) -> bool {
+        !self.can_upgrade()
+    }
+
+    fn event(&self) -> crate::Event {
+        // Use pointer of WeakRcLink as event.
+        ptr_to_event(self.link)
+    }
+}
+
 impl<T> Default for WeakRc<T> {
     #[inline(always)]
     fn default() -> Self {
@@ -491,6 +513,10 @@ impl<T> StrongRc<T> {
             let weak = &mut *self.ptr.as_mut().weak_link.as_mut();
             // invalidate back link to us in WeakRcLink
             weak.ptr = dangling();
+            // If not only self holds on to a weak link, notify sleeping threads.
+            if weak.weak() > 1 {
+                weak.notify();
+            }
         }
     }
 
@@ -563,6 +589,10 @@ impl<T> Drop for StrongRc<T> {
                 // destroy WeakRcLink if there are no references anymore
                 if weak.weak() == 0 {
                     drop(Box::from_raw(self.inner().weak_link.as_ptr()));
+                }
+                // Otherwise, wake up threads that wait for the drop.
+                else {
+                    weak.notify();
                 }
 
                 // destroy RcBox
