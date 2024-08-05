@@ -47,7 +47,6 @@ use base::io::LogFlags;
 use base::log;
 use base::mem::VirtAddr;
 
-use crate::notify;
 use crate::ptr_to_event;
 use crate::Awaitable;
 
@@ -318,9 +317,12 @@ impl<T> WeakRcLink<T> {
     }
 
     /// Notify all sleeping threads that wait for the address of `self`.
+    ///
+    /// Not executed during Miri tests as we do not use the thread library in this case.
     #[inline]
     fn notify(&self) {
-        notify(ptr_to_event(self.into()), None);
+        #[cfg(not(test))]
+        crate::notify(ptr_to_event(self.into()), None);
     }
 }
 
