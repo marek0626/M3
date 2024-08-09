@@ -33,7 +33,6 @@
 
 use core::cell::Cell;
 use core::fmt;
-use core::intrinsics;
 use core::marker::PhantomData;
 use core::mem::ManuallyDrop;
 use core::ops::Deref;
@@ -184,15 +183,10 @@ trait StrongInnerPtr {
             hint::assert_unchecked(strong != 0);
         }
 
-        let strong = strong.wrapping_add(1);
-        self.strong_ref().set(strong);
-
-        // We want to abort on overflow instead of dropping the value.
-        // Checking for overflow after the store instead of before
-        // allows for slightly better code generation.
-        if intrinsics::unlikely(strong == 0) {
-            intrinsics::abort();
-        }
+        // note that we deliberately do not check for overflow here (in contrast to std::rc),
+        // because we will never do a mem::forget with our Rcs. Without that, overflows are
+        // basically impossible as we would need too much memory to overflow 32/64 bit.
+        self.strong_ref().set(strong + 1);
     }
 
     #[inline]
@@ -222,15 +216,8 @@ trait WeakRcInnerPtr {
             hint::assert_unchecked(weak != 0);
         }
 
-        let weak = weak.wrapping_add(1);
-        self.weak_ref().set(weak);
-
-        // We want to abort on overflow instead of dropping the value.
-        // Checking for overflow after the store instead of before
-        // allows for slightly better code generation.
-        if intrinsics::unlikely(weak == 0) {
-            intrinsics::abort();
-        }
+        // no overflow checks for the same reason as above
+        self.weak_ref().set(weak + 1);
     }
 
     #[inline]
