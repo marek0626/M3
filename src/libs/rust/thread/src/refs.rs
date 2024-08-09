@@ -515,6 +515,29 @@ impl<T> StrongRc<T> {
         // that the inner pointer is valid.
         unsafe { self.ptr.as_ref() }
     }
+
+    #[cold]
+    unsafe fn do_drop(&mut self) {
+        let weak = &mut *self.ptr.as_mut().weak_link.as_mut();
+
+        // invalidate back link to us in WeakRcLink
+        weak.ptr = dangling();
+        // now that all strong references are gone, remove the additional weak reference to
+        // destroy the WeakRcLink as soon as all weak refs are gone as well.
+        weak.dec_weak();
+
+        // destroy WeakRcLink if there are no references anymore
+        if weak.weak() == 0 {
+            drop(Box::from_raw(self.inner().weak_link.as_ptr()));
+        }
+        // Otherwise, wake up threads that wait for the drop.
+        else {
+            weak.notify();
+        }
+
+        // destroy RcBox
+        drop(Box::from_raw(self.ptr.as_ptr()));
+    }
 }
 
 impl<T> Downgradable<T> for StrongRc<T> {
@@ -563,29 +586,12 @@ impl<T> Clone for StrongRc<T> {
 }
 
 impl<T> Drop for StrongRc<T> {
+    #[inline(always)]
     fn drop(&mut self) {
         unsafe {
             self.inner().dec_strong();
             if self.inner().strong() == 0 {
-                let weak = &mut *self.ptr.as_mut().weak_link.as_mut();
-
-                // invalidate back link to us in WeakRcLink
-                weak.ptr = dangling();
-                // now that all strong references are gone, remove the additional weak reference to
-                // destroy the WeakRcLink as soon as all weak refs are gone as well.
-                weak.dec_weak();
-
-                // destroy WeakRcLink if there are no references anymore
-                if weak.weak() == 0 {
-                    drop(Box::from_raw(self.inner().weak_link.as_ptr()));
-                }
-                // Otherwise, wake up threads that wait for the drop.
-                else {
-                    weak.notify();
-                }
-
-                // destroy RcBox
-                drop(Box::from_raw(self.ptr.as_ptr()));
+                self.do_drop();
             }
         }
     }
