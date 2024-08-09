@@ -80,7 +80,7 @@ fn do_exchange(
 }
 
 #[inline(never)]
-pub fn exchange(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn exchange(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::Exchange = get_request(&msg)?;
     drop(msg);
@@ -97,9 +97,9 @@ pub fn exchange(act: TempRc<Activity>) -> Result<(), VerboseError> {
     );
 
     let actcap: TempRc<Activity> = act.get_kobj(r.act)?;
-    do_exchange(&act, &actcap, &r.own, &other_crd, r.obtain)?;
+    do_exchange(act, &actcap, &r.own, &other_crd, r.obtain)?;
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 

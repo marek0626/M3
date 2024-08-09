@@ -35,7 +35,7 @@ use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::{tilemng, Activity, ActivityFlags, ActivityMng};
 
 #[inline(never)]
-pub fn create_mgate(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn create_mgate(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::CreateMGate = get_request(&msg)?;
     drop(msg);
@@ -116,12 +116,12 @@ pub fn create_mgate(act: TempRc<Activity>) -> Result<(), VerboseError> {
         try_cap_insert!(act.obj_caps().borrow_mut().insert_as_child(cap, r.act));
     }
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn create_rgate(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn create_rgate(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::CreateRGate = get_request(&msg)?;
     drop(msg);
@@ -147,12 +147,12 @@ pub fn create_rgate(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let rgate = RGateObject::new(r.order, r.msg_order, false);
     try_cap_insert!(act_caps.insert(Capability::new(r.dst, rgate)));
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn create_sgate(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn create_sgate(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::CreateSGate = get_request(&msg)?;
     drop(msg);
@@ -176,12 +176,12 @@ pub fn create_sgate(act: TempRc<Activity>) -> Result<(), VerboseError> {
 
     try_cap_insert!(act_caps.insert_as_child(cap, r.rgate));
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn create_srv(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn create_srv(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::CreateSrv<'_> = get_request(&msg)?;
 
@@ -214,12 +214,12 @@ pub fn create_srv(act: TempRc<Activity>) -> Result<(), VerboseError> {
     try_cap_insert!(act_caps.insert(cap));
 
     drop(msg);
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn create_sess(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn create_sess(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::CreateSess = get_request(&msg)?;
     drop(msg);
@@ -251,7 +251,7 @@ pub fn create_sess(act: TempRc<Activity>) -> Result<(), VerboseError> {
 
     try_cap_insert!(obj_caps.insert_as_child(cap, r.srv));
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 
@@ -401,7 +401,7 @@ pub fn create_activity_async(act: TempRc<Activity>) -> Result<(), VerboseError> 
 }
 
 #[inline(never)]
-pub fn create_sem(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn create_sem(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::CreateSem = get_request(&msg)?;
     drop(msg);
@@ -412,7 +412,7 @@ pub fn create_sem(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let cap = Capability::new(r.dst, sem);
     try_cap_insert!(act.obj_caps().borrow_mut().insert(cap));
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 

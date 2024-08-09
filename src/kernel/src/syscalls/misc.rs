@@ -133,7 +133,7 @@ pub fn alloc_ep_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn mgate_region(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn mgate_region(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::MGateRegion = get_request(&msg)?;
     drop(msg);
@@ -148,13 +148,13 @@ pub fn mgate_region(act: TempRc<Activity>) -> Result<(), VerboseError> {
         global: mgate.addr(),
         size: mgate.size(),
     });
-    send_reply(&act, &kreply);
+    send_reply(act, &kreply);
 
     Ok(())
 }
 
 #[inline(never)]
-pub fn rgate_buffer(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn rgate_buffer(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::RGateBuffer = get_request(&msg)?;
     drop(msg);
@@ -169,13 +169,13 @@ pub fn rgate_buffer(act: TempRc<Activity>) -> Result<(), VerboseError> {
         order: rgate.order(),
         msg_order: rgate.msg_order(),
     });
-    send_reply(&act, &kreply);
+    send_reply(act, &kreply);
 
     Ok(())
 }
 
 #[inline(never)]
-pub fn kmem_quota(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn kmem_quota(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::KMemQuota = get_request(&msg)?;
     drop(msg);
@@ -191,13 +191,13 @@ pub fn kmem_quota(act: TempRc<Activity>) -> Result<(), VerboseError> {
         total: kmem.quota(),
         left: kmem.left(),
     });
-    send_reply(&act, &kreply);
+    send_reply(act, &kreply);
 
     Ok(())
 }
 
 #[inline(never)]
-pub fn get_sess(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn get_sess(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::GetSess = get_request(&msg)?;
     drop(msg);
@@ -212,7 +212,7 @@ pub fn get_sess(act: TempRc<Activity>) -> Result<(), VerboseError> {
     );
 
     let actcap: TempRc<Activity> = act.get_kobj(r.act)?;
-    if TempRc::ptr_eq(&act, &actcap) {
+    if TempRc::ptr_eq(act, &actcap) {
         return Err(verror!(
             Code::InvArgs,
             "Cannot get session for own Activity"
@@ -256,12 +256,12 @@ pub fn get_sess(act: TempRc<Activity>) -> Result<(), VerboseError> {
         return Err(verror!(Code::InvArgs, "Unknown session id {}", r.sid));
     }
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn activate_mgate(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn activate_mgate(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::ActivateMGate = get_request(&msg)?;
     drop(msg);
@@ -304,12 +304,12 @@ pub fn activate_mgate(act: TempRc<Activity>) -> Result<(), VerboseError> {
 
     mg.set_ep(&ep, GateObject::Mem(mg.clone().downgrade_store()));
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn activate_rgate(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn activate_rgate(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::ActivateRGate = get_request(&msg)?;
     drop(msg);
@@ -406,7 +406,7 @@ pub fn activate_rgate(act: TempRc<Activity>) -> Result<(), VerboseError> {
 
     rg.set_ep(&ep, GateObject::Recv(rg.clone().downgrade_store()));
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 
@@ -477,7 +477,7 @@ pub fn activate_sgate_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn invalidate(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn invalidate(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::Invalidate = get_request(&msg)?;
     drop(msg);
@@ -495,7 +495,7 @@ pub fn invalidate(act: TempRc<Activity>) -> Result<(), VerboseError> {
         ));
     }
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 
@@ -622,7 +622,7 @@ pub fn activity_wait_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     Ok(())
 }
 
-pub fn reset_stats(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn reset_stats(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     sysc_log!(act, "reset_stats()",);
 
     for tile in platform::user_tiles() {
@@ -630,13 +630,13 @@ pub fn reset_stats(act: TempRc<Activity>) -> Result<(), VerboseError> {
         tilemng::tilemux(tile).reset_stats().ok();
     }
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 
-pub fn noop(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn noop(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     sysc_log!(act, "noop()",);
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }

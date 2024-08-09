@@ -79,7 +79,7 @@ pub fn derive_tile_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn derive_kmem(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn derive_kmem(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::DeriveKMem = get_request(&msg)?;
     drop(msg);
@@ -99,14 +99,14 @@ pub fn derive_kmem(act: TempRc<Activity>) -> Result<(), VerboseError> {
 
     let cap = Capability::new(r.dst, KMemObject::new(r.quota));
     try_cap_insert!(act.obj_caps().borrow_mut().insert_as_child(cap, r.kmem));
-    assert!(kmem.alloc(&act, r.kmem, r.quota));
+    assert!(kmem.alloc(act, r.kmem, r.quota));
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn derive_mem(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn derive_mem(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::DeriveMem = get_request(&msg)?;
     drop(msg);
@@ -140,12 +140,12 @@ pub fn derive_mem(act: TempRc<Activity>) -> Result<(), VerboseError> {
 
     try_cap_insert!(tact.obj_caps().borrow_mut().insert_as_child(cap, r.src));
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn derive_srv_req(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn derive_srv_req(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::DeriveSrvReq = get_request(&msg)?;
     drop(msg);
@@ -198,12 +198,12 @@ pub fn derive_srv_req(act: TempRc<Activity>) -> Result<(), VerboseError> {
         return Err(e.into());
     }
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn derive_srv_fin(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn derive_srv_fin(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::DeriveSrvFin = get_request(&msg)?;
     drop(msg);
@@ -267,6 +267,6 @@ pub fn derive_srv_fin(act: TempRc<Activity>) -> Result<(), VerboseError> {
         return Err(Error::new(res).into());
     }
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }

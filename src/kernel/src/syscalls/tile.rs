@@ -131,7 +131,7 @@ pub fn tile_set_quota_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn tile_set_pmp(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_set_pmp(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::TileSetPMP = get_request(&msg)?;
     drop(msg);
@@ -184,7 +184,7 @@ pub fn tile_set_pmp(act: TempRc<Activity>) -> Result<(), VerboseError> {
 
     tilemux.reconfigure_pmp_ep(r.ep, mgate, r.overwrite)?;
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
 
@@ -240,7 +240,7 @@ pub fn tile_reset_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn tile_info(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_info(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::TileInfo = get_request(&msg)?;
     drop(msg);
@@ -260,13 +260,13 @@ pub fn tile_info(act: TempRc<Activity>) -> Result<(), VerboseError> {
         desc: platform::tile_desc(tile.tile()),
         ep_count: ktcu::get_ep_count(tile.tile())?,
     });
-    send_reply(&act, &kreply);
+    send_reply(act, &kreply);
 
     Ok(())
 }
 
 #[inline(never)]
-pub fn tile_mem(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_mem(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let msg = act.syscall();
     let r: syscalls::TileMem = get_request(&msg)?;
     drop(msg);
@@ -290,6 +290,6 @@ pub fn tile_mem(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let cap = Capability::new(r.dst, mgate);
     try_cap_insert!(act_caps.insert_as_child(cap, r.tile));
 
-    reply_success(&act);
+    reply_success(act);
     Ok(())
 }
