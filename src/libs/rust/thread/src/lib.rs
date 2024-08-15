@@ -23,8 +23,7 @@
 
 use base::boxed::Box;
 use base::cell::{LazyStaticRefCell, Ref, StaticCell};
-use base::cfg;
-use base::col::{BoxList, Vec};
+use base::col::{ArrayVec, BoxList, Vec};
 use base::impl_boxitem;
 use base::io::LogFlags;
 use base::libc;
@@ -32,6 +31,7 @@ use base::log;
 use base::mem::{self, VirtAddr};
 use base::tcu;
 use base::vec;
+use base::{cfg, const_assert};
 use core::ptr::{slice_from_raw_parts, NonNull};
 
 pub type Event = u64;
@@ -104,13 +104,15 @@ fn alloc_id() -> u32 {
     NEXT_ID.get()
 }
 
+const MAX_EVENTS: usize = 5;
+
 pub struct Thread {
     prev: Option<NonNull<Thread>>,
     next: Option<NonNull<Thread>>,
     id: u32,
     regs: Regs,
     stack: Vec<usize>,
-    event: Event,
+    events: ArrayVec<Event, MAX_EVENTS>,
     has_msg: bool,
     msg: [mem::MaybeUninit<u64>; MAX_MSG_SIZE / 8],
 }
@@ -129,7 +131,7 @@ impl Thread {
             id: alloc_id(),
             regs: Regs::default(),
             stack: Vec::new(),
-            event: 0,
+            events: Default::default(),
             has_msg: false,
             // safety: will only be safe to access if `has_msg` is true
             msg: unsafe { mem::MaybeUninit::uninit().assume_init() },
@@ -143,7 +145,7 @@ impl Thread {
             id: alloc_id(),
             regs: Regs::default(),
             stack: vec![0usize; cfg::STACK_SIZE / mem::size_of::<usize>()],
-            event: 0,
+            events: Default::default(),
             has_msg: false,
             // safety: will only be safe to access if `has_msg` is true
             msg: unsafe { mem::MaybeUninit::uninit().assume_init() },
@@ -181,18 +183,24 @@ impl Thread {
     }
 
     fn subscribe(&mut self, event: Event) {
-        assert!(self.event == 0);
-        self.event = event;
+        self.events.push(event);
+    }
+
+    /// Unsubscribe to the latest event
+    ///
+    /// # Panics
+    ///
+    /// Panics if the latest event does not match the supplied `event`.
+    fn unsubscribe(&mut self, event: Event) {
+        assert_eq!(
+            self.events.pop(),
+            event,
+            "unsubscribed to unexpected event (maybe you got the order wrong?)"
+        );
     }
 
     fn trigger_event(&mut self, event: Event) -> bool {
-        if self.event == event {
-            self.event = 0;
-            true
-        }
-        else {
-            false
-        }
+        self.events.iter().any(|&e| e == event)
     }
 
     fn set_msg(&mut self, msg: &tcu::Message) {
@@ -302,6 +310,13 @@ pub fn remove_thread() {
     TMNG.borrow_mut().sleep.pop_front().unwrap();
 }
 
+/// Use the bits of the address as an event.
+#[inline(always)]
+pub fn ptr_to_event<T>(ptr: NonNull<T>) -> Event {
+    const_assert!(usize::BITS <= Event::BITS);
+    ptr.as_ptr() as Event
+}
+
 pub fn alloc_event() -> Event {
     static NEXT_EVENT: StaticCell<Event> = StaticCell::new(0);
     // if we have no other threads available, don't use events
@@ -340,6 +355,31 @@ pub fn wait_for_async(event: Event) {
         drop(tmng);
 
         thread_switch_async(&mut (*old).regs as *mut _, next_ptr);
+    }
+
+    let mut tmng = TMNG.borrow_mut();
+    // Pop the event we just pushed in subscribe.
+    tmng.current.unsubscribe(event);
+}
+
+/// Wait for the event and the `awaitables` too.
+pub fn wait_many_async(event: Event, awaitables: &[&dyn Awaitable]) {
+    let mut tmng = TMNG.borrow_mut();
+    for awaitable in awaitables {
+        if awaitable.ready() {
+            return;
+        }
+    }
+    for awaitable in awaitables {
+        tmng.current.subscribe(awaitable.event());
+    }
+    drop(tmng);
+
+    wait_for_async(event);
+
+    let mut tmng = TMNG.borrow_mut();
+    for awaitable in awaitables.iter().rev() {
+        tmng.current.unsubscribe(awaitable.event())
     }
 }
 
@@ -401,4 +441,10 @@ pub fn stop_async() {
             thread_switch_async(&mut cur.regs as *mut _, next_ptr);
         }
     }
+}
+
+/// Something that can be awaited for until ready using an event.
+pub trait Awaitable {
+    fn ready(&self) -> bool;
+    fn event(&self) -> Event;
 }
