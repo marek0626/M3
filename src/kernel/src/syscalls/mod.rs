@@ -37,15 +37,21 @@ macro_rules! sysc_log {
     )
 }
 
+#[cold]
+pub fn cap_insert_error(code: Code) -> VerboseError {
+    match code {
+        Code::NoSpace => verror!(code, "Insufficient kernel memory quota"),
+        Code::InvArgs => verror!(code, "Selector already in use"),
+        Code::ObjectGone => verror!(code, "Activity is dead"),
+        _ => panic!("unexpected capability insert error code"),
+    }
+}
+
 macro_rules! try_cap_insert {
     ($e:expr) => {
         if let Err(e) = $e {
-            Err(match e.code() {
-                Code::NoSpace => verror!(e.code(), "Insufficient kernel memory quota"),
-                Code::InvArgs => verror!(e.code(), "Selector already in use"),
-                Code::ObjectGone => verror!(e.code(), "Activity is dead"),
-                _ => panic!("unexpected capability insert error code"),
-            })?;
+            use crate::syscalls::cap_insert_error;
+            Err(cap_insert_error(e.code()))?;
         }
     };
 }
