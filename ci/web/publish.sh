@@ -7,8 +7,8 @@ fi
 dir="$1"
 
 if [ -d "$dir" ]; then
-    kubectl exec -n os -t m3-ci-web -- sh -c "rm -rf /web/*";
+    kubectl exec -n os -t m3-ci-web-0 -- sh -c "rm -rf /web/*";
     for f in "$dir"/*; do
-        kubectl cp -n os "$f" m3-ci-web:/web;
+        kubectl cp -n os "$f" m3-ci-web-0:/web;
     done
 fi
