@@ -26,7 +26,7 @@ Getting Started:
 
 The recommended way to install all required packages is to use [Nix](https://nixos.org/):
 
-    $ nix develop
+    $ nix develop path:nix
 
 Nix will then install all required packages in a known-to-work version and drop you into a shell to work with M³.
 
