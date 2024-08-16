@@ -99,7 +99,7 @@ impl SocketSession {
                 sbuf_slots,
                 sbuf_size,
             },
-            CapRngDesc::new(CapType::Object, caps, 4).unwrap(),
+            caps,
             iface,
         );
 
@@ -118,7 +118,7 @@ impl SocketSession {
         match res {
             Ok(sd) => {
                 // Send capabilities back to caller so it can connect to the created gates
-                xchg.out_caps(CapRngDesc::new(CapType::Object, caps + 2, 2).unwrap());
+                xchg.out_caps(CapRngDesc::new(CapType::Object, caps.start() + 2, 2).unwrap());
                 xchg.out_args().push(sd);
                 Ok(())
             },

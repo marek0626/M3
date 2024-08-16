@@ -15,6 +15,7 @@
 
 use crate::cap::Selector;
 use crate::cell::{Cell, LazyReadOnlyCell};
+use crate::kif::{CapRngDesc, CapType};
 
 static SELSPACE: LazyReadOnlyCell<SelSpace> = LazyReadOnlyCell::default();
 
@@ -30,15 +31,24 @@ impl SelSpace {
     }
 
     /// Allocates a new capability selector and returns it.
+    ///
+    /// # Panics
+    ///
+    /// If the allocator walked beyond the end of the selector space.
     pub fn alloc_sel(&self) -> Selector {
-        self.alloc_sels(1)
+        self.alloc_sels(1).start()
     }
 
-    /// Allocates `count` new and contiguous capability selectors and returns the first one.
-    pub fn alloc_sels(&self, count: u64) -> Selector {
+    /// Allocates `count` new and contiguous capability selectors and returns the range as a
+    /// [`CapRngDesc`].
+    ///
+    /// # Panics
+    ///
+    /// If the allocator walked beyond the end of the selector space or the range is not representable.
+    pub fn alloc_sels(&self, count: u64) -> CapRngDesc {
         let next = self.next.get();
         self.next.set(next + count);
-        next
+        CapRngDesc::new(CapType::Object, next, count).expect("Insufficient selectors")
     }
 }
 

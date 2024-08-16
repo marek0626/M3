@@ -28,7 +28,7 @@ DirectPipe::DirectPipe(Activity &rd, Activity &wr, MemCap &mem, size_t size)
     : _rd(rd),
       _wr(wr),
       _size(size),
-      _rcap(RecvCap::create(SelSpace::get().alloc_sels(4), nextlog2<MSG_BUF_SIZE>::val,
+      _rcap(RecvCap::create(SelSpace::get().alloc_sels(4).start(), nextlog2<MSG_BUF_SIZE>::val,
                             nextlog2<MSG_SIZE>::val)),
       _rmem(mem.derive_for(Activity::own().sel(), _rcap.sel() + 1, 0, size, MemGate::R)),
       _wmem(mem.derive_for(Activity::own().sel(), _rcap.sel() + 2, 0, size, MemGate::W)),

@@ -364,10 +364,35 @@ fn create_activity(t: &mut dyn WvTester) {
 
     let tile = wv_require_ok!(Tile::get("compat|own"));
 
-    // invalid dest selector
+    // invalid dest CRD
     wv_assert_err!(
         t,
-        syscalls::create_activity(SEL_KMEM, "test", tile.sel(), kmem),
+        syscalls::create_activity(
+            CapRngDesc::new(CapType::Object, sels.start(), 2).unwrap(),
+            "test",
+            tile.sel(),
+            kmem
+        ),
+        Code::InvArgs
+    );
+    wv_assert_err!(
+        t,
+        syscalls::create_activity(
+            CapRngDesc::new(CapType::Mapping, sels.start(), 3).unwrap(),
+            "test",
+            tile.sel(),
+            kmem
+        ),
+        Code::InvArgs
+    );
+    wv_assert_err!(
+        t,
+        syscalls::create_activity(
+            CapRngDesc::new(CapType::Object, SEL_KMEM, 3).unwrap(),
+            "test",
+            tile.sel(),
+            kmem
+        ),
         Code::InvArgs
     );
 
@@ -408,10 +433,7 @@ fn create_activity(t: &mut dyn WvTester) {
             Code::NotSup
         );
     }
-    wv_assert_ok!(
-        t,
-        Activity::own().revoke(CapRngDesc::new_single(CapType::Object, sels), false)
-    );
+    wv_assert_ok!(t, Activity::own().revoke(sels, false));
 }
 
 fn create_sem(t: &mut dyn WvTester) {
@@ -880,8 +902,8 @@ impl Handler<()> for DummyHandler {
 }
 
 fn derive_srv(t: &mut dyn WvTester) {
-    let serv_sel = SelSpace::get().alloc_sels(2);
-    let sgate_sel = serv_sel + 1;
+    let serv_sel = SelSpace::get().alloc_sel();
+    let sgate_sel = SelSpace::get().alloc_sel();
     let mut hdl = DummyHandler {
         sessions: SessionContainer::new(16),
     };

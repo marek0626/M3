@@ -44,14 +44,15 @@ ActivityArgs &ActivityArgs::pager(Reference<Pager> pager) noexcept {
 
 ChildActivity::ChildActivity(const Reference<class Tile> &tile, const std::string_view &name,
                              const ActivityArgs &args)
-    : Activity(SelSpace::get().alloc_sels(3), 0, tile,
+    : Activity(SelSpace::get().alloc_sels(3).start(), 0, tile,
                args._kmem ? args._kmem : Activity::own().kmem()),
       _resmng(),
       _files(),
       _mounts(),
       _exec() {
+    auto crd = KIF::CapRngDesc(KIF::CapRngDesc::OBJ, sel(), 3);
     // create activity
-    const auto [eps_start, id] = Syscalls::create_activity(sel(), name, tile->sel(), _kmem->sel());
+    const auto [eps_start, id] = Syscalls::create_activity(crd, name, tile->sel(), _kmem->sel());
     _eps_start = eps_start;
     _id = id;
 
@@ -95,7 +96,8 @@ void ChildActivity::delegate(const KIF::CapRngDesc &crd, capsel_t dest) {
 }
 
 void ChildActivity::obtain(const KIF::CapRngDesc &crd) {
-    obtain(crd, SelSpace::get().alloc_sels(crd.count()));
+    auto dest = SelSpace::get().alloc_sels(crd.count());
+    obtain(crd, dest.start());
 }
 
 void ChildActivity::obtain(const KIF::CapRngDesc &crd, capsel_t dest) {

@@ -18,6 +18,7 @@ use m3::col::{String, Vec};
 use m3::com::SendGate;
 use m3::errors::{Code, Error};
 use m3::io::LogFlags;
+use m3::kif::CapRngDesc;
 use m3::log;
 use m3::mem::MsgBuf;
 use m3::serialize::M3Deserializer;
@@ -39,10 +40,11 @@ pub struct DerivedService {
 }
 
 impl DerivedService {
-    fn new(sels: Selector) -> Self {
+    fn new(sels: CapRngDesc) -> Self {
+        assert_eq!(sels.count(), 2);
         Self {
-            srv: Capability::new(sels + 0, CapFlags::empty()),
-            sgate: Capability::new(sels + 1, CapFlags::empty()),
+            srv: Capability::new(sels.start() + 0, CapFlags::empty()),
+            sgate: Capability::new(sels.start() + 1, CapFlags::empty()),
         }
     }
 
@@ -111,7 +113,13 @@ impl Service {
     pub fn derive_async(&self, child: childs::Id, sessions: u32) -> Result<DerivedService, Error> {
         let dst = SelSpace::get().alloc_sels(2);
         let event = events::alloc_event();
-        syscalls::derive_srv_req(self.sel(), dst + 0, dst + 1, sessions, event)?;
+        syscalls::derive_srv_req(
+            self.sel(),
+            dst.start() + 0,
+            dst.start() + 1,
+            sessions,
+            event,
+        )?;
 
         let reply = events::wait_for_async(child, event)?;
         let mut de = M3Deserializer::new(reply.as_words());

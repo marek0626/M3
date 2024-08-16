@@ -221,7 +221,7 @@ pub fn create_map(
 /// On success, the function returns the activity id (for debugging purposes) and EP id of the first
 /// standard EP.
 pub fn create_activity(
-    dst: Selector,
+    dst: CapRngDesc,
     name: &str,
     tile: Selector,
     kmem: Selector,

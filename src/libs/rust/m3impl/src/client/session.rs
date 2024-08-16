@@ -178,8 +178,7 @@ impl ClientSession {
         PRE: Fn(&mut M3Serializer<SliceSink<'_>>),
         POST: FnMut(&mut M3Deserializer<'_>) -> Result<(), Error>,
     {
-        let caps = SelSpace::get().alloc_sels(count);
-        let crd = kif::CapRngDesc::new(kif::CapType::Object, caps, count).unwrap();
+        let crd = SelSpace::get().alloc_sels(count);
         self.obtain_for(Activity::own().sel(), crd, pre, post)?;
         Ok(crd)
     }

@@ -71,7 +71,7 @@ KIF::CapRngDesc ClientSession::obtain(uint count, KIF::ExchangeArgs *args) {
 }
 
 KIF::CapRngDesc ClientSession::obtain_for(Activity &act, uint count, KIF::ExchangeArgs *args) {
-    KIF::CapRngDesc crd(KIF::CapRngDesc::OBJ, SelSpace::get().alloc_sels(count), count);
+    auto crd = SelSpace::get().alloc_sels(count);
     obtain_for(act, crd, args);
     return crd;
 }

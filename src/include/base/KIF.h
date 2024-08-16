@@ -262,7 +262,7 @@ struct KIF {
         } PACKED;
 
         struct CreateActivity : public DefaultRequest {
-            xfer_t dst_sel;
+            xfer_t dst_crd[2];
             xfer_t tile_sel;
             xfer_t kmem_sel;
             xfer_t namelen;

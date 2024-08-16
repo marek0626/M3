@@ -125,7 +125,7 @@ impl VTermSession {
     ) -> Result<(), Error> {
         log!(LogFlags::VTReqs, "[{}] vterm::clone(crt={})", sid, crt);
 
-        let (sel, _nsid) = cli.add_connected(crt, |cli, serv, _sgate| {
+        let (crd, _nsid) = cli.add_connected(crt, |cli, serv, _sgate| {
             let parent_sess = Self::get_sess(cli, sid)?;
             let nsid = serv.id();
 
@@ -143,7 +143,7 @@ impl VTermSession {
             Ok(child_sess)
         })?;
 
-        xchg.out_caps(kif::CapRngDesc::new(kif::CapType::Object, sel, 2).unwrap());
+        xchg.out_caps(crd);
         Ok(())
     }
 

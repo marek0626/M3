@@ -269,6 +269,9 @@ pub fn create_activity_async(act: TempRc<Activity>) -> Result<(), VerboseError> 
         r.kmem
     );
 
+    if r.dst.count() != 3 || r.dst.cap_type() != CapType::Object {
+        return Err(verror!(Code::InvArgs, "Invalid destination selectors"));
+    }
     if r.name.is_empty() {
         return Err(verror!(Code::InvArgs, "Invalid name"));
     }
@@ -302,7 +305,7 @@ pub fn create_activity_async(act: TempRc<Activity>) -> Result<(), VerboseError> 
     drop(tilemux);
 
     let name = r.name.to_string();
-    let dst_sel = r.dst;
+    let dst_sel = r.dst.start();
     let tile_sel = r.tile;
     let kmem_sel = r.kmem;
     let act_id = act.id();

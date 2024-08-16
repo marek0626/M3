@@ -66,9 +66,13 @@ impl M3FS {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(id: usize, name: &str) -> Result<FSHandle, Error> {
         let sels = SelSpace::get().alloc_sels(2);
-        let sess = ClientSession::new_with_sel(name, sels + 0)?;
-        sess.connect_for(Activity::own(), sels + 1)?;
-        Ok(Self::create(id, sess, SendGate::new_bind(sels + 1)?))
+        let sess = ClientSession::new_with_sel(name, sels.start() + 0)?;
+        sess.connect_for(Activity::own(), sels.start() + 1)?;
+        Ok(Self::create(
+            id,
+            sess,
+            SendGate::new_bind(sels.start() + 1)?,
+        ))
     }
 
     /// Binds a new m3fs-session to selectors `sels`..`sels+1`.

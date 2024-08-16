@@ -38,12 +38,12 @@ class LoadGen : public ClientSession {
 public:
     class Channel {
     public:
-        explicit Channel(capsel_t sels, size_t memsize)
+        explicit Channel(KIF::CapRngDesc crd, size_t memsize)
             : _off(),
               _rem(),
               _rgate(RecvGate::create(nextlog2<64>::val, nextlog2<64>::val)),
-              _scap(SendCap::create(&_rgate, SendGateArgs().credits(1).sel(sels + 0))),
-              _mgate(MemGate::create_global(memsize, MemGate::RW, sels + 1)),
+              _scap(SendCap::create(&_rgate, SendGateArgs().credits(1).sel(crd.start() + 0))),
+              _mgate(MemGate::create_global(memsize, MemGate::RW, crd.start() + 1)),
               _is() {
         }
 
@@ -98,9 +98,9 @@ public:
     }
 
     Channel *create_channel(size_t memsize) {
-        capsel_t sels = SelSpace::get().alloc_sels(2);
-        auto chan = new Channel(sels, memsize);
-        delegate(KIF::CapRngDesc(KIF::CapRngDesc::OBJ, sels, 2));
+        auto crd = SelSpace::get().alloc_sels(2);
+        auto chan = new Channel(crd, memsize);
+        delegate(crd);
         return chan;
     }
 

@@ -37,15 +37,15 @@ public:
     }
 
     FileRef<GenericFile> create_channel(bool read) {
-        capsel_t sels = SelSpace::get().alloc_sels(2);
+        auto crd = SelSpace::get().alloc_sels(2);
         KIF::ExchangeArgs args;
         ExchangeOStream os(args);
         os << opcodes::File::CLONE_FILE << (read ? 0 : 1);
         args.bytes = os.total();
-        obtain_for(Activity::own(), KIF::CapRngDesc(KIF::CapRngDesc::OBJ, sels, 2), &args);
+        obtain_for(Activity::own(), crd, &args);
         auto flags = FILE_NEWSESS | (read ? FILE_R : FILE_W);
-        auto file =
-            std::unique_ptr<GenericFile>(new GenericFile(flags, sels, static_cast<size_t>(-1)));
+        auto file = std::unique_ptr<GenericFile>(
+            new GenericFile(flags, crd.start(), static_cast<size_t>(-1)));
         return Activity::own().files()->alloc(std::move(file));
     }
 };
