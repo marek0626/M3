@@ -33,7 +33,6 @@
 
 use core::cell::Cell;
 use core::fmt;
-use core::intrinsics;
 use core::marker::PhantomData;
 use core::mem::ManuallyDrop;
 use core::ops::Deref;
@@ -184,15 +183,10 @@ trait StrongInnerPtr {
             hint::assert_unchecked(strong != 0);
         }
 
-        let strong = strong.wrapping_add(1);
-        self.strong_ref().set(strong);
-
-        // We want to abort on overflow instead of dropping the value.
-        // Checking for overflow after the store instead of before
-        // allows for slightly better code generation.
-        if intrinsics::unlikely(strong == 0) {
-            intrinsics::abort();
-        }
+        // note that we deliberately do not check for overflow here (in contrast to std::rc),
+        // because we will never do a mem::forget with our Rcs. Without that, overflows are
+        // basically impossible as we would need too much memory to overflow 32/64 bit.
+        self.strong_ref().set(strong + 1);
     }
 
     #[inline]
@@ -222,15 +216,8 @@ trait WeakRcInnerPtr {
             hint::assert_unchecked(weak != 0);
         }
 
-        let weak = weak.wrapping_add(1);
-        self.weak_ref().set(weak);
-
-        // We want to abort on overflow instead of dropping the value.
-        // Checking for overflow after the store instead of before
-        // allows for slightly better code generation.
-        if intrinsics::unlikely(weak == 0) {
-            intrinsics::abort();
-        }
+        // no overflow checks for the same reason as above
+        self.weak_ref().set(weak + 1);
     }
 
     #[inline]
@@ -528,6 +515,29 @@ impl<T> StrongRc<T> {
         // that the inner pointer is valid.
         unsafe { self.ptr.as_ref() }
     }
+
+    #[cold]
+    unsafe fn do_drop(&mut self) {
+        let weak = &mut *self.ptr.as_mut().weak_link.as_mut();
+
+        // invalidate back link to us in WeakRcLink
+        weak.ptr = dangling();
+        // now that all strong references are gone, remove the additional weak reference to
+        // destroy the WeakRcLink as soon as all weak refs are gone as well.
+        weak.dec_weak();
+
+        // destroy WeakRcLink if there are no references anymore
+        if weak.weak() == 0 {
+            drop(Box::from_raw(self.inner().weak_link.as_ptr()));
+        }
+        // Otherwise, wake up threads that wait for the drop.
+        else {
+            weak.notify();
+        }
+
+        // destroy RcBox
+        drop(Box::from_raw(self.ptr.as_ptr()));
+    }
 }
 
 impl<T> Downgradable<T> for StrongRc<T> {
@@ -576,29 +586,12 @@ impl<T> Clone for StrongRc<T> {
 }
 
 impl<T> Drop for StrongRc<T> {
+    #[inline(always)]
     fn drop(&mut self) {
         unsafe {
             self.inner().dec_strong();
             if self.inner().strong() == 0 {
-                let weak = &mut *self.ptr.as_mut().weak_link.as_mut();
-
-                // invalidate back link to us in WeakRcLink
-                weak.ptr = dangling();
-                // now that all strong references are gone, remove the additional weak reference to
-                // destroy the WeakRcLink as soon as all weak refs are gone as well.
-                weak.dec_weak();
-
-                // destroy WeakRcLink if there are no references anymore
-                if weak.weak() == 0 {
-                    drop(Box::from_raw(self.inner().weak_link.as_ptr()));
-                }
-                // Otherwise, wake up threads that wait for the drop.
-                else {
-                    weak.notify();
-                }
-
-                // destroy RcBox
-                drop(Box::from_raw(self.ptr.as_ptr()));
+                self.do_drop();
             }
         }
     }
