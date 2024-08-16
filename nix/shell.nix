@@ -46,8 +46,14 @@ in mkShellNoCC {
         # having these set breaks some configure checks
         unset CC CXX AS LD AR RANLIB NM OBJCOPY OBJDUMP READELF SIZE STRINGS STRIP
 
-        export RUSTUP_HOME=$PWD/.rustup
-        export CARGO_HOME=$PWD/.cargo
+        # if we're in the nix subdirectory (e.g., due to direnv), move one level up
+        if [[ "$PWD" = */nix ]]; then
+            export RUSTUP_HOME=$PWD/../.rustup
+            export CARGO_HOME=$PWD/../.cargo
+        else
+            export RUSTUP_HOME=$PWD/.rustup
+            export CARGO_HOME=$PWD/.cargo
+        fi
         export M3_TARGET=''${M3_TARGET:-gem5}
         export M3_ISA=''${M3_ISA:-riscv64}
         export M3_BUILD=''${M3_BUILD:-release}

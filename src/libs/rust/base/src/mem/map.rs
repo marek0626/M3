@@ -179,8 +179,6 @@ impl<T: PrimInt + fmt::LowerHex> fmt::Debug for MemMap<T> {
 #[cfg(test)]
 mod tests {
     #[test]
-    // TODO peek_prev makes miri complain
-    #[cfg(not(miri))]
     fn basics() {
         use super::*;
 

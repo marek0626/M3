@@ -63,6 +63,7 @@ impl<'a, T> Iterator for DListIter<'a, T> {
 /// The mutable iterator for [`DList`]
 pub struct DListIterMut<'a, T> {
     list: &'a mut DList<T>,
+    prev: Option<NonNull<Node<T>>>,
     head: Option<NonNull<Node<T>>>,
 }
 
@@ -72,6 +73,7 @@ impl<'a, T> Iterator for DListIterMut<'a, T> {
     fn next(&mut self) -> Option<&'a mut T> {
         self.head.map(|node| unsafe {
             let node = &mut *node.as_ptr();
+            self.prev = node.prev;
             self.head = node.next;
             &mut node.data
         })
@@ -81,14 +83,7 @@ impl<'a, T> Iterator for DListIterMut<'a, T> {
 impl<'a, T> DListIterMut<'a, T> {
     /// Returns a mutable reference to the previous element
     pub fn peek_prev(&mut self) -> Option<&mut T> {
-        unsafe {
-            let cur = match self.head {
-                None => self.list.tail,
-                Some(mut head) => head.as_mut().prev,
-            };
-            cur.and_then(|mut p| p.as_mut().prev)
-                .map(|pp| &mut (*pp.as_ptr()).data)
-        }
+        unsafe { self.prev.map(|p| &mut (*p.as_ptr()).data) }
     }
 
     /// Inserts the given element before the current element
@@ -271,6 +266,7 @@ impl<T> DList<T> {
     /// Returns a mutable iterator for the list
     pub fn iter_mut(&mut self) -> DListIterMut<'_, T> {
         DListIterMut {
+            prev: None,
             head: self.head,
             list: self,
         }
@@ -442,8 +438,6 @@ mod test {
     }
 
     #[test]
-    // TODO peek_prev makes miri complain
-    #[cfg(not(miri))]
     fn iter() {
         let mut l = gen_list(&[23, 42, 57]);
 
