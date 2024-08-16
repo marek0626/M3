@@ -95,7 +95,7 @@ impl AddrSpace {
     ) -> Result<(), Error> {
         let child_id = cli.get_mut(sid).unwrap().child_id();
 
-        let (sel, _) = cli.add(crt, |_cli, serv| {
+        let (crd, _) = cli.add(crt, |_cli, serv| {
             log!(
                 LogFlags::PgReqs,
                 "[{}] pager::add_child(nsid={})",
@@ -105,7 +105,7 @@ impl AddrSpace {
             Ok(AddrSpace::new(serv, Some(sid), child_id))
         })?;
 
-        xchg.out_caps(CapRngDesc::new_single(CapType::Object, sel));
+        xchg.out_caps(crd);
 
         Ok(())
     }

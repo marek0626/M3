@@ -123,7 +123,7 @@ impl PipesSession {
             msize
         );
 
-        let (sel, _nsid) = cli.add(crt, |cli, serv| {
+        let (crd, _nsid) = cli.add(crt, |cli, serv| {
             let parent_sess = Self::get_sess(cli, sid)?;
 
             match parent_sess.data_mut() {
@@ -136,7 +136,7 @@ impl PipesSession {
             }
         })?;
 
-        xchg.out_caps(kif::CapRngDesc::new_single(kif::CapType::Object, sel));
+        xchg.out_caps(crd);
 
         Ok(())
     }

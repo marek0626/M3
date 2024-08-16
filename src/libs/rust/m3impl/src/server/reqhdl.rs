@@ -159,8 +159,8 @@ impl<S: RequestSession + 'static> ClientManager<S> {
     /// The `create_sess` closure receives the created [`ServerSession`] instance and is expected
     /// to store it to keep the session alive.
     ///
-    /// Returns the selector and session id of the session
-    pub fn add<F>(&mut self, crt: usize, create_sess: F) -> Result<(Selector, SessId), Error>
+    /// Returns the selector range and session id of the session
+    pub fn add<F>(&mut self, crt: usize, create_sess: F) -> Result<(kif::CapRngDesc, SessId), Error>
     where
         F: FnOnce(&mut Self, ServerSession) -> Result<S, Error>,
     {
@@ -174,11 +174,11 @@ impl<S: RequestSession + 'static> ClientManager<S> {
         // manager will also not close the session and therefore we want to know when the session
         // capability was revoked to remove the session.
         let serv = ServerSession::new(self.serv_sel, crt, sid, true)?;
-        let sel = serv.sel();
+        let crd = kif::CapRngDesc::new_single(kif::CapType::Object, serv.sel());
         let sess = create_sess(self, serv)?;
         // the add cannot fail, because we called can_add before
         self.sessions.add(crt, sid, sess).unwrap();
-        Ok((sel, sid))
+        Ok((crd, sid))
     }
 
     /// Creates a new session using `create_sess` with a newly created
