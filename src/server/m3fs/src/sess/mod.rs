@@ -19,6 +19,8 @@ mod meta_session;
 mod open_files;
 
 pub use file_session::FileSession;
+use m3::kif::{CapRngDesc, CapType};
+use m3::vfs::OpenFlags;
 use meta_session::FileLimit;
 pub use meta_session::MetaSession;
 pub use open_files::OpenFiles;
@@ -113,7 +115,16 @@ impl FSSession {
     ) -> Result<(), Error> {
         // serv.sel() + 1 == _sgate.sel() must hold
         cli.add_connected(crt, |cli, serv, _sgate| match Self::get_sess(cli, sid)? {
-            FSSession::Meta(meta) => meta.open_file(serv, xchg).map(FSSession::File),
+            FSSession::Meta(meta) => {
+                let args = xchg.in_args();
+                let flags: OpenFlags = args.pop()?;
+                let path: &str = args.pop()?;
+
+                let nsess = meta.open_file(serv, flags, path).map(FSSession::File)?;
+
+                xchg.out_caps(nsess.caps().unwrap());
+                Ok(nsess)
+            },
             _ => Err(Error::new(Code::InvArgs)),
         })
         .map(|_| ())
@@ -126,7 +137,15 @@ impl FSSession {
         xchg: &mut CapExchange<'_>,
     ) -> Result<(), Error> {
         match Self::get_sess(cli, sid)? {
-            FSSession::File(file) => file.get_mem(xchg),
+            FSSession::File(file) => {
+                let offset: u32 = xchg.in_args().pop()?;
+                let (sel, offset, len) = file.get_mem(offset)?;
+
+                xchg.out_caps(CapRngDesc::new_single(CapType::Object, sel));
+                xchg.out_args().push(offset);
+                xchg.out_args().push(len);
+                Ok(())
+            },
             _ => Err(Error::new(Code::InvArgs)),
         }
     }
@@ -166,9 +185,14 @@ impl FSSession {
         xchg: &mut CapExchange<'_>,
     ) -> Result<(), Error> {
         // serv.sel() + 1 == _sgate.sel() must hold
-        cli.add_connected(crt, |cli, serv, _sgate| match Self::get_sess(cli, sid)? {
-            FSSession::File(file) => file.clone(serv, xchg).map(FSSession::File),
-            FSSession::Meta(meta) => meta.clone(serv, xchg).map(FSSession::Meta),
+        cli.add_connected(crt, |cli, serv, _sgate| {
+            let nsess = match Self::get_sess(cli, sid)? {
+                FSSession::File(file) => file.clone(serv).map(FSSession::File),
+                FSSession::Meta(meta) => meta.clone(serv).map(FSSession::Meta),
+            }?;
+            let crd = nsess.caps().unwrap();
+            xchg.out_caps(crd);
+            Ok(nsess)
         })
         .map(|_| ())
     }
@@ -205,6 +229,13 @@ impl FSSession {
 }
 
 impl M3FSSession for FSSession {
+    fn caps(&self) -> Option<CapRngDesc> {
+        match self {
+            FSSession::Meta(m) => m.caps(),
+            FSSession::File(f) => f.caps(),
+        }
+    }
+
     fn next_in(&mut self, stream: &mut GateIStream<'_>) -> Result<(), Error> {
         match self {
             FSSession::Meta(m) => m.next_in(stream),
@@ -320,6 +351,7 @@ impl M3FSSession for FSSession {
 
 /// Represents an abstract server-side M3FS Session.
 pub trait M3FSSession {
+    fn caps(&self) -> Option<CapRngDesc>;
     fn next_in(&mut self, stream: &mut GateIStream<'_>) -> Result<(), Error>;
     fn next_out(&mut self, stream: &mut GateIStream<'_>) -> Result<(), Error>;
     fn commit(&mut self, stream: &mut GateIStream<'_>) -> Result<(), Error>;

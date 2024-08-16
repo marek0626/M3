@@ -29,7 +29,7 @@ use m3::{
     io::LogFlags,
     kif::{CapRngDesc, CapType, Perm},
     rc::Rc,
-    server::{CapExchange, ServerSession, SessId},
+    server::{ServerSession, SessId},
     syscalls,
     vfs::{OpenFlags, SeekMode},
 };
@@ -143,11 +143,7 @@ impl FileSession {
         Ok(fsess)
     }
 
-    pub fn clone(
-        &mut self,
-        serv: ServerSession,
-        data: &mut CapExchange<'_>,
-    ) -> Result<Self, Error> {
+    pub fn clone(&mut self, serv: ServerSession) -> Result<Self, Error> {
         log!(
             LogFlags::FSSess,
             "[{}] file::clone(path={})",
@@ -158,7 +154,6 @@ impl FileSession {
         self.file_limit.borrow().check(self.session_id)?;
 
         let sid = serv.id();
-        let sel = serv.sel();
         let nsess = Self::new(
             Some(serv),
             Some(self.session_id),
@@ -173,14 +168,10 @@ impl FileSession {
         self.child_sessions.push(sid);
         self.file_limit.borrow_mut().add(true);
 
-        data.out_caps(CapRngDesc::new(CapType::Object, sel, 2).unwrap());
-
         Ok(nsess)
     }
 
-    pub fn get_mem(&mut self, data: &mut CapExchange<'_>) -> Result<(), Error> {
-        let offset: u32 = data.in_args().pop()?;
-
+    pub fn get_mem(&mut self, offset: u32) -> Result<(Selector, u64, u64), Error> {
         log!(
             LogFlags::FSSess,
             "[{}] file::get_mem(path={}, offset={})",
@@ -203,10 +194,6 @@ impl FileSession {
             &mut self.load_limit,
         )?;
 
-        data.out_caps(m3::kif::CapRngDesc::new_single(CapType::Object, sel));
-        data.out_args().push(0);
-        data.out_args().push(len);
-
         log!(
             LogFlags::FSSess,
             "[{}] file::get_mem(path={}, offset={}) -> {}",
@@ -218,7 +205,7 @@ impl FileSession {
 
         self.capscon.add(sel);
 
-        Ok(())
+        Ok((sel, 0, len as u64))
     }
 
     fn revoke_cap(&mut self) {
@@ -608,6 +595,12 @@ impl Drop for FileSession {
 }
 
 impl M3FSSession for FileSession {
+    fn caps(&self) -> Option<CapRngDesc> {
+        self._serv
+            .as_ref()
+            .map(|s| CapRngDesc::new(CapType::Object, s.sel(), 2).unwrap())
+    }
+
     fn next_in(&mut self, stream: &mut GateIStream<'_>) -> Result<(), Error> {
         let _: usize = stream.pop()?;
         self.file_in_out(stream, false)

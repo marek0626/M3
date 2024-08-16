@@ -27,7 +27,6 @@ use m3::{
     io::LogFlags,
     kif::{CapRngDesc, CapType},
     rc::Rc,
-    server::CapExchange,
     server::{ServerSession, SessId},
     vfs::{FileMode, OpenFlags},
 };
@@ -122,11 +121,7 @@ impl MetaSession {
         self.file_limit.borrow_mut().remove(true);
     }
 
-    pub fn clone(
-        &mut self,
-        serv: ServerSession,
-        data: &mut CapExchange<'_>,
-    ) -> Result<Self, Error> {
+    pub fn clone(&mut self, serv: ServerSession) -> Result<Self, Error> {
         log!(
             LogFlags::FSSess,
             "[{}] meta::clone(nsid={})",
@@ -136,11 +131,7 @@ impl MetaSession {
 
         // the session shares the file count with the parent to prevent that clients can sidestep
         // the limit by cloning sessions.
-        let sel = serv.sel();
         let nsess = MetaSession::new(serv, self.file_limit.clone());
-
-        data.out_caps(CapRngDesc::new(CapType::Object, sel, 2).unwrap());
-
         Ok(nsess)
     }
 
@@ -148,13 +139,10 @@ impl MetaSession {
     pub fn open_file(
         &mut self,
         serv: ServerSession,
-        data: &mut CapExchange<'_>,
+        flags: OpenFlags,
+        path: &str,
     ) -> Result<FileSession, Error> {
         self.file_limit.borrow().check(self.serv.id())?;
-
-        let args = data.in_args();
-        let flags: OpenFlags = args.pop()?;
-        let path: &str = args.pop()?;
 
         log!(
             LogFlags::FSSess,
@@ -165,13 +153,10 @@ impl MetaSession {
         );
 
         let sid = serv.id();
-        let sel = serv.sel();
         let session = self.do_open(Some(serv), sid, path, flags)?;
 
         self.files.push(sid);
         self.file_limit.borrow_mut().add(true);
-
-        data.out_caps(CapRngDesc::new(CapType::Object, sel, 2).unwrap());
 
         log!(
             LogFlags::FSSess,
@@ -247,6 +232,10 @@ impl MetaSession {
 }
 
 impl M3FSSession for MetaSession {
+    fn caps(&self) -> Option<CapRngDesc> {
+        Some(CapRngDesc::new(CapType::Object, self.serv.sel(), 2).unwrap())
+    }
+
     fn next_in(&mut self, stream: &mut GateIStream<'_>) -> Result<(), Error> {
         self.with_file_sess(stream, |f, stream| f.file_in_out(stream, false))
     }
