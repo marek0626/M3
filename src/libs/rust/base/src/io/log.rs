@@ -25,7 +25,7 @@ use crate::errors::Error;
 use crate::io::{LogFlags, Serial, Write};
 use crate::tcu::{TileId, TCU};
 
-const MAX_LINE_LEN: usize = 180;
+const MAX_LINE_LEN: usize = 256;
 const SUFFIX: &[u8] = b"\x1B[0m";
 
 static LOG_READY: StaticCell<bool> = StaticCell::new(false);
