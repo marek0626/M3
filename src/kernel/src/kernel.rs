@@ -217,12 +217,6 @@ fn workloop_async() -> ! {
 
     // do the tile deinit just once
     if tiles::tilemng::state() == tiles::tilemng::State::RUNNING {
-        // with all activities gone, we should only have the main thread left; add another thread for
-        // the asynchronous tile reset
-        assert_eq!(thread::thread_count(), 0);
-        #[cfg_attr(dylint_lib = "m3_lints", allow(async_alias))]
-        thread::add_thread(VirtAddr::from(thread_startup_async as *const ()), 0);
-
         // trigger the shutdown of tiles
         tiles::deinit_async();
     }
@@ -241,7 +235,8 @@ fn workloop_async() -> ! {
         thread::try_yield_async();
     }
 
-    // if we get back here, all activities and multiplexers on user tiles are shut down, so we can
-    // shut down the kernel tile as well
+    // now that all activities are gone and no other tiles are in use, we should only have the main
+    // thread left.
+    assert_eq!(thread::thread_count(), 0);
     exit(0);
 }

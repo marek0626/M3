@@ -34,10 +34,10 @@ use crate::cap::{
     EPCategory, EPObject, EPQuota, GateObject, InvalidateType, MGateObject, RGateObject,
     SGateObject, TileObject,
 };
-use crate::ktcu;
 use crate::mem;
 use crate::platform;
 use crate::tiles::{tilemng, Activity, INVAL_ID};
+use crate::{ktcu, thread_startup_async};
 
 struct TileState {
     // Note that we shouldn't even use EPObject (a kernel object) here, because it's actually a
@@ -332,6 +332,13 @@ impl TileMux {
                         ktcu::write_slice(mux_tile_id, mux_offset, &trampoline);
                     }
                 }
+
+                // the exit call is async and thus requires a dedicated thread for this tile. note
+                // that one thread is sufficient, because TileMux has only one credit and thus can
+                // just perform one exit call at a time.
+                // TODO account the kernel memory for the thread to the caller
+                #[cfg_attr(dylint_lib = "m3_lints", allow(async_alias))]
+                thread::add_thread(VirtAddr::from(thread_startup_async as *const ()), 0);
             }
             else {
                 drop(tile);
@@ -342,6 +349,9 @@ impl TileMux {
                 if platform::tile_desc(tile_id).is_programmable() {
                     Self::shutdown_async(tilemux).unwrap();
                 }
+
+                // remove some thread from the pool now that this tile is no longer usable
+                thread::remove_thread();
             }
             start
         };
