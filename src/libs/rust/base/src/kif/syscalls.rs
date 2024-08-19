@@ -84,7 +84,6 @@ pub enum Operation {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct CreateSrv<'s> {
     pub dst: CapSel,
     pub rgate: CapSel,
@@ -93,7 +92,6 @@ pub struct CreateSrv<'s> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct CreateSess {
     pub dst: CapSel,
     pub srv: CapSel,
@@ -103,7 +101,6 @@ pub struct CreateSess {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct CreateMGate {
     pub dst: CapSel,
     pub act: CapSel,
@@ -113,7 +110,6 @@ pub struct CreateMGate {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct CreateRGate {
     pub dst: CapSel,
     pub order: u32,
@@ -121,7 +117,6 @@ pub struct CreateRGate {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct CreateSGate {
     pub dst: CapSel,
     pub rgate: CapSel,
@@ -130,7 +125,6 @@ pub struct CreateSGate {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct CreateMap {
     pub dst: CapSel,
     pub act: CapSel,
@@ -141,7 +135,6 @@ pub struct CreateMap {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct CreateActivity<'s> {
     pub dst: CapRngDesc,
     pub tile: CapSel,
@@ -150,14 +143,12 @@ pub struct CreateActivity<'s> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct CreateSem {
     pub dst: CapSel,
     pub value: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct AllocEP {
     pub dst: CapSel,
     pub act: CapSel,
@@ -166,14 +157,12 @@ pub struct AllocEP {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ActivateMGate {
     pub ep: CapSel,
     pub gate: CapSel,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ActivateRGate {
     pub ep: CapSel,
     pub gate: CapSel,
@@ -182,14 +171,12 @@ pub struct ActivateRGate {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ActivateSGate {
     pub ep: CapSel,
     pub gate: CapSel,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct Invalidate {
     pub ep: CapSel,
 }
@@ -203,7 +190,6 @@ pub enum ActivityOp {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ActivityCtrl {
     pub act: CapSel,
     pub op: ActivityOp,
@@ -211,7 +197,6 @@ pub struct ActivityCtrl {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ActivityWait {
     pub event: u64,
     pub act_count: usize,
@@ -219,7 +204,6 @@ pub struct ActivityWait {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct DeriveMem {
     pub act: CapSel,
     pub dst: CapSel,
@@ -230,7 +214,6 @@ pub struct DeriveMem {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct DeriveKMem {
     pub kmem: CapSel,
     pub dst: CapSel,
@@ -238,7 +221,6 @@ pub struct DeriveKMem {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct DeriveTile {
     pub tile: CapSel,
     pub dst: CapSel,
@@ -248,7 +230,6 @@ pub struct DeriveTile {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct DeriveSrvReq {
     pub srv: CapSel,
     pub dst_srv: CapSel,
@@ -258,7 +239,6 @@ pub struct DeriveSrvReq {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct DeriveSrvFin {
     pub srv: CapSel,
     pub result: Code,
@@ -267,7 +247,6 @@ pub struct DeriveSrvFin {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct GetSess {
     pub srv: CapSel,
     pub act: CapSel,
@@ -276,31 +255,26 @@ pub struct GetSess {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct MGateRegion {
     pub mgate: CapSel,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct RGateBuffer {
     pub rgate: CapSel,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct KMemQuota {
     pub kmem: CapSel,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct TileQuota {
     pub tile: CapSel,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct TileSetQuota {
     pub tile: CapSel,
     pub time: u64,
@@ -308,7 +282,6 @@ pub struct TileSetQuota {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct TileSetPMP {
     pub tile: CapSel,
     pub mgate: CapSel,
@@ -317,7 +290,6 @@ pub struct TileSetPMP {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct TileMem {
     pub tile: CapSel,
     pub dst: CapSel,
@@ -344,14 +316,12 @@ pub enum MuxType {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct TileInfo {
     pub tile: CapSel,
 }
 
 /// The tile info reply message
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct TileInfoReply {
     pub ty: MuxType,
     pub id: TileId,
@@ -360,7 +330,6 @@ pub struct TileInfoReply {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct TileReset {
     pub tile: CapSel,
     pub mux_mem: CapSel,
@@ -376,13 +345,11 @@ pub enum SemOp {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct SemCtrl {
     pub sem: CapSel,
     pub op: SemOp,
 }
 
-#[repr(C)]
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ExchangeArgs {
     pub bytes: usize,
@@ -390,7 +357,6 @@ pub struct ExchangeArgs {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ExchangeSess {
     pub act: CapSel,
     pub sess: CapSel,
@@ -400,7 +366,6 @@ pub struct ExchangeSess {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct Exchange {
     pub act: CapSel,
     pub own: CapRngDesc,
@@ -409,7 +374,6 @@ pub struct Exchange {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct Revoke {
     pub act: CapSel,
     pub crd: CapRngDesc,
@@ -417,16 +381,13 @@ pub struct Revoke {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ResetStats {}
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct Noop {}
 
 /// The create activity reply message
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct CreateActivityReply {
     pub id: ActId,
     pub eps_start: EpId,
@@ -434,14 +395,12 @@ pub struct CreateActivityReply {
 
 /// The alloc endpoints reply message
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct AllocEPReply {
     pub ep: EpId,
 }
 
 /// The activity wait reply message
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ActivityWaitReply {
     pub act_sel: CapSel,
     pub exitcode: Code,
@@ -449,7 +408,6 @@ pub struct ActivityWaitReply {
 
 /// The kernel gate region reply message
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct MGateRegionReply {
     pub global: GlobAddr,
     pub size: GlobOff,
@@ -457,7 +415,6 @@ pub struct MGateRegionReply {
 
 /// The kernel receive gate buffer reply message
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct RGateBufferReply {
     pub order: u32,
     pub msg_order: u32,
@@ -465,7 +422,6 @@ pub struct RGateBufferReply {
 
 /// The kernel memory quota reply message
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct KMemQuotaReply {
     pub id: QuotaId,
     pub total: usize,
@@ -474,7 +430,6 @@ pub struct KMemQuotaReply {
 
 /// The tile quota reply message
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct TileQuotaReply {
     pub eps_id: QuotaId,
     pub eps_total: usize,
@@ -489,7 +444,6 @@ pub struct TileQuotaReply {
 
 /// The delegate/obtain reply message
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ExchangeSessReply {
     pub args: ExchangeArgs,
 }

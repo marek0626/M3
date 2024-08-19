@@ -38,7 +38,6 @@ pub enum Operation {
 
 /// The activity-wait upcall that is sent upon a activity-exit
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ActivityWait {
     pub event: u64,
     pub error: Code,
@@ -48,7 +47,6 @@ pub struct ActivityWait {
 
 /// The derive-srv upcall that is sent upon completion
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct DeriveSrv {
     pub event: u64,
     pub error: Code,

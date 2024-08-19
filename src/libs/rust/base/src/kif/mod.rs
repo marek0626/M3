@@ -54,7 +54,6 @@ pub const FIRST_FREE_SEL: CapSel = SEL_ACT + 1;
 
 /// The default reply message that only contains the error code
 #[derive(Serialize, Deserialize)]
-#[repr(C)]
 pub struct DefaultReply {
     pub error: Code,
 }
