@@ -596,6 +596,7 @@ impl Activity {
 
             // if it's root, there is nobody waiting for it; just remove it
             if act.is_root() {
+                tilemng::tilemux(act.tile_id).rem_activity(act.id);
                 ActivityMng::remove_activity(act.id());
                 thread::remove_thread();
             }
