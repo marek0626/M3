@@ -397,7 +397,7 @@ fn testderive(t: &mut dyn WvTester) {
     let sels = SelSpace::get().alloc_sels(2);
     wv_assert_ok!(
         t,
-        syscalls::derive_srv_req(our_sel, sels + 0, sels + 1, 1, 0xDEAD_BEEF)
+        syscalls::derive_srv_req(our_sel, sels.start() + 0, sels.start() + 1, 1, 0xDEAD_BEEF)
     );
 
     // wait for upcall

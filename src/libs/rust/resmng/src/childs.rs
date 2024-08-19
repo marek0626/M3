@@ -163,10 +163,9 @@ pub trait Child {
         syscalls::exchange(self.activity_sel(), crd, dst, false)
     }
     fn obtain(&self, src: Selector) -> Result<Selector, Error> {
-        let dst = SelSpace::get().alloc_sels(1);
-        let own = CapRngDesc::new_single(CapType::Object, dst);
+        let own = SelSpace::get().alloc_sels(1);
         syscalls::exchange(self.activity_sel(), own, src, true)?;
-        Ok(dst)
+        Ok(own.start())
     }
 
     fn has_service(&self, sel: Selector) -> bool {

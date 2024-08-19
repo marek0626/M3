@@ -143,7 +143,7 @@ pub struct CreateMap {
 #[derive(Debug, Serialize, Deserialize)]
 #[repr(C)]
 pub struct CreateActivity<'s> {
-    pub dst: CapSel,
+    pub dst: CapRngDesc,
     pub tile: CapSel,
     pub kmem: CapSel,
     pub name: &'s str,

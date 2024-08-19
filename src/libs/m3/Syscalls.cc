@@ -128,12 +128,13 @@ void Syscalls::create_map(capsel_t dst, capsel_t act, capsel_t mgate, capsel_t f
     send_receive_throw(req_buf);
 }
 
-std::pair<epid_t, actid_t> Syscalls::create_activity(capsel_t dst, const std::string_view &name,
-                                                     capsel_t tile, capsel_t kmem) {
+std::pair<epid_t, actid_t> Syscalls::create_activity(KIF::CapRngDesc dst,
+                                                     const std::string_view &name, capsel_t tile,
+                                                     capsel_t kmem) {
     MsgBuf req_buf;
     auto &req = req_buf.cast<KIF::Syscall::CreateActivity>();
     req.opcode = KIF::Syscall::CREATE_ACT;
-    req.dst_sel = dst;
+    dst.to_raw(req.dst_crd);
     req.tile_sel = tile;
     req.kmem_sel = kmem;
     req.namelen = Math::min(name.length() + 1, sizeof(req.name));

@@ -51,9 +51,9 @@ public:
      * @param count the number of selectors
      * @return the first one
      */
-    capsel_t alloc_sels(uint count) noexcept {
+    KIF::CapRngDesc alloc_sels(uint count) noexcept {
         _next += count;
-        return _next - count;
+        return KIF::CapRngDesc(KIF::CapRngDesc::OBJ, _next - count, count);
     }
     capsel_t alloc_sel() noexcept {
         return _next++;

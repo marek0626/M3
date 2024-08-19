@@ -154,7 +154,7 @@ impl ChildActivity {
             // use an invalid cap temporary until we set the actual SendCap
             rmng: ResMngChild::default(),
             base: Activity::new_act(
-                Capability::new(sel, CapFlags::empty()),
+                Capability::new(sel.start(), CapFlags::empty()),
                 tile.clone(),
                 args.kmem.unwrap_or_else(|| Activity::own().kmem().clone()),
             ),
@@ -296,13 +296,14 @@ impl ChildActivity {
     /// [`Activity::own`](Activity::own).
     pub fn obtain_obj(&self, sel: Selector) -> Result<Selector, Error> {
         self.obtain(CapRngDesc::new_single(CapType::Object, sel))
+            .map(|crd| crd.start())
     }
 
     /// Obtains the given capability range of `self` to [`Activity::own`](Activity::own).
-    pub fn obtain(&self, crd: CapRngDesc) -> Result<Selector, Error> {
+    pub fn obtain(&self, crd: CapRngDesc) -> Result<CapRngDesc, Error> {
         let count = crd.count();
-        let start = SelSpace::get().alloc_sels(count);
-        self.obtain_to(crd, start).map(|_| start)
+        let dst = SelSpace::get().alloc_sels(count);
+        self.obtain_to(crd, dst.start()).map(|_| dst)
     }
 
     /// Obtains the given capability range of `self` to [`Activity::own`](Activity::own) using

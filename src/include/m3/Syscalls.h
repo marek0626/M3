@@ -60,8 +60,9 @@ public:
     static void create_mgate(capsel_t dst, capsel_t act, goff_t addr, size_t size, int perms);
     static void create_rgate(capsel_t dst, uint order, uint msgorder);
     static void create_sgate(capsel_t dst, capsel_t rgate, label_t label, uint credits);
-    static std::pair<epid_t, actid_t> create_activity(capsel_t dst, const std::string_view &name,
-                                                      capsel_t tile, capsel_t kmem);
+    static std::pair<epid_t, actid_t> create_activity(KIF::CapRngDesc dst,
+                                                      const std::string_view &name, capsel_t tile,
+                                                      capsel_t kmem);
     static void create_map(capsel_t dst, capsel_t act, capsel_t mgate, capsel_t first,
                            capsel_t pages, int perms);
     static void create_sem(capsel_t dst, uint value);
