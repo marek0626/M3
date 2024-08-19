@@ -24,14 +24,12 @@ use crate::serialize::{Deserialize, Serialize};
 
 /// The data part of the delegate/obtain request messages
 #[derive(Debug, Default, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ExchangeData {
     pub caps: CapRngDesc,
     pub args: ExchangeArgs,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub enum Request<'s> {
     Open { arg: &'s str },
     DeriveCrt { sessions: u32 },
@@ -43,7 +41,6 @@ pub enum Request<'s> {
 
 /// The open reply message
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct OpenReply {
     pub sid: CapSel,
     pub ident: u64,
@@ -51,7 +48,6 @@ pub struct OpenReply {
 
 /// The delegate/obtain reply message
 #[derive(Debug, Default, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ExchangeReply {
     pub data: ExchangeData,
 }

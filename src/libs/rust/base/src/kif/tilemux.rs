@@ -59,7 +59,6 @@ pub enum Sidecalls {
 
 /// The info sidecall
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct Info {}
 
 /// The operations for the `act_ctrl` sidecall
@@ -72,7 +71,6 @@ pub enum ActivityOp {
 
 /// The activity init sidecall
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ActInit {
     pub act_id: u64,
     pub time_quota: QuotaId,
@@ -82,7 +80,6 @@ pub struct ActInit {
 
 /// The activity control sidecall
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ActivityCtrl {
     pub act_id: u64,
     pub act_op: ActivityOp,
@@ -90,7 +87,6 @@ pub struct ActivityCtrl {
 
 /// The request-ep sidecall
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ReqEP {
     pub act_id: u64,
     pub ep_id: EpId,
@@ -99,7 +95,6 @@ pub struct ReqEP {
 
 /// The map sidecall
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct Map {
     pub act_id: u64,
     pub virt: VirtAddr,
@@ -110,7 +105,6 @@ pub struct Map {
 
 /// The translate sidecall
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct Translate {
     pub act_id: u64,
     pub virt: VirtAddr,
@@ -119,7 +113,6 @@ pub struct Translate {
 
 /// The remove messages sidecall
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct RemMsgs {
     pub act_id: u64,
     pub unread_mask: u32,
@@ -127,7 +120,6 @@ pub struct RemMsgs {
 
 /// The EP invalidation sidecall
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct EpInval {
     pub act_id: u64,
     pub ep: EpId,
@@ -135,7 +127,6 @@ pub struct EpInval {
 
 /// The derive quota sidecall
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct DeriveQuota {
     pub parent_time: QuotaId,
     pub parent_pts: QuotaId,
@@ -145,7 +136,6 @@ pub struct DeriveQuota {
 
 /// The get quota sidecall
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct GetQuota {
     pub time: QuotaId,
     pub pts: QuotaId,
@@ -153,7 +143,6 @@ pub struct GetQuota {
 
 /// The set quota sidecall
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct SetQuota {
     pub id: QuotaId,
     pub time: u64,
@@ -162,7 +151,6 @@ pub struct SetQuota {
 
 /// The remove quotas sidecall
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct RemoveQuotas {
     pub time: Option<QuotaId>,
     pub pts: Option<QuotaId>,
@@ -170,17 +158,14 @@ pub struct RemoveQuotas {
 
 /// The reset stats sidecall
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct ResetStats {}
 
 /// The shutdown sidecall
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct Shutdown {}
 
 /// The sidecall response
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct Response {
     pub val1: u64,
     pub val2: u64,
@@ -195,7 +180,6 @@ pub enum Calls {
 
 /// The exit call
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(C)]
 pub struct Exit {
     pub act_id: ActId,
     pub status: Code,
