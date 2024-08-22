@@ -20,6 +20,7 @@
 #![feature(allocator_internals)]
 #![feature(core_intrinsics)]
 #![feature(maybe_uninit_write_slice)]
+#![feature(linked_list_cursors)]
 #![default_lib_allocator]
 #![cfg_attr(not(feature = "linux"), no_std)]
 
