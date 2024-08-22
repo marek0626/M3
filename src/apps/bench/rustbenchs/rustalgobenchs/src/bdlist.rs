@@ -16,7 +16,7 @@
  * General Public License version 2 for more details.
  */
 
-use m3::col::DList;
+use m3::col::LinkedList;
 use m3::test::WvTester;
 use m3::time::{CycleInstant, Profiler, Runner};
 use m3::{wv_perf, wv_run_test};
@@ -31,7 +31,7 @@ fn push_back(_t: &mut dyn WvTester) {
     let prof = Profiler::default().warmup(100).repeats(30);
 
     #[derive(Default)]
-    struct ListTester(DList<u32>);
+    struct ListTester(LinkedList<u32>);
 
     impl Runner for ListTester {
         fn pre(&mut self) {
@@ -55,7 +55,7 @@ fn push_front(_t: &mut dyn WvTester) {
     let prof = Profiler::default().warmup(100).repeats(30);
 
     #[derive(Default)]
-    struct ListTester(DList<u32>);
+    struct ListTester(LinkedList<u32>);
 
     impl Runner for ListTester {
         fn pre(&mut self) {
@@ -79,7 +79,7 @@ fn clear(_t: &mut dyn WvTester) {
     let prof = Profiler::default().warmup(100).repeats(30);
 
     #[derive(Default)]
-    struct ListTester(DList<u32>);
+    struct ListTester(LinkedList<u32>);
 
     impl Runner for ListTester {
         fn pre(&mut self) {
