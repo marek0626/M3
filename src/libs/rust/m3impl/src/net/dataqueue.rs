@@ -16,7 +16,7 @@
 
 use core::cmp;
 
-use crate::col::DList;
+use crate::col::LinkedList;
 use crate::net::{event, Endpoint, IpAddr, NetEvent, Port};
 
 struct Item {
@@ -49,7 +49,7 @@ impl Item {
 #[doc(hidden)]
 #[derive(Default)]
 pub struct DataQueue {
-    items: DList<Item>,
+    items: LinkedList<Item>,
 }
 
 impl DataQueue {
