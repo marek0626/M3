@@ -15,7 +15,7 @@
 
 //! Contains the message queue types
 
-use crate::col::{DList, Vec};
+use crate::col::{LinkedList, Vec};
 use crate::errors::Error;
 use crate::mem::MsgBuf;
 
@@ -49,7 +49,7 @@ pub trait MsgSender<M> {
 /// [`MsgSender`] given as the type argument `S`. Additionally, the custom meta data `M` will be
 /// passed to every sent message.
 pub struct MsgQueue<S: MsgSender<M>, M> {
-    queue: DList<PendingMsg<M>>,
+    queue: LinkedList<PendingMsg<M>>,
     sender: S,
 }
 
@@ -57,7 +57,7 @@ impl<S: MsgSender<M>, M> MsgQueue<S, M> {
     /// Creates a new message queue with given sender
     pub const fn new(sender: S) -> Self {
         Self {
-            queue: DList::new(),
+            queue: LinkedList::new(),
             sender,
         }
     }

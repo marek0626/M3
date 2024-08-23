@@ -21,7 +21,7 @@ use core::ops;
 
 use num_traits::PrimInt;
 
-use crate::col::DList;
+use crate::col::LinkedList;
 use crate::errors::{Code, Error};
 use crate::util::math;
 
@@ -44,13 +44,13 @@ impl<T: PrimInt + fmt::LowerHex> fmt::Debug for Area<T> {
 
 /// The memory map, allowing allocs and frees of memory areas
 pub struct MemMap<T: PrimInt> {
-    areas: DList<Area<T>>,
+    areas: LinkedList<Area<T>>,
 }
 
 impl<T: PrimInt + ops::AddAssign + ops::SubAssign> MemMap<T> {
     /// Creates a new memory map from `addr` to `addr`+`size`.
     pub fn new(addr: T, size: T) -> Self {
-        let mut areas = DList::new();
+        let mut areas = LinkedList::new();
         areas.push_back(Area::new(addr, size));
         MemMap { areas }
     }
@@ -58,9 +58,9 @@ impl<T: PrimInt + ops::AddAssign + ops::SubAssign> MemMap<T> {
     /// Allocates a region of `size` bytes, aligned by `align`.
     pub fn allocate(&mut self, size: T, align: T) -> Result<T, Error> {
         // find an area with sufficient space
-        let mut it = self.areas.iter_mut();
+        let mut cur = self.areas.cursor_front_mut();
         let a: Option<&mut Area<T>> = loop {
-            match it.next() {
+            match cur.current() {
                 None => break None,
                 Some(a) => {
                     let diff = math::round_up(a.addr, align) - a.addr;
@@ -69,15 +69,16 @@ impl<T: PrimInt + ops::AddAssign + ops::SubAssign> MemMap<T> {
                     }
                 },
             }
+            cur.move_next();
         };
 
         match a {
             None => Err(Error::new(Code::OutOfMem)),
             Some(a) => {
                 // if we need to do some alignment, create a new area in front of a
-                let diff = math::round_up(a.addr, align) - a.addr;
+                let org_addr = a.addr;
+                let diff = math::round_up(a.addr, align) - org_addr;
                 if diff != T::zero() {
-                    it.insert_before(Area::new(a.addr, diff));
                     a.addr += diff;
                     a.size -= diff;
                 }
@@ -89,7 +90,10 @@ impl<T: PrimInt + ops::AddAssign + ops::SubAssign> MemMap<T> {
 
                 // if the area is empty now, remove it
                 if a.size == T::zero() {
-                    it.remove();
+                    cur.remove_current();
+                }
+                if diff != T::zero() {
+                    cur.insert_before(Area::new(org_addr, diff));
                 }
 
                 Ok(res)
@@ -100,37 +104,42 @@ impl<T: PrimInt + ops::AddAssign + ops::SubAssign> MemMap<T> {
     /// Free's the given memory region defined by `addr` and `size`.
     pub fn free(&mut self, addr: T, size: T) {
         // find the area behind ours
-        let mut it = self.areas.iter_mut();
-        let n: Option<&mut Area<T>> = loop {
-            match it.next() {
-                None => break None,
+        let mut cur = self.areas.cursor_front_mut();
+        loop {
+            match cur.current() {
+                None => break,
                 Some(n) => {
                     if addr <= n.addr {
-                        break Some(n);
+                        break;
                     }
                 },
             }
-        };
+            cur.move_next();
+        }
 
         let res = {
-            let p: Option<&mut Area<T>> = it.peek_prev();
+            let cur_rdonly = cur.as_cursor();
+            let n = cur_rdonly.current();
+            let p = cur_rdonly.peek_prev();
             match (p, n) {
                 // merge with prev and next
-                (Some(ref mut p), Some(ref n))
-                    if p.addr + p.size == addr && addr + size == n.addr =>
-                {
-                    p.size += size + n.size;
+                (Some(ref mut p), Some(n)) if p.addr + p.size == addr && addr + size == n.addr => {
+                    let nsize = n.size;
+                    let p = cur.peek_prev().unwrap();
+                    p.size += size + nsize;
                     1
                 },
 
                 // merge with prev
                 (Some(ref mut p), _) if p.addr + p.size == addr => {
+                    let p = cur.peek_prev().unwrap();
                     p.size += size;
                     0
                 },
 
                 // merge with next
                 (_, Some(ref mut n)) if addr + size == n.addr => {
+                    let n = cur.current().unwrap();
                     n.addr -= size;
                     n.size += size;
                     0
@@ -141,10 +150,10 @@ impl<T: PrimInt + ops::AddAssign + ops::SubAssign> MemMap<T> {
         };
 
         if res == 1 {
-            it.remove();
+            cur.remove_current();
         }
         else if res == 2 {
-            it.insert_before(Area::new(addr, size));
+            cur.insert_before(Area::new(addr, size));
         }
     }
 
