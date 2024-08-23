@@ -369,4 +369,30 @@ mod tests {
             assert_eq!(treap.get(v), None);
         }
     }
+
+    #[test]
+    fn test_clear() {
+        let mut treap = Treap::new();
+        treap.insert(0, 4);
+        treap.insert(1, 5);
+        treap.insert(4, 42);
+        assert!(!treap.is_empty());
+        treap.clear();
+        assert!(treap.is_empty());
+    }
+
+    #[test]
+    fn test_remove_root() {
+        let mut treap = Treap::new();
+        treap.insert(0x123, 4);
+        treap.insert(0x444, 5);
+        treap.insert(0x222, 42);
+        let val = treap.get_mut(&0x222).unwrap();
+        *val += 1;
+        assert_eq!(treap.get(&0x222), Some(&43));
+        assert!(treap.remove_root().is_some());
+        assert!(treap.remove_root().is_some());
+        assert!(treap.remove_root().is_some());
+        assert!(treap.is_empty());
+    }
 }
