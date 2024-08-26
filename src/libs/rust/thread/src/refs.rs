@@ -846,6 +846,60 @@ mod tests {
     }
 
     #[test]
+    fn downgrade_upgrade() {
+        let dropped = Cell::from(false);
+        let rc = StrongRc::new(DropMarker::new(&dropped));
+        let temp = TempRc::new(rc.clone());
+        let weak = temp.downgrade_store();
+        assert_eq!(dropped.get(), false);
+        assert!(weak.can_upgrade());
+        let strong = weak.upgrade();
+        assert!(strong.is_some());
+        drop(strong);
+        assert_eq!(dropped.get(), false);
+        drop(rc);
+        assert_eq!(dropped.get(), true);
+    }
+
+    #[test]
+    fn ptr() {
+        let val = 42;
+        let rc = StrongRc::new(val);
+        let rc2 = StrongRc::new(val);
+        let clone = rc.clone();
+        assert!(StrongRc::ptr_eq(&rc, &clone));
+        assert!(!StrongRc::ptr_eq(&rc2, &clone));
+        assert!(!StrongRc::ptr_eq(&rc, &rc2));
+        let ptr = StrongRc::as_ptr(&clone);
+        assert_eq!(unsafe { *ptr }, 42);
+
+        let temp = TempRc::new(rc);
+        let temp2 = TempRc::new(rc2);
+        let tclone = temp.clone();
+        assert!(TempRc::ptr_eq(&temp, &tclone));
+        assert!(!TempRc::ptr_eq(&temp2, &tclone));
+        assert!(!TempRc::ptr_eq(&temp, &temp2));
+        let ptr = TempRc::as_ptr(&tclone);
+        assert_eq!(unsafe { *ptr }, *tclone);
+    }
+
+    #[test]
+    fn into_strong() {
+        let val = 42;
+        let rc = StrongRc::new(val);
+        let temp = TempRc::new(rc);
+        assert_eq!(TempRc::strong_count(&temp), 1);
+        assert_eq!(TempRc::weak_count(&temp), 0);
+        let strong = TempRc::into_strong(temp).unwrap();
+        assert_eq!(*strong, 42);
+        let clone = strong.clone();
+        let temp = TempRc::new(clone);
+        assert_eq!(TempRc::strong_count(&temp), 2);
+        assert_eq!(TempRc::weak_count(&temp), 0);
+        assert!(TempRc::into_strong(temp).is_err());
+    }
+
+    #[test]
     fn strong_then_weak() {
         let dropped = Cell::from(false);
         let rc = StrongRc::new(DropMarker::new(&dropped));
