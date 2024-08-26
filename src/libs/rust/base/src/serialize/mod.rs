@@ -109,6 +109,8 @@ mod tests {
         ser.push('a');
         ser.push(true);
         ser.push(());
+        ser.push::<Option<i32>>(None);
+        ser.push(Some(42));
 
         let mut de = M3Deserializer::new(&vec);
         assert_eq!(de.pop::<u8>(), Ok(1u8));
@@ -124,6 +126,27 @@ mod tests {
         assert_eq!(de.pop::<char>(), Ok('a'));
         assert_eq!(de.pop::<bool>(), Ok(true));
         assert_eq!(de.pop::<()>(), Ok(()));
+        assert_eq!(de.pop::<Option<i32>>(), Ok(None));
+        assert_eq!(de.pop::<Option<i32>>(), Ok(Some(42)));
+        assert!(de.pop::<u32>().is_err());
+    }
+
+    #[test]
+    fn slice_sink() {
+        let mut buf = [0u64; 128];
+        let mut ser = M3Serializer::new(SliceSink::new(&mut buf));
+
+        ser.push(42);
+        ser.push("test");
+        ser.push(serde_bytes::Bytes::new(&[8, 7, 6]));
+
+        let mut de = M3Deserializer::new(&buf);
+        assert_eq!(de.pop::<u32>(), Ok(42));
+        assert_eq!(de.pop::<&str>(), Ok("test"));
+        assert_eq!(
+            de.pop::<&serde_bytes::Bytes>().unwrap(),
+            &serde_bytes::Bytes::new(&[8, 7, 6])
+        );
     }
 
     #[test]
@@ -151,6 +174,36 @@ mod tests {
     }
 
     #[test]
+    fn bytes() {
+        let mut vec = vec![];
+        let mut ser = M3Serializer::new(VecSink::new(&mut vec));
+        let buf = serde_bytes::Bytes::new(&[0, 5, 8, 10]);
+        ser.push(&buf);
+
+        let mut de = M3Deserializer::new(&vec);
+        assert_eq!(
+            de.pop::<&serde_bytes::Bytes>().unwrap(),
+            &serde_bytes::Bytes::new(&[0, 5, 8, 10])
+        );
+    }
+
+    #[test]
+    fn byte_buf() {
+        let mut vec = vec![];
+        let mut ser = M3Serializer::new(VecSink::new(&mut vec));
+        let mut buf = serde_bytes::ByteBuf::new();
+        buf.push(42);
+        buf.push(23);
+        buf.push(100);
+        ser.push(buf);
+
+        let mut de = M3Deserializer::new(&vec);
+        assert_eq!(de.pop::<serde_bytes::ByteBuf>().unwrap().into_vec(), vec![
+            42, 23, 100
+        ]);
+    }
+
+    #[test]
     fn structs() {
         #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
         struct Foo {
@@ -163,6 +216,9 @@ mod tests {
         struct FooUnit;
 
         #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
+        struct FooNewType(u32);
+
+        #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
         struct FooTupleStruct(u32, bool, u8);
 
         let mut vec = vec![];
@@ -173,6 +229,7 @@ mod tests {
             c: String::from("test"),
         });
         ser.push(FooUnit);
+        ser.push(FooNewType(14));
         ser.push(FooTupleStruct(4, true, 16));
 
         let mut de = M3Deserializer::new(&vec);
@@ -185,6 +242,7 @@ mod tests {
             })
         );
         assert_eq!(de.pop::<FooUnit>(), Ok(FooUnit));
+        assert_eq!(de.pop::<FooNewType>(), Ok(FooNewType(14)));
         assert_eq!(de.pop::<FooTupleStruct>(), Ok(FooTupleStruct(4, true, 16)));
     }
 
