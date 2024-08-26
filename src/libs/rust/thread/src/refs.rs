@@ -399,17 +399,14 @@ impl<T> Upgradable<T> for WeakRc<T> {
     fn upgrade(&self) -> Option<Self::Strong> {
         let inner = self.strong_inner()?;
 
-        if inner.strong() == 0 {
-            None
-        }
-        else {
-            unsafe {
-                inner.inc_strong();
-                Some(TempRc::new(StrongRc {
-                    ptr: (*self.link.as_ptr()).ptr,
-                    phantom: PhantomData,
-                }))
-            }
+        // we know that the strong count is not zero here, because otherwise the link would be
+        // dangling and we would have return None above.
+        unsafe {
+            inner.inc_strong();
+            Some(TempRc::new(StrongRc {
+                ptr: (*self.link.as_ptr()).ptr,
+                phantom: PhantomData,
+            }))
         }
     }
 }
