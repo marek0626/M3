@@ -452,6 +452,9 @@ mod tests {
         let l: BoxList<TestItem> = BoxList::new();
         assert_eq!(l.len(), 0);
         assert_eq!(l.iter().next(), None);
+
+        let empty = BoxList::<TestItem>::default();
+        assert_eq!(empty.len(), 0);
     }
 
     #[test]
@@ -468,6 +471,8 @@ mod tests {
 
     #[test]
     fn iter() {
+        use crate::col::Vec;
+
         let mut l: BoxList<TestItem> = gen_list(&[23, 42, 57]);
 
         {
@@ -486,6 +491,15 @@ mod tests {
         }
 
         assert_eq!(l, gen_list(&[32, 24, 75]));
+
+        {
+            let elems = l.into_iter().collect::<Vec<_>>();
+            let mut it = elems.into_iter();
+            assert_eq!(it.next().unwrap().data, 32);
+            assert_eq!(it.next().unwrap().data, 24);
+            assert_eq!(it.next().unwrap().data, 75);
+            assert!(it.next().is_none());
+        }
     }
 
     #[test]
@@ -532,6 +546,63 @@ mod tests {
 
             assert_eq!(l, gen_list(&[3]));
         }
+    }
+
+    #[test]
+    fn remove_if() {
+        let mut l = gen_list(&[23, 42, 57, 10, 67, 1024]);
+
+        let e = l.remove_if(|e| e.data % 2 == 0).unwrap();
+        assert_eq!(e.data, 42);
+        assert_eq!(l.len(), 5);
+
+        let e = l.remove_if(|e| e.data == 23).unwrap();
+        assert_eq!(e.data, 23);
+        assert_eq!(l.len(), 4);
+
+        let e = l.remove_if(|e| e.data > 100).unwrap();
+        assert_eq!(e.data, 1024);
+        assert_eq!(l.len(), 3);
+
+        assert!(l.remove_if(|e| e.data > 100).is_none());
+        assert_eq!(l.len(), 3);
+
+        l.clear();
+        assert_eq!(l.len(), 0);
+    }
+
+    #[test]
+    fn move_back() {
+        let mut l = gen_list(&[23, 42, 57, 10, 67, 1024]);
+
+        let e: *mut TestItem = l.iter_mut().nth(3).unwrap();
+        unsafe {
+            assert_eq!((*e).data, 10);
+            l.move_to_back(e);
+        }
+        assert_eq!(l.len(), 6);
+        assert_eq!(l.back().unwrap().data, 10);
+
+        let e: *mut TestItem = l.front_mut().unwrap();
+        unsafe {
+            assert_eq!((*e).data, 23);
+            l.move_to_back(e);
+        }
+        assert_eq!(l.len(), 6);
+        assert_eq!(l.back().unwrap().data, 23);
+
+        let e: *mut TestItem = l.back_mut().unwrap();
+        unsafe {
+            assert_eq!((*e).data, 23);
+            l.move_to_back(e);
+        }
+        assert_eq!(l.len(), 6);
+        assert_eq!(l.back().unwrap().data, 23);
+
+        assert_eq!(
+            l.iter().fold(0, |acc, x| acc + x.data),
+            23 + 42 + 57 + 10 + 67 + 1024
+        );
     }
 
     #[test]
