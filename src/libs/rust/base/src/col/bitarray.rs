@@ -60,7 +60,7 @@ impl BitArray {
         self.words[idx(bit)] & bitpos(bit) != 0
     }
 
-    /// Returns the index of the first bit that is not set
+    /// Returns the index of the first bit that is not set (or self.size() if all are set)
     pub fn first_clear(&self) -> usize {
         self.first_clear
     }
