@@ -65,6 +65,12 @@ test-host:
   script:
     - kubectl exec -n os -t m3-ci -- sh -c "./bootstrap.sh $CI_COMMIT_SHA"
     - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b test -n'
+    - kubectl exec -n os -t m3-ci -- sh -c "
+        cd M3
+          && nix develop path:nix -c ./b testcov -n
+          && mkdir -p /cache/results/$(date -I)-$CI_COMMIT_SHA
+          && cp -r build/rust/coverage /cache/results/$(date -I)-$CI_COMMIT_SHA
+        "
   resource_group: pod
 
 test-gem5:
