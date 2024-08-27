@@ -15,8 +15,9 @@
 
 use core::intrinsics;
 use core::ops::{Deref, DerefMut};
+use core::ptr::NonNull;
 
-use crate::cell::StaticUnsafeCell;
+use crate::cell::{StaticCell, StaticUnsafeCell};
 use crate::mem;
 
 pub const MAX_MSG_SIZE: usize = 512;
@@ -24,40 +25,45 @@ pub const MAX_MSG_SIZE: usize = 512;
 static DEF_MSG_BUF: StaticUnsafeCell<MsgBuf> = StaticUnsafeCell::new(MsgBuf {
     bytes: [mem::MaybeUninit::new(0); MAX_MSG_SIZE],
     pos: 0,
-    used: false,
 });
+static DEF_MSG_USED: StaticCell<bool> = StaticCell::new(false);
 
 /// A reference to a `MsgBuf` that makes sure that each `MsgBuf` is used at most once at a time.
-pub struct MsgBufRef<'m> {
-    buf: &'m mut MsgBuf,
+pub struct MsgBufRef {
+    buf: NonNull<MsgBuf>,
 }
 
-impl<'m> MsgBufRef<'m> {
-    fn new(buf: &'m mut MsgBuf) -> Self {
-        assert!(!buf.used);
-        buf.used = true;
+impl MsgBufRef {
+    fn new(buf: NonNull<MsgBuf>) -> Self {
+        assert!(!DEF_MSG_USED.get());
+        DEF_MSG_USED.set(true);
         Self { buf }
     }
 }
 
-impl<'m> Drop for MsgBufRef<'m> {
+impl Drop for MsgBufRef {
     fn drop(&mut self) {
-        self.buf.pos = 0;
-        self.buf.used = false;
+        // safety: we make sure that no one else can hold a reference to this buffer
+        unsafe {
+            (*self.buf.as_ptr()).pos = 0;
+        }
+        DEF_MSG_USED.set(false);
     }
 }
 
-impl<'m> Deref for MsgBufRef<'m> {
+impl Deref for MsgBufRef {
     type Target = MsgBuf;
 
     fn deref(&self) -> &Self::Target {
-        self.buf
+        // safety: we make sure that no one else can hold a reference to this buffer
+        unsafe { &*self.buf.as_ptr() }
     }
 }
 
-impl<'m> DerefMut for MsgBufRef<'m> {
+impl DerefMut for MsgBufRef {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.buf
+        // safety: we make sure that no one else can hold a reference to this buffer
+        unsafe { &mut *self.buf.as_ptr() }
     }
 }
 
@@ -68,7 +74,6 @@ impl<'m> DerefMut for MsgBufRef<'m> {
 pub struct MsgBuf {
     bytes: [mem::MaybeUninit<u8>; MAX_MSG_SIZE],
     pos: usize,
-    used: bool,
 }
 
 impl MsgBuf {
@@ -77,9 +82,9 @@ impl MsgBuf {
     /// Every message buffer can only be used once at a time, so that the caller has to make sure
     /// that the returned `MsgBufRef` is dropped before the next call to `borrow_ref`.
     /// Alternatively, `MsgBuf::new` can be used to allocate a new buffer.
-    pub fn borrow_def() -> MsgBufRef<'static> {
+    pub fn borrow_def() -> MsgBufRef {
         // safety: MsgBufRef takes care that there is no other user of DEF_MSG_BUF
-        MsgBufRef::new(unsafe { DEF_MSG_BUF.get_mut() })
+        MsgBufRef::new(unsafe { NonNull::new_unchecked(DEF_MSG_BUF.as_ptr()) })
     }
 
     /// Creates a new zero'd message buffer containing an empty message
@@ -87,7 +92,6 @@ impl MsgBuf {
         Self {
             bytes: [mem::MaybeUninit::new(0); MAX_MSG_SIZE],
             pos: 0,
-            used: false,
         }
     }
 
@@ -96,7 +100,6 @@ impl MsgBuf {
         Self {
             bytes: unsafe { mem::MaybeUninit::uninit().assume_init() },
             pos: 0,
-            used: false,
         }
     }
 
