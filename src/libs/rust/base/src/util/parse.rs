@@ -53,13 +53,13 @@ pub fn size(s: &str) -> Result<usize, Error> {
 
 /// Parses a time from the given string
 ///
-/// The suffixes ns, µs, ms, and s can be used to denote nanoseconds, microseconds, milliseconds and
+/// The suffixes ns, us, ms, and s can be used to denote nanoseconds, microseconds, milliseconds and
 /// seconds.
 pub fn time(s: &str) -> Result<TimeDuration, Error> {
     let (width, mul) = if s.ends_with("ns") {
         (2, 1)
     }
-    else if s.ends_with("µs") {
+    else if s.ends_with("us") {
         (2, 1_000)
     }
     else if s.ends_with("ms") {
@@ -71,10 +71,7 @@ pub fn time(s: &str) -> Result<TimeDuration, Error> {
     else {
         return Err(Error::new(Code::InvArgs));
     };
-    Ok(TimeDuration::from_nanos(match mul {
-        1 => int(s)?,
-        m => m * int(&s[0..s.len() - width])?,
-    }))
+    Ok(TimeDuration::from_nanos(mul * int(&s[0..s.len() - width])?))
 }
 
 /// Parses a u64 from the given string
