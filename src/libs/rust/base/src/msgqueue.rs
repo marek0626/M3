@@ -104,3 +104,39 @@ impl<S: MsgSender<M>, M> MsgQueue<S, M> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct DummySender(bool);
+
+    impl MsgSender<()> for DummySender {
+        fn can_send(&self) -> bool {
+            self.0
+        }
+
+        fn send(&mut self, _meta: (), _msg: &MsgBuf) -> Result<(), Error> {
+            self.0 = !self.0;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn basics() {
+        let mut queue = MsgQueue::new(DummySender(true));
+        let msg = MsgBuf::new();
+
+        // we can send directly
+        assert_eq!(queue.sender().0, true);
+        assert_eq!(queue.send((), &msg).unwrap(), true);
+        assert_eq!(queue.send_pending(), false);
+
+        // we cannot send now
+        assert_eq!(queue.sender_mut().0, false);
+        // message has been enqueued
+        assert_eq!(queue.send((), &msg).unwrap(), false);
+        // and will now be sent
+        assert_eq!(queue.send_pending(), true);
+    }
+}
