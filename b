@@ -762,9 +762,12 @@ case "$cmd" in
         done
         [ $errors -eq 0 ] || exit 1
         if [ "$cmd" = "testcov" ]; then
-            ( cd src &&
-                grcov . -s . --binary-path "$out" -t html --branch \
-                    --ignore-not-existing -o "$out/coverage" )
+            (
+                cd src &&
+                    grcov . -s . --binary-path "$out" -t html \
+                        --ignore-not-existing -o "$out/coverage" &&
+                    find . -name "*.profraw" -print0 | xargs -0 rm -f
+            )
             echo "The coverage results are now available in $out/coverage."
         fi
         ;;
