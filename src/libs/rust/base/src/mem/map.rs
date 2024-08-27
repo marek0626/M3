@@ -187,10 +187,10 @@ impl<T: PrimInt + fmt::LowerHex> fmt::Debug for MemMap<T> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn basics() {
-        use super::*;
-
         let mut m = MemMap::new(0, 0x1000);
 
         assert_eq!(m.allocate(0x100, 0x10), Ok(0x0));
@@ -210,5 +210,58 @@ mod tests {
         m.free(0x0, 0x200);
 
         assert_eq!(m.size(), (0x1000, 1));
+    }
+
+    #[test]
+    fn largest_contiguous() {
+        let mut m = MemMap::new(0, 1000);
+
+        assert_eq!(m.largest_contiguous(), Some(1000));
+
+        assert_eq!(m.allocate(200, 1), Ok(0));
+        assert_eq!(m.allocate(200, 1), Ok(200));
+        assert_eq!(m.allocate(200, 1), Ok(400));
+        assert_eq!(m.allocate(200, 1), Ok(600));
+
+        assert_eq!(m.largest_contiguous(), Some(200));
+
+        m.free(400, 200);
+        assert_eq!(m.largest_contiguous(), Some(200));
+
+        m.free(200, 200);
+        assert_eq!(m.largest_contiguous(), Some(400));
+    }
+
+    #[test]
+    fn alloc() {
+        let mut m = MemMap::new(0, 0x1000);
+
+        assert_eq!(m.allocate(0x50, 0x100), Ok(0));
+        assert_eq!(m.allocate(0x50, 0x100), Ok(0x100));
+        assert_eq!(m.allocate(0x50, 0x100), Ok(0x200));
+
+        // each allocation leaves a 0x50 hole after it (@ 0x50, @ 0x150, @ 0x250). the last one
+        // goes to the end of the area, making it the largest contiguous region.
+        assert_eq!(m.largest_contiguous(), Some(0x1000 - 0x250));
+    }
+
+    #[test]
+    fn free() {
+        let mut m = MemMap::new(0, 1200);
+
+        assert_eq!(m.allocate(200, 1), Ok(0));
+        assert_eq!(m.allocate(200, 1), Ok(200));
+        assert_eq!(m.allocate(200, 1), Ok(400));
+        assert_eq!(m.allocate(200, 1), Ok(600));
+        assert_eq!(m.allocate(200, 1), Ok(800));
+        assert_eq!(m.allocate(200, 1), Ok(1000));
+
+        m.free(800, 200);
+        m.free(400, 200);
+        // merge with prev and next
+        m.free(600, 200);
+
+        // merge with prev
+        m.free(1000, 200);
     }
 }
