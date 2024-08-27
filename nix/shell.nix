@@ -1,4 +1,4 @@
-{ nixpkgs ? <nixpkgs>, system ? builtins.currentSystem }:
+{ nixpkgs ? <nixpkgs>, current ? <nixpkgs>, system ? builtins.currentSystem }:
 with import nixpkgs { inherit system; };
 
 let
@@ -23,7 +23,11 @@ let
 
     # building the M3 system and applications
     # we want to have clang 15 for clang-format (the clang package is still at 11.1.0)
-    m3Inputs = [ rustup ninja llvmPackages_15.clang-unwrapped libxml2 python311Packages.autopep8 pkg-config ];
+    m3Inputs = [
+        rustup ninja llvmPackages_15.clang-unwrapped libxml2
+        # use grcov from the newer nixpkgs version to get some important bugfixes
+        python311Packages.autopep8 pkg-config current.grcov
+    ];
 
     # building M³Linux
     m3lxInputs = [ flex bison dtc ncurses ];
