@@ -212,3 +212,74 @@ impl Default for Profiler {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cell::StaticCell;
+    use crate::time::CycleDuration;
+
+    static NEXT_TIME: StaticCell<u64> = StaticCell::new(0);
+
+    struct MyInstant(u64);
+
+    impl Instant for MyInstant {
+        type Duration = CycleDuration;
+
+        fn now() -> Self {
+            NEXT_TIME.set(NEXT_TIME.get() + 10);
+            MyInstant(NEXT_TIME.get() - 10)
+        }
+
+        fn duration_since(&self, earlier: Self) -> Self::Duration {
+            CycleDuration::new(self.0 - earlier.0)
+        }
+    }
+
+    struct MyRunner(u64, u64, u64);
+    impl Runner for MyRunner {
+        fn pre(&mut self) {
+            self.0 += 1;
+        }
+
+        fn run(&mut self) {
+            self.1 += 1;
+        }
+
+        fn post(&mut self) {
+            self.2 += 1;
+        }
+    }
+
+    #[test]
+    fn run() {
+        let prof = Profiler::default().warmup(2).repeats(5);
+        let res = prof.run::<MyInstant, _>(|| {});
+        for r in res.times() {
+            assert_eq!(r.as_raw(), 10);
+        }
+        assert_eq!(res.avg().as_raw(), 10);
+        assert_eq!(res.stddev().as_raw(), 0);
+        assert_eq!(res.runs(), 5);
+        assert_eq!(
+            crate::format!("{}", res),
+            "10 cycles (+/- 0 cycles with 5 runs)"
+        );
+    }
+
+    #[test]
+    fn runner() {
+        let prof = Profiler::default().warmup(2).repeats(4);
+        let mut runner = MyRunner(0, 0, 0);
+        let res = prof.runner::<MyInstant, _>(&mut runner);
+        assert_eq!(runner.0, 6);
+        assert_eq!(runner.1, 6);
+        assert_eq!(runner.2, 6);
+        for r in res.times() {
+            assert_eq!(r.as_raw(), 10);
+        }
+        assert_eq!(res.avg().as_raw(), 10);
+        assert_eq!(res.stddev().as_raw(), 0);
+        assert_eq!(res.runs(), 4);
+    }
+}
