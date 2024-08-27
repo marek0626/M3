@@ -751,6 +751,7 @@ case "$cmd" in
         export RUST_BACKTRACE=1
         if [ "$cmd" = "testcov" ]; then
             export RUSTFLAGS="-C instrument-coverage=all"
+            rm -rf "$out/coverage"
             cargoargs=(test)
         else
             cargoargs=(miri test)
