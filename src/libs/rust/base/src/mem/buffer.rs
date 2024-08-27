@@ -181,3 +181,34 @@ impl<const N: usize> DerefMut for AlignedBuf<N> {
         &mut self.data
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn basics() {
+        let mut buf = MsgBuf::default();
+        assert_eq!(buf.bytes().len(), 0);
+        assert_eq!(buf.size(), 0);
+
+        buf.set_from_slice(&[0, 1, 2, 3, 4, 5, 6, 7]);
+        assert_eq!(buf.size(), 8);
+
+        let clone = buf.clone();
+        assert_eq!(clone.size(), buf.size());
+        assert_eq!(clone.bytes(), buf.bytes());
+    }
+
+    #[test]
+    #[should_panic]
+    fn double_use() {
+        let mut buf = MsgBuf::borrow_def();
+        assert_eq!(buf.size(), 0);
+        buf.set_from_slice(&[0, 1]);
+        assert_eq!(buf.size(), 2);
+
+        // panics as the default buffer is already in use
+        let _buf2 = MsgBuf::borrow_def();
+    }
+}
