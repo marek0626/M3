@@ -500,14 +500,14 @@ impl ServObject {
         Self::new(self.serv.clone(), false, creator)
     }
 
-    pub fn send(&self, lbl: Label, msg: MsgBufRef<'_>) -> Result<thread::Event, Error> {
+    pub fn send(&self, lbl: Label, msg: MsgBufRef) -> Result<thread::Event, Error> {
         self.serv.send(lbl, &msg)
     }
 
     pub fn send_receive_async(
         srv: TempRc<Self>,
         lbl: Label,
-        msg: MsgBufRef<'_>,
+        msg: MsgBufRef,
     ) -> Result<&'static tcu::Message, Error> {
         let event = Self::send(&srv, lbl, msg)?;
         drop(srv);

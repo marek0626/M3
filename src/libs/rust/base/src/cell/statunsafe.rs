@@ -40,6 +40,11 @@ impl<T: Sized> StaticUnsafeCell<T> {
         }
     }
 
+    /// Returns a mutable pointer to the inner value
+    pub fn as_ptr(&self) -> *mut T {
+        self.inner.get()
+    }
+
     /// Returns a reference to the inner value
     ///
     /// # Safety

@@ -153,6 +153,7 @@ help() {
     echo "    fmt:                     run formatters for all C++, Rust, and Python code."
     echo "    fmt-check:               run formatters, but in check mode."
     echo "    test:                    run Rust tests on host with miri."
+    echo "    testcov:                 run Rust tests on host and generate code coverage."
     echo ""
     echo "  M³Linux (RISC-V only):"
     echo "    mklx ...:                (re)build Linux including bbl via buildroot. The"
@@ -742,17 +743,34 @@ case "$cmd" in
         [ $errors -eq 0 ] || exit 1
         ;;
 
-    test)
+    test|testcov)
         errors=0
         dirs="src/libs/rust/thread src/libs/rust/base"
+        out="$root/build/rust"
         tgt=$(rustup show 2>/dev/null | grep 'Default host:' | gawk '{ print($3) }')
         export RUST_BACKTRACE=1
+        if [ "$cmd" = "testcov" ]; then
+            export RUSTFLAGS="-C instrument-coverage=all"
+            rm -rf "$out/coverage"
+            cargoargs=(test)
+        else
+            cargoargs=(miri test)
+        fi
         for d in $dirs; do
             (
-                cd "$d" && cargo miri test --target "$tgt" --target-dir "$root/build/rust"
+                cd "$d" && cargo "${cargoargs[@]}" -j1 --target "$tgt" --target-dir "$out"
             ) || errors=$((errors + 1))
         done
         [ $errors -eq 0 ] || exit 1
+        if [ "$cmd" = "testcov" ]; then
+            (
+                cd src &&
+                    grcov . -s . --binary-path "$out" -t html \
+                        --ignore-not-existing -o "$out/coverage" &&
+                    find . -name "*.profraw" -print0 | xargs -0 rm -f
+            )
+            echo "The coverage results are now available in $out/coverage."
+        fi
         ;;
 
     # -- M³Linux --

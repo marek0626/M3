@@ -60,7 +60,7 @@ impl BitArray {
         self.words[idx(bit)] & bitpos(bit) != 0
     }
 
-    /// Returns the index of the first bit that is not set
+    /// Returns the index of the first bit that is not set (or self.size() if all are set)
     pub fn first_clear(&self) -> usize {
         self.first_clear
     }
@@ -82,5 +82,104 @@ impl BitArray {
         if bit < self.first_clear {
             self.first_clear = bit;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn basics() {
+        let mut ba = BitArray::new(4);
+        assert_eq!(ba.size(), 4);
+        assert_eq!(ba.first_clear(), 0);
+        assert_eq!(ba.is_set(0), false);
+
+        ba.set(2);
+        assert_eq!(ba.is_set(2), true);
+
+        ba.set(3);
+        assert_eq!(ba.is_set(3), true);
+
+        ba.clear(3);
+        assert_eq!(ba.is_set(3), false);
+    }
+
+    #[test]
+    fn large() {
+        let mut ba = BitArray::new(1024);
+        assert_eq!(ba.size(), 1024);
+
+        ba.set(0);
+        assert_eq!(ba.first_clear(), 1);
+
+        ba.set(1);
+        assert_eq!(ba.first_clear(), 2);
+
+        ba.set(500);
+        assert_eq!(ba.first_clear(), 2);
+        assert_eq!(ba.is_set(500), true);
+
+        ba.set(1023);
+        assert_eq!(ba.first_clear(), 2);
+        assert_eq!(ba.is_set(1023), true);
+
+        ba.clear(1);
+        assert_eq!(ba.first_clear(), 1);
+
+        ba.clear(0);
+        assert_eq!(ba.first_clear(), 0);
+    }
+
+    #[test]
+    fn unaligned() {
+        let mut ba = BitArray::new(65);
+        ba.set(64);
+        assert_eq!(ba.is_set(64), true);
+    }
+
+    #[test]
+    fn first_clear() {
+        let mut ba = BitArray::new(4);
+        assert_eq!(ba.size(), 4);
+        assert_eq!(ba.first_clear(), 0);
+        assert_eq!(ba.is_set(0), false);
+
+        ba.set(0);
+        assert_eq!(ba.first_clear(), 1);
+        ba.set(1);
+        assert_eq!(ba.first_clear(), 2);
+        ba.set(2);
+        assert_eq!(ba.first_clear(), 3);
+        ba.set(3);
+        assert_eq!(ba.first_clear(), 4);
+
+        ba.clear(3);
+        assert_eq!(ba.first_clear(), 3);
+        ba.clear(0);
+        assert_eq!(ba.first_clear(), 0);
+        ba.clear(1);
+        assert_eq!(ba.first_clear(), 0);
+        ba.clear(2);
+        assert_eq!(ba.first_clear(), 0);
+
+        ba.set(1);
+        ba.set(2);
+        ba.set(3);
+        assert_eq!(ba.first_clear(), 0);
+        ba.set(0);
+        assert_eq!(ba.first_clear(), 4);
+
+        ba.clear(0);
+        ba.clear(1);
+        ba.clear(2);
+        ba.clear(3);
+
+        ba.set(1);
+        ba.set(2);
+        assert_eq!(ba.first_clear(), 0);
+        ba.set(0);
+        assert_eq!(ba.first_clear(), 3);
     }
 }

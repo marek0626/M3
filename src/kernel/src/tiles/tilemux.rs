@@ -912,7 +912,7 @@ impl TileMux {
     fn send_receive_sidecall_async<R: core::fmt::Debug>(
         mut tilemux: RefMut<'_, Self>,
         act: Option<ActId>,
-        req: base::mem::MsgBufRef<'_>,
+        req: base::mem::MsgBufRef,
         msg: &R,
         check_init: bool,
     ) -> Result<kif::tilemux::Response, Error> {

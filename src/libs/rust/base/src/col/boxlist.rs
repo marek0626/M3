@@ -313,27 +313,27 @@ impl<T: BoxItem> BoxList<T> {
     /// # Safety
     ///
     /// This function assumes that the given element is part of this list
-    pub unsafe fn move_to_back(&mut self, item: &mut T) {
+    pub unsafe fn move_to_back(&mut self, item: *mut T) {
         // already at the back? (tail is always Some, because T is in the list)
-        if self.tail.unwrap().as_ptr() == item as *mut T {
+        if self.tail.unwrap().as_ptr() == item {
             return;
         }
 
         // remove us from the list
-        match item.prev() {
-            Some(mut p) => p.as_mut().set_next(item.next()),
-            None => self.head = item.next(),
+        match (*item).prev() {
+            Some(mut p) => p.as_mut().set_next((*item).next()),
+            None => self.head = (*item).next(),
         }
         // it's not at the back, so we can assume next() is Some
-        item.next().unwrap().as_mut().set_prev(item.prev());
+        (*item).next().unwrap().as_mut().set_prev((*item).prev());
 
         // let the current tail's next point to us
-        let item_ptr = Some(NonNull::new_unchecked(item as *mut T));
+        let item_ptr = Some(NonNull::new_unchecked(item));
         self.tail.unwrap().as_mut().set_next(item_ptr);
 
         // add us to the end
-        item.set_prev(self.tail);
-        item.set_next(None);
+        (*item).set_prev(self.tail);
+        (*item).set_next(None);
         self.tail = item_ptr;
     }
 }
@@ -452,6 +452,9 @@ mod tests {
         let l: BoxList<TestItem> = BoxList::new();
         assert_eq!(l.len(), 0);
         assert_eq!(l.iter().next(), None);
+
+        let empty = BoxList::<TestItem>::default();
+        assert_eq!(empty.len(), 0);
     }
 
     #[test]
@@ -468,6 +471,8 @@ mod tests {
 
     #[test]
     fn iter() {
+        use crate::col::Vec;
+
         let mut l: BoxList<TestItem> = gen_list(&[23, 42, 57]);
 
         {
@@ -486,6 +491,15 @@ mod tests {
         }
 
         assert_eq!(l, gen_list(&[32, 24, 75]));
+
+        {
+            let elems = l.into_iter().collect::<Vec<_>>();
+            let mut it = elems.into_iter();
+            assert_eq!(it.next().unwrap().data, 32);
+            assert_eq!(it.next().unwrap().data, 24);
+            assert_eq!(it.next().unwrap().data, 75);
+            assert!(it.next().is_none());
+        }
     }
 
     #[test]
@@ -532,6 +546,63 @@ mod tests {
 
             assert_eq!(l, gen_list(&[3]));
         }
+    }
+
+    #[test]
+    fn remove_if() {
+        let mut l = gen_list(&[23, 42, 57, 10, 67, 1024]);
+
+        let e = l.remove_if(|e| e.data % 2 == 0).unwrap();
+        assert_eq!(e.data, 42);
+        assert_eq!(l.len(), 5);
+
+        let e = l.remove_if(|e| e.data == 23).unwrap();
+        assert_eq!(e.data, 23);
+        assert_eq!(l.len(), 4);
+
+        let e = l.remove_if(|e| e.data > 100).unwrap();
+        assert_eq!(e.data, 1024);
+        assert_eq!(l.len(), 3);
+
+        assert!(l.remove_if(|e| e.data > 100).is_none());
+        assert_eq!(l.len(), 3);
+
+        l.clear();
+        assert_eq!(l.len(), 0);
+    }
+
+    #[test]
+    fn move_back() {
+        let mut l = gen_list(&[23, 42, 57, 10, 67, 1024]);
+
+        let e: *mut TestItem = l.iter_mut().nth(3).unwrap();
+        unsafe {
+            assert_eq!((*e).data, 10);
+            l.move_to_back(e);
+        }
+        assert_eq!(l.len(), 6);
+        assert_eq!(l.back().unwrap().data, 10);
+
+        let e: *mut TestItem = l.front_mut().unwrap();
+        unsafe {
+            assert_eq!((*e).data, 23);
+            l.move_to_back(e);
+        }
+        assert_eq!(l.len(), 6);
+        assert_eq!(l.back().unwrap().data, 23);
+
+        let e: *mut TestItem = l.back_mut().unwrap();
+        unsafe {
+            assert_eq!((*e).data, 23);
+            l.move_to_back(e);
+        }
+        assert_eq!(l.len(), 6);
+        assert_eq!(l.back().unwrap().data, 23);
+
+        assert_eq!(
+            l.iter().fold(0, |acc, x| acc + x.data),
+            23 + 42 + 57 + 10 + 67 + 1024
+        );
     }
 
     #[test]

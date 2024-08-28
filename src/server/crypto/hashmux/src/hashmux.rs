@@ -267,7 +267,7 @@ impl HashRequest {
     }
 
     /// Reply with the specified message to the original request.
-    fn reply_msg(self, msg: MsgBufRef<'_>, req_rgate: &RecvGate) {
+    fn reply_msg(self, msg: MsgBufRef, req_rgate: &RecvGate) {
         req_rgate
             .reply(&msg, self.msg)
             .or_else(|_| req_rgate.ack_msg(self.msg))

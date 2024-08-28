@@ -106,6 +106,9 @@ for key in sorted(all_results.keys())[-NUM_DAYS:]:
                 results[key][test][subkey] = check_result.parse_output(logfile)
                 os.makedirs(os.path.dirname(logcopy), exist_ok=True)
                 shutil.copyfile(logfile, logcopy)
+            elif f == 'coverage':
+                covdst = '{}/{}/coverage'.format(args.output, key)
+                shutil.copytree(str(dir) + '/' + str(f), covdst)
     except Exception as e:
         print("warning: ignoring directory '{}': {}".format(key, e), file=sys.stderr)
         del results[key]
@@ -191,7 +194,8 @@ with open(args.output + '/index.html', 'w') as report:
         report.write("      (<span title=\"{}\">{}</span>)<br/>\n"
                      .format(key[11:], key[11:19]))
         report.write("      <div style=\"margin-top: 0.2em\">\n")
-        report.write("        <a href=\"{}/log.html\">Errors</a>\n".format(key))
+        report.write("        <a href=\"{}/log.html\">Errors</a> &middot;\n".format(key))
+        report.write("        <a href=\"{}/coverage/index.html\">Coverage</a>\n".format(key))
         report.write("      </div>\n")
         report.write("    </th>\n")
     report.write("  <th>Performance History</th>\n")

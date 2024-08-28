@@ -152,12 +152,12 @@ impl State {
 
     pub fn get_read_size(&self) -> usize {
         assert!(!self.reader.is_empty());
-        self.rbuf.size() / (4 * self.reader.len())
+        self.rbuf.capacity() / (4 * self.reader.len())
     }
 
     pub fn get_write_size(&self) -> usize {
         assert!(!self.writer.is_empty());
-        self.rbuf.size() / (4 * self.writer.len())
+        self.rbuf.capacity() / (4 * self.writer.len())
     }
 
     pub fn get_notify_gate(&mut self, sess: SessId) -> Option<&mut NotifyGate> {

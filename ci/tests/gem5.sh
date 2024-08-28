@@ -301,6 +301,8 @@ if [ "$publish" != "" ]; then
         resdst="$publish/$(date -I)-$(git rev-parse HEAD)"
         mkdir "$resdst"
         rsync -am --include='log.txt' --include='*/' --exclude='*' "$result"/* "$resdst"
+        # copy coverage results from host tests
+        rsync -am "$result"/coverage/ "$resdst"/coverage/
 
         # generate website
         if [ "$web" != "" ]; then

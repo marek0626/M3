@@ -54,7 +54,7 @@ const fn _next_log2(size: usize, shift: u32) -> u32 {
 /// assert_eq!(next_log2(5), 3);
 /// ```
 pub const fn next_log2(size: usize) -> u32 {
-    _next_log2(size, (mem::size_of::<usize>() * 8 - 2) as u32)
+    _next_log2(size, (mem::size_of::<usize>() * 8 - 1) as u32)
 }
 
 /// Rounds the given value up to the given alignment
@@ -88,8 +88,77 @@ pub fn is_aligned<T: PrimInt>(addr: T, align: T) -> bool {
 
 /// Assuming that `startx` < `endx` and `endx` is not included (that means with start=0 and end=10
 /// 0 .. 9 is used), the function determines whether the two ranges overlap anywhere.
+///
+/// Note that both ranges are assumed to be non-empty
 pub fn overlaps<T: Ord>(start1: T, end1: T, start2: T, end2: T) -> bool {
     (start1 >= start2 && start1 < end2) // start in range
     || (end1 > start2 && end1 <= end2)  // end in range
     || (start1 < start2 && end1 > end2) // complete overlapped
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sqrt() {
+        // note: == comparison with floats does not work in general, but adding an external crate
+        // just for this test seems overkill
+        assert_eq!(sqrt(4.0), 2.0);
+        assert_eq!(sqrt(16.0), 4.0);
+    }
+
+    #[test]
+    fn test_next_log2() {
+        assert_eq!(next_log2(0), 0);
+        assert_eq!(next_log2(1), 0);
+        assert_eq!(next_log2(2), 1);
+        assert_eq!(next_log2(12), 4);
+        assert_eq!(next_log2(16), 4);
+        assert_eq!(next_log2(63), 6);
+        assert_eq!(next_log2(usize::MAX), usize::BITS);
+    }
+
+    #[test]
+    fn test_round_up() {
+        assert_eq!(round_up(10, 4), 12);
+        assert_eq!(round_up(10, 16), 16);
+        assert_eq!(round_up(0xfff, 0x1000), 0x1000);
+        assert_eq!(round_up(0x1000, 0x1000), 0x1000);
+        assert_eq!(round_up(0, 0x1000), 0);
+        assert_eq!(round_up(1, 0x1000), 0x1000);
+    }
+
+    #[test]
+    fn test_round_dn() {
+        assert_eq!(round_dn(10, 4), 8);
+        assert_eq!(round_dn(10, 16), 0);
+        assert_eq!(round_dn(0xfff, 0x1000), 0);
+        assert_eq!(round_dn(0x1000, 0x1000), 0x1000);
+        assert_eq!(round_dn(0, 0x1000), 0);
+        assert_eq!(round_dn(1, 0x1000), 0);
+    }
+
+    #[test]
+    fn test_is_aligned() {
+        assert_eq!(is_aligned(0x1000, 0x1000), true);
+        assert_eq!(is_aligned(0xfff, 0x1000), false);
+        assert_eq!(is_aligned(0x1001, 0x1000), false);
+        assert_eq!(is_aligned(4, 4), true);
+        assert_eq!(is_aligned(2, 4), false);
+    }
+
+    #[test]
+    fn test_overlaps() {
+        assert_eq!(overlaps(0, 4, 4, 8), false);
+        assert_eq!(overlaps(0, 4, 3, 8), true);
+        assert_eq!(overlaps(8, 12, 0, 8), false);
+        assert_eq!(overlaps(8, 12, 8, 9), true);
+        assert_eq!(overlaps(8, 12, 8, 12), true);
+        assert_eq!(overlaps(8, 12, 9, 11), true);
+        assert_eq!(overlaps(8, 12, 9, 12), true);
+        assert_eq!(overlaps(8, 12, 11, 12), true);
+        assert_eq!(overlaps(8, 12, 12, 12), false);
+        assert_eq!(overlaps(8, 12, 12, 12), false);
+    }
 }

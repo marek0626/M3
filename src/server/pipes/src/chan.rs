@@ -213,7 +213,7 @@ impl Channel {
 
         // commits are done here, because they don't get new data
         if commit > 0 {
-            return reply_vmsg!(is, Code::Success, state.rbuf.size());
+            return reply_vmsg!(is, Code::Success, state.rbuf.capacity());
         }
 
         // if there are already queued read requests, just append this request
@@ -298,7 +298,7 @@ impl Channel {
 
         // commits are done here, because they don't get new data
         if commit > 0 {
-            return reply_vmsg!(is, Code::Success, state.rbuf.size());
+            return reply_vmsg!(is, Code::Success, state.rbuf.capacity());
         }
 
         // if there are already queued write requests, just append this request
