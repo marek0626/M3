@@ -38,7 +38,7 @@ pub fn main() -> Result<(), Error> {
     let infile = args[1];
     let outfile = args[2];
 
-    let tile = Tile::get_with("riscv32", TileArgs::default().inherit_pmp(false))
+    let tile = Tile::get_with("riscv32+coreacc", TileArgs::default().inherit_pmp(false))
         .expect("allocate riscv32 tile");
     let act = ChildActivity::new(tile, "test").expect("create child activity");
 
