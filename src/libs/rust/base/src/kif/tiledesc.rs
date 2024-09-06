@@ -263,6 +263,14 @@ impl TileDesc {
                         res.attr() | TileAttr::KECACC | TileAttr::IMEM,
                     )
                 },
+                "coreacc" => {
+                    res = TileDesc::new_with_attr(
+                        res.tile_type(),
+                        res.isa(),
+                        0,
+                        res.attr() | TileAttr::COREACC | TileAttr::IMEM,
+                    )
+                },
                 "rot" => {
                     res = TileDesc::new_with_attr(
                         res.tile_type(),
