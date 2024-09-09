@@ -147,8 +147,19 @@ pub fn main() -> ! {
         TCU::write_obj(crate::ENV_EP, &env, 0).expect("Failed to write BootEnv to kernel tile");
     }
 
+    // for RISCV32 the execution starts at 0 and we need to jump to the actual entrypoint
+    #[cfg(target_arch = "riscv32")]
+    {
+        let trampoline: [u32; 2] = [
+            0x0001_22b7, // lui t0, 0x12 = 0x12000
+            0x0000_8282, // jr  t0
+        ];
+        TCU::write_slice(crate::MEM_EP, &trampoline, rot::MEM_OFFSET as GlobOff)
+            .expect("Failed to write kernel trampoline");
+    }
+
     // Fixup context
-    ctx.entry_addr = rot::ROSA_NEXT_ADDR as u64;
+    ctx.entry_addr = rot::ROSA_NEXT_ADDR;
     ctx.magic = RosaCtx::MAGIC;
 
     {

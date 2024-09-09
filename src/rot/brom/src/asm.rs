@@ -15,12 +15,39 @@
 use core::arch::global_asm;
 use core::mem::offset_of;
 
+#[cfg(target_arch = "riscv32")]
 global_asm!(
     ".section .init.reset, \"ax\"",
     ".global _reset",
     "_reset:",
         // Load magic
-        "li     a0, {MEM_OFFSET}",
+        "li     a0, {CTX_OFFSET}",
+        "lw     t0, {MAGIC_OFFSET}(a0)",
+        // Check if magic is equal to BROM_HDR_MAGIC
+        "li     t1, {BROM_HDR_MAGIC0}",
+        "beq    t0, t1, 1f",
+        "li     t1, {BROM_HDR_MAGIC1}",
+        "beq    t0, t1, 1f",
+        // Context not initialized, jump to code in ROM
+        "j      _start",
+        // Load entry address
+    "1: lw      ra, {ENTRY_ADDR_OFFSET}(a0)",
+        // TODO: Lock UDS access to be sure (should be locked already)
+        "ret",
+    CTX_OFFSET = const rot::LayerCtx::<()>::CTX_OFFSET,
+    BROM_HDR_MAGIC0 = const rot::LayerCtx::<()>::BROM_HDR_MAGIC & 0xFFFF_FFFF,
+    BROM_HDR_MAGIC1 = const rot::LayerCtx::<()>::BROM_HDR_MAGIC >> 32,
+    MAGIC_OFFSET = const offset_of!(rot::LayerCtx::<()>, brom_hdr_magic),
+    ENTRY_ADDR_OFFSET = const offset_of!(rot::LayerCtx::<()>, entry_addr),
+);
+
+#[cfg(target_arch = "riscv64")]
+global_asm!(
+    ".section .init.reset, \"ax\"",
+    ".global _reset",
+    "_reset:",
+        // Load magic
+        "li     a0, {CTX_OFFSET}",
         "ld     t0, {MAGIC_OFFSET}(a0)",
         // Check if magic is equal to BROM_HDR_MAGIC
         "li     t1, {BROM_HDR_MAGIC}",
@@ -31,7 +58,7 @@ global_asm!(
     "1: ld      ra, {ENTRY_ADDR_OFFSET}(a0)",
         // TODO: Lock UDS access to be sure (should be locked already)
         "ret",
-    MEM_OFFSET = const rot::LayerCtx::<()>::MEM_OFFSET,
+    CTX_OFFSET = const rot::LayerCtx::<()>::CTX_OFFSET,
     BROM_HDR_MAGIC = const rot::LayerCtx::<()>::BROM_HDR_MAGIC,
     MAGIC_OFFSET = const offset_of!(rot::LayerCtx::<()>, brom_hdr_magic),
     ENTRY_ADDR_OFFSET = const offset_of!(rot::LayerCtx::<()>, entry_addr),

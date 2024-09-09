@@ -14,7 +14,6 @@
 
 #![no_std]
 
-use base::cfg::PAGE_SIZE;
 use base::mem::{VirtAddr, VirtAddrRaw};
 
 pub use {ed25519_dalek as ed25519, serde_json as json};
@@ -31,8 +30,15 @@ pub use {cshake, kecacc};
 // disables long-running crypto operations
 pub const QUICK_BOOT: bool = false;
 
+#[cfg(target_arch = "riscv64")]
 pub const MEM_OFFSET: usize = 0x1000_0000;
-pub const MEM_ENV_START: VirtAddr = VirtAddr::new((MEM_OFFSET + PAGE_SIZE) as VirtAddrRaw);
+#[cfg(target_arch = "riscv32")]
+pub const MEM_OFFSET: usize = 0;
+
+#[cfg(target_arch = "riscv64")]
+pub const MEM_ENV_START: VirtAddr = VirtAddr::new((MEM_OFFSET + 0x1000) as VirtAddrRaw);
+#[cfg(target_arch = "riscv32")]
+pub const MEM_ENV_START: VirtAddr = VirtAddr::new((MEM_OFFSET + 0x1_0000) as VirtAddrRaw);
 
 pub type Magic = u64;
 
@@ -40,7 +46,7 @@ pub const fn encode_magic(id: &[u8; 7], version: u8) -> Magic {
     u64::from_be_bytes([id[0], id[1], id[2], id[3], id[4], id[5], id[6], version])
 }
 
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
 mod asm;
 
 mod bin;

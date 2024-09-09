@@ -1,2 +1,3 @@
 def build(gen, env):
-    env.m3_rust_exe(gen, out='raser')
+    if env['ISA'].startswith('riscv'):
+        env.m3_rust_exe(gen, out='raser')

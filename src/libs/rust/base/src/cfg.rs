@@ -54,8 +54,10 @@ pub const TILE_MEM_BASE: VirtAddr = VirtAddr::new(0xE000_0000);
 
 pub const MEM_CAP_END: VirtAddr = RBUF_STD_ADDR;
 
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", not(feature = "rot")))]
 pub const ENV_START: VirtAddr = VirtAddr::new(0x1_0000);
+#[cfg(all(target_arch = "riscv32", feature = "rot"))]
+pub const ENV_START: VirtAddr = VirtAddr::new(0x0b00_1000);
 #[cfg(all(target_arch = "riscv64", not(feature = "rot")))]
 pub const ENV_START: VirtAddr = VirtAddr::new(0x1000_1000);
 #[cfg(all(target_arch = "riscv64", feature = "rot"))]
