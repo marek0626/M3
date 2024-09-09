@@ -58,9 +58,9 @@ impl ArchMMUFlags for X86MMUFlags {
     }
 
     fn access_allowed(&self, flags: Self) -> bool {
-        self.contains(Self::P)
-            && !(!self.contains(Self::W) && flags.contains(Self::W))
-            && !(self.contains(Self::NX) && !flags.contains(Self::NX))
+        (flags.contains(Self::NX) || !self.contains(Self::NX))
+            && (!flags.contains(Self::W) || self.contains(Self::W))
+            && self.contains(Self::P)
     }
 }
 
