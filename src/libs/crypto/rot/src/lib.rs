@@ -28,6 +28,9 @@ pub use hw::*;
 pub use secret::*;
 pub use {cshake, kecacc};
 
+// disables long-running crypto operations
+pub const QUICK_BOOT: bool = false;
+
 pub const MEM_OFFSET: usize = 0x1000_0000;
 pub const MEM_ENV_START: VirtAddr = VirtAddr::new((MEM_OFFSET + PAGE_SIZE) as VirtAddrRaw);
 
