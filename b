@@ -671,8 +671,12 @@ case "$cmd" in
     clippy)
         errors=0
         while IFS= read -r -d '' f; do
-            # vmtest only works on RISC-V
+            # vmtest only works on riscv64
             if [ "$M3_ISA" != "riscv64" ] && [[ "$f" =~ "vmtest" ]]; then
+                continue
+            fi
+            # rot works only on riscv32/riscv64
+            if [[ ! "$M3_ISA" =~ riscv(32|64) ]] && [[ "$f" =~ rot|raser ]]; then
                 continue
             fi
             run_clippy "$f" || errors=$((errors + 1))
