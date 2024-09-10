@@ -1,0 +1,12 @@
+<config>
+    <env>M3_GEM5_CFG=config/rot.py</env>
+    <rot layers="brom,blau.bin,rosa.bin" />
+    <kernel args="kernel" />
+    <dom>
+        <app args="root">
+            <dom>
+                <app args="hello"/>
+            </dom>
+        </app>
+    </dom>
+</config>

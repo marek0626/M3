@@ -18,24 +18,48 @@ use core::mem::size_of;
 use base::io::LogFlags;
 use base::log;
 
-use crate::{CtxData, LayerCtx, MEM_OFFSET};
+use crate::{CtxData, LayerCtx};
 
-// If the context is not at the beginning of the memory, the assembly needs to be changed
-// so that the beginning of SRAM is still cleared if needed. Right now the context is
-// copied to the beginning of SRAM and the rest of the stack is cleared.
-const _: () = assert!(
-    LayerCtx::<()>::MEM_OFFSET == MEM_OFFSET,
-    "Assembly needs changes if context is moved"
-);
-
-pub(crate) unsafe fn switch<Data: CtxData>(ctx: LayerCtx<Data>) -> ! {
-    log!(
-        LogFlags::RoTBoot,
-        "Jumping to next layer @ {:#x}",
-        ctx.entry_addr
-    );
+#[cfg(target_arch = "riscv32")]
+unsafe fn prepare_switch<Data: CtxData>(ctx: &LayerCtx<Data>) -> usize {
+    let entry = ctx.entry_addr;
     asm!(
+        // Clear MEM_OFFSET .. CTX_OFFSET
+        "2: sw      zero, 0({mem_off})",
+        "   addi    {mem_off}, {mem_off}, 4",
+        "   bne     {mem_off}, {mem_pos}, 2b",
+
         // Copy the context to the beginning of memory
+        "1: lw      x4, 0({ctx_pos})",
+        "   addi    {ctx_pos}, {ctx_pos}, 4",
+        "   sw      x4, 0({mem_pos})",
+        "   addi    {mem_pos}, {mem_pos}, 4",
+        "   bne     {mem_pos}, {copy_end}, 1b",
+
+        // Clear the rest of the stack and the BSS
+        "   la      x4, _eclear",
+        "2: sw      zero, 0({mem_pos})",
+        "   addi    {mem_pos}, {mem_pos}, 4",
+        "   bne     {mem_pos}, x4, 2b",
+
+        ctx_pos = in(reg) ctx,
+        mem_off = in(reg) crate::MEM_OFFSET,
+        mem_pos = in(reg) LayerCtx::<Data>::CTX_OFFSET,
+        copy_end = in(reg) LayerCtx::<Data>::CTX_OFFSET + size_of::<LayerCtx<Data>>(),
+    );
+    entry
+}
+
+#[cfg(target_arch = "riscv64")]
+unsafe fn prepare_switch<Data: CtxData>(ctx: &LayerCtx<Data>) -> usize {
+    const _: () = assert!(
+        LayerCtx::<()>::CTX_OFFSET == crate::MEM_OFFSET,
+        "Assembly needs changes if context is moved"
+    );
+
+    let entry = ctx.entry_addr;
+    asm!(
+        // Copy the context to CTX_OFFSET
         "1: ld      x4, 0({ctx_pos})",
         "   addi    {ctx_pos}, {ctx_pos}, 8",
         "   sd      x4, 0({mem_pos})",
@@ -48,6 +72,21 @@ pub(crate) unsafe fn switch<Data: CtxData>(ctx: LayerCtx<Data>) -> ! {
         "   addi    {mem_pos}, {mem_pos}, 8",
         "   bne     {mem_pos}, x4, 2b",
 
+        ctx_pos = in(reg) ctx,
+        mem_pos = in(reg) LayerCtx::<Data>::CTX_OFFSET,
+        copy_end = in(reg) LayerCtx::<Data>::CTX_OFFSET + size_of::<LayerCtx<Data>>(),
+    );
+    entry
+}
+
+pub(crate) unsafe fn switch<Data: CtxData>(ctx: LayerCtx<Data>) -> ! {
+    log!(
+        LogFlags::RoTBoot,
+        "Jumping to next layer @ {:#x}",
+        ctx.entry_addr
+    );
+    let entry = prepare_switch(&ctx);
+    asm!(
         // Clear registers
         //" li      x1, 0", // Contains entry address
         "   li      x2, 0",
@@ -85,10 +124,7 @@ pub(crate) unsafe fn switch<Data: CtxData>(ctx: LayerCtx<Data>) -> ! {
         // Jump to the new entry point
         "   ret",
 
-        in("x1") ctx.entry_addr, // ra
-        ctx_pos = in(reg) &ctx,
-        mem_pos = in(reg) MEM_OFFSET,
-        copy_end = in(reg) MEM_OFFSET + size_of::<LayerCtx<Data>>(),
+        in("x1") entry, // ra
         options(noreturn)
     )
 }

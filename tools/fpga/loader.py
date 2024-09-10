@@ -219,6 +219,7 @@ class Loader:
         # TODO manually set RV32 until the HW reports that correctly
         if self.tcu_version == (2, 0, 1) and (tile_idx == 3 or tile_idx == 4):
             desc &= ~(0x1FF << 6)
-            desc |= 2 << 6
+            desc |= 2 << 6          # RV32
+            desc |= (1 << 7) << 11  # COREACC
 
         return desc

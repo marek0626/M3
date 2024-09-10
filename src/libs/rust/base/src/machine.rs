@@ -34,15 +34,25 @@ impl minicov::CoverageWriter for Gem5CovWriter {
     }
 }
 
-#[cfg(all(not(feature = "linux"), not(target_arch = "riscv64")))]
+#[cfg(all(
+    not(feature = "linux"),
+    not(target_arch = "riscv64"),
+    not(target_arch = "riscv32")
+))]
 extern "C" {
     pub fn gem5_writefile(src: *const u8, len: u64, offset: u64, file: u64);
     pub fn gem5_shutdown(delay: u64);
 }
 
-#[cfg(all(not(feature = "linux"), target_arch = "riscv64"))]
+#[cfg(all(
+    not(feature = "linux"),
+    any(target_arch = "riscv64", target_arch = "riscv32")
+))]
 unsafe fn gem5_writefile(src: *const u8, len: u64, offset: u64, file: u64) -> u64 {
-    let result: u64;
+    let len = len as usize;
+    let offset = offset as usize;
+    let file = file as usize;
+    let result: usize;
     unsafe {
         core::arch::asm!(
             ".long 0x9E00007B",
@@ -53,11 +63,15 @@ unsafe fn gem5_writefile(src: *const u8, len: u64, offset: u64, file: u64) -> u6
             options(readonly, nostack, preserves_flags),
         )
     }
-    result
+    result as u64
 }
 
-#[cfg(all(not(feature = "linux"), target_arch = "riscv64"))]
+#[cfg(all(
+    not(feature = "linux"),
+    any(target_arch = "riscv64", target_arch = "riscv32")
+))]
 unsafe fn gem5_shutdown(delay: u64) -> ! {
+    let delay = delay as usize;
     unsafe {
         core::arch::asm!(
             ".long 0x4200007B",

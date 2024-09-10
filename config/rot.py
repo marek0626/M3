@@ -25,6 +25,15 @@ num_o3 = int(os.environ.get('M3_GEM5_O3_CORES', num_tiles))
 num_minor = int(os.environ.get('M3_GEM5_MINOR_CORES', num_tiles))
 num_kecacc = int(os.environ.get('M3_GEM5_KECACC_TILES', 1))
 
+if os.environ.get('M3_ISA') == 'riscv32':
+    l1size=None
+    l2size=None
+    spmsize='64MB'
+else:
+    l1size='32kB'
+    l2size='128kB'
+    spmsize=None
+
 hard_disk0 = os.environ.get('M3_GEM5_IDE_DRIVE')
 
 mem_tile = None
@@ -65,8 +74,9 @@ for i in range(0, num_minor):
                           id=TileId(0, len(tiles)),
                           cmdline='',
                           memTile=None,
-                          l1size='32kB',
-                          l2size='128kB')
+                          l1size=l1size,
+                          l2size=l2size,
+                          spmsize=spmsize)
     tiles.append(tile)
 
 # create the out-of-order core tiles
@@ -77,8 +87,9 @@ for i in range(0, num_o3):
                           id=TileId(0, len(tiles)),
                           cmdline='',
                           memTile=None,
-                          l1size='32kB',
-                          l2size='256kB')
+                          l1size=l1size,
+                          l2size=l2size,
+                          spmsize=spmsize)
     tiles.append(tile)
 
 options.cpu_type = DEFAULT_MINOR_CPU

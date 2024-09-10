@@ -22,7 +22,7 @@
                     <dom tile="perf|core">
                         <app args="/bin/acceltest /zeros.bin /output.txt">
                             <mount fs="m3fs" path="/" />
-                            <tiles type="riscv32" mux="straccmux" />
+                            <tiles type="riscv32+coreacc" mux="straccmux" />
                         </app>
                     </dom>
                 </app>

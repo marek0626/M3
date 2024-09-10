@@ -8,7 +8,7 @@ outs = [
 
 
 def build(gen, env):
-    if env['ISA'] != 'riscv64':
+    if env['ISA'] != 'riscv64' and env['ISA'] != 'riscv32':
         # (because of riscv-rt and the RISC-V specific assembly code)
         return
     if env['TGT'] == 'hw22':
@@ -16,7 +16,7 @@ def build(gen, env):
         return
 
     # we want soft-float
-    env = env.new('riscv64', True)
+    env = env.new(env['ISA'], True)
 
     env['BINDIR'] = env['BUILDDIR'] + '/rotbin'
     env['CRGFLAGS'] += ['--features', 'rosa/' + env['TGT']]
@@ -33,8 +33,8 @@ def build(gen, env):
         env['CRGFLAGS'] += ['--release']
 
     # riscv64imac-unknown-none-elf works too and is a standard Rust target
-    env['TRIPLE'] = 'riscv64imc-unknown-none-elf'
-    if env['TRIPLE'] == 'riscv64imc-unknown-none-elf':
+    env['TRIPLE'] = env['ISA'] + 'imc-unknown-none-elf'
+    if env['TRIPLE'] == env['ISA'] + 'imc-unknown-none-elf':
         # Non-standard target, need to build the standard library ourselves
         env['CRGFLAGS'] += ['-Z build-std=core,alloc']
         # Can be used to completely remove panic messages from the binary
@@ -47,7 +47,7 @@ def build(gen, env):
     # avoid "unknown target triple 'riscv64imac-unknown-none-elf'".
     # https://github.com/rust-lang/cc-rs/blob/2447a2ba5f455c00b1563193e125b60eebbd8ebe/src/lib.rs#L1885-L1892
     if 'TARGET_CFLAGS' in env['CRGENV']:
-        env['CRGENV']['TARGET_CFLAGS'] += ' --target=riscv64-unknown-none-elf'
+        env['CRGENV']['TARGET_CFLAGS'] += ' --target=' + env['ISA'] + '-unknown-none-elf'
 
     cargo_ws(env, gen, outs=outs)
 

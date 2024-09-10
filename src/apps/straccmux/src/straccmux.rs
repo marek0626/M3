@@ -53,10 +53,6 @@ pub extern "C" fn exit(_code: i32) -> ! {
     }
 }
 
-fn kpex_rbuf_addr() -> VirtAddr {
-    env::boot().tile_desc().rbuf_mux_space().0
-}
-
 fn side_rbuf_addr() -> VirtAddr {
     VirtAddr::new(
         env::boot().tile_desc().rbuf_mux_space().0.as_raw() + cfg::KPEX_RBUF_SIZE as VirtAddrRaw,
@@ -105,7 +101,6 @@ impl AccelAct {
             status: Code::Success,
         });
         tcu::TCU::send(tcu::KPEX_SEP, &msg_buf, 0, tcu::KPEX_REP).unwrap();
-        receive::<()>(tcu::KPEX_REP, kpex_rbuf_addr()).unwrap();
     }
 }
 
@@ -264,6 +259,13 @@ pub extern "C" fn env_run() {
             if handle_sidecall(msg) {
                 break;
             }
+        }
+
+        // just ignore exit responses by the kernel
+        // TODO: we cannot send another exit until the last one was ACKed. This will currently lead
+        // to a failure during sending.
+        if let Some(msg_off) = tcu::TCU::fetch_msg(tcu::KPEX_REP) {
+            tcu::TCU::ack_msg(tcu::KPEX_REP, msg_off).unwrap();
         }
 
         match STATE.get() {
