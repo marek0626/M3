@@ -1,5 +1,5 @@
 <config>
-    <env>M3_GEM5_CFG=config/accels.py</env>
+    <env>M3_GEM5_CFG=platform/gem5/configs/m3/accels.py</env>
     <mods>
         <mod name="fs" file="bench.img" />
     </mods>

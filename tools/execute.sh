@@ -321,7 +321,7 @@ build_params_gem5() {
 
     M3_GEM5_CPUFREQ=${M3_GEM5_CPUFREQ:-1GHz}
     M3_GEM5_MEMFREQ=${M3_GEM5_MEMFREQ:-333MHz}
-    M3_GEM5_CFG=${M3_GEM5_CFG:-config/default.py}
+    M3_GEM5_CFG=${M3_GEM5_CFG:-platform/gem5/configs/m3/default.py}
     export M3_GEM5_TILES=$M3_GEM5_CORES
     export M3_GEM5_IDE_DRIVE=$M3_GEM5_HDD
 
