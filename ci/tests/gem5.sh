@@ -122,7 +122,7 @@ run_bench() {
         if [ "$bench" = "hello" ]; then
             export M3_BUILD=debug
         elif [ "$bench" = "standalone" ]; then
-            export M3_GEM5_CFG=config/spm.py M3_CORES=8
+            export M3_GEM5_CFG=platform/gem5/configs/m3/spm.py M3_CORES=8
         fi
     elif [[ "$bench" == lx* ]]; then
         cp "boot/linux/${bench#lx}.xml" "$M3_OUT/boot.gen.xml"
@@ -134,7 +134,7 @@ run_bench() {
         export M3_GEM5_HDD=$inputdir/test-hdd.img
         cp "boot/${bootprefix}$bench.xml" "$M3_OUT/boot.gen.xml"
     elif [ "$bench" = "abort-test" ]; then
-        export M3_GEM5_CFG=config/aborttest.py
+        export M3_GEM5_CFG=platform/gem5/configs/m3/aborttest.py
         cp boot/hello.xml "$M3_OUT/boot.gen.xml"
     else
         if [[ "$bench" =~ "bench" ]] || [[ "$bench" =~ "voiceassist" ]]; then

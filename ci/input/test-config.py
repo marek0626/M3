@@ -1,8 +1,8 @@
 import os, sys
 
 sys.path.append(os.path.realpath('platform/gem5/configs'))
-sys.path.append(os.path.realpath('platform/gem5/configs/example'))
-from tcu_fs import *
+sys.path.append(os.path.realpath('platform/gem5/configs/m3'))
+from base import *
 
 options = getOptions()
 root = createRoot(options)
