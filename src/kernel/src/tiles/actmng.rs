@@ -111,12 +111,11 @@ impl ActivityMng {
         if flags.is_empty() {
             // if this call fails, we need to undo our actions above
             if let Err(e) = Self::init_activity_async(act.clone()) {
+                // tilemux and count modifications will be reverted in Activity::drop.
                 // note that this is okay, because we have not inserted the new activity into a
                 // capability table and thus nobody else will have removed it from the table yet.
-                tilemng::tilemux(tile_id).rem_activity(id);
                 let mut actmng = INST.borrow_mut();
                 actmng.acts[id as usize] = WeakRc::default();
-                actmng.count -= 1;
                 return Err(e);
             }
         }
