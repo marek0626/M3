@@ -206,7 +206,7 @@ impl CapTable {
         Ok(())
     }
 
-    pub fn obtain(&mut self, sel: CapSel, cap: &mut Capability, child: bool) -> Result<(), Error> {
+    pub fn obtain(&mut self, sel: CapSel, cap: &mut Capability) -> Result<(), Error> {
         let mut nc: Capability = (*cap).clone();
         nc.sels = SelRange::new(sel);
         nc.origin = false;
@@ -224,12 +224,7 @@ impl CapTable {
 
         let nc = self.do_insert(nc);
         log!(LogFlags::KernCaps, "Cloning cap {:?}", nc);
-        if child {
-            cap.inherit(nc);
-        }
-        else {
-            nc.inherit(cap);
-        }
+        cap.inherit(nc);
         Ok(())
     }
 

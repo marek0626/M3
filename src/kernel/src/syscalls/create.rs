@@ -336,9 +336,9 @@ pub fn create_activity_async(act: TempRc<Activity>) -> Result<(), VerboseError> 
 
         // obtain kmem and tile cap from parent
         let kmem_parent = parent_caps.get_mut(kmem_sel)?;
-        child_caps.obtain(kif::SEL_KMEM, kmem_parent, true)?;
+        child_caps.obtain(kif::SEL_KMEM, kmem_parent)?;
         let tile_parent = parent_caps.get_mut(tile_sel)?;
-        child_caps.obtain(kif::SEL_TILE, tile_parent, true)?;
+        child_caps.obtain(kif::SEL_TILE, tile_parent)?;
 
         // give activity cap to the parent and obtain it to child
         // safety: we need to keep another reference here in case the insert fails to properly destruct
@@ -367,7 +367,7 @@ pub fn create_activity_async(act: TempRc<Activity>) -> Result<(), VerboseError> 
     let act_parent = parent_caps.get_mut(dst_sel)?;
     nact.obj_caps()
         .borrow_mut()
-        .obtain(kif::SEL_ACT, act_parent, true)?;
+        .obtain(kif::SEL_ACT, act_parent)?;
 
     // create EP caps for the pager EPs
     if nact.tile_desc().has_virtmem() {
