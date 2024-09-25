@@ -73,7 +73,11 @@ fn do_exchange(
         let dst_sel = dst_rng.start() + i;
         let mut obj_caps_ref = src.obj_caps().borrow_mut();
         let src_cap = obj_caps_ref.get_mut(src_sel).ok();
-        src_cap.map(|c| dst.obj_caps().borrow_mut().obtain(dst_sel, c));
+        let result = src_cap.map(|c| dst.obj_caps().borrow_mut().obtain(dst_sel, c));
+        // Abort early on error but do no cleanup.
+        if let Some(Err(e)) = result {
+            return Err(e.into());
+        }
     }
 
     Ok(())
