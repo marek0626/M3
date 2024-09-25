@@ -247,10 +247,7 @@ pub fn get_sess(act: &TempRc<Activity>) -> Result<(), VerboseError> {
             ));
         }
 
-        try_cap_insert!(actcap
-            .obj_caps()
-            .borrow_mut()
-            .obtain(r.dst, csess.unwrap(), true));
+        try_cap_insert!(actcap.obj_caps().borrow_mut().obtain(r.dst, csess.unwrap()));
     }
     else {
         return Err(verror!(Code::InvArgs, "Unknown session id {}", r.sid));

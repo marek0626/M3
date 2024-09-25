@@ -235,11 +235,10 @@ pub fn derive_srv_fin(act: &TempRc<Activity>) -> Result<(), VerboseError> {
             sgate_cap.get::<TempRc<SGateObject>>()?;
 
             // pass sgate to calling activity
-            try_cap_insert!(der_act.obj_caps().borrow_mut().obtain(
-                derive.dst_sgate,
-                sgate_cap,
-                true
-            ));
+            try_cap_insert!(der_act
+                .obj_caps()
+                .borrow_mut()
+                .obtain(derive.dst_sgate, sgate_cap));
 
             // derive new service object and pass it to calling activity
             let derived_srv = src_srv.derive(r.creator);
