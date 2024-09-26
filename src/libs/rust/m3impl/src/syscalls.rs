@@ -609,6 +609,12 @@ pub fn sem_ctrl(sem: Selector, op: syscalls::SemOp) -> Result<(), Error> {
 ///
 /// If `obtain` is true, the capabilities `other`..`own.count()` and copied to `own`. If `obtain` is
 /// false, the capabilities `own` are copied to `other`..`own.count()`.
+///
+/// # Errors
+///
+/// The exchange operation is aborted as soon as an exchange of a single capability fails.
+/// The already-exchanged capabilities are left in place and the error code of the failed exchange
+/// is returned.
 pub fn exchange(
     act: Selector,
     own: CapRngDesc,
