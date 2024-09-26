@@ -7,7 +7,7 @@ let
 
     # building gem5
     gem5Inputs = [
-        scons gcc zlib.dev protobuf gnum4
+        scons gcc zlib.dev protobuf gnum4 gperftools
         python311Full python311Packages.pydot pre-commit
     ];
 
