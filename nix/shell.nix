@@ -3,11 +3,11 @@ with import nixpkgs { inherit system; };
 
 let
     # general dependencies
-    generalInputs = [ less git gawk openssh which rsync wget cpio openssl ];
+    generalInputs = [ bashInteractive less git gawk openssh which rsync wget cpio openssl ];
 
     # building gem5
     gem5Inputs = [
-        scons gcc zlib.dev protobuf gnum4
+        scons gcc zlib.dev protobuf gnum4 gperftools
         python311Full python311Packages.pydot pre-commit
     ];
 
