@@ -18,10 +18,10 @@
 
 //! Contains the error handling types
 
+use alloc::borrow::Cow;
+
 use core::fmt;
 use core::intrinsics;
-
-use alloc::borrow::Cow;
 
 use crate::col::String;
 use crate::serialize::{Deserialize, Deserializer, Serialize, Serializer};
@@ -127,7 +127,9 @@ impl<'de> Deserialize<'de> for Code {
     where
         D: Deserializer<'de>,
     {
-        Ok(Self::from(u32::deserialize(deserializer)?))
+        use serde::de::Error;
+        let code = u32::deserialize(deserializer)?;
+        Self::try_from(code).map_err(|_| D::Error::custom("Invalid error code"))
     }
 }
 
@@ -261,18 +263,25 @@ impl<T> From<Result<T, Error>> for Code {
     }
 }
 
-impl From<u32> for Error {
-    fn from(error: u32) -> Self {
-        Self::new(Code::from(error))
+impl TryFrom<u32> for Error {
+    type Error = Error;
+
+    fn try_from(error: u32) -> Result<Self, Self::Error> {
+        Ok(Self::new(Code::try_from(error)?))
     }
 }
 
-impl From<u32> for Code {
-    fn from(error: u32) -> Self {
-        assert!(error <= Code::ConnectionFailed as u32);
-        // safety: assuming that the assert above doesn't fail, the conversion is safe
-        // TODO better way?
-        unsafe { intrinsics::transmute(error) }
+impl TryFrom<u32> for Code {
+    type Error = Error;
+
+    fn try_from(error: u32) -> Result<Self, Self::Error> {
+        if error <= Code::ConnectionFailed as u32 {
+            // safety: assuming that the assert above doesn't fail, the conversion is safe
+            Ok(unsafe { intrinsics::transmute::<u32, Code>(error) })
+        }
+        else {
+            Err(Error::new(Code::InvArgs))
+        }
     }
 }
 

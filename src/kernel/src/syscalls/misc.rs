@@ -564,7 +564,8 @@ pub fn activity_ctrl_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
             let act_id = act.id();
             drop(act);
 
-            Activity::stop_app_async(actcap, Code::from(r.arg as u32), act_id);
+            let exitcode = Code::try_from(r.arg as u32)?;
+            Activity::stop_app_async(actcap, exitcode, act_id);
 
             if is_self {
                 // syscall message has already been invalidated

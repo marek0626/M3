@@ -444,7 +444,7 @@ impl CUReq {
         Self::PMPFailure {
             phys: (req >> 32) as u32,
             write: ((req >> 3) & 0x1) != 0,
-            error: Code::from(((req >> 4) & 0x1ffff) as u32),
+            error: Code::try_from(((req >> 4) & 0x1ffff) as u32).unwrap(),
         }
     }
 }
@@ -898,7 +898,7 @@ impl TCU {
             let cmd = Self::read_unpriv_reg(UnprivReg::Command);
             if (cmd & 0xF) == CmdOpCode::Idle.into() {
                 let err = (cmd >> 20) & 0x1F;
-                return Result::from(Code::from(err as u32));
+                return Result::from(Code::try_from(err as u32).unwrap());
             }
         }
     }
@@ -1084,7 +1084,7 @@ impl TCU {
             if (cmd & 0xF) == PrivCmdOpCode::Idle.into() {
                 let err = (cmd >> 4) & 0x1F;
                 if err != 0 {
-                    break Err(Error::new(Code::from(err as u32)));
+                    break Err(Error::new(Code::try_from(err as u32).unwrap()));
                 }
                 else if (cmd >> 9) == 0 {
                     // if the command was finished successfully, use the current command register
@@ -1210,7 +1210,7 @@ impl TCU {
         loop {
             let cmd = Self::read_priv_reg(PrivReg::PrivCmd);
             if (cmd & 0xF) == PrivCmdOpCode::Idle.into() {
-                return Code::from(((cmd >> 4) & 0x1F) as u32);
+                return Code::try_from(((cmd >> 4) & 0x1F) as u32).unwrap();
             }
         }
     }

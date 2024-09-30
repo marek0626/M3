@@ -71,7 +71,7 @@ fn tmcall_wait(state: &mut arch::State) -> Result<(), Error> {
 }
 
 fn tmcall_stop(state: &mut arch::State) -> Result<(), Error> {
-    let code = Code::from(state.r[isr::TMC_ARG1] as u32);
+    let code = Code::try_from(state.r[isr::TMC_ARG1] as u32)?;
 
     log!(LogFlags::MuxCalls, "tmcall::stop(code={:?})", code);
 

@@ -54,7 +54,7 @@ pub enum Operation {
 }
 
 pub(crate) fn get_result(res: usize) -> Result<(), Error> {
-    Result::from(Code::from(res as u32))
+    Result::from(Code::try_from(res as u32)?)
 }
 
 cfg_if! {

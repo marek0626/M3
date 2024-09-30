@@ -494,7 +494,7 @@ fn do_ext_cmd(tile: TileId, cmd: Reg) -> Result<Reg, Error> {
         }
     };
 
-    match Code::from(((res >> 4) & 0x1F) as u32) {
+    match Code::try_from(((res >> 4) & 0x1F) as u32).unwrap() {
         Code::Success => Ok(res >> 9),
         e => Err(Error::new(e)),
     }
