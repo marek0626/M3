@@ -112,31 +112,32 @@ impl OwnActivity {
                 TimeDuration::MAX => None,
                 t => Some(t),
             };
-            return tmif::wait(None, None, timeout);
+            return tmif::wait(None, None, None, timeout);
         }
         if crate::env::get().platform() != crate::env::Platform::Hw {
             let timeout = match timeout {
                 TimeDuration::MAX => None,
                 t => Some(t.as_nanos() as u64),
             };
-            return TCU::wait_for_msg(INVALID_EP, timeout);
+            return TCU::wait_for_msg(INVALID_EP, INVALID_EP, timeout);
         }
         Ok(())
     }
 
     /// Puts the own activity to sleep until the next message arrives on the given EP
     pub fn wait_for(
-        ep: Option<EpId>,
+        rep: Option<EpId>,
+        iep: Option<EpId>,
         irq: Option<tmif::IRQId>,
         timeout: Option<TimeDuration>,
     ) -> Result<(), Error> {
         if crate::env::get().shared() {
-            return tmif::wait(ep, irq, timeout);
+            return tmif::wait(rep, iep, irq, timeout);
         }
         if crate::env::get().platform() != crate::env::Platform::Hw {
-            if let Some(ep) = ep {
+            if let Some(rep) = rep {
                 let timeout = timeout.map(|t| t.as_nanos() as u64);
-                return TCU::wait_for_msg(ep, timeout);
+                return TCU::wait_for_msg(rep, iep.unwrap_or(INVALID_EP), timeout);
             }
         }
         Ok(())

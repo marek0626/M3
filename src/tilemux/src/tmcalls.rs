@@ -31,23 +31,26 @@ use crate::vma;
 use crate::{arch, helper};
 
 fn tmcall_wait(state: &mut arch::State) -> Result<(), Error> {
-    let ep = state.r[isr::TMC_ARG1] as EpId;
-    let irq = state.r[isr::TMC_ARG2] as tmif::IRQId;
-    let timeout = match state.r[isr::TMC_ARG3] {
+    let rep = state.r[isr::TMC_ARG1] as EpId;
+    let iep = state.r[isr::TMC_ARG2] as EpId;
+    let irq = state.r[isr::TMC_ARG3] as tmif::IRQId;
+    let timeout = match state.r[isr::TMC_ARG4] {
         usize::MAX => None,
         t => Some(TimeDuration::from_nanos(t as u64)),
     };
 
     log!(
         LogFlags::MuxCalls,
-        "tmcall::wait(ep={}, irq={}, timeout={:?})",
-        ep,
+        "tmcall::wait(rep={}, iep={}, irq={}, timeout={:?})",
+        rep,
+        iep,
         irq,
         timeout,
     );
 
     let mut cur = activities::cur();
-    let wait_ep = if ep == INVALID_EP { None } else { Some(ep) };
+    let wait_rep = if rep == INVALID_EP { None } else { Some(rep) };
+    let wait_iep = if iep == INVALID_EP { None } else { Some(iep) };
     let wait_irq = if irq <= IRQ::Timer as tmif::IRQId || irq == tmif::INVALID_IRQ {
         None
     }
@@ -55,14 +58,14 @@ fn tmcall_wait(state: &mut arch::State) -> Result<(), Error> {
         Some(irq)
     };
 
-    if (wait_ep.is_none() || wait_irq.is_some()) && irqs::wait(&cur, wait_irq).is_some() {
+    if (wait_rep.is_none() || wait_irq.is_some()) && irqs::wait(&cur, wait_irq).is_some() {
         return Ok(());
     }
 
     if let Some(t) = timeout {
         timer::add(cur.id(), t);
     }
-    cur.block(None, wait_ep, wait_irq, timeout);
+    cur.block(None, wait_rep, wait_iep, wait_irq, timeout);
 
     Ok(())
 }

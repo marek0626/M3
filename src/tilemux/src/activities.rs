@@ -151,7 +151,8 @@ pub struct Activity {
     ctxsws: u64,
     wait_timeout: bool,
     wait_irq: Option<tmif::IRQId>,
-    wait_ep: Option<tcu::EpId>,
+    wait_rep: Option<tcu::EpId>,
+    wait_iep: Option<tcu::EpId>,
     irq_mask: u32,
     act_reg: tcu::Reg,
     eps_start: tcu::EpId,
@@ -420,7 +421,8 @@ pub fn schedule(mut action: ScheduleAction) -> VirtAddr {
             timer::remove(act.id());
             act.wait_timeout = false;
         }
-        act.wait_ep = None;
+        act.wait_rep = None;
+        act.wait_iep = None;
         act.wait_irq = None;
 
         break new_state;
@@ -689,7 +691,8 @@ impl Activity {
             scheduled: TimeInstant::now(),
             wait_timeout: false,
             wait_irq: None,
-            wait_ep: None,
+            wait_rep: None,
+            wait_iep: None,
             irq_mask: 0,
             eps_start,
             cmd: helper::TCUCmdState::new(),
@@ -804,8 +807,11 @@ impl Activity {
         if self.pf_state.is_some() {
             true
         }
-        else if let Some(wep) = self.wait_ep {
-            !tcu::TCU::has_msgs(wep)
+        else if let Some(rep) = self.wait_rep {
+            !tcu::TCU::has_msgs(rep)
+        }
+        else if let Some(iep) = self.wait_iep {
+            !tcu::TCU::is_valid(iep)
         }
         else {
             msgs == 0
@@ -815,21 +821,24 @@ impl Activity {
     pub fn block(
         &mut self,
         cont: Option<fn(&mut Activity) -> ContResult>,
-        ep: Option<tcu::EpId>,
+        rep: Option<tcu::EpId>,
+        iep: Option<tcu::EpId>,
         irq: Option<tmif::IRQId>,
         timeout: Option<TimeDuration>,
     ) {
         log!(
             LogFlags::MuxCtxSws,
-            "Block Activity {} for ep={:?}, irq={:?}, timeout={:?}",
+            "Block Activity {} for rep={:?}, iep={:?}, irq={:?}, timeout={:?}",
             self.id(),
-            ep,
+            rep,
+            iep,
             irq,
             timeout,
         );
 
         self.cont = cont;
-        self.wait_ep = ep;
+        self.wait_rep = rep;
+        self.wait_iep = iep;
         self.wait_irq = irq;
         self.wait_timeout = timeout.is_some();
 
@@ -840,7 +849,7 @@ impl Activity {
 
     fn should_unblock(&self, event: &Event) -> bool {
         match event {
-            Event::Message(eep) => match self.wait_ep {
+            Event::Message(eep) => match self.wait_rep {
                 // if we wait for a specific EP, only unblock if this EP got a message
                 Some(wep) => *eep == wep,
                 // if we wait for a specific IRQ, don't unblock on messages
@@ -850,7 +859,7 @@ impl Activity {
                 // if we wait for a specific IRQ, only unblock if this IRQ occurred
                 Some(wirq) => *eirq == wirq,
                 // if we wait for a specific EP, don't unblock on IRQs
-                None => self.wait_ep.is_none(),
+                None => self.wait_rep.is_none(),
             },
             // always unblock on timeouts or invalided EPs
             Event::Timeout => true,

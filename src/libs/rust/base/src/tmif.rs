@@ -63,7 +63,8 @@ cfg_if! {
 
         #[inline(always)]
         pub fn wait(
-            _ep: Option<EpId>,
+            _rep: Option<EpId>,
+            _iep: Option<EpId>,
             _irq: Option<IRQId>,
             duration: Option<TimeDuration>,
         ) -> Result<(), Error> {
@@ -114,13 +115,15 @@ cfg_if! {
 
         #[inline(always)]
         pub fn wait(
-            ep: Option<EpId>,
+            rep: Option<EpId>,
+            iep: Option<EpId>,
             irq: Option<IRQId>,
             duration: Option<TimeDuration>,
         ) -> Result<(), Error> {
-            TMABI::call3(
+            TMABI::call4(
                 Operation::Wait,
-                ep.unwrap_or(INVALID_EP) as usize,
+                rep.unwrap_or(INVALID_EP) as usize,
+                iep.unwrap_or(INVALID_EP) as usize,
                 irq.unwrap_or(INVALID_IRQ) as usize,
                 match duration {
                     Some(d) => d.as_nanos() as usize,

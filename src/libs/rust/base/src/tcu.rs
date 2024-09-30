@@ -912,19 +912,19 @@ impl TCU {
     /// Puts the CU to sleep until the CU is woken up (e.g., by a message reception).
     #[inline(always)]
     pub fn sleep() -> Result<(), Error> {
-        Self::wait_for_msg(INVALID_EP, None)
+        Self::wait_for_msg(INVALID_EP, INVALID_EP, None)
     }
 
-    /// Puts the CU to sleep until a message arrives at receive EP `ep`.
+    /// Puts the CU to sleep until a message arrives at receive EP `rep` or `iep` is invalidated.
     #[inline(always)]
-    pub fn wait_for_msg(ep: EpId, timeout: Option<u64>) -> Result<(), Error> {
+    pub fn wait_for_msg(rep: EpId, iep: EpId, timeout: Option<u64>) -> Result<(), Error> {
         if timeout.is_some() {
             return Err(Error::new(Code::NotSup));
         }
 
         Self::write_unpriv_reg(
             UnprivReg::Command,
-            Self::build_cmd(0, CmdOpCode::Sleep, ep as u64),
+            Self::build_cmd(0, CmdOpCode::Sleep, (iep as u64) << 16 | (rep as u64)),
         );
         Self::get_error()
     }

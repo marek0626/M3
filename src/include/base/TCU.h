@@ -452,10 +452,10 @@ private:
     }
 
     void sleep() {
-        wait_for_msg(INVALID_EP);
+        wait_for_msg(INVALID_EP, INVALID_EP);
     }
-    void wait_for_msg(epid_t ep) {
-        write_reg(UnprivRegs::COMMAND, build_command(0, CmdOpCode::SLEEP, ep));
+    void wait_for_msg(epid_t rep, epid_t iep) {
+        write_reg(UnprivRegs::COMMAND, build_command(0, CmdOpCode::SLEEP, (iep << 16) | rep));
         get_error();
     }
 
