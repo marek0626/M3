@@ -763,7 +763,9 @@ case "$cmd" in
         fi
         for d in $dirs; do
             (
-                cd "$d" && cargo "${cargoargs[@]}" -j1 --target "$tgt" --target-dir "$out"
+                # we run in single-threaded mode because some tests work with global data
+                cd "$d" &&
+                    cargo "${cargoargs[@]}" --target "$tgt" --target-dir "$out" -- --test-threads=1
             ) || errors=$((errors + 1))
         done
         [ $errors -eq 0 ] || exit 1

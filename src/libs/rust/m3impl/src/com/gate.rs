@@ -63,6 +63,11 @@ impl<T: GateCap> LazyGate<T> {
         Self::Unact(src)
     }
 
+    /// Returns true if this `LazyGate` is already activated
+    pub fn activated(&self) -> bool {
+        matches!(self, Self::Act(_))
+    }
+
     /// Requests access to the gate and returns a reference to it
     ///
     /// If not already done, this call will activate the gate.

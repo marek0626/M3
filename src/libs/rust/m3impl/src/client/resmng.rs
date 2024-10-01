@@ -352,7 +352,7 @@ impl ResMng {
         build_vmsg!(buf, op, req);
 
         let mut reply = GateIStream::new(sgate.call(&buf, reply_gate)?, reply_gate);
-        let res = Code::from(reply.pop::<u32>()?);
+        let res = Code::try_from(reply.pop::<u32>()?)?;
         match res {
             Code::Success => Ok(reply),
             e => Err(Error::new(e)),

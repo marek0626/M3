@@ -139,7 +139,7 @@ void RecvGate::stop() noexcept {
 }
 
 void RecvGate::wait_for_msg() {
-    OwnActivity::wait_for_msg(ep()->id());
+    OwnActivity::wait_for_msg(ep()->id(), TCU::INVALID_EP);
 }
 
 const TCU::Message *RecvGate::fetch() noexcept {
@@ -171,12 +171,12 @@ const TCU::Message *RecvGate::receive(SendGate *sgate) {
                 return reply;
         }
 
+        OwnActivity::wait_for_msg(ep()->id(), sgate ? sgate->ep()->id() : TCU::INVALID_EP);
+
         if(sgate && EXPECT_FALSE(!TCU::get().is_valid(sgate->ep()->id()))) {
             throw MessageException("SendGate became invalid while waiting for reply",
                                    Errors::EP_INVALID);
         }
-
-        OwnActivity::wait_for_msg(ep()->id());
     }
     UNREACHED;
 }

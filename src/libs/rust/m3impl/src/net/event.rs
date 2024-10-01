@@ -28,7 +28,7 @@ use crate::kif::{CapRngDesc, CapType};
 use crate::mem::{self, MaybeUninit, MsgBuf};
 use crate::net::{Endpoint, IpAddr, Port};
 use crate::rc::Rc;
-use crate::tcu::{Header, Message};
+use crate::tcu::{EpId, Header, Message};
 use crate::tiles::{Activity, OwnActivity};
 use crate::util::math;
 
@@ -232,16 +232,25 @@ impl NetEventChannel {
         }))
     }
 
+    fn send_ep(&self) -> Option<EpId> {
+        if self.sgate.borrow().activated() {
+            Some(self.sgate.borrow_mut().get().unwrap().ep().id())
+        }
+        else {
+            None
+        }
+    }
+
     /// Wait until new messages have been received
     pub fn wait_for_events(&self) {
         // ignore errors
-        OwnActivity::wait_for(Some(self.rgate.ep()), None, None).ok();
+        OwnActivity::wait_for(Some(self.rgate.ep()), self.send_ep(), None, None).ok();
     }
 
     /// Wait until new messages can be send
     pub fn wait_for_credits(&self) {
         // ignore errors
-        OwnActivity::wait_for(Some(self.rpl_gate.ep()), None, None).ok();
+        OwnActivity::wait_for(Some(self.rpl_gate.ep()), self.send_ep(), None, None).ok();
     }
 
     /// Returns true if messages can be send

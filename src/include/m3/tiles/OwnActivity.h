@@ -54,19 +54,19 @@ public:
      */
     static void sleep_for(TimeDuration duration) noexcept {
         if(env()->shared || duration != TimeDuration::MAX)
-            TMIF::wait(TCU::INVALID_EP, INVALID_IRQ, duration);
+            TMIF::wait(TCU::INVALID_EP, TCU::INVALID_EP, INVALID_IRQ, duration);
         else if(env()->platform != Platform::HW)
-            TCU::get().wait_for_msg(TCU::INVALID_EP);
+            TCU::get().wait_for_msg(TCU::INVALID_EP, TCU::INVALID_EP);
     }
 
     /**
      * Puts the own activity to sleep until the next message arrives on the given EP
      */
-    static void wait_for_msg(epid_t ep) noexcept {
+    static void wait_for_msg(epid_t rep, epid_t iep) noexcept {
         if(env()->shared)
-            TMIF::wait(ep, INVALID_IRQ, TimeDuration::MAX);
+            TMIF::wait(rep, iep, INVALID_IRQ, TimeDuration::MAX);
         else if(env()->platform != Platform::HW)
-            TCU::get().wait_for_msg(ep);
+            TCU::get().wait_for_msg(rep, iep);
     }
 
     /**

@@ -475,13 +475,13 @@ impl RecvGate {
                 }
             }
 
+            OwnActivity::wait_for(Some(self.ep()), sgate.map(|sg| sg.ep().id()), None, None)?;
+
             if let Some(sg) = sgate {
                 if !tcu::TCU::is_valid(sg.ep().id()) {
                     return Err(Error::new(Code::NoSEP));
                 }
             }
-
-            OwnActivity::wait_for(Some(self.ep()), None, None)?;
         }
     }
 

@@ -344,7 +344,9 @@ build_params_gem5() {
     fi
     params=("${params[@]}" "$M3_GEM5_CFG" --cpu-type "$M3_GEM5_CPU" --isa "$M3_ISA")
     params=("${params[@]}" --cmd "$cmd" --mods "$mods" --logflags "$M3_LOG")
-    params=("${params[@]}" --rot-layers "$rot_layers")
+    if [ "$rot_layers" != "" ]; then
+        params=("${params[@]}" --rot-layers "$rot_layers")
+    fi
     params=("${params[@]}" --cpu-clock="$M3_GEM5_CPUFREQ" --sys-clock="$M3_GEM5_MEMFREQ")
     if [ "$M3_GEM5_PAUSE" != "" ]; then
         params=("${params[@]}" --pausetile="$M3_GEM5_PAUSE")

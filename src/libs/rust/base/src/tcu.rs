@@ -444,7 +444,7 @@ impl CUReq {
         Self::PMPFailure {
             phys: (req >> 32) as u32,
             write: ((req >> 3) & 0x1) != 0,
-            error: Code::from(((req >> 4) & 0x1ffff) as u32),
+            error: Code::try_from(((req >> 4) & 0x1ffff) as u32).unwrap(),
         }
     }
 }
@@ -898,7 +898,7 @@ impl TCU {
             let cmd = Self::read_unpriv_reg(UnprivReg::Command);
             if (cmd & 0xF) == CmdOpCode::Idle.into() {
                 let err = (cmd >> 20) & 0x1F;
-                return Result::from(Code::from(err as u32));
+                return Result::from(Code::try_from(err as u32).unwrap());
             }
         }
     }
@@ -912,19 +912,19 @@ impl TCU {
     /// Puts the CU to sleep until the CU is woken up (e.g., by a message reception).
     #[inline(always)]
     pub fn sleep() -> Result<(), Error> {
-        Self::wait_for_msg(INVALID_EP, None)
+        Self::wait_for_msg(INVALID_EP, INVALID_EP, None)
     }
 
-    /// Puts the CU to sleep until a message arrives at receive EP `ep`.
+    /// Puts the CU to sleep until a message arrives at receive EP `rep` or `iep` is invalidated.
     #[inline(always)]
-    pub fn wait_for_msg(ep: EpId, timeout: Option<u64>) -> Result<(), Error> {
+    pub fn wait_for_msg(rep: EpId, iep: EpId, timeout: Option<u64>) -> Result<(), Error> {
         if timeout.is_some() {
             return Err(Error::new(Code::NotSup));
         }
 
         Self::write_unpriv_reg(
             UnprivReg::Command,
-            Self::build_cmd(0, CmdOpCode::Sleep, ep as u64),
+            Self::build_cmd(0, CmdOpCode::Sleep, (iep as u64) << 16 | (rep as u64)),
         );
         Self::get_error()
     }
@@ -1084,7 +1084,7 @@ impl TCU {
             if (cmd & 0xF) == PrivCmdOpCode::Idle.into() {
                 let err = (cmd >> 4) & 0x1F;
                 if err != 0 {
-                    break Err(Error::new(Code::from(err as u32)));
+                    break Err(Error::new(Code::try_from(err as u32).unwrap()));
                 }
                 else if (cmd >> 9) == 0 {
                     // if the command was finished successfully, use the current command register
@@ -1210,7 +1210,7 @@ impl TCU {
         loop {
             let cmd = Self::read_priv_reg(PrivReg::PrivCmd);
             if (cmd & 0xF) == PrivCmdOpCode::Idle.into() {
-                return Code::from(((cmd >> 4) & 0x1F) as u32);
+                return Code::try_from(((cmd >> 4) & 0x1F) as u32).unwrap();
             }
         }
     }

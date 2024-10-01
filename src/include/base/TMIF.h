@@ -59,7 +59,7 @@ namespace m3 {
 #if defined(__m3lx__)
 
 struct TMIF {
-    static Errors::Code wait(epid_t, irq_t, TimeDuration timeout) {
+    static Errors::Code wait(epid_t, epid_t, irq_t, TimeDuration timeout) {
         m3lx::wait_msg(timeout);
         return Errors::SUCCESS;
     }
@@ -95,8 +95,8 @@ struct TMIF {
 #else
 
 struct TMIF {
-    static Errors::Code wait(epid_t ep, irq_t irq, TimeDuration timeout) {
-        return TMABI::call3(Operation::WAIT, ep, irq, timeout.as_nanos());
+    static Errors::Code wait(epid_t rep, epid_t iep, irq_t irq, TimeDuration timeout) {
+        return TMABI::call4(Operation::WAIT, rep, iep, irq, timeout.as_nanos());
     }
 
     static Errors::Code exit(Errors::Code code) {
