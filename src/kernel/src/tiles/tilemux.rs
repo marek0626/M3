@@ -294,7 +294,6 @@ impl TileMux {
                 let tile = tile.unwrap();
                 tilemux.init_state(&tile, ep_count);
                 drop(tile);
-                tilemux.shutdown = false;
 
                 if platform::tile_desc(tile_id).is_programmable() {
                     // here we need a multiplexer and therefore memory
@@ -308,7 +307,11 @@ impl TileMux {
 
                     // use the given memory gate for the first PMP EP (for the multiplexer)
                     if platform::tile_desc(tile_id).has_virtmem() {
-                        tilemux.reconfigure_pmp_ep(0, Some(mux_mem), true)?;
+                        if let Err(e) = tilemux.reconfigure_pmp_ep(0, Some(mux_mem), true) {
+                            // put the tile back into the original state (shut down)
+                            tilemux.deinit_state();
+                            return Err(e);
+                        }
                     }
 
                     if env::boot().platform == env::Platform::Hw {
@@ -339,6 +342,8 @@ impl TileMux {
                 // TODO account the kernel memory for the thread to the caller
                 #[cfg_attr(dylint_lib = "m3_lints", allow(async_alias))]
                 thread::add_thread(VirtAddr::from(thread_startup_async as *const ()), 0);
+
+                tilemux.shutdown = false;
             }
             else {
                 drop(tile);
