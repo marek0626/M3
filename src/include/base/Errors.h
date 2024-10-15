@@ -57,6 +57,10 @@ struct Errors {
         TLB_FULL,
         NO_PMP_EP,
         NO_IRQ,
+        EXREG_NO_PERM,
+        EXREG_WRONG_TILE,
+        EXREG_OVERLAPS,
+        EXREG_EXISTS,
         // SW errors
         INV_ARGS,
         OBJECT_GONE,

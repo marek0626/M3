@@ -24,6 +24,7 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 use crate::cfg;
 use crate::mem::{VirtAddr, VirtAddrRaw};
 use crate::serialize::{Deserialize, Serialize};
+use crate::tcu;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive, FromPrimitive)]
 #[repr(u64)]
@@ -170,6 +171,14 @@ impl TileDesc {
     /// Returns the size of the internal memory (0 if none is present)
     pub fn mem_size(self) -> usize {
         ((self.val >> 28) as usize) << 12
+    }
+
+    /// Returns the number of exclusive regions in this tile
+    pub fn exclusive_regions(self) -> usize {
+        match self.tile_type() {
+            TileType::Mem => tcu::EXREG_REGS,
+            _ => 0,
+        }
     }
 
     /// Returns whether the tile executes software

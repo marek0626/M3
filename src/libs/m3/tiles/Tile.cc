@@ -139,9 +139,10 @@ Reference<Tile> Tile::get(const char *desc, bool init) {
     vthrow(Errors::NOT_FOUND, "Unable to find tile with {}"_cf, desc);
 }
 
-Reference<Tile> Tile::derive(Option<uint> eps, Option<TimeDuration> time, Option<size_t> pts) {
+Reference<Tile> Tile::derive(Option<uint> eps, Option<uint> exregs, Option<TimeDuration> time,
+                             Option<size_t> pts) {
     capsel_t sel = SelSpace::get().alloc_sel();
-    Syscalls::derive_tile(this->sel(), sel, eps, time, pts);
+    Syscalls::derive_tile(this->sel(), sel, eps, exregs, time, pts);
     return Reference<Tile>(new Tile(sel, desc(), 0, false));
 }
 
@@ -155,7 +156,7 @@ KIF::Syscall::MuxType Tile::mux_type() const {
     return mux_type;
 }
 
-std::tuple<Quota<uint>, Quota<TimeDuration>, Quota<size_t>> Tile::quota() const {
+std::tuple<Quota<uint>, Quota<uint>, Quota<TimeDuration>, Quota<size_t>> Tile::quota() const {
     return Syscalls::tile_quota(sel());
 }
 

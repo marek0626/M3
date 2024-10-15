@@ -126,7 +126,7 @@ static KOBJ_SIZES: [usize; 11] = [
     kobj_size::<SemObject>(),
     kobj_size::<KMemObject>(),
     // assume pessimistically that each TileObject has its own EPQuota
-    kobj_size::<TileObject>() + kobj_size::<EPQuota>(),
+    kobj_size::<TileObject>() + kobj_size::<TileQuota>(),
     kobj_size::<EPObject>(),
 ];
 
@@ -392,6 +392,7 @@ pub struct MGateObject {
     base: BaseGate,
     mem: mem::Allocation,
     perms: kif::Perm,
+    exclusive: Cell<Option<TileId>>,
     derived: bool,
 }
 
@@ -401,6 +402,7 @@ impl MGateObject {
             base: BaseGate::default(),
             mem,
             perms,
+            exclusive: Cell::from(None),
             derived,
         })
     }
@@ -423,6 +425,48 @@ impl MGateObject {
 
     pub fn perms(&self) -> kif::Perm {
         self.perms
+    }
+
+    pub fn exclusive_tile(&self) -> Option<TileId> {
+        self.exclusive.get()
+    }
+
+    pub fn derive(
+        &self,
+        offset: GlobOff,
+        size: GlobOff,
+        perms: kif::Perm,
+    ) -> Result<StrongRc<Self>, VerboseError> {
+        if offset.checked_add(size).is_none() || offset + size > self.size() || size == 0 {
+            return Err(verror!(Code::InvArgs, "Size or offset invalid"));
+        }
+
+        let addr = self.addr().raw() + offset;
+        let mem = mem::Allocation::new(GlobAddr::new(addr), size);
+
+        Ok(StrongRc::new(Self {
+            base: BaseGate::default(),
+            mem,
+            perms: self.perms & perms,
+            exclusive: self.exclusive.clone(),
+            derived: true,
+        }))
+    }
+
+    pub fn make_exclusive(&self, user_tile: &TempRc<TileObject>) -> Result<(), Error> {
+        if let Some(extile) = self.exclusive.get() {
+            if extile == user_tile.tile() {
+                return Ok(());
+            }
+            return Err(Error::new(Code::Exists));
+        }
+
+        self.exclusive.set(Some(user_tile.tile()));
+        Ok(())
+    }
+
+    pub fn inval_exclusive(&self) {
+        self.exclusive.take();
     }
 }
 
@@ -684,22 +728,22 @@ impl fmt::Debug for SemObject {
     }
 }
 
-pub struct EPQuota {
+pub struct TileQuota {
     id: QuotaId,
     total: Cell<usize>,
     left: Cell<usize>,
 }
 
-impl EPQuota {
-    pub fn new(eps: usize) -> Rc<Self> {
+impl TileQuota {
+    pub fn new(num: usize) -> Rc<Self> {
         static NEXT_ID: StaticCell<QuotaId> = StaticCell::new(0);
         let id = NEXT_ID.get();
         NEXT_ID.set(id + 1);
 
         Rc::new(Self {
             id,
-            total: Cell::from(eps),
-            left: Cell::from(eps),
+            total: Cell::from(num),
+            left: Cell::from(num),
         })
     }
 
@@ -714,12 +758,41 @@ impl EPQuota {
     pub fn left(&self) -> usize {
         self.left.get()
     }
+
+    fn alloc(&self, num: usize, tile: TileId, name: &str) {
+        log!(
+            LogFlags::KernTiles,
+            "Tile[{}, {:#x}]: allocating {} {} ({} left)",
+            tile,
+            self as *const _ as usize,
+            num,
+            name,
+            self.left()
+        );
+        assert!(self.left() >= num);
+        self.left.set(self.left() - num);
+    }
+
+    fn free(&self, num: usize, tile: TileId, name: &str) {
+        assert!(self.left() + num <= self.total());
+        self.left.set(self.left() + num);
+        log!(
+            LogFlags::KernTiles,
+            "Tile[{}, {:#x}]: freed {} {} ({} left)",
+            tile,
+            self as *const _ as usize,
+            num,
+            name,
+            self.left()
+        );
+    }
 }
 
 pub struct TileObject {
     tile: TileId,
     acts: RefCell<Vec<(ActId, CapSel)>>,
-    ep_quota: Rc<EPQuota>,
+    ep_quota: Rc<TileQuota>,
+    exregs_quota: Rc<TileQuota>,
     time_quota: QuotaId,
     pt_quota: QuotaId,
     derived: bool,
@@ -728,7 +801,8 @@ pub struct TileObject {
 impl TileObject {
     pub fn new(
         tile: TileId,
-        ep_quota: Rc<EPQuota>,
+        ep_quota: Rc<TileQuota>,
+        exregs_quota: Rc<TileQuota>,
         time_quota: QuotaId,
         pt_quota: QuotaId,
         derived: bool,
@@ -737,17 +811,19 @@ impl TileObject {
             tile,
             acts: RefCell::from(Vec::new()),
             ep_quota: ep_quota.clone(),
+            exregs_quota: exregs_quota.clone(),
             time_quota,
             pt_quota,
             derived,
         });
         log!(
             LogFlags::KernTiles,
-            "Tile[{}, {:#x}]: {} new TileObject with EPs={}, time={}, pts={}",
+            "Tile[{}, {:#x}]: {} new TileObject with EPs={}, exregs={}, time={}, pts={}",
             tile,
             &*res as *const _ as usize,
             if derived { "derived" } else { "created" },
             ep_quota.total(),
+            exregs_quota.total(),
             time_quota,
             pt_quota,
         );
@@ -757,6 +833,7 @@ impl TileObject {
     pub fn derive_async(
         tile: TempRc<Self>,
         eps: Option<usize>,
+        exregs: Option<usize>,
         time: Option<u64>,
         pts: Option<usize>,
     ) -> Result<StrongRc<Self>, VerboseError> {
@@ -765,11 +842,13 @@ impl TileObject {
             if !tile.has_quota(num) {
                 return Err(verror!(Code::NoSpace, "Insufficient EPs"));
             }
-            tile.alloc(num);
+            tile.alloc_eps(num);
         }
 
         let tile_id = tile.tile();
-        let (time_id, pt_id, tile) = if time.is_some() || pts.is_some() {
+        let (time_id, pt_id, tile) = if platform::tile_desc(tile_id).supports_tilemux()
+            && (time.is_some() || pts.is_some())
+        {
             let tilemux = tilemng::tilemux(tile_id);
             let time_quota_id = tile.time_quota_id();
             let pt_quota_id = tile.pt_quota_id();
@@ -787,7 +866,7 @@ impl TileObject {
             match res {
                 Err(e) => {
                     if let Some(num) = eps {
-                        tile.free(num);
+                        tile.free_eps(num);
                     }
                     return Err(VerboseError::from(e));
                 },
@@ -800,12 +879,25 @@ impl TileObject {
 
         // now that the async call is done, create the EPQuota
         let ep_quota = if let Some(num) = eps {
-            EPQuota::new(num)
+            TileQuota::new(num)
         }
         else {
             tile.ep_quota.clone()
         };
-        Ok(Self::new(tile_id, ep_quota, time_id, pt_id, true))
+        let exregs_quota = if let Some(num) = exregs {
+            TileQuota::new(num)
+        }
+        else {
+            tile.exregs_quota.clone()
+        };
+        Ok(Self::new(
+            tile_id,
+            ep_quota,
+            exregs_quota,
+            time_id,
+            pt_id,
+            true,
+        ))
     }
 
     pub fn tile(&self) -> TileId {
@@ -820,8 +912,12 @@ impl TileObject {
         self.acts.borrow().len()
     }
 
-    pub fn ep_quota(&self) -> &EPQuota {
+    pub fn ep_quota(&self) -> &TileQuota {
         self.ep_quota.as_ref()
+    }
+
+    pub fn exregs_quota(&self) -> &TileQuota {
+        self.exregs_quota.as_ref()
     }
 
     pub fn time_quota_id(&self) -> QuotaId {
@@ -875,30 +971,20 @@ impl TileObject {
         }
     }
 
-    pub fn alloc(&self, eps: usize) {
-        log!(
-            LogFlags::KernTiles,
-            "Tile[{}, {:#x}]: allocating {} EPs ({} left)",
-            self.tile,
-            self as *const _ as usize,
-            eps,
-            self.ep_quota.left()
-        );
-        assert!(self.ep_quota.left() >= eps);
-        self.ep_quota.left.set(self.ep_quota.left() - eps);
+    pub fn alloc_eps(&self, num: usize) {
+        self.ep_quota.alloc(num, self.tile, "EPs");
     }
 
-    pub fn free(&self, eps: usize) {
-        assert!(self.ep_quota.left() + eps <= self.ep_quota.total());
-        self.ep_quota.left.set(self.ep_quota.left() + eps);
-        log!(
-            LogFlags::KernTiles,
-            "Tile[{}, {:#x}]: freed {} EPs ({} left)",
-            self.tile,
-            self as *const _ as usize,
-            eps,
-            self.ep_quota.left()
-        );
+    pub fn free_eps(&self, num: usize) {
+        self.ep_quota.free(num, self.tile, "EPs");
+    }
+
+    pub fn alloc_exreg(&self, num: usize) {
+        self.exregs_quota.alloc(num, self.tile, "ExRegs");
+    }
+
+    pub fn free_exregs(&self, num: usize) {
+        self.exregs_quota.free(num, self.tile, "ExRegs");
     }
 
     pub fn reset(&self, total_eps: usize) {
@@ -980,8 +1066,13 @@ impl TileObject {
         // have the same EP quota, but they are already gone).
         if !Rc::ptr_eq(&self.ep_quota, &parent.ep_quota) {
             // grant the EPs back to our parent
-            parent.free(self.ep_quota.left());
+            parent.free_eps(self.ep_quota.left());
             assert!(self.ep_quota.left() == self.ep_quota.total());
+        }
+
+        if !Rc::ptr_eq(&self.exregs_quota, &parent.exregs_quota) {
+            parent.free_exregs(self.exregs_quota.left());
+            assert!(self.exregs_quota.left() == self.exregs_quota.total());
         }
     }
 }
@@ -992,9 +1083,10 @@ impl fmt::Debug for TileObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Tile[id={}, eps={}, derived={}, acts=",
+            "Tile[id={}, eps={}, exregs={}, derived={}, acts=",
             self.tile,
             self.ep_quota.left(),
+            self.exregs_quota.left(),
             self.derived,
         )?;
         for (aid, sel) in self.acts.borrow().iter() {
@@ -1145,7 +1237,7 @@ impl Drop for EPObject {
             if let Some(tile) = self.tile.upgrade() {
                 tilemng::tilemux(tile.tile).free_eps(self.ep, 1 + self.replies);
 
-                tile.free(1 + self.replies);
+                tile.free_eps(1 + self.replies);
             }
         }
     }

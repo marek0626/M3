@@ -379,6 +379,7 @@ pub struct Domain {
     pub(crate) initrd: Option<String>,
     pub(crate) dtb: Option<String>,
     pub(crate) apps: Vec<Rc<AppConfig>>,
+    pub(crate) tee: bool,
 }
 
 impl Domain {
@@ -391,11 +392,16 @@ impl Domain {
             initrd: None,
             dtb: None,
             apps,
+            tee: false,
         }
     }
 
     pub fn pseudo(&self) -> bool {
         self.pseudo
+    }
+
+    pub fn tee(&self) -> bool {
+        self.tee
     }
 
     pub fn apps(&self) -> &Vec<Rc<AppConfig>> {
@@ -754,13 +760,14 @@ impl AppConfig {
             if !d.pseudo {
                 writeln!(
                     f,
-                    "{:0w$}Domain on {} with mux=({}, {}M, {:?}, {:?}) [",
+                    "{:0w$}Domain on {} with mux=({}, {}M, {:?}, {:?}), TEE={} [",
                     "",
                     d.tile.0,
                     d.mux().unwrap_or("tilemux"),
                     d.mux_mem.unwrap_or(cfg::FIXED_TILEMUX_MEM) / (1024 * 1024),
                     d.initrd(),
                     d.dtb(),
+                    d.tee(),
                     w = layer + 2
                 )?;
                 sub_layer += 2;

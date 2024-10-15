@@ -182,6 +182,7 @@ struct KIF {
             DERIVE_SRV_FIN,
             GET_SESS,
             MGATE_REGION,
+            MGATE_MKEXCL,
             RGATE_BUFFER,
             KMEM_QUOTA,
             TILE_QUOTA,
@@ -347,6 +348,7 @@ struct KIF {
             xfer_t tile_sel;
             xfer_t dst_sel;
             xfer_t eps;
+            xfer_t exregs;
             xfer_t time;
             xfer_t pts;
         } PACKED;
@@ -375,6 +377,12 @@ struct KIF {
 
         struct MGateRegion : public DefaultRequest {
             xfer_t mgate_sel;
+        } PACKED;
+
+        struct MGateMkExcl : public DefaultRequest {
+            xfer_t mgate_sel;
+            xfer_t mem_tile_sel;
+            xfer_t user_tile_sel;
         } PACKED;
 
         struct MGateRegionReply : public DefaultReply {
@@ -409,6 +417,9 @@ struct KIF {
             xfer_t eps_id;
             xfer_t eps_total;
             xfer_t eps_left;
+            xfer_t exregs_id;
+            xfer_t exregs_total;
+            xfer_t exregs_left;
             xfer_t time_id;
             xfer_t time_total;
             xfer_t time_left;

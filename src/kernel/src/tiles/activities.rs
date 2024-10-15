@@ -137,7 +137,7 @@ impl Activity {
 
             // alloc standard EPs
             tilemng::tilemux(act.tile_id()).alloc_eps(eps_start, STD_EPS_COUNT);
-            tile.alloc(STD_EPS_COUNT);
+            tile.alloc_eps(STD_EPS_COUNT);
 
             // add us to tile
             if let Some((aid, sel)) = act.parent {
@@ -643,7 +643,7 @@ impl Drop for Activity {
         // free standard EPs
         tilemng::tilemux(self.tile_id()).free_eps(self.eps_start, STD_EPS_COUNT);
         if let Some(tile) = self.tile.upgrade() {
-            tile.free(STD_EPS_COUNT);
+            tile.free_eps(STD_EPS_COUNT);
             // remove us from tile
             if let Some((aid, sel)) = self.parent {
                 tile.rem_activity(aid, sel);

@@ -148,6 +148,7 @@ pub struct BootMapper {
     act_sel: Selector,
     mem_sel: Selector,
     has_virtmem: bool,
+    tee: bool,
     mem_pool: Rc<RefCell<memory::MemPool>>,
     allocs: Vec<memory::Allocation>,
 }
@@ -157,12 +158,14 @@ impl BootMapper {
         act_sel: Selector,
         mem_sel: Selector,
         has_virtmem: bool,
+        tee: bool,
         mem_pool: Rc<RefCell<memory::MemPool>>,
     ) -> Self {
         BootMapper {
             act_sel,
             mem_sel,
             has_virtmem,
+            tee,
             mem_pool,
             allocs: Vec::new(),
         }
@@ -184,9 +187,10 @@ impl Mapper for BootMapper {
         perm: Perm,
         flags: MapFlags,
     ) -> Result<bool, Error> {
-        if perm.contains(Perm::W) {
+        // TEEs get a copy for every region
+        if self.tee || perm.contains(Perm::W) {
             // create new memory and copy data into it
-            self.map_anon(pager, virt, len, perm, flags)
+            self.map_anon(pager, virt, len, perm | Perm::W, flags)
         }
         else if self.has_virtmem {
             // map the memory of the boot module directly; therefore no initialization necessary

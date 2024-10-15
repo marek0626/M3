@@ -550,7 +550,7 @@ fn alloc_ep(t: &mut dyn WvTester) {
     // create new child activity with a small number of EPs (allocate new tile to make it work even
     // if we cannot share tiles)
     let tile = wv_require_ok!(Tile::get("core"));
-    let tile = wv_require_ok!(tile.derive(Some(16), None, None));
+    let tile = wv_require_ok!(tile.derive(Some(16), None, None, None));
     let act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
     // not enough quota
     wv_assert_err!(
@@ -827,26 +827,26 @@ fn derive_tile(t: &mut dyn WvTester) {
     // invalid dest selector
     wv_assert_err!(
         t,
-        syscalls::derive_tile(tile.sel(), SEL_ACT, Some(1), None, None),
+        syscalls::derive_tile(tile.sel(), SEL_ACT, Some(1), None, None, None),
         Code::InvArgs
     );
     // invalid ep count
     wv_assert_err!(
         t,
-        syscalls::derive_tile(tile.sel(), sel, Some(oquote_eps + 1), None, None),
+        syscalls::derive_tile(tile.sel(), sel, Some(oquote_eps + 1), None, None, None),
         Code::NoSpace
     );
     // invalid tile sel
     wv_assert_err!(
         t,
-        syscalls::derive_tile(SEL_ACT, sel, Some(1), None, None),
+        syscalls::derive_tile(SEL_ACT, sel, Some(1), None, None, None),
         Code::InvArgs
     );
 
     // transfer EPs
     {
         {
-            let tile2 = wv_require_ok!(tile.derive(Some(1), None, None));
+            let tile2 = wv_require_ok!(tile.derive(Some(1), None, None, None));
             let quota2 = wv_require_ok!(tile2.quota()).endpoints().remaining();
             let nquota = wv_require_ok!(tile.quota()).endpoints().remaining();
             wv_assert_eq!(t, quota2, 1);
@@ -860,7 +860,7 @@ fn derive_tile(t: &mut dyn WvTester) {
     if oquota.time().total().as_nanos() > 100 {
         {
             let tile2 =
-                wv_require_ok!(tile.derive(None, Some(TimeDuration::from_nanos(100)), None));
+                wv_require_ok!(tile.derive(None, None, Some(TimeDuration::from_nanos(100)), None));
             let quota2 = wv_require_ok!(tile2.quota()).time().total();
             let nquota = wv_require_ok!(tile.quota()).time().total();
             wv_assert_eq!(t, quota2, TimeDuration::from_nanos(100));
@@ -1029,7 +1029,7 @@ fn tile_set_quota(t: &mut dyn WvTester) {
     );
 
     // cannot be called on derived tile caps
-    let der_tile = wv_require_ok!(Activity::own().tile().derive(None, None, None));
+    let der_tile = wv_require_ok!(Activity::own().tile().derive(None, None, None, None));
     wv_assert_err!(
         t,
         syscalls::tile_set_quota(der_tile.sel(), TimeDuration::from_nanos(100), 100),

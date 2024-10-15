@@ -148,7 +148,7 @@ fn mng_pool(t: &mut dyn WvTester) {
         false,
     )));
 
-    let mut pool = wv_require_ok!(mng.alloc_pool(0x120000));
+    let mut pool = wv_require_ok!(mng.alloc_pool(0x120000, false));
     wv_assert_eq!(t, pool.capacity(), 0x120000);
     wv_assert_eq!(t, pool.available(), 0x120000);
 

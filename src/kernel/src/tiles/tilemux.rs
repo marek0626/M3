@@ -13,26 +13,26 @@
  * General Public License version 2 for more details.
  */
 
-use base::build_vmsg;
 use base::cell::RefMut;
 use base::cfg;
 use base::col::{BitArray, Vec};
 use base::env;
-use base::errors::{Code, Error};
+use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{self, TileAttr, TileISA};
 use base::log;
 use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, VirtAddr};
 use base::quota;
 use base::tcu::{self, ActId, EpId, TileId};
+use base::{build_vmsg, verror};
 
 use core::cmp;
 
 use thread::{Downgradable, StrongRc, TempRc, WeakRc};
 
 use crate::cap::{
-    EPCategory, EPObject, EPQuota, GateObject, InvalidateType, MGateObject, RGateObject,
-    SGateObject, TileObject,
+    EPCategory, EPObject, GateObject, InvalidateType, MGateObject, RGateObject, SGateObject,
+    TileObject, TileQuota,
 };
 use crate::mem;
 use crate::platform;
@@ -168,7 +168,8 @@ impl TileMux {
         let tile = TileObject::new(
             tile_id,
             // empty quota until reset
-            EPQuota::new(0),
+            TileQuota::new(0),
+            TileQuota::new(platform::tile_desc(tile_id).exclusive_regions()),
             kif::tilemux::DEF_QUOTA_ID,
             kif::tilemux::DEF_QUOTA_ID,
             false,
@@ -272,9 +273,9 @@ impl TileMux {
         mux_mem: Option<TempRc<MGateObject>>,
         ep_count: Option<usize>,
         root: bool,
-    ) -> Result<(), Error> {
+    ) -> Result<(), VerboseError> {
         if tilemng::tilemux(tile_id).has_activities() {
-            return Err(Error::new(Code::InvState));
+            return Err(verror!(Code::InvState, "Cannot reset tile with activities"));
         }
 
         let start = {
@@ -298,7 +299,7 @@ impl TileMux {
                 if platform::tile_desc(tile_id).is_programmable() {
                     // here we need a multiplexer and therefore memory
                     if mux_mem.is_none() {
-                        return Err(Error::new(Code::InvArgs));
+                        return Err(verror!(Code::InvArgs, "Need memory cap for multiplexer"));
                     }
 
                     let mux_mem = mux_mem.unwrap();
@@ -380,6 +381,12 @@ impl TileMux {
         }
         else {
             tilemux.deinit_state();
+            drop(tilemux);
+
+            // invalidate all exclusive regions for this user tile
+            for mtile in platform::mem_tiles() {
+                tilemng::memmux(mtile).invalidate(tile_id);
+            }
         }
 
         Ok(())
@@ -388,7 +395,8 @@ impl TileMux {
     pub fn new_tile_obj(&self) -> StrongRc<TileObject> {
         TileObject::new(
             self.tile_id(),
-            EPQuota::new(self.tile.ep_quota().total()),
+            TileQuota::new(self.tile.ep_quota().total()),
+            TileQuota::new(platform::tile_desc(self.tile_id()).exclusive_regions()),
             self.tile.time_quota_id(),
             self.tile.pt_quota_id(),
             false,
@@ -418,12 +426,15 @@ impl TileMux {
         ep: tcu::EpId,
         mg: Option<TempRc<MGateObject>>,
         overwrite: bool,
-    ) -> Result<(), Error> {
+    ) -> Result<(), VerboseError> {
         let ep_obj = self.pmp_ep(ep).ok_or_else(|| Error::new(Code::InvState))?;
 
         // if overwrite is disabled, the EP needs to be invalid
         if mg.is_some() && ep_obj.is_configured() && !overwrite {
-            return Err(Error::new(Code::Exists));
+            return Err(verror!(
+                Code::Exists,
+                "EP already configured and overwrite is disabled"
+            ));
         }
 
         // deconfigure the EP first to ensure that it is not already configured for another gate
@@ -538,7 +549,20 @@ impl TileMux {
         act: ActId,
         obj: &MGateObject,
         tile_id: TileId,
-    ) -> Result<(), Error> {
+    ) -> Result<(), VerboseError> {
+        if let Some(extile) = obj.exclusive_tile() {
+            if self.tile_id() != extile {
+                return Err(verror!(
+                    Code::NoPerm,
+                    "{} has no permissions to exclusive region of {} ({}..{})",
+                    self.tile_id(),
+                    extile,
+                    obj.addr(),
+                    obj.addr() + (obj.size() - 1)
+                ));
+            }
+        }
+
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {
             let act = self.ep_activity_id(act);
             ktcu::config_mem(
@@ -550,7 +574,8 @@ impl TileMux {
                 obj.size() as usize,
                 obj.perms(),
             );
-        })
+        })?;
+        Ok(())
     }
 
     pub fn invalidate_ep(

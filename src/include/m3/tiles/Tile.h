@@ -97,12 +97,13 @@ public:
      * one
      *
      * @param eps the number of EPs to transfer (None = share the quota)
+     * @param exregs the number of exclusive regions to transfer (None = share the quota)
      * @param time the time slice length to transfer (None = share the quota)
      * @param pts the number of page tables to transfer (None = share the quota)
      * @return the new tile object
      */
-    Reference<Tile> derive(Option<uint> eps = None, Option<TimeDuration> time = None,
-                           Option<size_t> pts = None);
+    Reference<Tile> derive(Option<uint> eps = None, Option<uint> exregs = None,
+                           Option<TimeDuration> time = None, Option<size_t> pts = None);
 
     /**
      * @return the number of endpoints available on this tile (via syscall)
@@ -122,9 +123,10 @@ public:
     }
 
     /**
-     * @return a tuple with the current EP quota, time quota and page-table quota
+     * @return a tuple with the current EP quota, exclusive regions, time quota, and page-table
+     * quota
      */
-    std::tuple<Quota<uint>, Quota<TimeDuration>, Quota<size_t>> quota() const;
+    std::tuple<Quota<uint>, Quota<uint>, Quota<TimeDuration>, Quota<size_t>> quota() const;
 
     /**
      * Sets the quota of the tile with given selector to specified initial values.

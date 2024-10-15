@@ -53,37 +53,42 @@ static const char *errmsgs[] = {
     "TLB contains only fixed entries",
     "No PMP endpoint",
     "No pending IRQ",
+    "No read/write permission for exclusive region",
+    "Tile has no access to exclusive region",
+    /* 30 */
+    "Exclusive region overlaps with another region",
+    "Exclusive region exists",
     "Invalid arguments",
     "Object gone",
-    /* 30 */
     "Out of memory",
     "No such file or directory",
     "Not supported",
     "No free/suitable tile",
     "Invalid ELF file",
     "No space left",
+    /* 40 */
     "Object does already exist",
     "Cross-filesystem link not possible",
     "Directory not empty",
     "Is a directory",
-    /* 40 */
     "Is no directory",
     "Endpoint is invalid",
     "End of file",
     "Messages are waiting to be handled",
     "Reply will be sent via upcall",
     "Commit failed",
+    /* 50 */
     "Out of kernel memory",
     "Not found",
     "Timeout",
     "Read failed",
-    /* 50 */
     "Write failed",
     "UTF-8 error",
     "Bad file descriptor",
     "Invalid seek",
     "Unspecified error",
     "Invalid capability",
+    /* 60 */
     "Last cap would overflow",
     "Cap count too large",
 

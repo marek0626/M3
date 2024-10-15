@@ -127,9 +127,9 @@ static void execute_pipeline(Pipes &pipesrv, std::unique_ptr<Parser::CmdList> &c
             // if we share our tile with this child activity, give it separate quotas to ensure
             // that we get our share (we don't trust the child apps)
             if(tiles[i]->sel() == Activity::own().tile()->sel()) {
-                const auto [eps, time, pts] = tiles[i]->quota();
+                const auto [eps, exregs, time, pts] = tiles[i]->quota();
                 if(eps.left > MIN_EPS && pts.left > MIN_PTS) {
-                    tiles[i] = tiles[i]->derive(Some(eps.left - MIN_EPS),
+                    tiles[i] = tiles[i]->derive(Some(eps.left - MIN_EPS), None,
                                                 Some(time.total - MIN_TIME),
                                                 Some(pts.left - MIN_PTS));
                 }

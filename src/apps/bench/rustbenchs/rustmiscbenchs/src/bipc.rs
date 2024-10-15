@@ -50,7 +50,7 @@ fn pingpong_local(t: &mut dyn WvTester) {
     let tile = Activity::own().tile().clone();
     // give the child half of our time quota (minimize timer interrupts)
     let own_quota = wv_require_ok!(tile.quota()).time().total();
-    let tile = wv_require_ok!(tile.derive(None, Some(own_quota / 2), None));
+    let tile = wv_require_ok!(tile.derive(None, None, Some(own_quota / 2), None));
     pingpong_with_tile(t, "local", tile);
 }
 
@@ -112,8 +112,8 @@ fn pingpong_with_multiple(t: &mut dyn WvTester) {
 
     // split time quota between childs
     let cur_quota = wv_require_ok!(tile.quota()).time().total();
-    let tile1 = wv_require_ok!(tile.derive(None, Some(cur_quota / 2), None));
-    let tile2 = wv_require_ok!(tile.derive(None, Some(cur_quota / 2), None));
+    let tile1 = wv_require_ok!(tile.derive(None, None, Some(cur_quota / 2), None));
+    let tile2 = wv_require_ok!(tile.derive(None, None, Some(cur_quota / 2), None));
 
     let mut act1 = wv_require_ok!(ChildActivity::new_with(tile1, ActivityArgs::new("recv1")));
     let mut act2 = wv_require_ok!(ChildActivity::new_with(tile2, ActivityArgs::new("recv2")));

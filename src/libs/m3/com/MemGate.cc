@@ -56,6 +56,10 @@ MemCap MemCap::bind_bootmod(const std::string_view &name) {
     return MemCap(0, sel, false);
 }
 
+void MemCap::make_exclusive(class Tile &mem_tile, class Tile &user_tile) {
+    Syscalls::mgate_mkexcl(sel(), mem_tile.sel(), user_tile.sel());
+}
+
 MemCap MemCap::derive(goff_t offset, size_t size, int perms) const {
     capsel_t nsel = SelSpace::get().alloc_sel();
     Syscalls::derive_mem(Activity::own().sel(), nsel, sel(), offset, size, perms);

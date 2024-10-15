@@ -60,19 +60,35 @@ pub struct Tile {
 #[derive(Default)]
 pub struct TileQuota {
     eps: Quota<usize>,
+    exregs: Quota<usize>,
     time: Quota<TimeDuration>,
     pts: Quota<usize>,
 }
 
 impl TileQuota {
     /// Creates a new `TileQuota` object from given quotas.
-    pub fn new(eps: Quota<usize>, time: Quota<TimeDuration>, pts: Quota<usize>) -> Self {
-        Self { eps, time, pts }
+    pub fn new(
+        eps: Quota<usize>,
+        exregs: Quota<usize>,
+        time: Quota<TimeDuration>,
+        pts: Quota<usize>,
+    ) -> Self {
+        Self {
+            eps,
+            exregs,
+            time,
+            pts,
+        }
     }
 
     /// Returns the endpoint quota
     pub fn endpoints(&self) -> &Quota<usize> {
         &self.eps
+    }
+
+    /// Returns the exclusive-regions quota
+    pub fn exclusive_regions(&self) -> &Quota<usize> {
+        &self.exregs
     }
 
     /// Returns the time quota
@@ -90,8 +106,9 @@ impl fmt::Debug for TileQuota {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(
             f,
-            "TileQuota[eps={:?}, time={:?}ns, pts={:?}]",
+            "TileQuota[eps={:?}, exregs={:?}, time={:?}ns, pts={:?}]",
             self.endpoints(),
+            self.exclusive_regions(),
             self.time(),
             self.page_tables()
         )
@@ -242,11 +259,12 @@ impl Tile {
     pub fn derive(
         &self,
         eps: Option<usize>,
+        exregs: Option<usize>,
         time: Option<TimeDuration>,
         pts: Option<usize>,
     ) -> Result<Rc<Self>, Error> {
         let sel = SelSpace::get().alloc_sel();
-        syscalls::derive_tile(self.sel(), sel, eps, time, pts)?;
+        syscalls::derive_tile(self.sel(), sel, eps, exregs, time, pts)?;
         Ok(Rc::new(Tile {
             cap: Capability::new(sel, CapFlags::empty()),
             desc: self.desc(),

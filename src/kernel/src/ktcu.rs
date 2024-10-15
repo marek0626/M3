@@ -433,6 +433,51 @@ pub fn write_ep_remote(tile: TileId, ep: EpId, regs: &[Reg]) -> Result<(), Error
     Ok(())
 }
 
+#[allow(unused)]
+pub fn set_excl_region(
+    mem_tile: TileId,
+    user_tile: TileId,
+    idx: usize,
+    addr: GlobOff,
+    size: GlobOff,
+    perm: kif::Perm,
+) -> Result<(), Error> {
+    #[cfg(not(feature = "gem5"))]
+    return Ok(());
+
+    #[cfg(feature = "gem5")]
+    {
+        let mut cfg = user_tile.raw() << 3 | 1;
+        if perm.contains(kif::Perm::R) {
+            cfg |= 1 << 1;
+        }
+        if perm.contains(kif::Perm::W) {
+            cfg |= 1 << 2;
+        }
+
+        assert!(((addr >> 2) & ((size >> 3) - 1)) == 0);
+        assert!(size.is_power_of_two());
+        let addr_size = (addr >> 2) | ((size >> 3) - 1);
+        let arg1 = TCU::ext_reg_addr(ExtReg::ExtArg1).as_goff();
+        try_write_slice(mem_tile, arg1, &[addr_size])?;
+
+        let reg = ExtCmdOpCode::SetExcl as Reg | ((cfg as Reg) << 9) | ((idx as Reg) << 26);
+        do_ext_cmd(mem_tile, reg).map(|_| ())
+    }
+}
+
+#[allow(unused)]
+pub fn invalidate_excl_region(mem_tile: TileId, idx: usize) -> Result<(), Error> {
+    #[cfg(not(feature = "gem5"))]
+    return Ok(());
+
+    #[cfg(feature = "gem5")]
+    {
+        let reg = ExtCmdOpCode::InvExcl as Reg | ((idx as Reg) << 9);
+        do_ext_cmd(mem_tile, reg).map(|_| ())
+    }
+}
+
 pub fn invalidate_ep_remote(tile: TileId, ep: EpId, force: bool) -> Result<u32, Error> {
     log!(LogFlags::KernEPs, "{}:EP{} = invalid", tile, ep);
 

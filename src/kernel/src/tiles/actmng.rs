@@ -286,7 +286,11 @@ impl ActivityMng {
         }
 
         // TILES
-        for tile_id in platform::user_tiles() {
+        for tile_id in platform::all_tiles() {
+            if tile_id == platform::kernel_tile() {
+                continue;
+            }
+
             // the tile for root is special, because we already reset it (causing a state change)
             // and thus need to pass this object to userspace instead of a new one
             if tile_id == tile.tile() {
@@ -300,7 +304,7 @@ impl ActivityMng {
                 }
             }
             else {
-                let cap = Capability::new(sel, tilemng::tilemux(tile_id).new_tile_obj());
+                let cap = Capability::new(sel, tilemng::new_tile_obj(tile_id));
                 act.obj_caps().borrow_mut().insert(cap).unwrap();
             }
             sel += 1;

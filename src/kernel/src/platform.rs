@@ -81,12 +81,27 @@ pub fn info_size() -> usize {
 pub fn kernel_tile() -> TileId {
     env::boot().tile_id()
 }
+pub fn all_tiles() -> impl Iterator<Item = TileId> {
+    get()
+        .tiles
+        .iter()
+        .flat_map(|chip| chip.iter())
+        .map(|t| t.id)
+}
 pub fn user_tiles() -> impl Iterator<Item = TileId> {
     get()
         .tiles
         .iter()
         .flat_map(|chip| chip.iter())
         .filter(|t| { t.id } != kernel_tile() && t.desc.tile_type() != TileType::Mem)
+        .map(|t| t.id)
+}
+pub fn mem_tiles() -> impl Iterator<Item = TileId> {
+    get()
+        .tiles
+        .iter()
+        .flat_map(|chip| chip.iter())
+        .filter(|t| t.desc.tile_type() == TileType::Mem)
         .map(|t| t.id)
 }
 
@@ -255,6 +270,7 @@ pub fn init() {
                 ));
             }
             kmem_idx += 1;
+            utiles.push(tile);
         }
         else {
             let tile_id = tile.id;
@@ -288,7 +304,7 @@ pub fn init() {
     // write-back user memory regions
     ktcu::write_slice(addr.tile(), uoffset, &umems);
 
-    KENV.set(KEnv::new(info, addr, mods, tiles));
+    KENV.set(KEnv::new(uinfo, addr, mods, tiles));
 }
 
 pub fn init_serial(dest: Option<(TileId, EpId)>) {
