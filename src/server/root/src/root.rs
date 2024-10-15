@@ -80,7 +80,7 @@ impl RootChildStarter {
             })
     }
 
-    fn modules_range(
+    fn fetch_mod_range(
         &mut self,
         domain: &config::Domain,
     ) -> Result<(GlobAddr, GlobOff), VerboseError> {
@@ -203,14 +203,14 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
                 // two net instances and one is co-located on our tile, we still need to fetch the
                 // first module to give the second one (running on another tile) the correct PMP
                 // region and not the one of the first module.
-                let _range = self.modules_range(domain)?;
+                let _range = self.fetch_mod_range(domain)?;
                 return Ok(());
             }
 
             // determine minimum range of boot modules we need to give access to to cover all boot
             // modules that are run on this tile. note that these should always be contiguous,
             // because we collect the boot modules from the config.
-            let range = self.modules_range(domain)?;
+            let range = self.fetch_mod_range(domain)?;
             let mslice = res.memory().find_mem(range.0, range.1, kif::Perm::RW)?;
 
             // create memory gate for this range
