@@ -137,7 +137,7 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
         )?;
 
         let mut act = ChildActivity::new_with(
-            tile,
+            tile.clone(),
             ActivityArgs::new(child.name())
                 .resmng(resmng_scap)
                 .kmem(child.kmem()),
@@ -160,8 +160,10 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
                 bmod.0.sel(),
                 act.tile_desc().has_virtmem(),
                 child.tee(),
+                tile,
                 child.mem().pool().clone(),
-            );
+                res,
+            )?;
             let bmod_gate = bmod.0.activate()?;
             let bfile = loader::BootFile::new(bmod_gate, bmod.2 as usize);
             let fd = Activity::own().files().add(Box::new(bfile))?;

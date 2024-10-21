@@ -398,16 +398,20 @@ impl ChildActivity {
     ) -> Result<RunningProgramActivity, Error> {
         self.obtain_files_and_mounts()?;
 
-        let (file, entry) = if let Some((mapper, file)) = program {
+        let (file, mapper, entry) = if let Some((mapper, file)) = program {
             let mut file = BufReader::new(file);
             let entry = loader::load_program(&self, mapper, &mut file)?;
-            (Some(file), entry)
+            (Some(file), Some(mapper), entry)
         }
         else {
-            (None, VirtAddr::null())
+            (None, None, VirtAddr::null())
         };
 
         self.load_environment(args, closure, entry)?;
+
+        if let Some(mapper) = mapper {
+            mapper.finished()?;
+        }
 
         let act = RunningProgramActivity::new(self, file);
         act.start().map(|_| act)

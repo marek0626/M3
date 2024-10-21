@@ -375,20 +375,17 @@ impl Subsystem {
             if dom.tee() && !dom_mem.is_power_of_two() {
                 dom_mem = 1 << (math::next_log2(dom_mem as usize) - 1);
             }
-            let mut mem_pool = res
-                .memory_mut()
-                .alloc_pool(dom_mem, dom.tee())
-                .map_err(|e| {
-                    verror!(
-                        e.code(),
-                        "Unable to allocate memory pool with {} b",
-                        dom_mem,
-                    )
-                })?;
-            if dom.tee() {
-                mem_pool.make_exclusive(res, tile_usage.tile_obj())?;
-            }
-            let mem_pool = Rc::new(RefCell::new(mem_pool));
+            let mem_pool = Rc::new(RefCell::new(
+                res.memory_mut()
+                    .alloc_pool(dom_mem, dom.tee())
+                    .map_err(|e| {
+                        verror!(
+                            e.code(),
+                            "Unable to allocate memory pool with {} b",
+                            dom_mem,
+                        )
+                    })?,
+            ));
 
             let mut domain_total_eps = tcu::PMEM_PROT_EPS + tcu::TILEMUX_EPS;
             for cfg in dom.apps() {

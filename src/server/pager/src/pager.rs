@@ -155,8 +155,9 @@ impl subsys::ChildStarter for PagedChildStarter {
         &mut self,
         _res: &mut Resources,
         tile: &mut tiles::TileUsage,
-        _domain: &config::Domain,
+        domain: &config::Domain,
     ) -> Result<(), VerboseError> {
+        assert!(!domain.tee(), "TEEs are currently unsupported by the pager");
         let fs_mod = MemCap::new_bind_bootmod("fs")?;
         let fs_mod_size = fs_mod.region()?.1 as usize;
         // don't overwrite PMP EPs here, but use the next free one. this is required in case we
