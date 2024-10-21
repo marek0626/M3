@@ -61,7 +61,7 @@ impl CapRngDesc {
         // value.
         let shifted = count
             .checked_mul(2)
-            .ok_or(Error::new(Code::CapCountTooLarge))?;
+            .ok_or_else(|| Error::new(Code::CapCountTooLarge))?;
         UnsafeCapRngDesc {
             start,
             count_ty: shifted | (ty as u64),
