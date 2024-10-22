@@ -274,14 +274,15 @@ void Syscalls::derive_kmem(capsel_t kmem, capsel_t dst, size_t quota) {
     send_receive_throw(req_buf);
 }
 
-void Syscalls::derive_tile(capsel_t tile, capsel_t dst, Option<uint> eps, Option<TimeDuration> time,
-                           Option<size_t> pts) {
+void Syscalls::derive_tile(capsel_t tile, capsel_t dst, Option<uint> eps, Option<uint> exregs,
+                           Option<TimeDuration> time, Option<size_t> pts) {
     MsgBuf req_buf;
     auto &req = req_buf.cast<KIF::Syscall::DeriveTile>();
     req.opcode = KIF::Syscall::DERIVE_TILE;
     req.tile_sel = tile;
     req.dst_sel = dst;
     req.eps = eps.unwrap_or(static_cast<uint>(-1));
+    req.exregs = exregs.unwrap_or(static_cast<uint>(-1));
     if(auto duration = time)
         req.time = duration.unwrap().as_nanos();
     else
@@ -339,6 +340,16 @@ std::pair<GlobAddr, size_t> Syscalls::mgate_region(capsel_t mgate) {
     return std::make_pair(GlobAddr(reply->global), reply->size);
 }
 
+void Syscalls::mgate_mkexcl(capsel_t mgate, capsel_t mem_tile, capsel_t user_tile) {
+    MsgBuf req_buf;
+    auto &req = req_buf.cast<KIF::Syscall::MGateMkExcl>();
+    req.opcode = KIF::Syscall::MGATE_MKEXCL;
+    req.mgate_sel = mgate;
+    req.mem_tile_sel = mem_tile;
+    req.user_tile_sel = user_tile;
+    send_receive_throw(req_buf);
+}
+
 std::pair<uint, uint> Syscalls::rgate_buffer(capsel_t rgate) {
     MsgBuf req_buf;
     auto &req = req_buf.cast<KIF::Syscall::RGateBuffer>();
@@ -367,7 +378,8 @@ Quota<size_t> Syscalls::kmem_quota(capsel_t kmem) {
     return Quota<size_t>(reply->id, reply->total, reply->left);
 }
 
-std::tuple<Quota<uint>, Quota<TimeDuration>, Quota<size_t>> Syscalls::tile_quota(capsel_t tile) {
+std::tuple<Quota<uint>, Quota<uint>, Quota<TimeDuration>, Quota<size_t>> Syscalls::tile_quota(
+    capsel_t tile) {
     MsgBuf req_buf;
     auto &req = req_buf.cast<KIF::Syscall::TileQuota>();
     req.opcode = KIF::Syscall::TILE_QUOTA;
@@ -380,6 +392,7 @@ std::tuple<Quota<uint>, Quota<TimeDuration>, Quota<size_t>> Syscalls::tile_quota
         throw SyscallException(res, KIF::Syscall::TILE_QUOTA);
 
     return std::make_tuple(Quota<uint>(reply->eps_id, reply->eps_total, reply->eps_left),
+                           Quota<uint>(reply->exregs_id, reply->exregs_total, reply->exregs_left),
                            Quota<TimeDuration>(reply->time_id,
                                                TimeDuration::from_nanos(reply->time_total),
                                                TimeDuration::from_nanos(reply->time_left)),

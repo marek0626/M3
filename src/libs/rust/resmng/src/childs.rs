@@ -705,6 +705,7 @@ pub struct OwnChild {
     res: ChildResources,
     sub: Option<SubsystemBuilder>,
     daemon: bool,
+    tee: bool,
     kmem: Rc<KMem>,
 }
 
@@ -717,6 +718,7 @@ impl OwnChild {
         child_tile: TileUsage,
         args: Vec<String>,
         daemon: bool,
+        tee: bool,
         kmem: Rc<KMem>,
         mem: Rc<ChildMem>,
         cfg: Rc<AppConfig>,
@@ -734,9 +736,14 @@ impl OwnChild {
             res: ChildResources::default(),
             sub,
             daemon,
+            tee,
             activity: None,
             kmem,
         }
+    }
+
+    pub fn tee(&self) -> bool {
+        self.tee
     }
 
     pub fn set_running(&mut self, act: Box<dyn RunningActivity>) {

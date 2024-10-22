@@ -97,6 +97,10 @@ impl fmt::Display for TileId {
     }
 }
 
+#[cfg(feature = "gem5")]
+pub const EXREG_REGS: usize = 16;
+#[cfg(not(feature = "gem5"))]
+pub const EXREG_REGS: usize = 0;
 pub const PMEM_PROT_EPS: usize = 4;
 pub const TILEMUX_EPS: usize = 4;
 
@@ -156,7 +160,7 @@ cfg_if! {
     }
     else {
         /// The number of external registers
-        pub const EXT_REGS: usize = 5;
+        pub const EXT_REGS: usize = 6;
         /// The number of unprivileged registers
         pub const UNPRIV_REGS: usize = 6;
     }
@@ -234,6 +238,8 @@ cfg_if! {
             TileDesc,
             /// For external commands
             ExtCmd,
+            /// Extra argument for external commands
+            ExtArg1,
             /// The global address of the EP region
             EpsAddr,
             /// The size of the EP region in bytes
@@ -405,6 +411,10 @@ pub enum ExtCmdOpCode {
     InvEP,
     /// Reset the CU
     Reset,
+    /// Sets a specific exclusive memory region
+    SetExcl,
+    /// Invalidates a specific exclusive memory region
+    InvExcl,
 }
 
 /// The TCU-internal IRQ ids to clear IRQs

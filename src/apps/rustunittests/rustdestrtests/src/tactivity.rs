@@ -113,7 +113,7 @@ fn kmem_revoke(t: &mut dyn WvTester) {
 
 fn tile_revoke(t: &mut dyn WvTester) {
     let tile = wv_require_ok!(Tile::get("compat|own"));
-    let child_tile = wv_require_ok!(tile.derive(None, None, None));
+    let child_tile = wv_require_ok!(tile.derive(None, None, None, None));
     let act = wv_require_ok!(ChildActivity::new_with(
         child_tile.clone(),
         ActivityArgs::new("test")

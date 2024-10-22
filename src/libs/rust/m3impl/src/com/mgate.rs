@@ -30,7 +30,7 @@ use crate::kif::INVALID_SEL;
 use crate::mem::{GlobOff, VirtAddr};
 use crate::syscalls;
 use crate::tcu;
-use crate::tiles::Activity;
+use crate::tiles::{Activity, Tile};
 
 pub use crate::kif::Perm;
 
@@ -122,6 +122,19 @@ impl MemCap {
     /// Returns the memory region (global address and size) this `MemCap` references.
     pub fn region(&self) -> Result<(GlobAddr, GlobOff), Error> {
         syscalls::mgate_region(self.sel())
+    }
+
+    /// Ensures that only `user_tile` can access this memory region
+    ///
+    /// The argument `mem_tile` denotes the memory tile that will host the exclusive region,
+    /// whereas `user_tile` specifies the tile that should be allowed to use the region. The
+    /// memory tile needs to have sufficient quota to install the exclusive region.
+    ///
+    /// This does only work if this memory region has a power-of-2 size and is size-aligned.
+    ///
+    /// Note also that this `MemCap` needs be belong to `mem_tile`.
+    pub fn make_exclusive(&self, mem_tile: &Tile, user_tile: &Tile) -> Result<(), Error> {
+        syscalls::mgate_mkexcl(self.sel(), mem_tile.sel(), user_tile.sel())
     }
 
     /// Derives a new `MemCap` from `self` that has access to a subset of `self`'s the memory

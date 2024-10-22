@@ -80,7 +80,7 @@ impl RootChildStarter {
             })
     }
 
-    fn modules_range(
+    fn fetch_mod_range(
         &mut self,
         domain: &config::Domain,
     ) -> Result<(GlobAddr, GlobOff), VerboseError> {
@@ -137,7 +137,7 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
         )?;
 
         let mut act = ChildActivity::new_with(
-            tile,
+            tile.clone(),
             ActivityArgs::new(child.name())
                 .resmng(resmng_scap)
                 .kmem(child.kmem()),
@@ -159,8 +159,11 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
                 act.sel(),
                 bmod.0.sel(),
                 act.tile_desc().has_virtmem(),
+                child.tee(),
+                tile,
                 child.mem().pool().clone(),
-            );
+                res,
+            )?;
             let bmod_gate = bmod.0.activate()?;
             let bfile = loader::BootFile::new(bmod_gate, bmod.2 as usize);
             let fd = Activity::own().files().add(Box::new(bfile))?;
@@ -197,20 +200,18 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
         domain: &config::Domain,
     ) -> Result<(), VerboseError> {
         if tile.tile_obj().mux_type()? == MuxType::TileMux {
-            if tile.tile_id() == Activity::own().tile_id() {
-                // even for our own tile, we need to fetch the boot modules to ensure that we
-                // assign the PMP regions for the other tiles correctly. For example, if we have
-                // two net instances and one is co-located on our tile, we still need to fetch the
-                // first module to give the second one (running on another tile) the correct PMP
-                // region and not the one of the first module.
-                let _range = self.modules_range(domain)?;
+            // fetch the module range in any case
+            let range = self.fetch_mod_range(domain)?;
+
+            if tile.tile_id() == Activity::own().tile_id() || domain.tee() {
+                // Our own tile does not need further PMP EPs. TEEs get a copy of the bootmodule
+                // anyway and therefore don't need another PMP EP either.
                 return Ok(());
             }
 
             // determine minimum range of boot modules we need to give access to to cover all boot
             // modules that are run on this tile. note that these should always be contiguous,
             // because we collect the boot modules from the config.
-            let range = self.modules_range(domain)?;
             let mslice = res.memory().find_mem(range.0, range.1, kif::Perm::RW)?;
 
             // create memory gate for this range
@@ -224,8 +225,7 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
                 .map_err(|e| verror!(e.code(), "Unable to add PMP region for boot module"))
         }
         else {
-            // for our own tile there is nothing to do, because we already have a PMP EP that covers
-            // all boot modules
+            // for tiles that don't run TileMux (e.g., M³Linux), we don't need additional PMP EPs
             Ok(())
         }
     }

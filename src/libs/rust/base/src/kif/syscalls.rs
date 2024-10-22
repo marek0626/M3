@@ -63,6 +63,7 @@ pub enum Operation {
     DeriveSrvFin,
     GetSess,
     MGateRegion,
+    MGateMkExcl,
     RGateBuffer,
     KMemQuota,
     TileQuota,
@@ -225,6 +226,7 @@ pub struct DeriveTile {
     pub tile: CapSel,
     pub dst: CapSel,
     pub eps: Option<usize>,
+    pub exregs: Option<usize>,
     pub time: Option<u64>,
     pub pts: Option<usize>,
 }
@@ -257,6 +259,13 @@ pub struct GetSess {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MGateRegion {
     pub mgate: CapSel,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MGateMkExcl {
+    pub mgate: CapSel,
+    pub mem_tile: CapSel,
+    pub user_tile: CapSel,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -434,6 +443,9 @@ pub struct TileQuotaReply {
     pub eps_id: QuotaId,
     pub eps_total: usize,
     pub eps_left: usize,
+    pub exregs_id: QuotaId,
+    pub exregs_total: usize,
+    pub exregs_left: usize,
     pub time_id: QuotaId,
     pub time_total: u64,
     pub time_left: u64,

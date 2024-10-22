@@ -111,6 +111,7 @@ impl TileState {
                     Ok(_) => break,
                 }
             }
+
             self.next_pmp_ep += 1;
         }
         self.pmp_regions.push((mcap, size));
@@ -421,7 +422,7 @@ impl TileUsage {
         time: Option<TimeDuration>,
         pts: Option<usize>,
     ) -> Result<TileUsage, Error> {
-        let tile = self.tile_obj().derive(eps, time, pts)?;
+        let tile = self.tile_obj().derive(eps, None, time, pts)?;
         let _quota = tile.quota().unwrap();
         log!(
             LogFlags::ResMngTiles,
@@ -503,6 +504,15 @@ impl TileManager {
                 );
             }
         }
+    }
+
+    pub fn find_by_id(&self, id: TileId) -> Result<Rc<Tile>, Error> {
+        for tile in &self.tiles {
+            if tile.id == id {
+                return Ok(tile.tile.clone());
+            }
+        }
+        Err(Error::new(Code::NotFound))
     }
 
     pub fn find(&self, desc: TileDesc) -> Result<TileUsage, Error> {

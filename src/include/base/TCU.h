@@ -214,7 +214,7 @@ private:
     static const size_t UNPRIV_REGS = 6;
     static const size_t EP_REGS = 3;
 #else
-    static const size_t EXT_REGS = 5;
+    static const size_t EXT_REGS = 6;
     static const size_t UNPRIV_REGS = 6;
     static const size_t EP_REGS = 4;
 #endif
@@ -237,8 +237,9 @@ private:
         EXT_CMD = 2,
 #endif
 #if defined(__hw__) || defined(__gem5__)
-        EPS_ADDR = 3,
-        EPS_SIZE = 4,
+        EXT_ARG1 = 3,
+        EPS_ADDR = 4,
+        EPS_SIZE = 5,
 #endif
     };
 

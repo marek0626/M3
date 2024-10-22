@@ -25,7 +25,7 @@ use thread::{Downgradable, NonWeak, TempRc, Upgradable};
 
 use crate::cap::{
     Capability, EPCategory, EPObject, GateObject, InvalidateType, KMemObject, MGateObject,
-    RGateObject, SGateObject, SemObject, ServObject, SessObject,
+    RGateObject, SGateObject, SemObject, ServObject, SessObject, TileObject,
 };
 use crate::ktcu;
 use crate::platform;
@@ -120,7 +120,7 @@ pub fn alloc_ep_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let cap = Capability::new(r.dst, ep);
     try_cap_insert!(act.obj_caps().borrow_mut().insert_as_child(cap, r.act));
 
-    dst_act.tile().alloc(ep_count);
+    dst_act.tile().alloc_eps(ep_count);
     tilemux.alloc_eps(epid, ep_count);
 
     let mut kreply = MsgBuf::borrow_def();
@@ -150,6 +150,54 @@ pub fn mgate_region(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     });
     send_reply(act, &kreply);
 
+    Ok(())
+}
+
+#[inline(never)]
+pub fn mgate_mkexcl(act: &TempRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::MGateMkExcl = get_request(&msg)?;
+    drop(msg);
+
+    sysc_log!(
+        act,
+        "mgate_mkexcl(mgate={}, mem_tile={}, user_tile={})",
+        r.mgate,
+        r.mem_tile,
+        r.user_tile
+    );
+
+    let act_caps = act.obj_caps().borrow();
+    let mgate: TempRc<MGateObject> = act_caps.get_kobj(r.mgate)?;
+    let mem_tile: TempRc<TileObject> = act_caps.get_kobj(r.mem_tile)?;
+    let user_tile: TempRc<TileObject> = act_caps.get_kobj(r.user_tile)?;
+
+    if mem_tile.tile() != mgate.tile_id() {
+        return Err(verror!(
+            Code::InvArgs,
+            "MGate needs to belong to the memory tile"
+        ));
+    }
+
+    let addr = mgate.offset();
+    let size = mgate.size();
+    if (size & 0x7) != 0 || !size.is_power_of_two() {
+        return Err(verror!(
+            Code::InvArgs,
+            "Invalid size (need 8-byte aligned power of 2)"
+        ));
+    }
+    if (addr & 0x3) != 0 || ((addr >> 2) & ((size >> 3) - 1)) != 0 {
+        return Err(verror!(
+            Code::InvArgs,
+            "Invalid address (need size-aligned)"
+        ));
+    }
+
+    let mut memmux = tilemng::memmux(mem_tile.tile());
+    memmux.add(mgate, mem_tile, user_tile)?;
+
+    reply_success(act);
     Ok(())
 }
 
@@ -290,14 +338,12 @@ pub fn activate_mgate(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     }
 
     let tile_id = mg.tile_id();
-    if let Err(e) = tilemng::tilemux(ep.tile_id()).config_mem_ep(
+    tilemng::tilemux(ep.tile_id()).config_mem_ep(
         ep.ep(),
         ep.activity().unwrap().id(),
         &mg,
         tile_id,
-    ) {
-        return Err(verror!(e.code(), "Unable to configure mem EP"));
-    }
+    )?;
 
     mg.set_ep(&ep, GateObject::Mem(mg.clone().downgrade_store()));
 

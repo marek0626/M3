@@ -17,7 +17,7 @@ use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
 use base::kif::{self, syscalls};
 use base::log;
-use base::mem::{GlobAddr, MsgBuf};
+use base::mem::MsgBuf;
 use base::tcu;
 use base::{build_vmsg, verror};
 
@@ -26,7 +26,6 @@ use thread::{Downgradable, TempRc, Upgradable};
 use crate::cap::{
     Capability, KMemObject, MGateObject, SGateObject, SelRange, ServObject, TileObject,
 };
-use crate::mem;
 use crate::syscalls::{get_request, reply_success, try_upgrade_kobj};
 use crate::tiles::{Activity, DeriveSrv};
 
@@ -38,10 +37,11 @@ pub fn derive_tile_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
 
     sysc_log!(
         act,
-        "derive_tile(tile={}, dst={}, eps={:?}, time={:?}, pts={:?})",
+        "derive_tile(tile={}, dst={}, eps={:?}, exregs={:?}, time={:?}, pts={:?})",
         r.tile,
         r.dst,
         r.eps,
+        r.exregs,
         r.time,
         r.pts,
     );
@@ -51,7 +51,7 @@ pub fn derive_tile_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let act_weak = act.downgrade_asyn();
 
     let tile_weak = tile.clone().downgrade_asyn();
-    let tile_new = TileObject::derive_async(tile, r.eps, r.time, r.pts)?;
+    let tile_new = TileObject::derive_async(tile, r.eps, r.exregs, r.time, r.pts)?;
     let tile_new_clone = tile_new.clone();
 
     let act = match try {
@@ -127,15 +127,8 @@ pub fn derive_mem(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let cap = {
         let act_caps = act.obj_caps().borrow();
         let mgate: TempRc<MGateObject> = act_caps.get_kobj(r.src)?;
-        if r.offset.checked_add(r.size).is_none() || r.offset + r.size > mgate.size() || r.size == 0
-        {
-            return Err(verror!(Code::InvArgs, "Size or offset invalid"));
-        }
-
-        let addr = mgate.addr().raw() + r.offset;
-        let new_mem = mem::Allocation::new(GlobAddr::new(addr), r.size);
-        let mgate_obj = MGateObject::new(new_mem, r.perms & mgate.perms(), true);
-        Capability::new(r.dst, mgate_obj)
+        let new_mgate = mgate.derive(r.offset, r.size, r.perms)?;
+        Capability::new(r.dst, new_mgate)
     };
 
     try_cap_insert!(tact.obj_caps().borrow_mut().insert_as_child(cap, r.src));

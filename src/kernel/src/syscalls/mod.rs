@@ -165,6 +165,7 @@ pub fn handle_async(msg: tcu::OwnedMessage) {
         o if o == Operation::ActivateSGate.into() => async_sys(act, misc::activate_sgate_async),
         o if o == Operation::Invalidate.into() => sync_sys(act, misc::invalidate),
         o if o == Operation::MGateRegion.into() => sync_sys(act, misc::mgate_region),
+        o if o == Operation::MGateMkExcl.into() => sync_sys(act, misc::mgate_mkexcl),
         o if o == Operation::RGateBuffer.into() => sync_sys(act, misc::rgate_buffer),
         o if o == Operation::KMemQuota.into() => sync_sys(act, misc::kmem_quota),
         o if o == Operation::TileQuota.into() => async_sys(act, tile::tile_quota_async),

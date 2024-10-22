@@ -25,7 +25,10 @@ use m3::kif::Perm;
 use m3::log;
 use m3::mem::{GlobAddr, GlobOff, MemMap};
 use m3::rc::Rc;
+use m3::tiles::Tile;
 use m3::util::math;
+
+use super::Resources;
 
 pub struct MemMod {
     mcap: MemCap,
@@ -125,7 +128,7 @@ impl MemoryManager {
     pub fn alloc_mem(&mut self, mut size: GlobOff) -> Result<MemSlice, Error> {
         size = math::round_up(size, cfg::PAGE_SIZE as GlobOff);
         while self.cur_mod < self.mods.len() {
-            if let Some(sl) = self.get_slice(size, true) {
+            if let Some(sl) = self.get_slice(size, true, false) {
                 self.cur_off += sl.size;
                 self.available -= sl.size;
                 return Ok(sl);
@@ -134,11 +137,12 @@ impl MemoryManager {
         Err(Error::new(Code::NoSpace))
     }
 
-    pub fn alloc_pool(&mut self, mut size: GlobOff) -> Result<MemPool, Error> {
+    pub fn alloc_pool(&mut self, mut size: GlobOff, size_aligned: bool) -> Result<MemPool, Error> {
+        assert!(!size_aligned || size.is_power_of_two());
         let mut res = MemPool::default();
         size = math::round_up(size, cfg::PAGE_SIZE as GlobOff);
-        while size > 0 && self.cur_mod < self.mods.len() {
-            if let Some(sl) = self.get_slice(size, false) {
+        while size > 0 && res.slices().len() <= 2 && self.cur_mod < self.mods.len() {
+            if let Some(sl) = self.get_slice(size, false, size_aligned) {
                 size -= sl.size;
                 self.cur_off += sl.size;
                 self.available -= sl.size;
@@ -154,7 +158,7 @@ impl MemoryManager {
         }
     }
 
-    fn get_slice(&mut self, size: GlobOff, all: bool) -> Option<MemSlice> {
+    fn get_slice(&mut self, size: GlobOff, all: bool, size_aligned: bool) -> Option<MemSlice> {
         let m = &self.mods[self.cur_mod];
         let avail = m.capacity() - self.cur_off;
         if m.reserved || self.cur_off == m.capacity() || (all && avail < size) {
@@ -166,7 +170,19 @@ impl MemoryManager {
             return None;
         }
 
-        let amount = cmp::min(avail, size);
+        let mut amount = cmp::min(avail, size);
+        if size_aligned {
+            if !amount.is_power_of_two() {
+                amount = 1 << (math::next_log2(amount as usize) - 1);
+            }
+            let aligned_addr = math::round_up(m.addr().offset() + self.cur_off, amount);
+            let off = aligned_addr - m.addr().offset();
+            if off > self.cur_off + m.capacity() {
+                self.cur_off = m.capacity();
+                return None;
+            }
+            self.cur_off = off;
+        }
         Some(MemSlice::new(m.clone(), self.cur_off, amount, Perm::RWX))
     }
 }
@@ -315,6 +331,29 @@ impl MemPool {
 
     fn add(&mut self, s: MemSlice) {
         self.slices.push(s)
+    }
+
+    pub fn make_exclusive(&mut self, res: &Resources, user_tile: &Tile) -> Result<(), Error> {
+        let mut slices = Vec::new();
+        for s in &mut self.slices {
+            let mem = s.derive()?;
+            let mem_tile = res.tiles().find_by_id(s.mem.mcap.region()?.0.tile())?;
+            mem.make_exclusive(&mem_tile, user_tile)?;
+            let slice = MemSlice::new(
+                Rc::new(MemMod::new(
+                    mem,
+                    s.addr(),
+                    s.capacity(),
+                    s.in_reserved_mem(),
+                )),
+                0,
+                s.capacity(),
+                Perm::RW,
+            );
+            slices.push(slice);
+        }
+        self.slices = slices;
+        Ok(())
     }
 
     pub fn allocate_slice(&mut self, size: GlobOff) -> Result<MemSlice, Error> {

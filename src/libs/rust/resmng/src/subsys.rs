@@ -322,6 +322,24 @@ impl Subsystem {
         // determine default mem and kmem per child
         let (def_kmem, def_umem) = split_mem(res, root)?;
 
+        // determine per-TEE exclusive regions
+        let total_tees = count_tees(root);
+        let exregs_per_tee = if total_tees > 0 {
+            // TODO for simplicity, we only take the regions in the first memory module into account
+            let mem_tile = res.memory().mods().first().unwrap().addr().tile();
+            let total_exregs = res
+                .tiles()
+                .find_by_id(mem_tile)
+                .unwrap()
+                .quota()?
+                .exclusive_regions()
+                .remaining();
+            total_exregs / total_tees
+        }
+        else {
+            0
+        };
+
         let mut mem_id = 1;
 
         for (idx, dom) in root.domains().iter().enumerate() {
@@ -350,18 +368,24 @@ impl Subsystem {
             };
 
             // memory pool for the domain
-            let dom_mem = dom.apps().iter().fold(0, |sum, a| {
+            let mut dom_mem = dom.apps().iter().fold(0, |sum, a| {
                 sum + a.user_mem().unwrap_or(def_umem as usize) as GlobOff
             });
-            let mem_pool = Rc::new(RefCell::new(res.memory_mut().alloc_pool(dom_mem).map_err(
-                |e| {
-                    verror!(
-                        e.code(),
-                        "Unable to allocate memory pool with {} b",
-                        dom_mem,
-                    )
-                },
-            )?));
+            // TEEs need a power-of-two as memory size to be able to make it exclusive
+            if dom.tee() && !dom_mem.is_power_of_two() {
+                dom_mem = 1 << (math::next_log2(dom_mem as usize) - 1);
+            }
+            let mem_pool = Rc::new(RefCell::new(
+                res.memory_mut()
+                    .alloc_pool(dom_mem, dom.tee())
+                    .map_err(|e| {
+                        verror!(
+                            e.code(),
+                            "Unable to allocate memory pool with {} b",
+                            dom_mem,
+                        )
+                    })?,
+            ));
 
             let mut domain_total_eps = tcu::PMEM_PROT_EPS + tcu::TILEMUX_EPS;
             for cfg in dom.apps() {
@@ -586,6 +610,7 @@ impl Subsystem {
                         &child_mem,
                         &mem_pool,
                         root,
+                        exregs_per_tee,
                     )?)
                 }
                 else {
@@ -602,6 +627,7 @@ impl Subsystem {
                     // TODO either remove args and daemon from config or remove the clones from OwnChild
                     cfg.args().clone(),
                     cfg.daemon(),
+                    dom.tee(),
                     kmem,
                     child_mem,
                     cfg.clone(),
@@ -653,6 +679,7 @@ impl Subsystem {
         child_mem: &Rc<childs::ChildMem>,
         mem_pool: &Rc<RefCell<memory::MemPool>>,
         root: &config::AppConfig,
+        exregs_per_tee: usize,
     ) -> Result<SubsystemBuilder, VerboseError> {
         // TODO currently, we don't support tile sharing of a resource manager and another
         // activities on the same level. The resource manager needs to set PMP EPs and might
@@ -693,6 +720,13 @@ impl Subsystem {
             .allocate_slice(sub_mem)
             .map_err(|e| verror!(e.code(), "Unable to allocate {}b for subsys", sub_mem,))?;
         sub.add_mem(sub_slice.derive()?, sub_slice.in_reserved_mem());
+
+        // pass down memory tile with quota for exclusive regions
+        let tee_count = count_tees(cfg);
+        if tee_count > 0 {
+            let mem_tile = res.tiles().find_by_id(sub_slice.addr().tile()).unwrap();
+            sub.add_tile(mem_tile.derive(None, Some(tee_count * exregs_per_tee), None, None)?);
+        }
 
         // add services
         for s in cfg.sess_creators() {
@@ -1060,4 +1094,18 @@ fn split_pts(total_pts: usize, d: &config::Domain) -> (usize, usize) {
         }
     }
     (pt_sharer, rem_pts)
+}
+
+fn count_tees(app: &config::AppConfig) -> usize {
+    let mut total = 0;
+    for d in app.domains() {
+        if d.tee() {
+            total += 1;
+        }
+
+        for app in d.apps() {
+            total += count_tees(app);
+        }
+    }
+    total
 }

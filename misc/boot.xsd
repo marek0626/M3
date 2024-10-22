@@ -12,6 +12,7 @@
                     <xs:attribute name="muxmem" type="xs:string"/>
                     <xs:attribute name="initrd" type="xs:string"/>
                     <xs:attribute name="dtb" type="xs:string"/>
+                    <xs:attribute name="tee" type="xs:int"/>
                 </xs:complexType>
             </xs:element>
 

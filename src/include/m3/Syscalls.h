@@ -78,16 +78,18 @@ public:
     static void derive_mem(capsel_t act, capsel_t dst, capsel_t src, goff_t offset, size_t size,
                            int perms);
     static void derive_kmem(capsel_t kmem, capsel_t dst, size_t quota);
-    static void derive_tile(capsel_t tile, capsel_t dst, Option<uint> eps,
+    static void derive_tile(capsel_t tile, capsel_t dst, Option<uint> eps, Option<uint> exregs,
                             Option<TimeDuration> time, Option<size_t> pts);
     static void derive_srv_req(capsel_t srv, capsel_t dst_srv, capsel_t dst_sgate, uint sessions,
                                event_t event);
     static void derive_srv_fin(capsel_t srv, Errors::Code result, capsel_t sgate, size_t creator);
     static void get_sess(capsel_t srv, capsel_t act, capsel_t dst, word_t sid);
     static std::pair<GlobAddr, size_t> mgate_region(capsel_t mgate);
+    static void mgate_mkexcl(capsel_t mgate, capsel_t mem_tile, capsel_t user_tile);
     static std::pair<uint, uint> rgate_buffer(capsel_t rgate);
     static Quota<size_t> kmem_quota(capsel_t kmem);
-    static std::tuple<Quota<uint>, Quota<TimeDuration>, Quota<size_t>> tile_quota(capsel_t tile);
+    static std::tuple<Quota<uint>, Quota<uint>, Quota<TimeDuration>, Quota<size_t>> tile_quota(
+        capsel_t tile);
     static void tile_set_quota(capsel_t tile, TimeDuration time, size_t pts);
     static void tile_set_pmp(capsel_t tile, capsel_t mgate, epid_t epid, bool overwrite);
     static std::tuple<KIF::Syscall::MuxType, TileId, TileDesc, size_t> tile_info(capsel_t tile);

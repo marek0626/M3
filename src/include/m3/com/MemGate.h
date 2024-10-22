@@ -21,6 +21,7 @@
 #include <base/KIF.h>
 
 #include <m3/com/Gate.h>
+#include <m3/tiles/Tile.h>
 
 namespace m3 {
 
@@ -76,6 +77,19 @@ public:
     }
 
     ~MemCap();
+
+    /**
+     * Ensures that only <user_tile> can access this memory region
+     *
+     * The argument <mem_tile> denotes the memory tile that will host the exclusive region,
+     * whereas <user_tile> specifies the tile that should be allowed to use the region. The
+     * memory tile needs to have sufficient quota to install the exclusive region.
+     *
+     * This does only work if this memory region has a power-of-2 size and is size-aligned.
+     *
+     * Note also that this <MemCap> needs be belong to <mem_tile>.
+     */
+    void make_exclusive(class Tile &mem_tile, class Tile &user_tile);
 
     /**
      * Derives memory from this memory capability. That is, it creates a new memory capability that

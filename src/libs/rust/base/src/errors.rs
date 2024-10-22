@@ -60,6 +60,10 @@ pub enum Code {
     TLBFull,
     NoPMPEP,
     NoIRQ,
+    ExRegNoPerm,
+    ExRegWrongTile,
+    ExRegOverlaps,
+    ExRegExists,
     // SW Errors
     InvArgs,
     ObjectGone,

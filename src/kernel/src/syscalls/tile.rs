@@ -14,7 +14,7 @@
  */
 
 use base::errors::{Code, VerboseError};
-use base::kif::{self, syscalls};
+use base::kif::{self, syscalls, TileType};
 use base::mem::MsgBuf;
 use base::quota::Quota;
 use base::tcu;
@@ -72,6 +72,9 @@ pub fn tile_quota_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
         eps_id: tile.ep_quota().id(),
         eps_total: tile.ep_quota().total(),
         eps_left: tile.ep_quota().left(),
+        exregs_id: tile.exregs_quota().id(),
+        exregs_total: tile.exregs_quota().total(),
+        exregs_left: tile.exregs_quota().left(),
         time_id: time.id(),
         time_total: time.total(),
         time_left: time.remaining(),
@@ -103,6 +106,9 @@ pub fn tile_set_quota_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
 
     let tile: TempRc<TileObject> = act.get_kobj(r.tile)?;
 
+    if platform::tile_desc(tile.tile()).tile_type() == TileType::Mem {
+        return Err(verror!(Code::InvArgs, "Cannot set quota for memory tiles"));
+    }
     if tile.derived() {
         return Err(verror!(
             Code::NoPerm,
@@ -147,6 +153,12 @@ pub fn tile_set_pmp(act: &TempRc<Activity>) -> Result<(), VerboseError> {
 
     let act_caps = act.obj_caps().borrow();
     let tile: TempRc<TileObject> = act_caps.get_kobj(r.tile)?;
+    if platform::tile_desc(tile.tile()).tile_type() == TileType::Mem {
+        return Err(verror!(
+            Code::InvArgs,
+            "Cannot set PMP EPs for memory tiles"
+        ));
+    }
     if tile.derived() {
         return Err(verror!(
             Code::NoPerm,
@@ -204,6 +216,9 @@ pub fn tile_reset_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
 
     let act_caps = act.obj_caps().borrow();
     let tile: TempRc<TileObject> = act_caps.get_kobj(r.tile)?;
+    if platform::tile_desc(tile.tile()).tile_type() == TileType::Mem {
+        return Err(verror!(Code::InvArgs, "Cannot reset memory tiles"));
+    }
     if tile.derived() {
         return Err(verror!(
             Code::NoPerm,
@@ -275,10 +290,16 @@ pub fn tile_mem(act: &TempRc<Activity>) -> Result<(), VerboseError> {
 
     let mut act_caps = act.obj_caps().borrow_mut();
     let tile: TempRc<TileObject> = act_caps.get_kobj(r.tile)?;
+    if platform::tile_desc(tile.tile()).tile_type() == TileType::Mem {
+        return Err(verror!(
+            Code::InvArgs,
+            "Cannot create memory cap for memory tiles"
+        ));
+    }
     if tile.derived() {
         return Err(verror!(
             Code::NoPerm,
-            "Cannot reset tiles for derived tile objects"
+            "Cannot create memory cap for derived tile objects"
         ));
     }
     if !platform::tile_desc(tile.tile()).has_memory() {

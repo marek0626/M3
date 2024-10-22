@@ -313,6 +313,7 @@ pub fn derive_tile(
     tile: Selector,
     dst: Selector,
     eps: Option<usize>,
+    exregs: Option<usize>,
     time: Option<TimeDuration>,
     pts: Option<usize>,
 ) -> Result<(), Error> {
@@ -321,6 +322,7 @@ pub fn derive_tile(
         tile,
         dst,
         eps,
+        exregs,
         time: time.map(|t| t.as_nanos() as u64),
         pts,
     });
@@ -408,6 +410,29 @@ pub fn mgate_region(mgate: Selector) -> Result<(GlobAddr, GlobOff), Error> {
     Ok((reply.data.global, reply.data.size))
 }
 
+/// Ensures that only `user_tile` can access the memory region denoted by `mgate`.
+///
+/// The argument `mem_tile` denotes the memory tile that will host the exclusive region,
+/// whereas `user_tile` specifies the tile that should be allowed to use the region. The
+/// memory tile needs to have sufficient quota to install the exclusive region.
+///
+/// This does only work if this memory region has a power-of-2 size and is size-aligned.
+///
+/// Note also that `mgate` needs be belong to `mem_tile`.
+pub fn mgate_mkexcl(mgate: Selector, mem_tile: Selector, user_tile: Selector) -> Result<(), Error> {
+    let mut buf = SYSC_BUF.borrow_mut();
+    build_vmsg!(
+        buf,
+        syscalls::Operation::MGateMkExcl,
+        syscalls::MGateMkExcl {
+            mgate,
+            mem_tile,
+            user_tile
+        }
+    );
+    send_receive_result(&buf)
+}
+
 /// Returns the total size and slot size of the RecvGate as powers of 2
 pub fn rgate_buffer(rgate: Selector) -> Result<(u32, u32), Error> {
     let mut buf = SYSC_BUF.borrow_mut();
@@ -442,6 +467,11 @@ pub fn tile_quota(tile: Selector) -> Result<TileQuota, Error> {
     let reply: Reply<syscalls::TileQuotaReply> = send_receive(&buf)?;
     Ok(TileQuota::new(
         Quota::new(reply.data.eps_id, reply.data.eps_total, reply.data.eps_left),
+        Quota::new(
+            reply.data.exregs_id,
+            reply.data.exregs_total,
+            reply.data.exregs_left,
+        ),
         Quota::new(
             reply.data.time_id,
             TimeDuration::from_nanos(reply.data.time_total),
