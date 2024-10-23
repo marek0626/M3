@@ -18,12 +18,13 @@ use base::col::Vec;
 use base::kif::tilemux::QuotaId;
 use base::kif::{self, TileType};
 use base::tcu::TileId;
-use thread::StrongRc;
+use thread::{StrongRc, TempRc};
 
 use crate::cap::{TileObject, TileQuota};
-use crate::ktcu;
+use crate::mem::MemType;
 use crate::platform;
 use crate::tiles::{MemMux, TileMux};
+use crate::{ktcu, mem};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum State {
@@ -37,7 +38,10 @@ enum TileState {
     Mem(MemMux),
 }
 
+const KERNEL_EPREGS: usize = 4;
+
 static TILES: LazyStaticRefCell<Vec<Vec<Option<TileState>>>> = LazyStaticRefCell::default();
+static EPMTILE: LazyStaticRefCell<StrongRc<TileObject>> = LazyStaticRefCell::default();
 static STATE: StaticCell<State> = StaticCell::new(State::RUNNING);
 
 pub fn state() -> State {
@@ -70,6 +74,24 @@ pub fn init() {
         tiles[cid].push(Some(state));
     }
     TILES.set(tiles);
+
+    // create tile object for EP memory
+    let mem = mem::borrow_mut();
+    let epmem = mem
+        .mods()
+        .iter()
+        .find(|m| m.mem_type() == MemType::EPS)
+        .unwrap();
+    let epmtile = epmem.addr().tile();
+    let tileobj = TileObject::new(
+        epmtile,
+        TileQuota::new(0),
+        TileQuota::new(platform::tile_desc(epmtile).exclusive_regions()),
+        QuotaId::default(),
+        QuotaId::default(),
+        false,
+    );
+    EPMTILE.set(tileobj);
 }
 
 pub fn deinit_async() {
@@ -84,6 +106,10 @@ pub fn deinit_async() {
     }
 
     STATE.set(State::SHUTDOWN);
+}
+
+pub fn ep_mem_tile() -> TempRc<TileObject> {
+    TempRc::new(EPMTILE.borrow_mut().clone())
 }
 
 pub fn tilemux(tile: TileId) -> RefMut<'static, TileMux> {
@@ -109,14 +135,26 @@ pub fn memmux(tile: TileId) -> RefMut<'static, MemMux> {
 pub fn new_tile_obj(tile: TileId) -> StrongRc<TileObject> {
     match platform::tile_desc(tile).tile_type() {
         TileType::Comp => tilemux(tile).new_tile_obj(),
-        TileType::Mem => TileObject::new(
-            tile,
-            TileQuota::new(0),
-            TileQuota::new(platform::tile_desc(tile).exclusive_regions()),
-            QuotaId::default(),
-            QuotaId::default(),
-            false,
-        ),
+        TileType::Mem => {
+            let (num, derived) = if tile == EPMTILE.borrow().tile() {
+                let epmtile = EPMTILE.borrow_mut().clone();
+                let num = epmtile.exregs_quota().total() - KERNEL_EPREGS;
+                epmtile.alloc_exreg(num);
+                (num, true)
+            }
+            else {
+                (platform::tile_desc(tile).exclusive_regions(), false)
+            };
+
+            TileObject::new(
+                tile,
+                TileQuota::new(0),
+                TileQuota::new(num),
+                QuotaId::default(),
+                QuotaId::default(),
+                derived,
+            )
+        },
     }
 }
 

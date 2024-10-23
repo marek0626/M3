@@ -576,6 +576,20 @@ pub fn tile_reset(tile: Selector, mux_mem: Selector, ep_count: Option<usize>) ->
     send_receive_result(&buf)
 }
 
+/// Locks the given tile.
+///
+/// This will, if present, mark the EP memory region as exclusive and thus prevent other tiles
+/// (e.g., the kernel tile) from accessing it.
+///
+/// This call requires a non-derived tile capability.
+pub fn tile_lock(tile: Selector) -> Result<(), Error> {
+    let mut buf = SYSC_BUF.borrow_mut();
+    build_vmsg!(buf, syscalls::Operation::TileLock, syscalls::TileLock {
+        tile,
+    });
+    send_receive_result(&buf)
+}
+
 /// Performs the activity operation `op` with the given activity.
 pub fn activity_ctrl(act: Selector, op: syscalls::ActivityOp, arg: u64) -> Result<(), Error> {
     let mut buf = SYSC_BUF.borrow_mut();

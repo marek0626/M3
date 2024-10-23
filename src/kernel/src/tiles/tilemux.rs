@@ -19,11 +19,12 @@ use base::col::{BitArray, Vec};
 use base::env;
 use base::errors::{Code, Error, VerboseError};
 use base::io::LogFlags;
-use base::kif::{self, TileAttr, TileISA};
+use base::kif::{self, Perm, TileAttr, TileISA};
 use base::log;
 use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, VirtAddr};
 use base::quota;
 use base::tcu::{self, ActId, EpId, TileId};
+use base::util::math;
 use base::{build_vmsg, verror};
 
 use core::cmp;
@@ -45,7 +46,7 @@ struct TileState {
     // need to link MemGate to the EPObject it's activated on for PMP EPs, we need an EPObject.
     // We therefore should never leak this object to the outside.
     pmp: Vec<StrongRc<EPObject>>,
-    eps_region: Option<mem::Allocation>,
+    eps_region: Option<StrongRc<MGateObject>>,
     eps: BitArray,
 }
 
@@ -73,10 +74,25 @@ impl TileState {
                 }
 
                 let ep_reg_size = count * (tcu::EP_REGS * size_of::<tcu::Reg>());
-                let region =
-                    mem::borrow_mut().allocate(mem::MemType::EPS, ep_reg_size as GlobOff, 1)?;
-                ktcu::set_eps_region(tile.tile(), region.global(), region.size())?;
-                (count, Some(region))
+                // make this power-of-two sized for TEEs so that we can mark that as exclusive
+                // TODO: maybe we should know upfront that this tile is going to be a TEE so that
+                // we can only do that for TEE tiles?
+                let ep_alloc_size = if ep_reg_size.is_power_of_two() {
+                    ep_reg_size
+                }
+                else {
+                    1 << math::next_log2(ep_reg_size)
+                };
+
+                let region = mem::borrow_mut().allocate(
+                    mem::MemType::EPS,
+                    ep_alloc_size as GlobOff,
+                    ep_alloc_size as GlobOff,
+                )?;
+                ktcu::set_eps_region(tile.tile(), region.global(), ep_reg_size as GlobOff)?;
+
+                let mgate = MGateObject::new(region, Perm::RW, false);
+                (count, Some(mgate))
             },
             None => (ktcu::get_ep_count(tile.tile())?, None),
         };
@@ -137,14 +153,6 @@ impl TileState {
         for bit in start..start + count as EpId {
             assert!(self.eps.is_set(bit as usize));
             self.eps.clear(bit as usize);
-        }
-    }
-}
-
-impl Drop for TileState {
-    fn drop(&mut self) {
-        if let Some(region) = self.eps_region {
-            mem::borrow_mut().free(&region);
         }
     }
 }
@@ -413,6 +421,13 @@ impl TileMux {
 
     pub fn ep_count(&self) -> Option<usize> {
         self.state.as_ref().map(|state| state.eps.size())
+    }
+
+    pub fn eps_region(&self) -> Option<TempRc<MGateObject>> {
+        self.state
+            .as_ref()
+            .and_then(|state| state.eps_region.as_ref())
+            .map(|rc| TempRc::new(rc.clone()))
     }
 
     fn pmp_ep(&self, ep: EpId) -> Option<TempRc<EPObject>> {

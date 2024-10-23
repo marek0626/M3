@@ -191,6 +191,7 @@ struct KIF {
             TILE_MEM,
             TILE_INFO,
             TILE_RESET,
+            TILE_LOCK,
             SEM_CTRL,
 
             // capability exchange
@@ -445,6 +446,10 @@ struct KIF {
             xfer_t tile_sel;
             xfer_t mux_mem_sel;
             xfer_t ep_count;
+        } PACKED;
+
+        struct TileLock : public DefaultRequest {
+            xfer_t tile_sel;
         } PACKED;
 
         enum MuxType {

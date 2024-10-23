@@ -273,6 +273,14 @@ impl Tile {
         }))
     }
 
+    /// Locks this tile.
+    ///
+    /// This will, if present, mark the EP memory region as exclusive and thus prevent other tiles
+    /// (e.g., the kernel tile) from accessing it.
+    pub fn lock(&self) -> Result<(), Error> {
+        syscalls::tile_lock(self.sel())
+    }
+
     /// Returns the selector
     pub fn sel(&self) -> Selector {
         self.cap.sel()
