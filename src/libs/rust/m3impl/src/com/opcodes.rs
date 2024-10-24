@@ -150,6 +150,8 @@ pub enum Pager {
     MapMem,
     /// Remove an existing mapping
     Unmap,
+    /// Acquire a quote for a launched application
+    Quote,
 }
 
 /// The operations for the disk protocol.

@@ -157,6 +157,7 @@ pub trait Child {
     fn res(&self) -> &ChildResources;
     fn res_mut(&mut self) -> &mut ChildResources;
     fn kmem(&self) -> Rc<KMem>;
+    fn hash(&self) -> Option<&String>;
 
     fn delegate(&self, src: Selector, dst: Selector) -> Result<(), Error> {
         let crd = CapRngDesc::new_single(CapType::Object, src);
@@ -707,6 +708,7 @@ pub struct OwnChild {
     daemon: bool,
     tee: bool,
     kmem: Rc<KMem>,
+    hash: Option<String>,
 }
 
 impl OwnChild {
@@ -739,11 +741,16 @@ impl OwnChild {
             tee,
             activity: None,
             kmem,
+            hash: None,
         }
     }
 
     pub fn tee(&self) -> bool {
         self.tee
+    }
+
+    pub fn set_hash(&mut self, hash: String) {
+        self.hash = Some(hash);
     }
 
     pub fn set_running(&mut self, act: Box<dyn RunningActivity>) {
@@ -844,6 +851,10 @@ impl Child for OwnChild {
 
     fn kmem(&self) -> Rc<KMem> {
         self.kmem.clone()
+    }
+
+    fn hash(&self) -> Option<&String> {
+        self.hash.as_ref()
     }
 }
 
@@ -982,6 +993,10 @@ impl Child for ForeignChild {
 
     fn kmem(&self) -> Rc<KMem> {
         self.kmem.clone()
+    }
+
+    fn hash(&self) -> Option<&String> {
+        None
     }
 }
 

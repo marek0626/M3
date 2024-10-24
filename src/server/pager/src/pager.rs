@@ -22,17 +22,20 @@ mod physmem;
 mod regions;
 
 use core::ops::DerefMut;
+use core::{cmp, fmt};
 
 use m3::boxed::Box;
 use m3::cell::LazyStaticRefCell;
-use m3::client::{ClientSession, Pager, M3FS};
+use m3::client::{ClientSession, Pager, RoTSession, M3FS};
 use m3::col::{String, ToString, Vec};
+use m3::com::GateIStream;
 use m3::com::{opcodes, MemCap, RecvGate, SGateArgs, SendCap};
 use m3::errors::{Code, Error, VerboseError};
 use m3::format;
 use m3::kif::syscalls::MuxType;
 use m3::mem::VirtAddr;
-use m3::server::{ExcType, RequestHandler, Server};
+use m3::reply_vmsg;
+use m3::server::{ExcType, RequestHandler, RequestSession, Server, ServerSession};
 use m3::tcu::Label;
 use m3::tiles::{Activity, ActivityArgs, ChildActivity};
 use m3::util::math;
@@ -40,6 +43,9 @@ use m3::verror;
 use m3::vfs;
 
 use addrspace::AddrSpace;
+use m3::io::LogFlags;
+use m3::log;
+use m3::vfs::{File, SeekMode};
 
 use resmng::childs::{self, Child, ChildManager, OwnChild};
 use resmng::config;
@@ -49,6 +55,8 @@ use resmng::sendqueue;
 use resmng::subsys;
 
 static REQHDL: LazyStaticRefCell<RequestHandler<AddrSpace, opcodes::Pager>> =
+    LazyStaticRefCell::default();
+static EVREQHDL: LazyStaticRefCell<RequestHandler<EvidenceSession, opcodes::Pager>> =
     LazyStaticRefCell::default();
 
 #[derive(Default)]
@@ -72,6 +80,24 @@ impl PagedChildStarter {
         self.mounts.push((name.to_string(), our_path.to_string()));
         Ok(our_path)
     }
+}
+
+// Extremely simple Karp-Rabin type hash.
+pub fn get_hash(file: &mut dyn File, file_size: usize) -> Result<String, Error> {
+    let mut hash: u64 = 0;
+    let mut buf: [u8; 1024] = [0; 1024];
+    let constant = 42;
+    let mut count = file_size;
+    while count > 0 {
+        let amount = cmp::min(count, buf.len());
+        let amount = file.read(&mut buf[0..amount])?;
+        for byte in buf.iter() {
+            hash = hash * constant + *byte as u64;
+        }
+        count -= amount;
+    }
+    file.seek(0, SeekMode::Set)?;
+    Ok(hash.to_string())
 }
 
 impl subsys::ChildStarter for PagedChildStarter {
@@ -138,6 +164,18 @@ impl subsys::ChildStarter for PagedChildStarter {
                 .map_err(|e| verror!(e.code(), "Unable to open {}", child.name()))?;
             let mut mapper = mapper::ChildMapper::new(aspace, act.tile_desc().has_virtmem());
 
+            {
+                let mut rawfile = file.borrow();
+                let size = rawfile.stat()?.size;
+                // Acquire hash
+                {
+                    let rawfile_ref = rawfile.deref_mut();
+                    let app_hash = get_hash(rawfile_ref, size)?;
+                    log!(LogFlags::Debug, "hash of {}: {}", child.name(), app_hash);
+                    child.set_hash(app_hash);
+                }
+            }
+
             act.exec_file(Some((&mut mapper, file.into_generic())), child.arguments())
                 .map_err(|e| verror!(e.code(), "Unable to execute {}", child.name()))?
         }
@@ -170,16 +208,18 @@ impl subsys::ChildStarter for PagedChildStarter {
 }
 
 #[allow(clippy::vec_box)]
-struct WorkloopArgs<'t, 'c, 'd, 'r, 'q, 's> {
+struct WorkloopArgs<'t, 'c, 'd, 'r, 'q, 's, 'v> {
     starter: &'t mut PagedChildStarter,
     childmng: &'c mut ChildManager,
     childs: &'d mut Vec<Box<OwnChild>>,
     res: &'r mut Resources,
     reqs: &'q requests::Requests,
     serv: &'s mut Server,
+    evserv: &'v mut Option<Server>,
+    rot: &'v mut Option<RoTSession>,
 }
 
-fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_, '_>) {
+fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_, '_, '_>) {
     let WorkloopArgs {
         starter,
         childmng,
@@ -187,6 +227,8 @@ fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_, '_>) {
         res,
         reqs,
         serv,
+        evserv,
+        rot,
     } = args;
 
     reqs.run_loop_async(
@@ -194,6 +236,22 @@ fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_, '_>) {
         childs,
         res,
         |childmng, _res| {
+            if evserv.is_some() {
+                evserv
+                    .as_mut()
+                    .unwrap()
+                    .fetch_and_handle(EVREQHDL.borrow_mut().deref_mut())
+                    .ok();
+                EVREQHDL
+                    .borrow_mut()
+                    .fetch_and_handle_msg_with(|_handler, opcode, sess, is| match opcode {
+                        o if o == opcodes::Pager::Quote.into() => {
+                            sess.quote(is, childmng, rot.as_mut().unwrap())
+                        },
+                        _ => Err(Error::new(Code::InvArgs)),
+                    });
+            }
+
             serv.fetch_and_handle(REQHDL.borrow_mut().deref_mut()).ok();
 
             REQHDL.borrow_mut().fetch_and_handle_msg_with(
@@ -234,6 +292,22 @@ pub fn main() -> Result<(), Error> {
         .expect("Unable to create request handler");
     let mut srv = Server::new_private("pager", &mut hdl).expect("Unable to create service");
 
+    let mut evhdl: RequestHandler<EvidenceSession, opcodes::Pager> =
+        RequestHandler::new_with(1, 128, 1).expect("couldn't create evidence req hdl");
+    let mut rot = None;
+    let mut evsrv = match Server::new("evidence", &mut evhdl) {
+        Ok(result) => {
+            EVREQHDL.set(evhdl);
+            rot = Some(RoTSession::new("rot").expect("couldn't open RoT session"));
+            Some(result)
+        },
+        Err(_) => {
+            log!(LogFlags::Debug, "Evidence service not found. Skipping...");
+            drop(evhdl);
+            None
+        },
+    };
+
     use opcodes::Pager;
     hdl.reg_cap_handler(Pager::Init, ExcType::Del(1), AddrSpace::init);
     hdl.reg_cap_handler(Pager::AddChild, ExcType::Obt(1), AddrSpace::add_child);
@@ -268,6 +342,8 @@ pub fn main() -> Result<(), Error> {
         res: &mut res,
         reqs: &reqs,
         serv: &mut srv,
+        evserv: &mut evsrv,
+        rot: &mut rot,
     };
 
     thread::init();
@@ -284,4 +360,53 @@ pub fn main() -> Result<(), Error> {
     workloop_async(&mut wargs);
 
     Ok(())
+}
+
+// Needed for Capability retention
+struct EvidenceSession {
+    _serv: ServerSession,
+}
+
+impl RequestSession for EvidenceSession {
+    fn new(inserv: ServerSession, _arg: &str) -> Result<Self, Error> {
+        let sess = Self { _serv: inserv };
+        Ok(sess)
+    }
+}
+
+type Signature = [u8; 64];
+
+struct SigWrap(Signature);
+
+impl fmt::LowerHex for SigWrap {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for byte in self.0 {
+            write!(f, "{:02x}", byte)?;
+        }
+        Ok(())
+    }
+}
+
+impl EvidenceSession {
+    pub fn quote(
+        &mut self,
+        is: &mut GateIStream<'_>,
+        childmgr: &ChildManager,
+        rot: &RoTSession,
+    ) -> Result<(), Error> {
+        let nonce: usize = is.pop()?;
+        let app_id: usize = is.pop()?;
+
+        let child = childmgr
+            .child_by_id(app_id as u32)
+            .ok_or_else(|| Error::new(Code::InvArgs))?;
+
+        let app_hash = child.hash().ok_or_else(|| Error::new(Code::InvArgs))?;
+        let xml = child.cfg().to_string();
+        let hash: String = format!("Hash:{}:{}:{}", nonce, app_hash, xml);
+        let quote: [u8; 64] = rot.sign(hash.as_bytes())?;
+        let quote_str = format!("{:x}", SigWrap(quote));
+
+        reply_vmsg!(is, Code::Success, quote_str)
+    }
 }
