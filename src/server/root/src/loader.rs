@@ -289,6 +289,8 @@ impl<'a> Mapper for BootMapper<'a> {
             self.mem_pool
                 .borrow_mut()
                 .make_exclusive(self.res, &self.tile)?;
+
+            self.tile.lock()?;
         }
         Ok(())
     }

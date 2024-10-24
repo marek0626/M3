@@ -454,6 +454,14 @@ void Syscalls::tile_reset(capsel_t tile, capsel_t mux_mem, Option<size_t> ep_cou
     send_receive_throw(req_buf);
 }
 
+void Syscalls::tile_lock(capsel_t tile) {
+    MsgBuf req_buf;
+    auto &req = req_buf.cast<KIF::Syscall::TileLock>();
+    req.opcode = KIF::Syscall::TILE_LOCK;
+    req.tile_sel = tile;
+    send_receive_throw(req_buf);
+}
+
 void Syscalls::sem_ctrl(capsel_t sel, KIF::Syscall::SemOp op) {
     MsgBuf req_buf;
     auto &req = req_buf.cast<KIF::Syscall::SemCtrl>();

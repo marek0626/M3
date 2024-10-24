@@ -172,6 +172,7 @@ pub fn handle_async(msg: tcu::OwnedMessage) {
         o if o == Operation::TileSetQuota.into() => async_sys(act, tile::tile_set_quota_async),
         o if o == Operation::TileSetPMP.into() => sync_sys(act, tile::tile_set_pmp),
         o if o == Operation::TileReset.into() => async_sys(act, tile::tile_reset_async),
+        o if o == Operation::TileLock.into() => sync_sys(act, tile::tile_lock),
         o if o == Operation::TileInfo.into() => sync_sys(act, tile::tile_info),
         o if o == Operation::TileMem.into() => sync_sys(act, tile::tile_mem),
         o if o == Operation::GetSess.into() => sync_sys(act, misc::get_sess),

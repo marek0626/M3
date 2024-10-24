@@ -72,6 +72,7 @@ pub enum Operation {
     TileMem,
     TileInfo,
     TileReset,
+    TileLock,
     SemCtrl,
 
     // Capability exchange
@@ -343,6 +344,11 @@ pub struct TileReset {
     pub tile: CapSel,
     pub mux_mem: CapSel,
     pub ep_count: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TileLock {
+    pub tile: CapSel,
 }
 
 /// The operations for the `sem_ctrl` system call

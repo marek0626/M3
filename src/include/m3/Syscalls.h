@@ -95,6 +95,7 @@ public:
     static std::tuple<KIF::Syscall::MuxType, TileId, TileDesc, size_t> tile_info(capsel_t tile);
     static void tile_mem(capsel_t dst, capsel_t tile);
     static void tile_reset(capsel_t tile, capsel_t eps_mem, Option<size_t> ep_count);
+    static void tile_lock(capsel_t tile);
     static void sem_ctrl(capsel_t sem, KIF::Syscall::SemOp);
 
     static void delegate(capsel_t act, capsel_t sess, const KIF::CapRngDesc &crd,

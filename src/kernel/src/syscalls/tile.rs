@@ -314,3 +314,35 @@ pub fn tile_mem(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     reply_success(act);
     Ok(())
 }
+
+#[inline(never)]
+pub fn tile_lock(act: &TempRc<Activity>) -> Result<(), VerboseError> {
+    let msg = act.syscall();
+    let r: syscalls::TileLock = get_request(&msg)?;
+    drop(msg);
+
+    sysc_log!(act, "tile_lock(tile={})", r.tile);
+
+    let tile: TempRc<TileObject> = act.obj_caps().borrow().get_kobj(r.tile)?;
+    if platform::tile_desc(tile.tile()).tile_type() != TileType::Comp {
+        return Err(verror!(Code::InvArgs, "Can only lock compute tiles"));
+    }
+    if tile.derived() {
+        return Err(verror!(Code::NoPerm, "Cannot lock derived tile objects"));
+    }
+
+    let tilemux = tilemng::tilemux(tile.tile());
+    let Some(eps_region) = tilemux.eps_region()
+    else {
+        reply_success(act);
+        return Ok(());
+    };
+    drop(tilemux);
+
+    let epmtile = tilemng::ep_mem_tile();
+    let mut mmux = tilemng::memmux(epmtile.tile());
+    mmux.add(eps_region, epmtile, tile)?;
+
+    reply_success(act);
+    Ok(())
+}

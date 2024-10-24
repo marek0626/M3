@@ -160,7 +160,7 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
                 bmod.0.sel(),
                 act.tile_desc().has_virtmem(),
                 child.tee(),
-                tile,
+                child.our_tile().tile_obj().clone(),
                 child.mem().pool().clone(),
                 res,
             )?;
