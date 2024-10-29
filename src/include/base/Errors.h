@@ -61,6 +61,7 @@ struct Errors {
         EXREG_WRONG_TILE,
         EXREG_OVERLAPS,
         EXREG_EXISTS,
+        TILE_LOCKED,
         // SW errors
         INV_ARGS,
         OBJECT_GONE,

@@ -64,6 +64,7 @@ pub enum Code {
     ExRegWrongTile,
     ExRegOverlaps,
     ExRegExists,
+    TileLocked,
     // SW Errors
     InvArgs,
     ObjectGone,

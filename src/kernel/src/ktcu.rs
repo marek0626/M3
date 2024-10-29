@@ -22,8 +22,8 @@ use base::kif;
 use base::log;
 use base::mem::{self, GlobAddr, GlobOff, PhysAddr, PhysAddrRaw, VirtAddr};
 use base::tcu::{
-    ActId, EpId, ExtCmdOpCode, ExtReg, Header, Label, OwnedMessage, Reg, TileId, EP_REGS,
-    MMIO_ADDR, PMEM_PROT_EPS, TCU, UNLIM_CREDITS,
+    ActId, EpId, ExtCmdOpCode, ExtReg, FeatureFlags, Header, Label, OwnedMessage, Reg, TileId,
+    EP_REGS, MMIO_ADDR, PMEM_PROT_EPS, TCU, UNLIM_CREDITS,
 };
 
 use crate::platform;
@@ -373,6 +373,13 @@ pub fn set_eps_region(tile: TileId, addr: GlobAddr, size: GlobOff) -> Result<(),
         ])?;
         try_write_slice(tile, TCU::ext_reg_addr(ExtReg::EpsSize).as_goff(), &[size])
     }
+}
+
+pub fn lock_tile(tile: TileId) -> Result<(), Error> {
+    let reg_addr = TCU::ext_reg_addr(ExtReg::Features).as_goff();
+    let mut features: u64 = try_read_obj(tile, reg_addr)?;
+    features |= FeatureFlags::LOCKED.bits();
+    try_write_slice(tile, reg_addr, &[features])
 }
 
 pub fn reset_tile(tile: TileId, start: bool) -> Result<(), Error> {

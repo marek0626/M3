@@ -254,6 +254,8 @@ bitflags! {
     pub struct FeatureFlags : Reg {
         /// Whether the tile is privileged
         const PRIV          = 1 << 0;
+        /// Whether the tile is currently locked (for a TEE)
+        const LOCKED        = 1 << 3;
     }
 }
 
