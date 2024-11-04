@@ -53,6 +53,7 @@ fn config_local_ep_remote_tcu(noc_id: u16, perm: Perm) {
             regs,
             rot::TCU_ACT_ID,
             noc_id,
+            0,
             tcu::MMIO_ADDR.as_goff(),
             // We never configure more than one remote EP at the moment
             tcu::MMIO_SIZE + tcu::MMIO_PRIV_SIZE + 1 * EP_REGS_SIZE,
@@ -126,7 +127,7 @@ pub fn main() -> ! {
 
     // Configure memory endpoint that spans the entire memory tile
     config_local_ep(crate::MEM_EP, |regs| {
-        TCU::config_mem_raw(regs, rot::TCU_ACT_ID, mem_tile_raw, 0, mem_size, Perm::W)
+        TCU::config_mem_raw(regs, rot::TCU_ACT_ID, mem_tile_raw, 0, 0, mem_size, Perm::W)
     });
 
     // Load modules
@@ -158,6 +159,7 @@ pub fn main() -> ! {
                     regs,
                     rot::TCU_ACT_ID,
                     m.addr().tile(),
+                    0,
                     m.addr().offset(),
                     msize,
                     Perm::R,
@@ -337,6 +339,7 @@ pub fn main() -> ! {
                 regs,
                 rot::TCU_ACT_ID,
                 kmod.addr().tile(),
+                0,
                 kmod.addr().offset(),
                 kmod.size as usize,
                 Perm::R,
@@ -391,6 +394,7 @@ pub fn main() -> ! {
             regs,
             rot::TCU_ACT_ID,
             mem_tile_raw,
+            0,
             kernel_offset,
             m3.kernel.mem_size as usize,
             Perm::RWX,
@@ -402,6 +406,7 @@ pub fn main() -> ! {
             regs,
             rot::TCU_ACT_ID,
             ktile_raw,
+            0,
             rot::MEM_OFFSET as GlobOff,
             m3.kernel.mem_size as usize,
             Perm::W,
@@ -413,6 +418,7 @@ pub fn main() -> ! {
             regs,
             rot::TCU_ACT_ID,
             ktile_raw,
+            0,
             rot::MEM_ENV_START.as_goff(),
             cfg::ENV_SIZE,
             Perm::W,

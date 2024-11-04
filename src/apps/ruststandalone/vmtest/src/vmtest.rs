@@ -83,7 +83,7 @@ fn read_write(wr_addr: VirtAddr, rd_addr: VirtAddr, size: usize) {
 
     // configure mem EP
     helper::config_local_ep(MEP, |regs| {
-        TCU::config_mem(regs, OWN_ACT, MEM_TILE, 0x4000_0000, size, Perm::RW);
+        TCU::config_mem(regs, OWN_ACT, MEM_TILE, 0, 0x4000_0000, size, Perm::RW);
     });
 
     // test write + read
@@ -170,7 +170,7 @@ fn send_recv(send_addr: VirtAddr, size: usize) {
         TCU::config_recv(regs, OWN_ACT, rbuf2_phys, max_msg_ord, max_msg_ord, None);
     });
     helper::config_local_ep(SEP, |regs| {
-        TCU::config_send(regs, OWN_ACT, 0x1234, OWN_TILE, REP1, max_msg_ord, 1);
+        TCU::config_send(regs, OWN_ACT, 0x1234, OWN_TILE, 0, REP1, max_msg_ord, 1);
     });
 
     let msg_buf: &mut MsgBuf = unsafe { transmute(send_addr.as_local()) };
@@ -239,7 +239,7 @@ fn test_msgs(area_begin: VirtAddr, _area_size: usize) {
             TCU::config_recv(regs, OWN_ACT, rbuf1_phys, 6, 6, None);
         });
         helper::config_local_ep(SEP, |regs| {
-            TCU::config_send(regs, OWN_ACT, 0x5678, OWN_TILE, REP1, 6, 1);
+            TCU::config_send(regs, OWN_ACT, 0x5678, OWN_TILE, 0, REP1, 6, 1);
         });
         let buf_addr = unsafe { buf.bytes.as_ptr().add(cfg::PAGE_SIZE - 16) };
         assert_eq!(
@@ -261,7 +261,7 @@ fn test_msgs(area_begin: VirtAddr, _area_size: usize) {
             regs[2] = 1;
         });
         helper::config_local_ep(RPLEP, |regs| {
-            TCU::config_send(regs, OWN_ACT, 0x5678, OWN_TILE, REP1, 6, 1);
+            TCU::config_send(regs, OWN_ACT, 0x5678, OWN_TILE, 0, REP1, 6, 1);
             // make it a reply EP
             #[cfg(any(feature = "hw22", feature = "hw23"))]
             {
@@ -327,7 +327,7 @@ fn test_foreign_msg() {
         TCU::config_recv(regs, 0xDEAD, rbuf1_phys, 6, 6, None);
     });
     helper::config_local_ep(SEP, |regs| {
-        TCU::config_send(regs, OWN_ACT, 0x5678, OWN_TILE, REP1, 6, 1);
+        TCU::config_send(regs, OWN_ACT, 0x5678, OWN_TILE, 0, REP1, 6, 1);
     });
 
     EXPECTED_CU_REQ.set(Some(tcu::CUReq::ForeignReceive {
@@ -377,7 +377,7 @@ fn test_own_msg() {
         TCU::config_recv(regs, OWN_ACT, rbuf1_phys, 6, 6, None);
     });
     helper::config_local_ep(SEP, |regs| {
-        TCU::config_send(regs, OWN_ACT, 0x5678, OWN_TILE, REP1, 6, 1);
+        TCU::config_send(regs, OWN_ACT, 0x5678, OWN_TILE, 0, REP1, 6, 1);
     });
 
     // no message yet
@@ -440,7 +440,15 @@ fn test_pmp_failures() {
 
     assert_eq!(tcu::TCU::unpack_mem_ep(1), None);
     helper::config_local_ep(1, |regs| {
-        TCU::config_mem(regs, OWN_ACT, MEM_TILE, base_off, cfg::PAGE_SIZE, Perm::RW);
+        TCU::config_mem(
+            regs,
+            OWN_ACT,
+            MEM_TILE,
+            0,
+            base_off,
+            cfg::PAGE_SIZE,
+            Perm::RW,
+        );
     });
 
     CU_REQS.set(0);
@@ -460,7 +468,15 @@ fn test_pmp_failures() {
 
         // change EP to read-only (cannot do that before, because otherwise map_global fails)
         helper::config_local_ep(1, |regs| {
-            TCU::config_mem(regs, OWN_ACT, MEM_TILE, base_off, cfg::PAGE_SIZE, Perm::R);
+            TCU::config_mem(
+                regs,
+                OWN_ACT,
+                MEM_TILE,
+                0,
+                base_off,
+                cfg::PAGE_SIZE,
+                Perm::R,
+            );
         });
 
         EXPECTED_CU_REQ.set(Some(tcu::CUReq::PMPFailure {

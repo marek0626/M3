@@ -22,13 +22,13 @@ use base::kif;
 use base::log;
 use base::mem::{self, GlobAddr, GlobOff, PhysAddr, PhysAddrRaw, VirtAddr};
 use base::tcu::{
-    ActId, EpId, ExtCmdOpCode, ExtReg, Header, Label, OwnedMessage, Reg, TileId, EP_REGS,
-    MMIO_ADDR, PMEM_PROT_EPS, TCU, UNLIM_CREDITS,
+    ActId, EpId, ExtCmdOpCode, ExtReg, FeatureFlags, Header, Label, OwnedMessage, Reg, TileId,
+    EP_REGS, MMIO_ADDR, PMEM_PROT_EPS, TCU, UNLIM_CREDITS,
 };
 
 use crate::platform;
 use crate::runtime::paging;
-use crate::tiles::KERNEL_ID;
+use crate::tiles::{tilemng, KERNEL_ID};
 
 pub const KSYS_EP: EpId = PMEM_PROT_EPS as EpId + 0;
 pub const KSRV_EP: EpId = PMEM_PROT_EPS as EpId + 1;
@@ -98,20 +98,22 @@ pub fn config_send(
     msg_ord: u32,
     credits: u32,
 ) {
+    let gen = tilemng::tilegen(tile);
     log!(
         log_flag(tgtep.0),
-        "{}:EP{} = Send[act={}, lbl={:#x}, tile={}, ep={}, msg_ord={}, credits={}]",
+        "{}:EP{} = Send[act={}, lbl={:#x}, tile={}.{}, ep={}, msg_ord={}, credits={}]",
         tgtep.0,
         tgtep.1,
         act,
         lbl,
         tile,
+        gen,
         ep,
         msg_ord,
         credits
     );
 
-    TCU::config_send(regs, act, lbl, tile, ep, msg_ord, credits);
+    TCU::config_send(regs, act, lbl, tile, gen, ep, msg_ord, credits);
 }
 
 pub fn config_mem(
@@ -123,9 +125,10 @@ pub fn config_mem(
     size: usize,
     perm: kif::Perm,
 ) {
+    let gen = tilemng::tilegen(tile);
     log!(
         log_flag(tgtep.0),
-        "{}:{}EP{} = Mem[act={}, tile={}, addr={:#x}, size={:#x}, perm={:?}]",
+        "{}:{}EP{} = Mem[act={}, tile={}.{}, addr={:#x}, size={:#x}, perm={:?}]",
         tgtep.0,
         if tgtep.1 < PMEM_PROT_EPS as EpId {
             "PMP"
@@ -136,12 +139,13 @@ pub fn config_mem(
         tgtep.1,
         act,
         tile,
+        gen,
         addr,
         size,
         perm
     );
 
-    TCU::config_mem(regs, act, tile, addr, size, perm);
+    TCU::config_mem(regs, act, tile, gen, addr, size, perm);
 }
 
 fn rbuf_addrs(virt: VirtAddr) -> (VirtAddr, PhysAddr) {
@@ -375,6 +379,13 @@ pub fn set_eps_region(tile: TileId, addr: GlobAddr, size: GlobOff) -> Result<(),
     }
 }
 
+pub fn lock_tile(tile: TileId) -> Result<(), Error> {
+    let reg_addr = TCU::ext_reg_addr(ExtReg::Features).as_goff();
+    let mut features: u64 = try_read_obj(tile, reg_addr)?;
+    features |= FeatureFlags::LOCKED.bits();
+    try_write_slice(tile, reg_addr, &[features])
+}
+
 pub fn reset_tile(tile: TileId, start: bool) -> Result<(), Error> {
     let val: Reg = if start { 1 } else { 0 };
     if env::boot().platform == env::Platform::Hw {
@@ -385,8 +396,14 @@ pub fn reset_tile(tile: TileId, start: bool) -> Result<(), Error> {
         try_write_slice(tile, MMIO_ADDR.as_goff() + 0x3030, &[val])
     }
     else {
-        let value = ExtCmdOpCode::Reset as Reg | (val << 9) as Reg;
-        do_ext_cmd(tile, value).map(|_| ())
+        let cmd = ExtCmdOpCode::Reset as Reg | (val << 9) as Reg;
+        let addr = TCU::ext_reg_addr(ExtReg::ExtCmd).as_goff();
+        try_write_slice(tile, addr, &[cmd])?;
+        // on stop, increment tile generation before we read the result of the external command
+        if !start {
+            tilemng::inc_tilegen(tile);
+        }
+        wait_ext_cmd(tile).map(|_| ())
     }
 }
 
@@ -461,7 +478,7 @@ pub fn set_excl_region(
         let arg1 = TCU::ext_reg_addr(ExtReg::ExtArg1).as_goff();
         try_write_slice(mem_tile, arg1, &[addr_size])?;
 
-        let reg = ExtCmdOpCode::SetExcl as Reg | ((cfg as Reg) << 9) | ((idx as Reg) << 26);
+        let reg = ExtCmdOpCode::SetExcl as Reg | ((cfg as Reg) << 9) | ((idx as Reg) << 42);
         do_ext_cmd(mem_tile, reg).map(|_| ())
     }
 }
@@ -531,6 +548,11 @@ pub fn inv_reply_remote(
 fn do_ext_cmd(tile: TileId, cmd: Reg) -> Result<Reg, Error> {
     let addr = TCU::ext_reg_addr(ExtReg::ExtCmd).as_goff();
     try_write_slice(tile, addr, &[cmd])?;
+    wait_ext_cmd(tile)
+}
+
+fn wait_ext_cmd(tile: TileId) -> Result<Reg, Error> {
+    let addr = TCU::ext_reg_addr(ExtReg::ExtCmd).as_goff();
 
     let res = loop {
         let res: Reg = try_read_obj(tile, addr)?;

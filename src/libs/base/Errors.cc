@@ -58,15 +58,17 @@ static const char *errmsgs[] = {
     /* 30 */
     "Exclusive region overlaps with another region",
     "Exclusive region exists",
+    "Tile is locked",
+    "Wrong tile generation",
     "Invalid arguments",
     "Object gone",
     "Out of memory",
     "No such file or directory",
     "Not supported",
     "No free/suitable tile",
+    /* 40 */
     "Invalid ELF file",
     "No space left",
-    /* 40 */
     "Object does already exist",
     "Cross-filesystem link not possible",
     "Directory not empty",
@@ -75,9 +77,9 @@ static const char *errmsgs[] = {
     "Endpoint is invalid",
     "End of file",
     "Messages are waiting to be handled",
+    /* 50 */
     "Reply will be sent via upcall",
     "Commit failed",
-    /* 50 */
     "Out of kernel memory",
     "Not found",
     "Timeout",
@@ -86,9 +88,9 @@ static const char *errmsgs[] = {
     "UTF-8 error",
     "Bad file descriptor",
     "Invalid seek",
+    /* 60 */
     "Unspecified error",
     "Invalid capability",
-    /* 60 */
     "Last cap would overflow",
     "Cap count too large",
 

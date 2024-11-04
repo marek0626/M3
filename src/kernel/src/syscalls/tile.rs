@@ -339,9 +339,12 @@ pub fn tile_lock(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     };
     drop(tilemux);
 
+    let tile_id = tile.tile();
     let epmtile = tilemng::ep_mem_tile();
     let mut mmux = tilemng::memmux(epmtile.tile());
     mmux.add(eps_region, epmtile, tile)?;
+
+    ktcu::lock_tile(tile_id).unwrap();
 
     reply_success(act);
     Ok(())

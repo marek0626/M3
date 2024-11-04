@@ -51,7 +51,9 @@ pub extern "C" fn env_run() {
 
     let msg_size = math::next_log2(MSG_SIZE);
     helper::config_local_ep(SEP, |regs| {
-        TCU::config_send(regs, OWN_ACT, 0x1234, DST_TILE, DST_EP, msg_size, CREDITS);
+        TCU::config_send(
+            regs, OWN_ACT, 0x1234, DST_TILE, 0, DST_EP, msg_size, CREDITS,
+        );
     });
 
     let buf_ord = math::next_log2(RBUF.len());
@@ -72,7 +74,7 @@ pub extern "C" fn env_run() {
         log!(LogFlags::Info, "send failed: {}", e);
         // get credits back
         helper::config_local_ep(SEP, |regs| {
-            TCU::config_send(regs, OWN_ACT, 0x1234, DST_TILE, DST_EP, 6, CREDITS);
+            TCU::config_send(regs, OWN_ACT, 0x1234, DST_TILE, 0, DST_EP, 6, CREDITS);
         });
     }
 

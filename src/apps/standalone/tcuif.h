@@ -139,11 +139,11 @@ public:
     static void config_send(epid_t ep, label_t lbl, m3::TileId tile, epid_t dstep,
                             unsigned msgorder, unsigned credits, bool reply = false,
                             epid_t crd_ep = m3::TCU::INVALID_EP) {
-        m3::TCU::config_send(ep, lbl, tile, dstep, msgorder, credits, reply, crd_ep);
+        m3::TCU::config_send(ep, lbl, tile, 0, dstep, msgorder, credits, reply, crd_ep);
     }
 
     static void config_mem(epid_t ep, m3::TileId tile, goff_t addr, size_t size, int perm) {
-        m3::TCU::config_mem(ep, tile, addr, size, perm);
+        m3::TCU::config_mem(ep, tile, 0, addr, size, perm);
     }
 
     static m3::Errors::Code invalidate_ep_remote(m3::TileId tile, epid_t ep, bool force,
