@@ -160,7 +160,10 @@ pub fn new_tile_obj(tile: TileId) -> StrongRc<TileObject> {
         TileType::Mem => {
             let (num, derived) = if tile == EPMTILE.borrow().tile() {
                 let epmtile = EPMTILE.borrow_mut().clone();
-                let num = epmtile.exregs_quota().total() - KERNEL_EPREGS;
+                let num = match epmtile.exregs_quota().total() {
+                    0 => 0,
+                    n => n - KERNEL_EPREGS,
+                };
                 epmtile.alloc_exreg(num);
                 (num, true)
             }
