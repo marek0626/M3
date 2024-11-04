@@ -55,6 +55,8 @@ pub type Label = u32;
 pub type Label = u64;
 /// A activity id
 pub type ActId = u16;
+/// A tile-generation id
+pub type GenId = u16;
 
 /// A tile id, consisting of a chip and chip-local tile id
 #[derive(Copy, Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1439,11 +1441,13 @@ impl TCU {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn config_send(
         regs: &mut [Reg],
         act: ActId,
         lbl: Label,
         tile: TileId,
+        _gen: GenId,
         dst_ep: EpId,
         msg_order: u32,
         credits: u32,
@@ -1465,7 +1469,9 @@ impl TCU {
                 | ((credits as Reg) << 19)
                 | ((credits as Reg) << 26)
                 | ((msg_order as Reg) << 33);
-            regs[1] = (dst_ep as Reg) | ((Self::tileid_to_nocid(tile) as Reg) << 16);
+            regs[1] = (dst_ep as Reg)
+                | ((Self::tileid_to_nocid(tile) as Reg) << 16)
+                | ((_gen as Reg) << 30);
             regs[2] = lbl as Reg;
             regs[3] = 0;
         }
@@ -1475,17 +1481,27 @@ impl TCU {
         regs: &mut [Reg],
         act: ActId,
         tile: TileId,
+        gen: GenId,
         addr: GlobOff,
         size: usize,
         perm: Perm,
     ) {
-        Self::config_mem_raw(regs, act, Self::tileid_to_nocid(tile), addr, size, perm)
+        Self::config_mem_raw(
+            regs,
+            act,
+            Self::tileid_to_nocid(tile),
+            gen,
+            addr,
+            size,
+            perm,
+        )
     }
 
     pub fn config_mem_raw(
         regs: &mut [Reg],
         act: ActId,
         tile_noc_id: u16,
+        gen: GenId,
         addr: GlobOff,
         size: usize,
         perm: Perm,
@@ -1493,7 +1509,8 @@ impl TCU {
         regs[0] = (EpType::Memory as Reg)
             | ((act as Reg) << 3)
             | ((perm.bits() as Reg) << 19)
-            | ((tile_noc_id as Reg) << 23);
+            | ((tile_noc_id as Reg) << 23)
+            | ((gen as Reg) << 37);
         regs[1] = addr as Reg;
         regs[2] = size as Reg;
         #[cfg(not(any(feature = "hw22", feature = "hw23")))]

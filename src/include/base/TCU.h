@@ -177,6 +177,7 @@ class TCU {
     }
 
 public:
+    typedef uint16_t genid_t;
     typedef uint64_t reg_t;
 #if defined(__hw22__) || defined(__hw23__)
     typedef uint32_t rep_bitmask_t;
@@ -602,8 +603,9 @@ private:
         CPU::memory_barrier();
     }
 
-    static void config_send(epid_t ep, label_t lbl, TileId tile, epid_t dstep, unsigned msgorder,
-                            unsigned credits, bool reply = false, epid_t crd_ep = INVALID_EP) {
+    static void config_send(epid_t ep, label_t lbl, TileId tile, genid_t gen, epid_t dstep,
+                            unsigned msgorder, unsigned credits, bool reply = false,
+                            epid_t crd_ep = INVALID_EP) {
         write_reg(ep, 0,
                   static_cast<reg_t>(m3::TCU::EpType::SEND) |
                       (static_cast<reg_t>(INVALID_ACT) << 3) | (static_cast<reg_t>(credits) << 19) |
@@ -615,7 +617,8 @@ private:
                       (static_cast<reg_t>(crd_ep) << 39) | (static_cast<reg_t>(reply) << 55));
 #endif
         write_reg(ep, 1,
-                  static_cast<reg_t>(dstep) | (static_cast<reg_t>(tileid_to_nocid(tile)) << 16));
+                  static_cast<reg_t>(dstep) | (static_cast<reg_t>(tileid_to_nocid(tile)) << 16) |
+                      (static_cast<reg_t>(gen) << 30));
         write_reg(ep, 2, lbl);
 #if defined(__hw__) || defined(__gem5__)
         write_reg(ep, 3, 0);
@@ -623,11 +626,13 @@ private:
         CPU::memory_barrier();
     }
 
-    static void config_mem(epid_t ep, TileId tile, goff_t addr, size_t size, int perm) {
+    static void config_mem(epid_t ep, TileId tile, genid_t gen, goff_t addr, size_t size,
+                           int perm) {
         write_reg(ep, 0,
                   static_cast<reg_t>(m3::TCU::EpType::MEMORY) |
                       (static_cast<reg_t>(INVALID_ACT) << 3) | (static_cast<reg_t>(perm) << 19) |
-                      (static_cast<reg_t>(tileid_to_nocid(tile)) << 23));
+                      (static_cast<reg_t>(tileid_to_nocid(tile)) << 23) |
+                      (static_cast<reg_t>(gen) << 37));
         write_reg(ep, 1, addr);
         write_reg(ep, 2, size);
 #if defined(__hw__) || defined(__gem5__)

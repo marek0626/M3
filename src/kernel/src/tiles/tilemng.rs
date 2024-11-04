@@ -17,7 +17,7 @@ use base::cell::{LazyStaticRefCell, RefMut, StaticCell};
 use base::col::Vec;
 use base::kif::tilemux::QuotaId;
 use base::kif::{self, TileType};
-use base::tcu::TileId;
+use base::tcu::{GenId, TileId};
 use thread::{StrongRc, TempRc};
 
 use crate::cap::{TileObject, TileQuota};
@@ -41,6 +41,7 @@ enum TileState {
 const KERNEL_EPREGS: usize = 4;
 
 static TILES: LazyStaticRefCell<Vec<Vec<Option<TileState>>>> = LazyStaticRefCell::default();
+static TILEGENS: LazyStaticRefCell<Vec<Vec<GenId>>> = LazyStaticRefCell::default();
 static EPMTILE: LazyStaticRefCell<StrongRc<TileObject>> = LazyStaticRefCell::default();
 static STATE: StaticCell<State> = StaticCell::new(State::RUNNING);
 
@@ -52,6 +53,7 @@ pub fn init() {
     deprivilege_tiles();
 
     let mut tiles = Vec::new();
+    let mut tilegens = Vec::new();
     for tile in platform::all_tiles() {
         if tile == platform::kernel_tile() {
             continue;
@@ -62,9 +64,11 @@ pub fn init() {
         if cid >= tiles.len() {
             assert_eq!(cid, tiles.len());
             tiles.push(Vec::new());
+            tilegens.push(Vec::new());
         }
         while tid != tiles[cid].len() {
             tiles[cid].push(None);
+            tilegens[cid].push(0);
         }
 
         let state = match platform::tile_desc(tile).tile_type() {
@@ -72,8 +76,10 @@ pub fn init() {
             TileType::Mem => TileState::Mem(MemMux::new(tile)),
         };
         tiles[cid].push(Some(state));
+        tilegens[cid].push(0);
     }
     TILES.set(tiles);
+    TILEGENS.set(tilegens);
 
     // create tile object for EP memory
     let mem = mem::borrow_mut();
@@ -110,6 +116,22 @@ pub fn deinit_async() {
 
 pub fn ep_mem_tile() -> TempRc<TileObject> {
     TempRc::new(EPMTILE.borrow_mut().clone())
+}
+
+pub fn tilegen(tile: TileId) -> GenId {
+    if TILEGENS.is_some() {
+        let chip = &TILEGENS.borrow()[tile.chip() as usize];
+        chip[tile.tile() as usize]
+    }
+    else {
+        // during initialization we don't reset any tile, so that the generation is always 0
+        0
+    }
+}
+
+pub fn inc_tilegen(tile: TileId) {
+    let chip = &mut TILEGENS.borrow_mut()[tile.chip() as usize];
+    chip[tile.tile() as usize] += 1;
 }
 
 pub fn tilemux(tile: TileId) -> RefMut<'static, TileMux> {
