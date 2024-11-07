@@ -21,6 +21,7 @@ mod mapper;
 mod physmem;
 mod regions;
 
+use core::num::Wrapping;
 use core::ops::DerefMut;
 use core::{cmp, fmt};
 
@@ -84,15 +85,15 @@ impl PagedChildStarter {
 
 // Extremely simple Karp-Rabin type hash.
 pub fn get_hash(file: &mut dyn File, file_size: usize) -> Result<String, Error> {
-    let mut hash: u64 = 0;
+    let mut hash = Wrapping::<usize>(0);
     let mut buf: [u8; 1024] = [0; 1024];
-    let constant = 42;
+    let constant = Wrapping::<usize>(42);
     let mut count = file_size;
     while count > 0 {
         let amount = cmp::min(count, buf.len());
         let amount = file.read(&mut buf[0..amount])?;
         for byte in buf.iter() {
-            hash = hash * constant + *byte as u64;
+            hash = hash * constant + Wrapping(*byte as usize);
         }
         count -= amount;
     }
