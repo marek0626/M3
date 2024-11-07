@@ -619,8 +619,19 @@ dependencies = [
 name = "rots"
 version = "0.1.0"
 dependencies = [
+ "base",
+ "kecacc",
  "m3",
  "rot",
+]
+
+[[package]]
+name = "rotshashtests"
+version = "0.1.0"
+dependencies = [
+ "cshake",
+ "hex-literal",
+ "m3",
 ]
 
 [[package]]

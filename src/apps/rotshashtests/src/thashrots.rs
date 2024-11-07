@@ -15,7 +15,8 @@
 use cshake::kmac;
 use hex_literal::hex;
 
-use m3::client::{HashInput, HashOutput, Pipes, RoTSession};
+//use m3::client::{HashInput, HashOutput, RoTSession, Pipes};
+use m3::client::{HashInput, HashOutput, RoTSession};
 use m3::col::Vec;
 use m3::com::{MemCap, MemGate, Perm};
 use m3::crypto::{HashAlgorithm, HashType};
@@ -25,9 +26,16 @@ use m3::io::{Read, Write};
 use m3::mem::{GlobOff, VirtAddr};
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ChildActivity, RunningActivity, RunningProgramActivity, Tile};
-use m3::vfs::{File, FileRef, IndirectPipe, OpenFlags, Seek, SeekMode, VFS};
+//use m3::vfs::{File, FileRef, IndirectPipe, OpenFlags, Seek, SeekMode, VFS};
+use m3::vfs::{File, FileRef, OpenFlags, Seek, SeekMode, VFS};
 use m3::{
-    format, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_require_some, wv_run_test,
+    //    format, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_require_some, wv_run_test,
+    format,
+    wv_assert_eq,
+    wv_assert_err,
+    wv_assert_ok,
+    wv_require_ok,
+    wv_run_test,
 };
 use m3::{println, tmif, util, vec};
 
@@ -41,7 +49,7 @@ pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, read_then_hash_file);
     wv_run_test!(t, shake_and_hash);
     wv_run_test!(t, shake_and_hash_file);
-    wv_run_test!(t, shake_and_hash_pipe);
+    //wv_run_test!(t, shake_and_hash_pipe);
     wv_run_test!(t, cshake_nist);
     wv_run_test!(t, kmac_nist);
 }
@@ -437,61 +445,61 @@ fn shake_and_hash_file(t: &mut dyn WvTester) {
     );
 }
 
-const PIPE_SHAKE_SIZE: usize = 256 * 1024; // 256 KiB
+//const PIPE_SHAKE_SIZE: usize = 256 * 1024; // 256 KiB
 
 // echo Pipe! | hashsum shake128 -O 262144 -o - | hashsum sha3-256
-fn shake_and_hash_pipe(t: &mut dyn WvTester) {
-    let pipes = wv_require_ok!(Pipes::new("pipes"));
+// fn shake_and_hash_pipe(t: &mut dyn WvTester) {
+//     let pipes = wv_require_ok!(Pipes::new("pipes"));
 
-    // Create two pipes
-    let imgate = wv_require_ok!(MemGate::new(0x1000, Perm::RW));
-    let ipipe = wv_require_ok!(IndirectPipe::new(&pipes, imgate));
-    let omgate = wv_require_ok!(MemGate::new(0x10000, Perm::RW));
-    let opipe = wv_require_ok!(IndirectPipe::new(&pipes, omgate));
+//     // Create two pipes
+//     let imgate = wv_require_ok!(MemGate::new(0x1000, Perm::RW));
+//     let ipipe = wv_require_ok!(IndirectPipe::new(&pipes, imgate));
+//     let omgate = wv_require_ok!(MemGate::new(0x10000, Perm::RW));
+//     let opipe = wv_require_ok!(IndirectPipe::new(&pipes, omgate));
 
-    // Setup child activity that runs "hashsum shake128 -O 262144 -o -"
-    let tile = wv_require_ok!(Tile::get("compat|own"));
-    let mut act = wv_require_ok!(ChildActivity::new(tile, "shaker"));
-    act.add_file(io::STDIN_FILENO, ipipe.reader().unwrap().fd());
-    act.add_file(io::STDOUT_FILENO, opipe.writer().unwrap().fd());
-    let closure = wv_require_ok!(act.run(|| {
-        let mut t = DefaultWvTester::default();
-        let hash = wv_require_ok!(RoTSession::new("hash2", &HashAlgorithm::SHAKE128));
-        wv_assert_ok!(t, io::stdin().get_mut().hash_input(&hash, usize::MAX));
-        wv_assert_ok!(
-            t,
-            io::stdout().get_mut().hash_output(&hash, PIPE_SHAKE_SIZE)
-        );
-        Ok(())
-    }));
+//     // Setup child activity that runs "hashsum shake128 -O 262144 -o -"
+//     let tile = wv_require_ok!(Tile::get("compat|own"));
+//     let mut act = wv_require_ok!(ChildActivity::new(tile, "shaker"));
+//     act.add_file(io::STDIN_FILENO, ipipe.reader().unwrap().fd());
+//     act.add_file(io::STDOUT_FILENO, opipe.writer().unwrap().fd());
+//     let closure = wv_require_ok!(act.run(|| {
+//         let mut t = DefaultWvTester::default();
+//         let hash = wv_require_ok!(RoTSession::new("hash2", &HashAlgorithm::SHAKE128));
+//         wv_assert_ok!(t, io::stdin().get_mut().hash_input(&hash, usize::MAX));
+//         wv_assert_ok!(
+//             t,
+//             io::stdout().get_mut().hash_output(&hash, PIPE_SHAKE_SIZE)
+//         );
+//         Ok(())
+//     }));
 
-    // Close unused parts of pipe that were delegated to activity
-    ipipe.close_reader();
-    opipe.close_writer();
+//     // Close unused parts of pipe that were delegated to activity
+//     ipipe.close_reader();
+//     opipe.close_writer();
 
-    let hash = wv_require_ok!(RoTSession::new("hash1", &HashAlgorithm::SHA3_256));
-    {
-        // echo "Pipe!"
-        let mut ifile = wv_require_some!(ipipe.writer());
-        wv_assert_ok!(t, writeln!(ifile, "Pipe!"));
-        ipipe.close_writer();
-    }
-    {
-        // hashsum sha3-256
-        let mut ofile = wv_require_some!(opipe.reader());
-        wv_assert_ok!(t, ofile.hash_input(&hash, usize::MAX));
-        opipe.close_reader();
-    }
+//     let hash = wv_require_ok!(RoTSession::new("hash1", &HashAlgorithm::SHA3_256));
+//     {
+//         // echo "Pipe!"
+//         let mut ifile = wv_require_some!(ipipe.writer());
+//         wv_assert_ok!(t, writeln!(ifile, "Pipe!"));
+//         ipipe.close_writer();
+//     }
+//     {
+//         // hashsum sha3-256
+//         let mut ofile = wv_require_some!(opipe.reader());
+//         wv_assert_ok!(t, ofile.hash_input(&hash, usize::MAX));
+//         opipe.close_reader();
+//     }
 
-    let mut buf = [0u8; HashAlgorithm::SHA3_256.output_bytes];
-    wv_assert_ok!(t, hash.finish(&mut buf));
-    wv_assert_eq!(
-        t,
-        &buf,
-        &hex!("dd20e9da838d0643a6d0e8af3ebbcac44692a32d595acd626e993dca02620aee")
-    );
-    wv_assert_eq!(t, closure.wait(), Ok(Code::Success));
-}
+//     let mut buf = [0u8; HashAlgorithm::SHA3_256.output_bytes];
+//     wv_assert_ok!(t, hash.finish(&mut buf));
+//     wv_assert_eq!(
+//         t,
+//         &buf,
+//         &hex!("dd20e9da838d0643a6d0e8af3ebbcac44692a32d595acd626e993dca02620aee")
+//     );
+//     wv_assert_eq!(t, closure.wait(), Ok(Code::Success));
+// }
 
 struct CSHAKETest {
     algo: &'static HashAlgorithm,

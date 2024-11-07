@@ -106,6 +106,7 @@
         <xs:attribute name="pagetables" type="xs:int"/>
         <xs:attribute name="eps" type="xs:int"/>
         <xs:attribute name="getinfo" type="xs:int"/>
+        <xs:attribute name="attestation_id" type="xs:int"/>
     </xs:complexType>
 
     <xs:element name="config">

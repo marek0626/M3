@@ -23,6 +23,7 @@ pub const BROM_NEXT_ADDR: usize = MEM_OFFSET + 0x3000;
 pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x20000;
 #[cfg(target_arch = "riscv64")]
 pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x18000;
+#[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
 pub const ROSA_ADDR: usize = BLAU_NEXT_ADDR;
 #[cfg(target_arch = "riscv32")]
 pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x12000; // TileMux

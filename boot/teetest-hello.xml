@@ -15,28 +15,17 @@
         </dom>
 	<dom>
           <app args="pager">
-	    <serv name="evidence" />
-	    <sess name="rot" />
 	    <sess name="m3fs" />
             <mod name="fs" perm="r" />
             <mod name="tilemux" perm="r" />
 	    <tiles type="perf|core|effi" count="3" />
 	    <dom tile="effi|perf|core">
-	      <app args="/bin/sleep 10" daemon="1">
+	      <app args="/bin/sleep 2" attestation_id="1" >
 		<tiles type="perf|core|effi" count="1" />
 	      </app>
 	    </dom>
 	  </app>
 	</dom>
-        <dom tile="core+rot">
-          <app args="rots" daemon="1">
-            <serv name="rot" />
-            <mod name="rot-certificate.json" perm="r" />
-          </app>
-        </dom>
-	<app args="teetest">
-	  <sess name="evidence" />
-	</app>
       </app>
     </dom>
 </config>

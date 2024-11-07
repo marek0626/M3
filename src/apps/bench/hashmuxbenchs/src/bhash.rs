@@ -13,7 +13,7 @@
  */
 
 use crate::util;
-use m3::client::{HashInput, HashOutput, HashSession};
+use m3::client::{HashInput, HashOutput, RoTSession};
 use m3::com::{MemCap, MemGate, Perm};
 use m3::crypto::HashAlgorithm;
 use m3::errors::{Code, Error};
@@ -36,7 +36,7 @@ pub fn run(t: &mut dyn WvTester) {
 
 fn reset(t: &mut dyn WvTester) {
     let prof = Profiler::default();
-    let mut hash = wv_require_ok!(HashSession::new("hash-bench", &HashAlgorithm::SHA3_256));
+    let mut hash = wv_require_ok!(RoTSession::new("hash-bench", &HashAlgorithm::SHA3_256));
 
     wv_perf!(
         "reset hash",
@@ -51,7 +51,7 @@ fn hash_empty(t: &mut dyn WvTester) {
             continue;
         }
 
-        let mut hash = wv_require_ok!(HashSession::new("hash-bench", algo));
+        let mut hash = wv_require_ok!(RoTSession::new("hash-bench", algo));
         let mut result = vec![0u8; algo.output_bytes];
         wv_perf!(
             format!("hash reset + finish with {}", algo.name),
@@ -69,8 +69,8 @@ fn _prepare_hash_mem(t: &mut dyn WvTester, size: usize) -> (MemGate, MemCap) {
     (mgate, mgated)
 }
 
-fn create_sess(algo: &'static HashAlgorithm) -> Result<HashSession, Error> {
-    match HashSession::new("hash-bench", algo) {
+fn create_sess(algo: &'static HashAlgorithm) -> Result<RoTSession, Error> {
+    match RoTSession::new("hash-bench", algo) {
         // ignore this test if this hash algorithm is not supported
         Err(e) if e.code() == Code::NotSup => {
             println!("Ignoring test -- {} not supported", algo.name);
@@ -119,7 +119,7 @@ fn hash_mem_sizes(t: &mut dyn WvTester) {
     let mut prof = Profiler::default().warmup(5).repeats(15);
 
     for shift in 0..=MAX_SIZE_SHIFT {
-        let hash = wv_require_ok!(HashSession::new("hash-bench", TEST_ALGO));
+        let hash = wv_require_ok!(RoTSession::new("hash-bench", TEST_ALGO));
         wv_assert_ok!(t, hash.ep().configure_mgate(mgated.sel()));
 
         let size = 1usize << shift;
@@ -147,7 +147,7 @@ fn hash_file(t: &mut dyn WvTester) {
 
     {
         // Fill file with pseudo random data using SHAKE
-        let hash = wv_require_ok!(HashSession::new("hash-prepare", &HashAlgorithm::SHAKE128));
+        let hash = wv_require_ok!(RoTSession::new("hash-prepare", &HashAlgorithm::SHAKE128));
         let mut file = wv_require_ok!(VFS::open(
             "/shake.bin",
             OpenFlags::W | OpenFlags::CREATE | OpenFlags::NEW_SESS
@@ -232,7 +232,7 @@ fn shake_mem_sizes(t: &mut dyn WvTester) {
             prof = prof.warmup(2).repeats(5); // 2^14 = 16 KiB
         }
 
-        let hash = wv_require_ok!(HashSession::new("hash-bench", SHAKE_TEST_ALGO));
+        let hash = wv_require_ok!(RoTSession::new("hash-bench", SHAKE_TEST_ALGO));
         wv_assert_ok!(t, hash.ep().configure_mgate(mgated.sel()));
 
         let res = prof.run::<CycleInstant, _>(|| {

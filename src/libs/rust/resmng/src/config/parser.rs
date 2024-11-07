@@ -192,6 +192,7 @@ fn parse_app(p: &mut ConfigParser, start: usize) -> Result<config::AppConfig, Er
                 "pagetables" => app.pts = Some(parse::int(&v)? as usize),
                 "eps" => app.eps = Some(parse::int(&v)? as usize),
                 "daemon" => app.daemon = parse::bool(&v)?,
+                "attestation_id" => app.attestation_id = parse::int(&v)? as u32,
                 "getinfo" => app.getinfo = parse::bool(&v)?,
                 _ => return Err(Error::new(Code::InvArgs)),
             },

@@ -17,6 +17,7 @@ use crate::com::{opcodes, RecvGate, SendGate, EP};
 use crate::crypto::HashAlgorithm;
 use crate::errors::{Code, Error};
 
+#[allow(dead_code)]
 /// Represents a session at the hash multiplexer
 ///
 /// The state of previously hashed data will be maintained until the session is destroyed.
@@ -27,13 +28,14 @@ pub struct HashSession {
     ep: EP,
 }
 
+#[allow(dead_code)]
 impl HashSession {
     /// Request a hash session from the resource manager and initialize it with the specified
     /// [`HashAlgorithm`].
     pub fn new(name: &str, algo: &'static HashAlgorithm) -> Result<Self, Error> {
         let sess = ClientSession::new(name)?;
         let sgate = sess.connect()?;
-        let ep = sess.obtain(1, |is| is.push(opcodes::Hash::GetMem), |_| Ok(()))?;
+        let ep = sess.obtain(1, |is| is.push(opcodes::RoT::GetMem), |_| Ok(()))?;
 
         let mut sess = HashSession {
             algo,
@@ -59,7 +61,7 @@ impl HashSession {
     /// Reset the state of the hash session (discarding all previous input and output data) and
     /// change the [`HashAlgorithm`].
     pub fn reset(&mut self, algo: &'static HashAlgorithm) -> Result<(), Error> {
-        send_recv_res!(&self.sgate, RecvGate::def(), opcodes::Hash::Reset, algo.ty).map(|_| ())?;
+        send_recv_res!(&self.sgate, RecvGate::def(), opcodes::RoT::Reset, algo.ty).map(|_| ())?;
         self.algo = algo;
         Ok(())
     }
@@ -70,7 +72,7 @@ impl HashSession {
     /// [`MemGate`](crate::com::MemGate) so that the hash multiplexer can successfully read `len`
     /// bytes with offset `off`.
     pub fn input(&self, off: usize, len: usize) -> Result<(), Error> {
-        send_recv_res!(&self.sgate, RecvGate::def(), opcodes::Hash::Input, off, len).map(|_| ())
+        send_recv_res!(&self.sgate, RecvGate::def(), opcodes::RoT::Input, off, len).map(|_| ())
     }
 
     /// Output new data from the state of the hash session.
@@ -86,14 +88,7 @@ impl HashSession {
         if len > self.algo.output_bytes {
             return Err(Error::new(Code::InvArgs));
         }
-        send_recv_res!(
-            &self.sgate,
-            RecvGate::def(),
-            opcodes::Hash::Output,
-            off,
-            len
-        )
-        .map(|_| ())
+        send_recv_res!(&self.sgate, RecvGate::def(), opcodes::RoT::Output, off, len).map(|_| ())
     }
 
     /// Finish the hash for previous [`input`](HashSession::input) data. If successful, the hash is
@@ -102,7 +97,7 @@ impl HashSession {
     /// functions).
     pub fn finish(&self, result: &mut [u8]) -> Result<(), Error> {
         assert_eq!(result.len(), self.algo.output_bytes);
-        send_recv!(self.sgate, RecvGate::def(), opcodes::Hash::Output).and_then(|mut reply| {
+        send_recv!(self.sgate, RecvGate::def(), opcodes::RoT::Output).and_then(|mut reply| {
             // FIXME: Find a better way to copy out the slice?
             let msg = reply.msg();
             if msg.data.len() != self.algo.output_bytes {
@@ -120,6 +115,7 @@ impl HashSession {
 /// For example, this is implemented for files. The [`EP`] from the hash
 /// multiplexer is delegated to M3FS and M3FS configures the [`EP`] accordingly
 /// to let the hash multiplexer read the file contents directly.
+#[allow(dead_code)]
 pub trait HashInput {
     /// Input a maximum of `len` bytes of this object into the [`HashSession`].
     fn hash_input(&mut self, _sess: &HashSession, _len: usize) -> Result<usize, Error> {
@@ -132,6 +128,7 @@ pub trait HashInput {
 /// For example, this is implemented for files. The [`EP`] from the hash
 /// multiplexer is delegated to M3FS and M3FS configures the [`EP`] accordingly
 /// to let the hash multiplexer write the file contents directly.
+#[allow(dead_code)]
 pub trait HashOutput {
     /// Output a maximum of `len` bytes to this object from the [`HashSession`].
     ///

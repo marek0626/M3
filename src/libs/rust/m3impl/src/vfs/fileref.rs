@@ -22,7 +22,7 @@ use core::marker::PhantomData;
 
 use crate::cap::Selector;
 use crate::cell::RefMut;
-use crate::client::{HashInput, HashOutput, HashSession, MapFlags, Pager};
+use crate::client::{HashInput, HashOutput, MapFlags, Pager, RoTSession};
 use crate::col::String;
 use crate::com::EP;
 use crate::errors::Error;
@@ -226,13 +226,13 @@ impl<T: ?Sized> Map for FileRef<T> {
 }
 
 impl<T: ?Sized> HashInput for FileRef<T> {
-    fn hash_input(&mut self, sess: &HashSession, len: usize) -> Result<usize, Error> {
+    fn hash_input(&mut self, sess: &RoTSession, len: usize) -> Result<usize, Error> {
         self.borrow().hash_input(sess, len)
     }
 }
 
 impl<T: ?Sized> HashOutput for FileRef<T> {
-    fn hash_output(&mut self, sess: &HashSession, len: usize) -> Result<usize, Error> {
+    fn hash_output(&mut self, sess: &RoTSession, len: usize) -> Result<usize, Error> {
         self.borrow().hash_output(sess, len)
     }
 }

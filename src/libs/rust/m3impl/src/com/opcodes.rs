@@ -183,4 +183,8 @@ pub enum RoT {
     GetCdi,
     DeriveSecret,
     Certify,
+    GetMem,
+    Reset,
+    Input,
+    Output,
 }

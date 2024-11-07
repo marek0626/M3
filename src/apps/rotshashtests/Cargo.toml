@@ -1,0 +1,13 @@
+[package]
+name = "rotshashtests"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/rotshashtests.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+m3 = { path = "../../libs/rust/m3" }
+cshake = { path = "../../libs/crypto/cshake" }
+hex-literal = "0.3.4"

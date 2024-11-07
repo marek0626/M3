@@ -10,3 +10,5 @@ crate-type = ["staticlib"]
 [dependencies]
 m3 = { path = "../../../libs/rust/m3" }
 rot = { path = "../../../libs/crypto/rot" }
+base = { path = "../../../libs/rust/base" }
+kecacc = { path = "../../../libs/crypto/kecacc" }

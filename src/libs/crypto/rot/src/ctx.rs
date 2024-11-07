@@ -91,6 +91,8 @@ impl<Data: CtxData> LayerCtx<Data> {
     pub const CTX_OFFSET: usize = crate::MEM_OFFSET + base::cfg::PAGE_SIZE;
     #[cfg(target_arch = "riscv64")]
     pub const CTX_OFFSET: usize = crate::MEM_OFFSET;
+    #[cfg(target_arch = "x86_64")]
+    pub const CTX_OFFSET: usize = 0;
 
     pub fn new(entry_addr: usize, data: Data) -> Self {
         Self {

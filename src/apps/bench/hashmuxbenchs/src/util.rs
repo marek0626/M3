@@ -12,7 +12,7 @@
  * General Public License version 2 for more details.
  */
 
-use m3::client::HashSession;
+use m3::client::RoTSession;
 use m3::com::{MemGate, Perm};
 use m3::crypto::HashAlgorithm;
 use m3::mem::GlobOff;
@@ -21,7 +21,7 @@ use m3::{wv_assert_ok, wv_require_ok};
 
 pub fn prepare_shake_mem(t: &mut dyn WvTester, size: usize) -> MemGate {
     let mgate = wv_require_ok!(MemGate::new(size as GlobOff, Perm::RW));
-    let hash = wv_require_ok!(HashSession::new("hash-prepare", &HashAlgorithm::SHAKE128));
+    let hash = wv_require_ok!(RoTSession::new("hash-prepare", &HashAlgorithm::SHAKE128));
 
     // Fill memory with pseudo-random data from SHAKE128
     let mgated = wv_require_ok!(mgate.derive_cap(0, size as GlobOff, Perm::W));

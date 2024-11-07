@@ -31,6 +31,7 @@ use m3::client::{ClientSession, Pager, RoTSession, M3FS};
 use m3::col::{String, ToString, Vec};
 use m3::com::GateIStream;
 use m3::com::{opcodes, MemCap, RecvGate, SGateArgs, SendCap};
+use m3::crypto::HashAlgorithm;
 use m3::errors::{Code, Error, VerboseError};
 use m3::format;
 use m3::kif::syscalls::MuxType;
@@ -301,7 +302,10 @@ pub fn main() -> Result<(), Error> {
     let mut evsrv = match Server::new("evidence", &mut evhdl) {
         Ok(result) => {
             EVREQHDL.set(evhdl);
-            rot = Some(RoTSession::new("rot").expect("couldn't open RoT session"));
+            rot = Some(
+                RoTSession::new("rot", &HashAlgorithm::SHA3_256)
+                    .expect("couldn't open RoT session"),
+            );
             Some(result)
         },
         Err(_) => {
@@ -398,15 +402,17 @@ impl EvidenceSession {
         rot: &RoTSession,
     ) -> Result<(), Error> {
         let nonce: usize = is.pop()?;
-        let app_id: usize = is.pop()?;
+        let att_id: u32 = is.pop()?;
 
+        log!(LogFlags::Info, "find child with attestation id {}", att_id);
         let child = childmgr
-            .child_by_id(app_id as u32)
-            .ok_or_else(|| Error::new(Code::InvArgs))?;
+            .child_by_attestation_id(att_id)
+            .ok_or_else(|| Error::new(Code::NotFound))?;
 
         let app_hash = child.hash().ok_or_else(|| Error::new(Code::InvArgs))?;
         let xml = child.cfg().to_string();
         let hash: String = format!("Hash:{}:{}:{}", nonce, app_hash, xml);
+        log!(LogFlags::Info, "Raw quote: {}", hash);
         let quote: [u8; 64] = rot.sign(hash.as_bytes())?;
         let quote_str = format!("{:x}", SigWrap(quote));
 

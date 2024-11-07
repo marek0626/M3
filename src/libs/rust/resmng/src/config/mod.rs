@@ -452,6 +452,7 @@ pub struct AppConfig {
     pub(crate) sgates: Vec<SGateDesc>,
     pub(crate) sems: Vec<SemDesc>,
     pub(crate) tiles: Vec<TileDesc>,
+    pub(crate) attestation_id: u32,
 }
 
 impl AppConfig {
@@ -780,6 +781,10 @@ impl AppConfig {
             }
         }
         writeln!(f, "{:0w$}]", "", w = layer)
+    }
+
+    pub fn attestation_id(&self) -> u32 {
+        self.attestation_id
     }
 }
 
