@@ -165,7 +165,9 @@ impl subsys::ChildStarter for PagedChildStarter {
                 .map_err(|e| verror!(e.code(), "Unable to open {}", child.name()))?;
             let mut mapper = mapper::ChildMapper::new(aspace, act.tile_desc().has_virtmem());
 
-            {
+            // if we don't run the evidence service, nobody can ask for the hashes and therefore we
+            // don't need to compute them.
+            if EVREQHDL.is_some() {
                 let mut rawfile = file.borrow();
                 let size = rawfile.stat()?.size;
                 // Acquire hash
