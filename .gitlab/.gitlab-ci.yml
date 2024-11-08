@@ -11,7 +11,8 @@ stages:
   - prepare
   - build
   - check
-  - test
+  - test-host
+  - test-gem5
   - cleanup
   - dummy
 
@@ -59,7 +60,7 @@ check:
   resource_group: pod
 
 test-host:
-  stage: test
+  stage: test-host
   rules:
     - if: '$CI_MERGE_REQUEST_LABELS !~ /:no-ci:|:no-ci-tests:/'
   script:
@@ -74,7 +75,7 @@ test-host:
   resource_group: pod
 
 test-gem5:
-  stage: test
+  stage: test-gem5
   allow_failure: true
   rules:
     - if: '$CI_MERGE_REQUEST_LABELS !~ /:no-ci:|:no-ci-tests:/'
