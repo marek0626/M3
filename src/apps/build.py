@@ -35,6 +35,7 @@ dirs = [
     'straccmux',
     'timertest',
     'unittests',
+    'teetest',
 ]
 
 

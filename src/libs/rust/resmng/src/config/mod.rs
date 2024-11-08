@@ -790,3 +790,11 @@ impl fmt::Debug for AppConfig {
         writeln!(f, "]")
     }
 }
+
+impl fmt::Display for AppConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        writeln!(f, "Config [")?;
+        self.print_rec(f, 2)?;
+        writeln!(f, "]")
+    }
+}

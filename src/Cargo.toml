@@ -37,6 +37,7 @@ members = [
     "apps/rustunittests/rustmisctests",
     "apps/rustunittests/rustvfstests",
     "apps/spammer",
+    "apps/teetest",
     "kernel",
     "server/crypto/hashmux",
     "server/crypto/rots",
