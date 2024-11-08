@@ -328,7 +328,13 @@ public:
         label_t replylabel;
         label_t label;
 #if !defined(__hw22__)
+#    if defined(__hw23__)
         uint64_t : 64;
+#    else
+        uint16_t sgen;
+        uint16_t rgen;
+        uint32_t : 32;
+#    endif
 #endif
     } PACKED;
 
