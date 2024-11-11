@@ -479,8 +479,14 @@ pub struct Header {
     reply_ep: u16,
     reply_label: Label,
     label: Label,
-    #[cfg(not(feature = "hw22"))]
+    #[cfg(feature = "hw23")]
     _pad: u64,
+    #[cfg(any(feature = "hw", feature = "gem5"))]
+    sgen: u16,
+    #[cfg(any(feature = "hw", feature = "gem5"))]
+    rgen: u16,
+    #[cfg(any(feature = "hw", feature = "gem5"))]
+    _pad: u32,
 }
 
 impl Header {
