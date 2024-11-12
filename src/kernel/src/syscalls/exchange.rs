@@ -13,14 +13,16 @@
  * General Public License version 2 for more details.
  */
 
-use base::errors::{Code, Error, VerboseError};
+use anyhow::anyhow;
+
+use base::build_vmsg;
+use base::errors::{Code, Error};
 use base::io::LogFlags;
 use base::kif::{service, syscalls, CapRngDesc, CapType, INVALID_SEL, SEL_ACT};
-use base::log;
 use base::mem::MsgBuf;
 use base::serialize::M3Deserializer;
 use base::tcu;
-use base::{build_vmsg, verror};
+use base::{format, log};
 
 use thread::{Downgradable, TempRc, Upgradable};
 
@@ -34,38 +36,35 @@ fn do_exchange(
     c1: &CapRngDesc,
     c2: &CapRngDesc,
     obtain: bool,
-) -> Result<(), VerboseError> {
+) -> anyhow::Result<()> {
     let src = if obtain { act2 } else { act1 };
     let dst = if obtain { act1 } else { act2 };
     let src_rng = if obtain { c2 } else { c1 };
     let dst_rng = if obtain { c1 } else { c2 };
 
     if act1.id() == act2.id() {
-        return Err(verror!(Code::InvArgs, "Cannot exchange with same Activity",));
+        return Err(anyhow!(Error::new(Code::InvArgs)).context("Cap exchange with same Activity"));
     }
     if c1.cap_type() != c2.cap_type() {
-        return Err(verror!(
-            Code::InvArgs,
+        return Err(anyhow!(Error::new(Code::InvArgs)).context(format!(
             "Cap types differ ({:?} vs {:?})",
             c1.cap_type(),
             c2.cap_type(),
-        ));
+        )));
     }
     if (obtain && c2.count() > c1.count()) || (!obtain && c2.count() != c1.count()) {
-        return Err(verror!(
-            Code::InvArgs,
+        return Err(anyhow!(Error::new(Code::InvArgs)).context(format!(
             "Cap counts differ ({} vs {})",
             c2.count(),
             c1.count(),
-        ));
+        )));
     }
 
     // No TOCTOU as we do not have an async call in-between.
     if !dst.obj_caps().borrow().range_unused(dst_rng) {
-        return Err(verror!(
-            Code::InvArgs,
-            "Destination selectors already in use",
-        ));
+        return Err(
+            anyhow!(Error::new(Code::InvArgs)).context("Destination selectors already in use")
+        );
     }
 
     for i in 0..c2.count() {
@@ -76,7 +75,7 @@ fn do_exchange(
         let result = src_cap.map(|c| dst.obj_caps().borrow_mut().obtain(dst_sel, c));
         // Abort early on error but do no cleanup.
         if let Some(Err(e)) = result {
-            return Err(e.into());
+            return Err(e);
         }
     }
 
@@ -84,12 +83,14 @@ fn do_exchange(
 }
 
 #[inline(never)]
-pub fn exchange(act: &TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn exchange(act: &TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::Exchange = get_request(&msg)?;
     drop(msg);
 
-    let other_crd = CapRngDesc::new(r.own.cap_type(), r.other, r.own.count())?;
+    let other_crd = CapRngDesc::new(r.own.cap_type(), r.other, r.own.count()).map_err(|e| {
+        anyhow!(e).context(format!("Invalid cap range {}:{}", r.other, r.own.count()))
+    })?;
 
     sysc_log!(
         act,
@@ -108,7 +109,7 @@ pub fn exchange(act: &TempRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn exchange_over_sess_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn exchange_over_sess_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::ExchangeSess = get_request(&msg)?;
     drop(msg);
@@ -146,7 +147,9 @@ pub fn exchange_over_sess_async(act: TempRc<Activity>) -> Result<(), VerboseErro
         }
     );
 
-    let serv = sess.service().ok_or_else(|| Error::new(Code::ObjectGone))?;
+    let serv = sess
+        .service()
+        .ok_or_else(|| anyhow!(Error::new(Code::ObjectGone)).context("Service was destroyed"))?;
     let label = sess.creator() as tcu::Label;
 
     log!(
@@ -169,17 +172,24 @@ pub fn exchange_over_sess_async(act: TempRc<Activity>) -> Result<(), VerboseErro
 
     let rmsg = match res {
         Ok(rmsg) => rmsg,
-        Err(e) => return Err(verror!(e.code(), "Service {} unreachable", serv.name())),
+        Err(e) => return Err(e.context(format!("Service {} unreachable", serv.name()))),
     };
 
     let mut de = M3Deserializer::new(rmsg.as_words());
-    let err: Code = de.pop()?;
+    let err: Code = de
+        .pop()
+        .map_err(|e| anyhow!(e).context("Invalid server response"))?;
     match err {
         Code::Success => {},
-        err => return Err(verror!(err, "Server {} denied cap exchange", serv.name())),
+        err => {
+            return Err(anyhow!(Error::new(err))
+                .context(format!("Server {} denied cap exchange", serv.name())))
+        },
     }
 
-    let reply: service::ExchangeReply = de.pop()?;
+    let reply: service::ExchangeReply = de
+        .pop()
+        .map_err(|e| anyhow!(e).context("Invalid server response"))?;
 
     sysc_log!(
         act,
@@ -208,7 +218,7 @@ pub fn exchange_over_sess_async(act: TempRc<Activity>) -> Result<(), VerboseErro
 }
 
 #[inline(never)]
-pub fn revoke_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn revoke_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::Revoke = get_request(&msg)?;
     drop(msg);
@@ -216,7 +226,7 @@ pub fn revoke_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     sysc_log!(act, "revoke(act={}, crd={}, own={})", r.act, r.crd, r.own);
 
     if r.crd.cap_type() == CapType::Object && r.crd.start() <= SEL_ACT {
-        return Err(verror!(Code::InvArgs, "Cap 0, 1, and 2 are not revokeable"));
+        return Err(anyhow!(Error::new(Code::InvArgs)).context("Cap 0, 1 and 2 are not revokeable"));
     }
 
     let actcap = {

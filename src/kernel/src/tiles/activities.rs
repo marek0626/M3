@@ -13,11 +13,13 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::anyhow;
+
 use base::boxed::Box;
 use base::build_vmsg;
 use base::cell::{Cell, RefCell, StaticRefCell};
 use base::col::{String, Vec};
-use base::errors::{Code, Error, VerboseError};
+use base::errors::{Code, Error};
 use base::io::LogFlags;
 use base::kif::{self, CapRngDesc, CapSel, CapType, TileDesc};
 use base::log;
@@ -109,7 +111,7 @@ impl Activity {
         eps_start: EpId,
         kmem: TempRc<KMemObject>,
         flags: ActivityFlags,
-    ) -> Result<StrongRc<Self>, Error> {
+    ) -> StrongRc<Self> {
         let act = StrongRc::new(Activity {
             id,
             name,
@@ -150,10 +152,10 @@ impl Activity {
         #[cfg_attr(dylint_lib = "m3_lints", allow(async_alias))]
         thread::add_thread(VirtAddr::from(thread_startup_async as *const ()), 0);
 
-        Ok(act)
+        act
     }
 
-    pub fn init_async(act: StrongRc<Self>) -> Result<(), Error> {
+    pub fn init_async(act: StrongRc<Self>) -> anyhow::Result<()> {
         use base::kif::PageFlags;
 
         loader::init_activity_async(act.clone())?;
@@ -182,7 +184,7 @@ impl Activity {
         }
     }
 
-    pub fn init_eps(&self, rbuf_phys: PhysAddr) -> Result<(), Error> {
+    pub fn init_eps(&self, rbuf_phys: PhysAddr) -> anyhow::Result<()> {
         use crate::cap::{RGateObject, SGateObject};
         use base::cfg;
         use base::tcu;
@@ -295,9 +297,9 @@ impl Activity {
         &self.map_caps
     }
 
-    pub fn get_kobj<T>(&self, sel: kif::CapSel) -> Result<T, VerboseError>
+    pub fn get_kobj<T>(&self, sel: kif::CapSel) -> anyhow::Result<T>
     where
-        T: for<'a> TryFrom<&'a KObject, Error = VerboseError>,
+        T: for<'a> TryFrom<&'a KObject, Error = anyhow::Error>,
     {
         let table = self.obj_caps().borrow();
         table.get_kobj(sel)
@@ -345,16 +347,19 @@ impl Activity {
         *self.cur_sysc.borrow_mut() = msg;
     }
 
-    pub fn reply_syscall(&self, reply: &MsgBuf) -> Result<(), Error> {
+    pub fn reply_syscall(&self, reply: &MsgBuf) -> anyhow::Result<()> {
         // note that we cannot hand out a mutable reference to the OwnedMessage, because that would
         // allow the caller to swap it with something else. Thus, we replicate this method and call
         // reply ourself.
-        self.cur_sysc.borrow_mut().reply(reply)
+        self.cur_sysc
+            .borrow_mut()
+            .reply(reply)
+            .map_err(|e| anyhow!(e))
     }
 
-    pub fn start_derive(&self, derive: DeriveSrv) -> Result<(), Error> {
+    pub fn start_derive(&self, derive: DeriveSrv) -> anyhow::Result<()> {
         if self.cur_derive_srv.borrow().is_some() {
-            return Err(Error::new(Code::Exists));
+            return Err(anyhow!(Error::new(Code::Exists)).context("Derive already running"));
         }
 
         *self.cur_derive_srv.borrow_mut() = Some(derive);
@@ -365,14 +370,14 @@ impl Activity {
         self.cur_derive_srv.borrow_mut().take()
     }
 
-    fn fetch_exit(&self, sels: &[u64]) -> Result<Option<(CapSel, Code)>, Error> {
+    fn fetch_exit(&self, sels: &[u64]) -> anyhow::Result<Option<(CapSel, Code)>> {
         for sel in sels {
             match self
                 .obj_caps()
                 .borrow()
                 .get_kobj::<TempRc<Activity>>(*sel as CapSel)
             {
-                Err(e) => return Err(Error::new(e.code())),
+                Err(e) => return Err(e),
                 Ok(wv) => {
                     if wv.id() == self.id() {
                         continue;
@@ -392,14 +397,14 @@ impl Activity {
         act: TempRc<Self>,
         event: u64,
         sels: &[u64],
-    ) -> Result<Option<(CapSel, Code)>, Error> {
+    ) -> anyhow::Result<Option<(CapSel, Code)>> {
         let act_id = act.id();
         let act_weak = act.downgrade_asyn();
 
         let res = loop {
-            let act = act_weak
-                .upgrade()
-                .ok_or_else(|| Error::new(Code::ObjectGone))?;
+            let act = act_weak.upgrade().ok_or_else(|| {
+                anyhow!(Error::new(Code::ObjectGone)).context("Activity was destroyed")
+            })?;
 
             // independent of how we notify the activity, check for exits in case the activity we wait for
             // already exited.
@@ -505,7 +510,7 @@ impl Activity {
             .unwrap();
     }
 
-    pub fn start_app_async(act: TempRc<Activity>) -> Result<(), Error> {
+    pub fn start_app_async(act: TempRc<Activity>) -> anyhow::Result<()> {
         if act.state.get() != State::INIT {
             return Ok(());
         }

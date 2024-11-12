@@ -13,6 +13,8 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::anyhow;
+
 use base::col::{BitArray, Vec};
 use base::errors::{Code, Error};
 use base::tcu::TileId;
@@ -49,11 +51,11 @@ impl MemMux {
         mgate: TempRc<MGateObject>,
         mem_tile: TempRc<TileObject>,
         user_tile: TempRc<TileObject>,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         assert!(mem_tile.tile() == self.tile);
 
         if mem_tile.exregs_quota().left() == 0 {
-            return Err(Error::new(Code::NoSpace));
+            return Err(anyhow!(Error::new(Code::NoSpace)).context("Exclusive-region quota"));
         }
         mgate.make_exclusive(&user_tile)?;
 

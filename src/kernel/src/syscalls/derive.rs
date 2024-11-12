@@ -13,13 +13,15 @@
  * General Public License version 2 for more details.
  */
 
-use base::errors::{Code, Error, VerboseError};
+use anyhow::anyhow;
+
+use base::build_vmsg;
+use base::errors::{Code, Error};
 use base::io::LogFlags;
 use base::kif::{self, syscalls};
 use base::log;
 use base::mem::MsgBuf;
 use base::tcu;
-use base::{build_vmsg, verror};
 
 use thread::{Downgradable, TempRc, Upgradable};
 
@@ -30,7 +32,7 @@ use crate::syscalls::{get_request, reply_success, try_upgrade_kobj};
 use crate::tiles::{Activity, DeriveSrv};
 
 #[inline(never)]
-pub fn derive_tile_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn derive_tile_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::DeriveTile = get_request(&msg)?;
     drop(msg);
@@ -61,7 +63,7 @@ pub fn derive_tile_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
 
         // TODO we will leak the quota object in TileMux if this fails
         let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
-        try_cap_insert!(act.obj_caps().borrow_mut().insert_as_child(cap, r.tile));
+        act.obj_caps().borrow_mut().insert_as_child(cap, r.tile)?;
 
         act
     } {
@@ -79,7 +81,7 @@ pub fn derive_tile_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn derive_kmem(act: &TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn derive_kmem(act: &TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::DeriveKMem = get_request(&msg)?;
     drop(msg);
@@ -94,11 +96,11 @@ pub fn derive_kmem(act: &TempRc<Activity>) -> Result<(), VerboseError> {
 
     let kmem: TempRc<KMemObject> = act.get_kobj(r.kmem)?;
     if !kmem.has_quota(r.quota) {
-        return Err(verror!(Code::NoSpace, "Insufficient quota"));
+        return Err(anyhow!(Error::new(Code::NoSpace)).context("Insufficient quota"));
     }
 
     let cap = Capability::new(r.dst, KMemObject::new(r.quota));
-    try_cap_insert!(act.obj_caps().borrow_mut().insert_as_child(cap, r.kmem));
+    act.obj_caps().borrow_mut().insert_as_child(cap, r.kmem)?;
     assert!(kmem.alloc(act, r.kmem, r.quota));
 
     reply_success(act);
@@ -106,7 +108,7 @@ pub fn derive_kmem(act: &TempRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn derive_mem(act: &TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn derive_mem(act: &TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::DeriveMem = get_request(&msg)?;
     drop(msg);
@@ -131,14 +133,14 @@ pub fn derive_mem(act: &TempRc<Activity>) -> Result<(), VerboseError> {
         Capability::new(r.dst, new_mgate)
     };
 
-    try_cap_insert!(tact.obj_caps().borrow_mut().insert_as_child(cap, r.src));
+    tact.obj_caps().borrow_mut().insert_as_child(cap, r.src)?;
 
     reply_success(act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn derive_srv_req(act: &TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn derive_srv_req(act: &TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::DeriveSrvReq = get_request(&msg)?;
     drop(msg);
@@ -154,7 +156,7 @@ pub fn derive_srv_req(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     );
 
     if r.sessions == 0 {
-        return Err(verror!(Code::InvArgs, "Invalid session count"));
+        return Err(anyhow!(Error::new(Code::InvArgs)).context("Invalid session count"));
     }
 
     let srv: TempRc<ServObject> = act.get_kobj(r.srv)?;
@@ -168,7 +170,7 @@ pub fn derive_srv_req(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     // if that fails, undo the start
     if let Err(e) = srv.set_derive_act(act.clone()) {
         act.finish_derive().unwrap();
-        return Err(e.into());
+        return Err(e);
     }
 
     let mut smsg = MsgBuf::borrow_def();
@@ -188,7 +190,7 @@ pub fn derive_srv_req(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     if let Err(e) = ServObject::send(&srv, label, smsg) {
         srv.fetch_derive_act().unwrap();
         act.finish_derive().unwrap();
-        return Err(e.into());
+        return Err(e);
     }
 
     reply_success(act);
@@ -196,7 +198,7 @@ pub fn derive_srv_req(act: &TempRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn derive_srv_fin(act: &TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn derive_srv_fin(act: &TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::DeriveSrvFin = get_request(&msg)?;
     drop(msg);
@@ -215,11 +217,11 @@ pub fn derive_srv_fin(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let der_act = srv.fetch_derive_act()?;
     let derive = der_act
         .finish_derive()
-        .ok_or_else(|| Error::new(Code::InvState))?;
+        .ok_or_else(|| anyhow!(Error::new(Code::InvState)).context("Derive service"))?;
 
     let res = if r.result == Code::Success {
         // don't return here via ? but catch the error and always sent the upcall with the result
-        let finish = || -> Result<(), VerboseError> {
+        let finish = || -> anyhow::Result<()> {
             let src_srv: TempRc<ServObject> = der_act.get_kobj(derive.src_srv)?;
 
             let mut obj_caps = act.obj_caps().borrow_mut();
@@ -228,22 +230,22 @@ pub fn derive_srv_fin(act: &TempRc<Activity>) -> Result<(), VerboseError> {
             sgate_cap.get::<TempRc<SGateObject>>()?;
 
             // pass sgate to calling activity
-            try_cap_insert!(der_act
+            der_act
                 .obj_caps()
                 .borrow_mut()
-                .obtain(derive.dst_sgate, sgate_cap));
+                .obtain(derive.dst_sgate, sgate_cap)?;
 
             // derive new service object and pass it to calling activity
             let derived_srv = src_srv.derive(r.creator);
             let cap = Capability::new(derive.dst_srv, derived_srv);
-            try_cap_insert!(der_act
+            der_act
                 .obj_caps()
                 .borrow_mut()
-                .insert_as_child(cap, derive.src_srv));
+                .insert_as_child(cap, derive.src_srv)?;
             Ok(())
         };
         match finish() {
-            Err(e) => e.code(),
+            Err(e) => e.downcast_ref::<Error>().unwrap().code(),
             Ok(_) => Code::Success,
         }
     }
@@ -256,7 +258,7 @@ pub fn derive_srv_fin(act: &TempRc<Activity>) -> Result<(), VerboseError> {
 
     // return Err here to get the error print from the syscall handler
     if res != Code::Success {
-        return Err(Error::new(res).into());
+        return Err(anyhow!(Error::new(res)).context("Derive service"));
     }
 
     reply_success(act);

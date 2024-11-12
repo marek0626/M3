@@ -13,11 +13,14 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::anyhow;
+
 use base::cell::{RefMut, StaticRefCell};
 use base::col::Vec;
 use base::io::LogFlags;
-use base::log;
 use base::mem::{GlobAddr, GlobOff};
+use base::{format, log};
+
 use core::fmt;
 
 use crate::mem::{MemMod, MemType};
@@ -70,7 +73,7 @@ impl MainMemory {
         mtype: MemType,
         size: GlobOff,
         align: GlobOff,
-    ) -> Result<Allocation, base::errors::Error> {
+    ) -> anyhow::Result<Allocation> {
         use base::errors::{Code, Error};
 
         for m in &mut self.mods {
@@ -88,7 +91,11 @@ impl MainMemory {
                 return Ok(Allocation::new(gaddr, size));
             }
         }
-        Err(Error::new(Code::OutOfMem))
+
+        Err(anyhow!(Error::new(Code::OutOfMem)).context(format!(
+            "Unable to allocate {}b with align={}b and type={:?}",
+            size, align, mtype
+        )))
     }
 
     pub fn free(&mut self, alloc: &Allocation) {

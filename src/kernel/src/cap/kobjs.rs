@@ -13,18 +13,20 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::{anyhow, Context};
+
+use base::build_vmsg;
 use base::cell::{Cell, Ref, RefCell, RefMut, StaticCell};
-use base::errors::{Code, Error, VerboseError};
+use base::errors::{Code, Error};
 use base::io::LogFlags;
 use base::kif::{self, service, tilemux::QuotaId};
 use base::kif::{CapRngDesc, CapSel, CapType};
-use base::log;
 use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, MsgBufRef, PhysAddr, VirtAddr};
 use base::rc::Rc;
 use base::tcu::{ActId, EpId, Label, TileId};
 use base::vec::Vec;
-use base::{build_vmsg, verror};
 use base::{env, tcu};
+use base::{format, log};
 
 use thread::{Downgradable, NonWeak, StrongRc, TempRc, Upgradable, WeakRc};
 
@@ -78,15 +80,15 @@ pub trait IntoKObject<T> {
 macro_rules! impl_from_kobj {
     ($ty:ty, $name:ident) => {
         impl TryFrom<&KObject> for TempRc<$ty> {
-            type Error = base::errors::VerboseError;
+            type Error = anyhow::Error;
 
             fn try_from(kobj: &KObject) -> Result<Self, Self::Error> {
                 match kobj {
                     KObject::$name(s) => Ok(thread::TempRc::new(s.clone())),
-                    _ => Err(base::verror!(
-                        base::errors::Code::InvArgs,
-                        concat!("Expected ", stringify!($name)),
-                    )),
+                    _ => Err(anyhow::anyhow!(base::errors::Error::new(
+                        base::errors::Code::InvArgs
+                    ))
+                    .context(concat!("Expected ", stringify!($name)))),
                 }
             }
         }
@@ -436,9 +438,9 @@ impl MGateObject {
         offset: GlobOff,
         size: GlobOff,
         perms: kif::Perm,
-    ) -> Result<StrongRc<Self>, VerboseError> {
+    ) -> anyhow::Result<StrongRc<Self>> {
         if offset.checked_add(size).is_none() || offset + size > self.size() || size == 0 {
-            return Err(verror!(Code::InvArgs, "Size or offset invalid"));
+            return Err(anyhow!(Error::new(Code::InvArgs)).context("Size or offset invalid"));
         }
 
         let addr = self.addr().raw() + offset;
@@ -453,12 +455,12 @@ impl MGateObject {
         }))
     }
 
-    pub fn make_exclusive(&self, user_tile: &TempRc<TileObject>) -> Result<(), Error> {
+    pub fn make_exclusive(&self, user_tile: &TempRc<TileObject>) -> anyhow::Result<()> {
         if let Some(extile) = self.exclusive.get() {
             if extile == user_tile.tile() {
                 return Ok(());
             }
-            return Err(Error::new(Code::Exists));
+            return Err(anyhow!(Error::new(Code::Exists)).context("MGate is exclusive"));
         }
 
         self.exclusive.set(Some(user_tile.tile()));
@@ -532,11 +534,11 @@ impl ServObject {
         self.creator
     }
 
-    pub fn set_derive_act(&self, act: TempRc<Activity>) -> Result<(), Error> {
+    pub fn set_derive_act(&self, act: TempRc<Activity>) -> anyhow::Result<()> {
         self.serv.set_derive_act(act)
     }
 
-    pub fn fetch_derive_act(&self) -> Result<TempRc<Activity>, Error> {
+    pub fn fetch_derive_act(&self) -> anyhow::Result<TempRc<Activity>> {
         self.serv.fetch_derive_act()
     }
 
@@ -544,7 +546,7 @@ impl ServObject {
         Self::new(self.serv.clone(), false, creator)
     }
 
-    pub fn send(&self, lbl: Label, msg: MsgBufRef) -> Result<thread::Event, Error> {
+    pub fn send(&self, lbl: Label, msg: MsgBufRef) -> anyhow::Result<thread::Event> {
         self.serv.send(lbl, &msg)
     }
 
@@ -552,7 +554,7 @@ impl ServObject {
         srv: TempRc<Self>,
         lbl: Label,
         msg: MsgBufRef,
-    ) -> Result<&'static tcu::Message, Error> {
+    ) -> anyhow::Result<&'static tcu::Message> {
         let event = Self::send(&srv, lbl, msg)?;
         drop(srv);
         SendQueue::receive_async(event)
@@ -672,12 +674,12 @@ impl SemObject {
         })
     }
 
-    pub fn down_async(s: TempRc<Self>) -> Result<(), Error> {
+    pub fn down_async(s: TempRc<Self>) -> anyhow::Result<()> {
         let sem_weak = s.downgrade_asyn();
         loop {
-            let sem = sem_weak
-                .upgrade()
-                .ok_or_else(|| Error::new(Code::ObjectGone))?;
+            let sem = sem_weak.upgrade().ok_or_else(|| {
+                anyhow!(Error::new(Code::ObjectGone)).context("Semaphore was destroyed")
+            })?;
             if sem.counter.get() != 0 {
                 sem.counter.set(sem.counter.get() - 1);
                 break;
@@ -689,9 +691,9 @@ impl SemObject {
 
             thread::wait_for_async(event);
 
-            let sem = tmp_weak
-                .upgrade()
-                .ok_or_else(|| Error::new(Code::ObjectGone))?;
+            let sem = tmp_weak.upgrade().ok_or_else(|| {
+                anyhow!(Error::new(Code::ObjectGone)).context("Semaphore was destroyed")
+            })?;
             sem.waiters.set(sem.waiters.get() - 1);
         }
         Ok(())
@@ -836,11 +838,13 @@ impl TileObject {
         exregs: Option<usize>,
         time: Option<u64>,
         pts: Option<usize>,
-    ) -> Result<StrongRc<Self>, VerboseError> {
+    ) -> anyhow::Result<StrongRc<Self>> {
         // only allocate it from the tile here, but don't keep an Rc to the EPQuota
         if let Some(num) = eps {
             if !tile.has_quota(num) {
-                return Err(verror!(Code::NoSpace, "Insufficient EPs"));
+                return Err(
+                    anyhow!(Error::new(Code::NoSpace)).context("Insufficient EPs for tile derive")
+                );
             }
             tile.alloc_eps(num);
         }
@@ -859,16 +863,16 @@ impl TileObject {
             // note that we don't need to give the EP quota back to the tile as the tile was
             // destroyed in this case, meaning that we already gave the quota back in
             // TileObject::revoke_async.
-            let tile = tile_weak
-                .upgrade()
-                .ok_or_else(|| Error::new(Code::ObjectGone))?;
+            let tile = tile_weak.upgrade().ok_or_else(|| {
+                anyhow!(Error::new(Code::ObjectGone)).context("Tile was destroyed")
+            })?;
 
             match res {
                 Err(e) => {
                     if let Some(num) = eps {
                         tile.free_eps(num);
                     }
-                    return Err(VerboseError::from(e));
+                    return Err(anyhow!(e).context("TileMux declined tile derive"));
                 },
                 Ok(v) => (v.0, v.1, tile),
             }
@@ -956,10 +960,12 @@ impl TileObject {
                     mem::Allocation::new(GlobAddr::new_with(mem_tile, mem_off), mem_size)
                 },
                 // otherwise we have real SPM
-                Err(e) if e.code() == Code::NoMEP => mem::Allocation::new(
-                    GlobAddr::new_with(self.tile(), desc.mem_offset() as GlobOff),
-                    desc.mem_size() as GlobOff,
-                ),
+                Err(e) if e.downcast_ref::<Error>().unwrap().code() == Code::NoMEP => {
+                    mem::Allocation::new(
+                        GlobAddr::new_with(self.tile(), desc.mem_offset() as GlobOff),
+                        desc.mem_size() as GlobOff,
+                    )
+                },
                 Err(e) => panic!("Unable to read PMPEP0: {}", e),
             }
         }
@@ -1180,7 +1186,7 @@ impl EPObject {
         self.gate.borrow().is_some()
     }
 
-    pub fn deconfigure(&self, invalidate: InvalidateType) -> Result<bool, Error> {
+    pub fn deconfigure(&self, invalidate: InvalidateType) -> anyhow::Result<bool> {
         let mut invalidated = false;
         if let Some(ref gate) = self.gate.borrow_mut().take() {
             let tile_id = self.tile_id();
@@ -1192,12 +1198,16 @@ impl EPObject {
 
                 // otherwise we always invalidate and potentially even force-invalidate
                 _ => {
-                    tilemng::tilemux(tile_id).invalidate_ep(
-                        self.activity().unwrap().id(),
-                        self.ep,
-                        invalidate == InvalidateType::Force,
-                        true,
-                    )?;
+                    tilemng::tilemux(tile_id)
+                        .invalidate_ep(
+                            self.activity().unwrap().id(),
+                            self.ep,
+                            invalidate == InvalidateType::Force,
+                            true,
+                        )
+                        .with_context(|| {
+                            format!("Invalidating EP {}:{} failed", tile_id, self.ep)
+                        })?;
                     invalidated = true;
                 },
             }
@@ -1395,7 +1405,7 @@ impl MapObject {
         glob: GlobAddr,
         pages: usize,
         flags: kif::PageFlags,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         let map_weak = map.downgrade_asyn();
         TileMux::map_async(tilemng::tilemux(act_tile), act_id, virt, glob, pages, flags).map(|_| {
             if let Some(map) = map_weak.upgrade() {

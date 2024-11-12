@@ -13,10 +13,11 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::{anyhow, Context};
+
 use core::mem::size_of_val;
 
 use base::cfg::{MOD_HEAP_SIZE, PAGE_BITS, PAGE_MASK, PAGE_SIZE};
-use base::elf;
 use base::env;
 use base::errors::{Code, Error};
 use base::io::{read_object, LogFlags, Read};
@@ -25,6 +26,7 @@ use base::log;
 use base::mem::{size_of, GlobAddr, GlobOff, PhysAddr, VirtAddr};
 use base::tcu;
 use base::util::math;
+use base::{elf, format};
 
 use thread::{StrongRc, TempRc};
 
@@ -44,7 +46,7 @@ trait ELFLoader {
         size: usize,
         flags: PageFlags,
         map: bool,
-    ) -> Result<(), Error>;
+    ) -> anyhow::Result<()>;
 
     #[cfg_attr(dylint_lib = "m3_lints", allow(unneeded_async))]
     fn zero_segment_async(
@@ -52,20 +54,20 @@ trait ELFLoader {
         virt: VirtAddr,
         size: usize,
         flags: PageFlags,
-    ) -> Result<(), Error>;
+    ) -> anyhow::Result<()>;
 
     #[cfg_attr(dylint_lib = "m3_lints", allow(unneeded_async))]
-    fn map_heap_async(&mut self, _virt: VirtAddr) -> Result<(), Error> {
+    fn map_heap_async(&mut self, _virt: VirtAddr) -> anyhow::Result<()> {
         Ok(())
     }
 
     #[cfg_attr(dylint_lib = "m3_lints", allow(unneeded_async))]
-    fn map_stack_async(&mut self) -> Result<(), Error> {
+    fn map_stack_async(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
 }
 
-pub fn init_activity_async(act: StrongRc<Activity>) -> Result<i32, Error> {
+pub fn init_activity_async(act: StrongRc<Activity>) -> anyhow::Result<i32> {
     let mut loader = ActivityELFLoader(act.clone());
 
     let root = act.is_root();
@@ -78,27 +80,32 @@ pub fn init_activity_async(act: StrongRc<Activity>) -> Result<i32, Error> {
             act.id(),
             desc.env_space().0,
             kif::PageFlags::RW,
-        )?;
+        )
+        .with_context(|| "Retrieving global address of environment")?;
 
         let flags = PageFlags::from(kif::Perm::RW);
         loader.load_segment_async(desc.env_space().0, env_addr, PAGE_SIZE, flags, false)?;
 
-        ktcu::glob_to_phys_remote(act.tile_id(), env_addr, flags)?
+        ktcu::glob_to_phys_remote(act.tile_id(), env_addr, flags).context(format!(
+            "Translating {:?} to physical address for environment",
+            env_addr
+        ))?
     }
     else {
         desc.env_space().0.as_phys(desc)
     };
 
     if root {
-        load_root_async(loader, env_phys)?;
+        load_root_async(loader, env_phys).context("Loading root")?;
     }
     Ok(0)
 }
 
-pub fn load_mux_async(tile: tcu::TileId, mem: &mem::Allocation) -> Result<(), Error> {
+pub fn load_mux_async(tile: tcu::TileId, mem: &mem::Allocation) -> anyhow::Result<()> {
     let desc = platform::tile_desc(tile);
 
-    let app = get_mod("tilemux").ok_or_else(|| Error::new(Code::NoSuchFile))?;
+    let app = get_mod("tilemux")
+        .ok_or_else(|| anyhow!(Error::new(Code::NoSuchFile)).context("No bootmodule 'tilemux'"))?;
     log!(
         LogFlags::KernActs,
         "Loading multiplexer '{}' onto {}",
@@ -108,7 +115,7 @@ pub fn load_mux_async(tile: tcu::TileId, mem: &mem::Allocation) -> Result<(), Er
 
     // load multiplexer into memory
     let mut loader = MetalELFLoader::new(mem.global(), desc.mem_offset() as GlobOff);
-    load_mod_async(&mut loader, app)?;
+    load_mod_async(&mut loader, app).context("Loading TileMux")?;
 
     // write env vars
     let env_mem_off =
@@ -137,11 +144,12 @@ pub fn load_mux_async(tile: tcu::TileId, mem: &mem::Allocation) -> Result<(), Er
     Ok(())
 }
 
-fn load_root_async(mut loader: ActivityELFLoader, env_phys: PhysAddr) -> Result<(), Error> {
+fn load_root_async(mut loader: ActivityELFLoader, env_phys: PhysAddr) -> anyhow::Result<()> {
     let entry = {
-        let app = get_mod("root").ok_or_else(|| Error::new(Code::NoSuchFile))?;
+        let app = get_mod("root")
+            .ok_or_else(|| anyhow!(Error::new(Code::NoSuchFile)).context("No bootmodule 'root'"))?;
         log!(LogFlags::KernActs, "Loading boot module '{}'", app.name());
-        load_mod_async(&mut loader, app)?
+        load_mod_async(&mut loader, app).context("Loading root")?
     };
 
     let act = &loader.0;
@@ -225,18 +233,21 @@ impl<'a> Read for KernelBootMod<'a> {
     }
 }
 
-fn load_mod_async<L>(loader: &mut L, bm: &kif::boot::Mod) -> Result<VirtAddr, Error>
+fn load_mod_async<L>(loader: &mut L, bm: &kif::boot::Mod) -> anyhow::Result<VirtAddr>
 where
     L: ELFLoader,
 {
     let mod_addr = GlobAddr::new(bm.addr);
 
     let mut kbm = KernelBootMod { bm, off: 0 };
-    let hdr: elf::ElfHeaderCommon = read_object(&mut kbm)?;
-    hdr.ident.check_magic()?;
+    let hdr: elf::ElfHeaderCommon =
+        read_object(&mut kbm).map_err(|e| anyhow!(e).context("Reading ELF header"))?;
+    hdr.ident
+        .check_magic()
+        .map_err(|e| anyhow!(e).context("Invalid ELF magic"))?;
 
     kbm.seek(0);
-    let hdr = hdr.load_hdr(&mut kbm)?;
+    let hdr = hdr.load_hdr(&mut kbm).map_err(|e| anyhow!(e))?;
 
     // copy load segments to destination tile
     let mut end = VirtAddr::default();
@@ -244,7 +255,9 @@ where
     for _ in 0..hdr.ph_num() {
         // load program header
         kbm.seek(off as GlobOff);
-        let phdr = hdr.load_ph(&mut kbm)?;
+        let phdr = hdr
+            .load_ph(&mut kbm)
+            .map_err(|e| anyhow!(e).context("Loading PH"))?;
         off += size_of_val(&*phdr);
 
         // we're only interested in non-empty load segments
@@ -262,13 +275,17 @@ where
         if phdr.file_size() == 0 {
             let size = math::round_up((phdr.virt_addr() & PAGE_MASK) + phdr.mem_size(), PAGE_SIZE);
 
-            loader.zero_segment_async(virt, size, flags)?;
+            loader
+                .zero_segment_async(virt, size, flags)
+                .context(format!("Zero segment {}:{}", virt, size))?;
             end = virt + size;
         }
         else {
             assert!(phdr.mem_size() == phdr.file_size());
             let size = (phdr.offset() & PAGE_MASK) + phdr.file_size();
-            loader.load_segment_async(virt, mod_addr + offset as GlobOff, size, flags, true)?;
+            loader
+                .load_segment_async(virt, mod_addr + offset as GlobOff, size, flags, true)
+                .context(format!("Load segment {}:{}", virt, size))?;
             end = virt + size;
         }
     }
@@ -301,7 +318,7 @@ impl ELFLoader for MetalELFLoader {
         size: usize,
         _flags: PageFlags,
         _map: bool,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         ktcu::copy(
             // destination
             self.dst.tile(),
@@ -319,7 +336,7 @@ impl ELFLoader for MetalELFLoader {
         virt: VirtAddr,
         size: usize,
         _flags: PageFlags,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         ktcu::clear(
             self.dst.tile(),
             self.dst.offset() + virt.as_goff() - self.offset,
@@ -338,7 +355,7 @@ impl ELFLoader for ActivityELFLoader {
         size: usize,
         flags: PageFlags,
         map: bool,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         let tile_id = self.0.tile_id();
 
         if self.0.tile_desc().has_virtmem() {
@@ -376,16 +393,14 @@ impl ELFLoader for ActivityELFLoader {
         virt: VirtAddr,
         size: usize,
         flags: PageFlags,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         let tile_id = self.0.tile_id();
         let tile_desc = self.0.tile_desc();
 
         let phys = if tile_desc.has_virtmem() {
-            let mem = mem::borrow_mut().allocate(
-                mem::MemType::ROOT,
-                size as GlobOff,
-                PAGE_SIZE as GlobOff,
-            )?;
+            let mem = mem::borrow_mut()
+                .allocate(mem::MemType::ROOT, size as GlobOff, PAGE_SIZE as GlobOff)
+                .with_context(|| format!("Allocating {}b for segment {}", size, virt))?;
             self.load_segment_async(virt, mem.global(), size, flags, true)?;
 
             ktcu::glob_to_phys_remote(tile_id, mem.global(), flags)?
@@ -397,30 +412,30 @@ impl ELFLoader for ActivityELFLoader {
         ktcu::clear(tile_id, phys.as_goff(), size)
     }
 
-    fn map_heap_async(&mut self, virt: VirtAddr) -> Result<(), Error> {
+    fn map_heap_async(&mut self, virt: VirtAddr) -> anyhow::Result<()> {
         let tile_desc = self.0.tile_desc();
 
         if tile_desc.has_virtmem() {
-            let phys = mem::borrow_mut().allocate(
-                mem::MemType::ROOT,
-                MOD_HEAP_SIZE as GlobOff,
-                PAGE_SIZE as GlobOff,
-            )?;
+            let phys = mem::borrow_mut()
+                .allocate(
+                    mem::MemType::ROOT,
+                    MOD_HEAP_SIZE as GlobOff,
+                    PAGE_SIZE as GlobOff,
+                )
+                .with_context(|| format!("Allocating {}b for heap", MOD_HEAP_SIZE))?;
             self.load_segment_async(virt, phys.global(), MOD_HEAP_SIZE, PageFlags::RW, true)?;
         }
         Ok(())
     }
 
-    fn map_stack_async(&mut self) -> Result<(), Error> {
+    fn map_stack_async(&mut self) -> anyhow::Result<()> {
         let tile_desc = self.0.tile_desc();
 
         if tile_desc.has_virtmem() {
             let (virt, size) = tile_desc.stack_space();
-            let phys = mem::borrow_mut().allocate(
-                mem::MemType::ROOT,
-                size as GlobOff,
-                PAGE_SIZE as GlobOff,
-            )?;
+            let phys = mem::borrow_mut()
+                .allocate(mem::MemType::ROOT, size as GlobOff, PAGE_SIZE as GlobOff)
+                .with_context(|| format!("Allocating {}b for stack", size))?;
             self.load_segment_async(virt, phys.global(), size, PageFlags::RW, true)?;
         }
         Ok(())

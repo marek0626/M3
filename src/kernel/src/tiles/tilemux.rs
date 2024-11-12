@@ -13,11 +13,13 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::anyhow;
+
+use base::build_vmsg;
 use base::cell::RefMut;
-use base::cfg;
 use base::col::{BitArray, Vec};
 use base::env;
-use base::errors::{Code, Error, VerboseError};
+use base::errors::{Code, Error};
 use base::io::LogFlags;
 use base::kif::{self, Perm, TileAttr, TileISA};
 use base::log;
@@ -25,7 +27,7 @@ use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, VirtAddr};
 use base::quota;
 use base::tcu::{self, ActId, EpId, TileId};
 use base::util::math;
-use base::{build_vmsg, verror};
+use base::{cfg, format};
 
 use core::cmp;
 
@@ -51,7 +53,7 @@ struct TileState {
 }
 
 impl TileState {
-    fn new(tile: &TempRc<TileObject>, ep_count: Option<usize>) -> Result<Self, Error> {
+    fn new(tile: &TempRc<TileObject>, ep_count: Option<usize>) -> anyhow::Result<Self> {
         // create PMP EPObjects for this Tile
         let mut pmp = Vec::new();
         for ep in 0..tcu::PMEM_PROT_EPS as EpId {
@@ -70,7 +72,7 @@ impl TileState {
             Some(count) => {
                 // more EPs are not supported as we only have 16-bit for EP ids
                 if count < tcu::FIRST_USER_EP as usize || count >= tcu::INVALID_EP as usize {
-                    return Err(Error::new(Code::InvArgs));
+                    return Err(anyhow!(Error::new(Code::InvArgs)));
                 }
 
                 let ep_reg_size = count * (tcu::EP_REGS * size_of::<tcu::Reg>());
@@ -114,7 +116,7 @@ impl TileState {
         Ok(state)
     }
 
-    fn find_eps(&self, count: usize) -> Result<EpId, Error> {
+    fn find_eps(&self, count: usize) -> anyhow::Result<EpId> {
         // the PMP EPs cannot be allocated
         let mut start = cmp::max(tcu::FIRST_USER_EP as usize, self.eps.first_clear());
         let mut bit = start;
@@ -126,7 +128,8 @@ impl TileState {
         }
 
         if bit != start + count {
-            Err(Error::new(Code::NoSpace))
+            Err(anyhow!(Error::new(Code::NoSpace))
+                .context(format!("No contiguous {} EPs found", count)))
         }
         else {
             Ok(start as EpId)
@@ -281,9 +284,11 @@ impl TileMux {
         mux_mem: Option<TempRc<MGateObject>>,
         ep_count: Option<usize>,
         root: bool,
-    ) -> Result<(), VerboseError> {
+    ) -> anyhow::Result<()> {
         if tilemng::tilemux(tile_id).has_activities() {
-            return Err(verror!(Code::InvState, "Cannot reset tile with activities"));
+            return Err(
+                anyhow!(Error::new(Code::InvState)).context("Cannot reset tile with activities")
+            );
         }
 
         let start = {
@@ -307,7 +312,8 @@ impl TileMux {
                 if platform::tile_desc(tile_id).is_programmable() {
                     // here we need a multiplexer and therefore memory
                     if mux_mem.is_none() {
-                        return Err(verror!(Code::InvArgs, "Need memory cap for multiplexer"));
+                        return Err(anyhow!(Error::new(Code::InvArgs))
+                            .context("Need memory cap for multiplexer"));
                     }
 
                     let mux_mem = mux_mem.unwrap();
@@ -441,15 +447,15 @@ impl TileMux {
         ep: tcu::EpId,
         mg: Option<TempRc<MGateObject>>,
         overwrite: bool,
-    ) -> Result<(), VerboseError> {
-        let ep_obj = self.pmp_ep(ep).ok_or_else(|| Error::new(Code::InvState))?;
+    ) -> anyhow::Result<()> {
+        let ep_obj = self
+            .pmp_ep(ep)
+            .ok_or_else(|| anyhow!(Error::new(Code::InvState)))?;
 
         // if overwrite is disabled, the EP needs to be invalid
         if mg.is_some() && ep_obj.is_configured() && !overwrite {
-            return Err(verror!(
-                Code::Exists,
-                "EP already configured and overwrite is disabled"
-            ));
+            return Err(anyhow!(Error::new(Code::Exists))
+                .context("EP already configured and overwrite is disabled"));
         }
 
         // deconfigure the EP first to ensure that it is not already configured for another gate
@@ -465,10 +471,10 @@ impl TileMux {
         Ok(())
     }
 
-    pub fn find_eps(&self, count: usize) -> Result<EpId, Error> {
+    pub fn find_eps(&self, count: usize) -> anyhow::Result<EpId> {
         self.state
             .as_ref()
-            .ok_or_else(|| Error::new(Code::InvState))?
+            .ok_or_else(|| anyhow!(Error::new(Code::InvState)))?
             .find_eps(count)
     }
 
@@ -514,8 +520,10 @@ impl TileMux {
         }
     }
 
-    pub fn config_snd_ep(&mut self, ep: EpId, act: ActId, obj: &SGateObject) -> Result<(), Error> {
-        let rgate = obj.rgate().ok_or_else(|| Error::new(Code::ObjectGone))?;
+    pub fn config_snd_ep(&mut self, ep: EpId, act: ActId, obj: &SGateObject) -> anyhow::Result<()> {
+        let rgate = obj
+            .rgate()
+            .ok_or_else(|| anyhow!(Error::new(Code::ObjectGone)))?;
         assert!(rgate.activated());
 
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {
@@ -540,7 +548,7 @@ impl TileMux {
         act: ActId,
         reply_eps: Option<EpId>,
         obj: &RGateObject,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {
             let act = self.ep_activity_id(act);
             ktcu::config_recv(
@@ -564,17 +572,16 @@ impl TileMux {
         act: ActId,
         obj: &MGateObject,
         tile_id: TileId,
-    ) -> Result<(), VerboseError> {
+    ) -> anyhow::Result<()> {
         if let Some(extile) = obj.exclusive_tile() {
             if self.tile_id() != extile {
-                return Err(verror!(
-                    Code::NoPerm,
+                return Err(anyhow!(Error::new(Code::NoPerm)).context(format!(
                     "{} has no permissions to exclusive region of {} ({}..{})",
                     self.tile_id(),
                     extile,
                     obj.addr(),
                     obj.addr() + (obj.size() - 1)
-                ));
+                )));
             }
         }
 
@@ -599,7 +606,7 @@ impl TileMux {
         ep: EpId,
         force: bool,
         notify: bool,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         let unread_mask = ktcu::invalidate_ep_remote(self.tile_id(), ep, force)?;
         if unread_mask != 0 && notify && platform::tile_desc(self.tile_id()).supports_tilemux() {
             let mut buf = MsgBuf::borrow_def();
@@ -622,11 +629,11 @@ impl TileMux {
         recv_tile: TileId,
         recv_ep: EpId,
         send_ep: EpId,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         ktcu::inv_reply_remote(recv_tile, recv_ep, self.tile_id(), send_ep)
     }
 
-    pub fn reset_stats(&mut self) -> Result<(), Error> {
+    pub fn reset_stats(&mut self) -> anyhow::Result<()> {
         let mut buf = MsgBuf::borrow_def();
         let msg = kif::tilemux::ResetStats {};
         build_vmsg!(buf, kif::tilemux::Sidecalls::ResetStats, &msg);
@@ -635,7 +642,7 @@ impl TileMux {
             .map(|_| ())
     }
 
-    pub fn shutdown_async(tilemux: RefMut<'_, Self>) -> Result<(), Error> {
+    pub fn shutdown_async(tilemux: RefMut<'_, Self>) -> anyhow::Result<()> {
         let mut buf = MsgBuf::borrow_def();
         let msg = kif::tilemux::Shutdown {};
         build_vmsg!(buf, kif::tilemux::Sidecalls::Shutdown, &msg);
@@ -665,7 +672,7 @@ impl TileMux {
         tilemux: RefMut<'_, Self>,
         mut msg: tcu::OwnedMessage,
         pos: usize,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         use crate::tiles::ActivityMng;
         use base::serialize::M3Deserializer;
 
@@ -673,7 +680,9 @@ impl TileMux {
         let mut de = M3Deserializer::new(msg.as_words());
         de.skip(pos);
 
-        let r: kif::tilemux::Exit = de.pop()?;
+        let r: kif::tilemux::Exit = de
+            .pop()
+            .map_err(|e| anyhow!(e).context("Invalid request from TileMux"))?;
 
         let tile_id = tilemux.tile_id();
         log!(LogFlags::KernTMC, "TileMux[{}] received {:?}", tile_id, r);
@@ -705,7 +714,7 @@ impl TileMux {
         Ok(())
     }
 
-    fn info_async(tilemux: RefMut<'_, Self>) -> Result<kif::syscalls::MuxType, Error> {
+    fn info_async(tilemux: RefMut<'_, Self>) -> anyhow::Result<kif::syscalls::MuxType> {
         let mut buf = MsgBuf::borrow_def();
         let msg = kif::tilemux::Info {};
         build_vmsg!(buf, kif::tilemux::Sidecalls::Info, &msg);
@@ -720,7 +729,7 @@ impl TileMux {
         time_quota: quota::Id,
         pt_quota: quota::Id,
         eps_start: EpId,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         let mut buf = MsgBuf::borrow_def();
         let msg = kif::tilemux::ActInit {
             act_id: act as u64,
@@ -738,7 +747,7 @@ impl TileMux {
         tilemux: RefMut<'_, Self>,
         act: ActId,
         act_op: base::kif::tilemux::ActivityOp,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         let mut buf = MsgBuf::borrow_def();
         let msg = kif::tilemux::ActivityCtrl {
             act_id: act as u64,
@@ -757,7 +766,7 @@ impl TileMux {
         act: ActId,
         ep_id: EpId,
         replies: usize,
-    ) -> Result<EpId, Error> {
+    ) -> anyhow::Result<EpId> {
         let mut buf = MsgBuf::borrow_def();
         let msg = kif::tilemux::ReqEP {
             act_id: act as u64,
@@ -776,7 +785,7 @@ impl TileMux {
         parent_pts: quota::Id,
         time: Option<u64>,
         pts: Option<usize>,
-    ) -> Result<(quota::Id, quota::Id), Error> {
+    ) -> anyhow::Result<(quota::Id, quota::Id)> {
         let mut buf = MsgBuf::borrow_def();
         let msg = kif::tilemux::DeriveQuota {
             parent_time,
@@ -796,7 +805,7 @@ impl TileMux {
         tilemux: RefMut<'_, Self>,
         time: quota::Id,
         pts: quota::Id,
-    ) -> Result<(quota::Quota<u64>, quota::Quota<usize>), Error> {
+    ) -> anyhow::Result<(quota::Quota<u64>, quota::Quota<usize>)> {
         let mut buf = MsgBuf::borrow_def();
         let msg = kif::tilemux::GetQuota { time, pts };
         build_vmsg!(buf, kif::tilemux::Sidecalls::GetQuota, &msg);
@@ -820,7 +829,7 @@ impl TileMux {
         id: quota::Id,
         time: u64,
         pts: usize,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         let mut buf = MsgBuf::borrow_def();
         let msg = kif::tilemux::SetQuota { id, time, pts };
         build_vmsg!(buf, kif::tilemux::Sidecalls::SetQuota, &msg);
@@ -833,7 +842,7 @@ impl TileMux {
         tilemux: RefMut<'_, Self>,
         time: Option<quota::Id>,
         pts: Option<quota::Id>,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         let mut buf = MsgBuf::borrow_def();
         let msg = kif::tilemux::RemoveQuotas { time, pts };
         build_vmsg!(buf, kif::tilemux::Sidecalls::RemoveQuotas, &msg);
@@ -851,7 +860,7 @@ impl TileMux {
         global: GlobAddr,
         pages: usize,
         perm: kif::PageFlags,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         let mut buf = MsgBuf::borrow_def();
         let msg = kif::tilemux::Map {
             act_id: act as u64,
@@ -871,7 +880,7 @@ impl TileMux {
         act: ActId,
         virt: VirtAddr,
         pages: usize,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         Self::map_async(
             tilemux,
             act,
@@ -887,7 +896,7 @@ impl TileMux {
         act: ActId,
         virt: VirtAddr,
         perm: kif::PageFlags,
-    ) -> Result<GlobAddr, Error> {
+    ) -> anyhow::Result<GlobAddr> {
         use base::cfg::PAGE_MASK;
 
         let mut buf = MsgBuf::borrow_def();
@@ -908,7 +917,7 @@ impl TileMux {
         .map(|reply| GlobAddr::new(reply.val1 & !(PAGE_MASK as GlobOff)))
     }
 
-    pub fn notify_invalidate(&mut self, act: ActId, ep: EpId) -> Result<(), Error> {
+    pub fn notify_invalidate(&mut self, act: ActId, ep: EpId) -> anyhow::Result<()> {
         let mut buf = MsgBuf::borrow_def();
         let msg = kif::tilemux::EpInval {
             act_id: act as u64,
@@ -926,12 +935,12 @@ impl TileMux {
         req: &MsgBuf,
         msg: &R,
         check_init: bool,
-    ) -> Result<thread::Event, Error> {
+    ) -> anyhow::Result<thread::Event> {
         use crate::tiles::ActivityMng;
 
         // if tilemux is not initialized, we cannot talk to it
         if check_init && !self.is_initialized() {
-            return Err(Error::new(Code::RecvGone));
+            return Err(anyhow!(Error::new(Code::RecvGone)).context("TileMux is not initialized"));
         }
 
         // if the activity has no app anymore, don't send the notify
@@ -940,7 +949,8 @@ impl TileMux {
                 .map(|v| !v.is_dead())
                 .unwrap_or(false)
             {
-                return Err(Error::new(Code::ObjectGone));
+                return Err(anyhow!(Error::new(Code::ObjectGone))
+                    .context(format!("Activity {} is dead", id)));
             }
         }
 
@@ -960,7 +970,7 @@ impl TileMux {
         req: base::mem::MsgBufRef,
         msg: &R,
         check_init: bool,
-    ) -> Result<kif::tilemux::Response, Error> {
+    ) -> anyhow::Result<kif::tilemux::Response> {
         use crate::com::SendQueue;
 
         let tile_id = tilemux.tile_id();
@@ -971,7 +981,9 @@ impl TileMux {
         let reply = SendQueue::receive_async(event)?;
 
         let mut de = base::serialize::M3Deserializer::new(reply.as_words());
-        let code: Code = de.pop()?;
+        let code: Code = de
+            .pop()
+            .map_err(|e| anyhow!(e).context("Invalid reply from TileMux"))?;
 
         log!(
             LogFlags::KernTMC,
@@ -982,9 +994,10 @@ impl TileMux {
 
         if code == Code::Success {
             de.pop()
+                .map_err(|e| anyhow!(e).context("Invalid reply from TileMux"))
         }
         else {
-            Err(Error::new(code))
+            Err(anyhow!(Error::new(code)).context("TileMux request failed"))
         }
     }
 }

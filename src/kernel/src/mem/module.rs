@@ -13,7 +13,8 @@
  * General Public License version 2 for more details.
  */
 
-use base::errors::Error;
+use anyhow::anyhow;
+
 use base::mem::{GlobAddr, GlobOff, MemMap};
 use base::tcu::TileId;
 use core::fmt;
@@ -65,8 +66,11 @@ impl MemMod {
         self.map.size().0
     }
 
-    pub fn allocate(&mut self, size: GlobOff, align: GlobOff) -> Result<GlobAddr, Error> {
-        self.map.allocate(size, align).map(|addr| self.gaddr + addr)
+    pub fn allocate(&mut self, size: GlobOff, align: GlobOff) -> anyhow::Result<GlobAddr> {
+        self.map
+            .allocate(size, align)
+            .map(|addr| self.gaddr + addr)
+            .map_err(|e| anyhow!(e))
     }
 
     pub fn free(&mut self, addr: GlobAddr, size: GlobOff) -> bool {
