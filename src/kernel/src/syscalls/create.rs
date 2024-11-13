@@ -468,9 +468,9 @@ pub fn create_map_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     // retrieve/create map object
     let (map_obj, _map_obj_clone, exists) = {
         let map_caps = dst_act.map_caps().borrow();
-        let map_cap = map_caps.get(r.dst);
+        let map_cap = map_caps.try_get(r.dst);
         match map_cap {
-            Ok(c) => {
+            Some(c) => {
                 // TODO check for kernel-created caps
                 // TODO we have to update MemGates that are childs of this cap
                 if c.len() != r.pages {
@@ -480,7 +480,7 @@ pub fn create_map_async(act: TempRc<Activity>) -> anyhow::Result<()> {
 
                 (c.get::<TempRc<MapObject>>()?, None, true)
             },
-            Err(_) => {
+            None => {
                 // TODO TOCTOU as multiple maps can race creating two mappings
                 // for the same range simultaniously.
                 let range = CapRngDesc::new(CapType::Mapping, r.dst, r.pages).map_err(|e| {

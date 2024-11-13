@@ -123,14 +123,22 @@ impl CapTable {
         true
     }
 
+    pub fn try_get(&self, sel: CapSel) -> Option<&Capability> {
+        self.caps.get(&SelRange::new(sel))
+    }
+
+    pub fn try_get_mut(&mut self, sel: CapSel) -> Option<&mut Capability> {
+        self.caps.get_mut(&SelRange::new(sel))
+    }
+
     pub fn get(&self, sel: CapSel) -> anyhow::Result<&Capability> {
-        self.caps.get(&SelRange::new(sel)).ok_or_else(|| {
+        self.try_get(sel).ok_or_else(|| {
             anyhow!(Error::new(Code::InvCap)).context(format!("Invalid cap at selector {}", sel))
         })
     }
 
     pub fn get_mut(&mut self, sel: CapSel) -> anyhow::Result<&mut Capability> {
-        self.caps.get_mut(&SelRange::new(sel)).ok_or_else(|| {
+        self.try_get_mut(sel).ok_or_else(|| {
             anyhow!(Error::new(Code::InvCap)).context(format!("Invalid cap at selector {}", sel))
         })
     }
@@ -242,7 +250,7 @@ impl CapTable {
         let mut sel = crd.start();
         while sel < crd.start() + crd.count() {
             let tbl_ref = tbl.borrow_mut();
-            match RefMut::filter_map(tbl_ref, |t| t.get_mut(sel).ok()) {
+            match RefMut::filter_map(tbl_ref, |t| t.try_get_mut(sel)) {
                 Ok(cap) => {
                     let len = cap.len();
                     if Capability::revoke_single_async(cap, own, revoker) {
