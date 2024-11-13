@@ -222,6 +222,28 @@ macro_rules! wv_require_ok {
     }};
 }
 
+/// Convenience macro that tests whether the argument is [`None`] and reports failures
+#[macro_export]
+macro_rules! wv_assert_none {
+    ($t:expr, $res:expr) => {{
+        let res = $res;
+        match res {
+            None => {
+                $t.test_succeeded();
+            },
+            Some(r) => {
+                ::m3::println!(
+                    "! {}:{}  expected None for {}, received Some FAILED",
+                    file!(),
+                    line!(),
+                    stringify!($res),
+                );
+                $t.test_failed();
+            },
+        }
+    }};
+}
+
 /// Convenience macro that tests whether the argument is [`Some`] and reports failures
 #[macro_export]
 macro_rules! wv_assert_some {

@@ -14,7 +14,6 @@
  */
 
 use m3::col::{String, ToString, Vec};
-use m3::errors::{Code, Error};
 use m3::format;
 use m3::kif;
 use m3::rc::Rc;
@@ -36,14 +35,14 @@ impl ConfigParser {
         }
     }
 
-    fn get(&mut self) -> Result<char, Error> {
+    fn get(&mut self) -> Option<char> {
         if self.pos < self.chars.len() {
             let idx = self.pos;
             self.pos += 1;
-            Ok(self.chars[idx])
+            Some(self.chars[idx])
         }
         else {
-            Err(Error::new(Code::InvArgs))
+            None
         }
     }
 
@@ -57,42 +56,42 @@ impl ConfigParser {
         }
     }
 
-    fn finish(&mut self) -> Result<(), Error> {
+    fn finish(&mut self) -> Option<()> {
         while self.pos < self.chars.len() {
             if !self.chars[self.pos].is_whitespace() {
-                return Err(Error::new(Code::InvArgs));
+                return None;
             }
             self.pos += 1;
         }
-        Ok(())
+        Some(())
     }
 
-    fn get_no_ws(&mut self) -> Result<char, Error> {
+    fn get_no_ws(&mut self) -> Option<char> {
         loop {
             let c = self.get()?;
             if c.is_whitespace() {
                 continue;
             }
-            break Ok(c);
+            break Some(c);
         }
     }
 
-    fn consume(&mut self, c: char) -> Result<(), Error> {
+    fn consume(&mut self, c: char) -> Option<()> {
         let nc = self.get_no_ws()?;
         if nc != c {
-            Err(Error::new(Code::InvArgs))
+            None
         }
         else {
-            Ok(())
+            Some(())
         }
     }
 
-    fn parse_ident(&mut self, delim: char) -> Result<String, Error> {
+    fn parse_ident(&mut self, delim: char) -> Option<String> {
         let mut name_buf = String::new();
         let first = self.get_no_ws()?;
         name_buf.push(first);
 
-        while let Ok(c) = self.get() {
+        while let Some(c) = self.get() {
             if c == delim {
                 self.put();
                 break;
@@ -103,14 +102,14 @@ impl ConfigParser {
 
             name_buf.push(c);
         }
-        Ok(name_buf)
+        Some(name_buf)
     }
 
-    fn parse_arg(&mut self) -> Result<Option<(String, String)>, Error> {
+    fn parse_arg(&mut self) -> Option<Option<(String, String)>> {
         let first = self.get_no_ws()?;
         self.put();
         if first == '>' || first == '/' {
-            return Ok(None);
+            return Some(None);
         }
 
         let name = self.parse_ident('=')?;
@@ -118,17 +117,17 @@ impl ConfigParser {
         self.consume('"')?;
 
         let mut val_buf = String::new();
-        while let Ok(c) = self.get() {
+        while let Some(c) = self.get() {
             if c == '"' {
                 break;
             }
 
             val_buf.push(c);
         }
-        Ok(Some((name, val_buf)))
+        Some(Some((name, val_buf)))
     }
 
-    fn parse_tag_name(&mut self) -> Result<Option<String>, Error> {
+    fn parse_tag_name(&mut self) -> Option<Option<String>> {
         self.consume('<')?;
 
         let mut name_buf = String::new();
@@ -137,13 +136,13 @@ impl ConfigParser {
         if first == '/' {
             while let Some(n) = self.put() {
                 if n == '<' {
-                    return Ok(None);
+                    return Some(None);
                 }
             }
         }
         name_buf.push(first);
 
-        while let Ok(c) = self.get() {
+        while let Some(c) = self.get() {
             if c.is_whitespace() {
                 break;
             }
@@ -155,23 +154,23 @@ impl ConfigParser {
             name_buf.push(c);
         }
 
-        Ok(Some(name_buf))
+        Some(Some(name_buf))
     }
 }
 
-pub(crate) fn parse(xml: &str) -> Result<config::AppConfig, Error> {
+pub(crate) fn parse(xml: &str) -> Option<config::AppConfig> {
     let mut p = ConfigParser::new(xml);
 
     let app = match p.parse_tag_name()? {
         Some(tag) if tag == "app" => parse_app(&mut p, 0),
-        _ => Err(Error::new(Code::InvArgs)),
+        _ => None,
     }?;
 
     p.finish()?;
-    Ok(app)
+    Some(app)
 }
 
-fn parse_app(p: &mut ConfigParser, start: usize) -> Result<config::AppConfig, Error> {
+fn parse_app(p: &mut ConfigParser, start: usize) -> Option<config::AppConfig> {
     let mut app = config::AppConfig::default();
 
     loop {
@@ -194,13 +193,13 @@ fn parse_app(p: &mut ConfigParser, start: usize) -> Result<config::AppConfig, Er
                 "daemon" => app.daemon = parse::bool(&v)?,
                 "attestation_id" => app.attestation_id = parse::int(&v)? as u32,
                 "getinfo" => app.getinfo = parse::bool(&v)?,
-                _ => return Err(Error::new(Code::InvArgs)),
+                _ => return None,
             },
         }
     }
 
     if app.name.is_empty() || app.args.is_empty() {
-        return Err(Error::new(Code::InvArgs));
+        return None;
     }
 
     // put all apps that belong to the same domain as `app` into a pseudo domain
@@ -230,7 +229,7 @@ fn parse_app(p: &mut ConfigParser, start: usize) -> Result<config::AppConfig, Er
                 "sgate" => app.sgates.push(parse_sgate(p)?),
                 "sem" => app.sems.push(parse_sem(p)?),
                 "serial" => app.serial = Some(config::SerialDesc::default()),
-                _ => return Err(Error::new(Code::InvArgs)),
+                _ => return None,
             }
 
             if tag != "dom" && tag != "app" {
@@ -242,7 +241,7 @@ fn parse_app(p: &mut ConfigParser, start: usize) -> Result<config::AppConfig, Er
         parse_close_tag(p, "app")?;
     }
     else {
-        return Err(Error::new(Code::InvArgs));
+        return None;
     }
 
     if !pseudo_dom.apps.is_empty() {
@@ -263,7 +262,7 @@ fn parse_app(p: &mut ConfigParser, start: usize) -> Result<config::AppConfig, Er
         }
     }
 
-    Ok(app)
+    Some(app)
 }
 
 fn hosts_service(app: &config::AppConfig, name: &str) -> bool {
@@ -290,7 +289,7 @@ fn collect_sess_crts(app: &config::AppConfig, crts: &mut Vec<config::SessCrtDesc
     }
 }
 
-fn parse_dual_name(dual: &mut config::DualName, n: String, v: String) -> Result<(), Error> {
+fn parse_dual_name(dual: &mut config::DualName, n: String, v: String) -> Option<()> {
     match n.as_ref() {
         "name" => {
             dual.local.clone_from(&v);
@@ -298,12 +297,12 @@ fn parse_dual_name(dual: &mut config::DualName, n: String, v: String) -> Result<
         },
         "lname" => dual.local = v,
         "gname" => dual.global = v,
-        _ => return Err(Error::new(Code::InvArgs)),
+        _ => return None,
     }
-    Ok(())
+    Some(())
 }
 
-fn parse_domain(p: &mut ConfigParser) -> Result<config::Domain, Error> {
+fn parse_domain(p: &mut ConfigParser) -> Option<config::Domain> {
     let mut dom = config::Domain::default();
 
     loop {
@@ -316,7 +315,7 @@ fn parse_domain(p: &mut ConfigParser) -> Result<config::Domain, Error> {
                 "initrd" => dom.initrd = Some(v),
                 "dtb" => dom.dtb = Some(v),
                 "tee" => dom.tee = parse::int(&v)? == 1,
-                _ => return Err(Error::new(Code::InvArgs)),
+                _ => return None,
             },
         }
     }
@@ -330,7 +329,7 @@ fn parse_domain(p: &mut ConfigParser) -> Result<config::Domain, Error> {
     let mut app_start = p.pos;
     while let Some(tag) = p.parse_tag_name()? {
         if tag != "app" {
-            return Err(Error::new(Code::InvArgs));
+            return None;
         }
 
         dom.apps.push(Rc::new(parse_app(p, app_start)?));
@@ -338,10 +337,10 @@ fn parse_domain(p: &mut ConfigParser) -> Result<config::Domain, Error> {
     }
 
     parse_close_tag(p, "dom")?;
-    Ok(dom)
+    Some(dom)
 }
 
-fn parse_mount(p: &mut ConfigParser) -> Result<config::MountDesc, Error> {
+fn parse_mount(p: &mut ConfigParser) -> Option<config::MountDesc> {
     let mut fs = String::new();
     let mut path = String::new();
 
@@ -358,20 +357,20 @@ fn parse_mount(p: &mut ConfigParser) -> Result<config::MountDesc, Error> {
                         path = format!("{}/", v);
                     }
                 },
-                _ => return Err(Error::new(Code::InvArgs)),
+                _ => return None,
             },
         }
     }
 
     if fs.is_empty() || path.is_empty() {
-        Err(Error::new(Code::InvArgs))
+        None
     }
     else {
-        Ok(config::MountDesc::new(fs, path))
+        Some(config::MountDesc::new(fs, path))
     }
 }
 
-fn parse_mod(p: &mut ConfigParser) -> Result<config::ModDesc, Error> {
+fn parse_mod(p: &mut ConfigParser) -> Option<config::ModDesc> {
     let mut name = config::DualName::default();
     let mut perm = kif::Perm::RWX;
 
@@ -381,20 +380,20 @@ fn parse_mod(p: &mut ConfigParser) -> Result<config::ModDesc, Error> {
             Some((n, v)) => match n.as_ref() {
                 "name" | "lname" | "gname" => parse_dual_name(&mut name, n, v)?,
                 "perm" => perm = parse::perm(&v)?,
-                _ => return Err(Error::new(Code::InvArgs)),
+                _ => return None,
             },
         }
     }
 
     if name.is_empty() {
-        Err(Error::new(Code::InvArgs))
+        None
     }
     else {
-        Ok(config::ModDesc::new(name, perm))
+        Some(config::ModDesc::new(name, perm))
     }
 }
 
-fn parse_service(p: &mut ConfigParser) -> Result<config::ServiceDesc, Error> {
+fn parse_service(p: &mut ConfigParser) -> Option<config::ServiceDesc> {
     let mut name = config::DualName::default();
 
     loop {
@@ -405,14 +404,14 @@ fn parse_service(p: &mut ConfigParser) -> Result<config::ServiceDesc, Error> {
     }
 
     if name.is_empty() {
-        Err(Error::new(Code::InvArgs))
+        None
     }
     else {
-        Ok(config::ServiceDesc::new(name))
+        Some(config::ServiceDesc::new(name))
     }
 }
 
-fn parse_sesscrt(p: &mut ConfigParser) -> Result<config::SessCrtDesc, Error> {
+fn parse_sesscrt(p: &mut ConfigParser) -> Option<config::SessCrtDesc> {
     let mut name = String::new();
     let mut count = None;
 
@@ -422,20 +421,20 @@ fn parse_sesscrt(p: &mut ConfigParser) -> Result<config::SessCrtDesc, Error> {
             Some((n, v)) => match n.as_ref() {
                 "name" => name = v,
                 "count" => count = Some(parse::int(&v)? as u32),
-                _ => return Err(Error::new(Code::InvArgs)),
+                _ => return None,
             },
         }
     }
 
     if name.is_empty() {
-        Err(Error::new(Code::InvArgs))
+        None
     }
     else {
-        Ok(config::SessCrtDesc::new(name, count))
+        Some(config::SessCrtDesc::new(name, count))
     }
 }
 
-fn parse_session(p: &mut ConfigParser) -> Result<config::SessionDesc, Error> {
+fn parse_session(p: &mut ConfigParser) -> Option<config::SessionDesc> {
     let mut name = config::DualName::default();
     let mut arg = String::new();
     let mut dep = true;
@@ -447,20 +446,20 @@ fn parse_session(p: &mut ConfigParser) -> Result<config::SessionDesc, Error> {
                 "name" | "lname" | "gname" => parse_dual_name(&mut name, n, v)?,
                 "args" => arg = v,
                 "dep" => dep = parse::bool(&v)?,
-                _ => return Err(Error::new(Code::InvArgs)),
+                _ => return None,
             },
         }
     }
 
     if name.is_empty() {
-        Err(Error::new(Code::InvArgs))
+        None
     }
     else {
-        Ok(config::SessionDesc::new(name, arg, dep))
+        Some(config::SessionDesc::new(name, arg, dep))
     }
 }
 
-fn parse_tile(p: &mut ConfigParser) -> Result<config::TileDesc, Error> {
+fn parse_tile(p: &mut ConfigParser) -> Option<config::TileDesc> {
     let mut ty = String::new();
     let mut count = 1;
     let mut mux = Some(String::from("tilemux"));
@@ -474,20 +473,20 @@ fn parse_tile(p: &mut ConfigParser) -> Result<config::TileDesc, Error> {
                 "count" => count = parse::int(&v)? as u32,
                 "mux" => mux = if v == "-" { None } else { Some(v) },
                 "optional" => optional = parse::bool(&v)?,
-                _ => return Err(Error::new(Code::InvArgs)),
+                _ => return None,
             },
         }
     }
 
     if ty.is_empty() {
-        Err(Error::new(Code::InvArgs))
+        None
     }
     else {
-        Ok(config::TileDesc::new(ty, count, mux, optional))
+        Some(config::TileDesc::new(ty, count, mux, optional))
     }
 }
 
-fn parse_rgate(p: &mut ConfigParser) -> Result<config::RGateDesc, Error> {
+fn parse_rgate(p: &mut ConfigParser) -> Option<config::RGateDesc> {
     let mut name = config::DualName::default();
     let mut msg_size = 64;
     let mut slots = 1;
@@ -499,20 +498,20 @@ fn parse_rgate(p: &mut ConfigParser) -> Result<config::RGateDesc, Error> {
                 "name" | "lname" | "gname" => parse_dual_name(&mut name, n, v)?,
                 "msgsize" => msg_size = parse::int(&v)? as usize,
                 "slots" => slots = parse::int(&v)? as usize,
-                _ => return Err(Error::new(Code::InvArgs)),
+                _ => return None,
             },
         }
     }
 
     if name.is_empty() {
-        Err(Error::new(Code::InvArgs))
+        None
     }
     else {
-        Ok(config::RGateDesc::new(name, msg_size, slots))
+        Some(config::RGateDesc::new(name, msg_size, slots))
     }
 }
 
-fn parse_sgate(p: &mut ConfigParser) -> Result<config::SGateDesc, Error> {
+fn parse_sgate(p: &mut ConfigParser) -> Option<config::SGateDesc> {
     let mut name = config::DualName::default();
     let mut credits = 1;
     let mut label = 0;
@@ -524,23 +523,23 @@ fn parse_sgate(p: &mut ConfigParser) -> Result<config::SGateDesc, Error> {
                 "name" | "lname" | "gname" => parse_dual_name(&mut name, n, v)?,
                 "credits" => credits = parse::int(&v)? as u32,
                 "label" => label = parse::int(&v)? as Label,
-                _ => return Err(Error::new(Code::InvArgs)),
+                _ => return None,
             },
         }
     }
 
     if name.is_empty() {
-        Err(Error::new(Code::InvArgs))
+        None
     }
     else {
         if credits == 0 {
             credits = UNLIM_CREDITS;
         }
-        Ok(config::SGateDesc::new(name, credits, label))
+        Some(config::SGateDesc::new(name, credits, label))
     }
 }
 
-fn parse_sem(p: &mut ConfigParser) -> Result<config::SemDesc, Error> {
+fn parse_sem(p: &mut ConfigParser) -> Option<config::SemDesc> {
     let mut name = config::DualName::default();
 
     loop {
@@ -551,20 +550,20 @@ fn parse_sem(p: &mut ConfigParser) -> Result<config::SemDesc, Error> {
     }
 
     if name.is_empty() {
-        Err(Error::new(Code::InvArgs))
+        None
     }
     else {
-        Ok(config::SemDesc::new(name))
+        Some(config::SemDesc::new(name))
     }
 }
 
-fn parse_close_tag(p: &mut ConfigParser, name: &str) -> Result<(), Error> {
+fn parse_close_tag(p: &mut ConfigParser, name: &str) -> Option<()> {
     p.consume('<')?;
     p.consume('/')?;
 
     let tname = p.parse_ident('>')?;
     if tname != name {
-        Err(Error::new(Code::InvArgs))
+        None
     }
     else {
         p.consume('>')

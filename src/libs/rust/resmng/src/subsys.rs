@@ -221,7 +221,7 @@ impl Subsystem {
 
         // parse boot config
         let xml_str = String::from_utf8(xml).map_err(|_| Error::new(Code::InvArgs))?;
-        let cfg = config::AppConfig::parse(&xml_str)?;
+        let cfg = config::AppConfig::parse(&xml_str).ok_or_else(|| Error::new(Code::InvArgs))?;
         Ok((xml_str, cfg))
     }
 

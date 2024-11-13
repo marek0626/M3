@@ -456,7 +456,7 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
-    pub fn parse(xml: &str) -> Result<Self, Error> {
+    pub fn parse(xml: &str) -> Option<Self> {
         parser::parse(xml)
     }
 
