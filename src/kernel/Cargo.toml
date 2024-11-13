@@ -13,6 +13,7 @@ bitflags = "2.1.0"
 thread = { path = "../libs/rust/thread" }
 isr = { path = "../libs/rust/isr" }
 paging = { path = "../libs/rust/paging" }
+anyhow = { version = "1.0.93", default-features = false }
 
 [features]
 default = []

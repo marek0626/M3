@@ -13,12 +13,14 @@
  * General Public License version 2 for more details.
  */
 
-use base::errors::{Code, VerboseError};
+use anyhow::anyhow;
+
+use base::build_vmsg;
+use base::errors::{Code, Error};
 use base::kif::{self, syscalls, TileType};
 use base::mem::MsgBuf;
 use base::quota::Quota;
-use base::tcu;
-use base::{build_vmsg, verror};
+use base::{format, tcu};
 
 use thread::{Downgradable, TempRc, Upgradable};
 
@@ -28,7 +30,7 @@ use crate::tiles::{tilemng, Activity, TileMux, INVAL_ID};
 use crate::{ktcu, platform};
 
 #[inline(never)]
-pub fn tile_quota_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_quota_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::TileQuota = get_request(&msg)?;
     drop(msg);
@@ -48,12 +50,10 @@ pub fn tile_quota_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
         if tilemng::tilemux(tile_id).is_initialized() {
             TileMux::get_quota_async(tilemng::tilemux(tile_id), time_quota_id, pt_quota_id)
                 .map_err(|e| {
-                    verror!(
-                        e.code(),
+                    e.context(format!(
                         "Unable to get quota for time={}, pts={}",
-                        time_quota_id,
-                        pt_quota_id,
-                    )
+                        time_quota_id, pt_quota_id,
+                    ))
                 })?
         }
         else {
@@ -91,7 +91,7 @@ pub fn tile_quota_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn tile_set_quota_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_set_quota_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::TileSetQuota = get_request(&msg)?;
     drop(msg);
@@ -107,19 +107,15 @@ pub fn tile_set_quota_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let tile: TempRc<TileObject> = act.get_kobj(r.tile)?;
 
     if platform::tile_desc(tile.tile()).tile_type() == TileType::Mem {
-        return Err(verror!(Code::InvArgs, "Cannot set quota for memory tiles"));
+        return Err(anyhow!(Error::new(Code::InvArgs)).context("Cannot set quota for memory tiles"));
     }
     if tile.derived() {
-        return Err(verror!(
-            Code::NoPerm,
-            "Cannot set tile quota with derived tile capability"
-        ));
+        return Err(anyhow!(Error::new(Code::NoPerm))
+            .context("Cannot set tile quota with derived tile capability"));
     }
     if tile.activities() > 1 {
-        return Err(verror!(
-            Code::InvArgs,
-            "Cannot set tile quota with more than one Activity on the tile"
-        ));
+        return Err(anyhow!(Error::new(Code::InvArgs))
+            .context("Cannot set tile quota with more than one Activity on the tile"));
     }
 
     let tilemux = tilemng::tilemux(tile.tile());
@@ -137,7 +133,7 @@ pub fn tile_set_quota_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn tile_set_pmp(act: &TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_set_pmp(act: &TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::TileSetPMP = get_request(&msg)?;
     drop(msg);
@@ -154,30 +150,24 @@ pub fn tile_set_pmp(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let act_caps = act.obj_caps().borrow();
     let tile: TempRc<TileObject> = act_caps.get_kobj(r.tile)?;
     if platform::tile_desc(tile.tile()).tile_type() == TileType::Mem {
-        return Err(verror!(
-            Code::InvArgs,
-            "Cannot set PMP EPs for memory tiles"
-        ));
+        return Err(
+            anyhow!(Error::new(Code::InvArgs)).context("Cannot set PMP EPs for memory tiles")
+        );
     }
     if tile.derived() {
-        return Err(verror!(
-            Code::NoPerm,
-            "Cannot set PMP EPs for derived tile objects"
-        ));
+        return Err(anyhow!(Error::new(Code::NoPerm))
+            .context("Cannot set PMP EPs for derived tile objects"));
     }
     if r.overwrite && tile.activities() > 0 {
-        return Err(verror!(
-            Code::InvState,
-            "Cannot overwrite PMP EPs with existing activities"
-        ));
+        return Err(anyhow!(Error::new(Code::InvState))
+            .context("Cannot overwrite PMP EPs with existing activities"));
     }
 
     if r.ep < 1 || r.ep >= tcu::PMEM_PROT_EPS as tcu::EpId {
-        return Err(verror!(
-            Code::InvArgs,
+        return Err(anyhow!(Error::new(Code::InvArgs)).context(format!(
             "Only EPs 1..{} can be used for tile_set_pmp",
             tcu::PMEM_PROT_EPS
-        ));
+        )));
     }
 
     let mut tilemux = tilemng::tilemux(tile.tile());
@@ -188,7 +178,7 @@ pub fn tile_set_pmp(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     else {
         // invalidate EP if requested
         if let Err(e) = tilemux.invalidate_ep(INVAL_ID, r.ep, true, false) {
-            return Err(verror!(e.code(), "Unable to invalidate PMP EP"));
+            return Err(e.context("Unable to invalidate PMP EP"));
         }
 
         None
@@ -201,7 +191,7 @@ pub fn tile_set_pmp(act: &TempRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn tile_reset_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_reset_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::TileReset = get_request(&msg)?;
     drop(msg);
@@ -217,13 +207,11 @@ pub fn tile_reset_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
     let act_caps = act.obj_caps().borrow();
     let tile: TempRc<TileObject> = act_caps.get_kobj(r.tile)?;
     if platform::tile_desc(tile.tile()).tile_type() == TileType::Mem {
-        return Err(verror!(Code::InvArgs, "Cannot reset memory tiles"));
+        return Err(anyhow!(Error::new(Code::InvArgs)).context("Cannot reset memory tiles"));
     }
     if tile.derived() {
-        return Err(verror!(
-            Code::NoPerm,
-            "Cannot reset tiles for derived tile objects"
-        ));
+        return Err(anyhow!(Error::new(Code::NoPerm))
+            .context("Cannot reset tiles for derived tile objects"));
     }
 
     let mux_mem = if r.mux_mem == kif::INVALID_SEL {
@@ -233,10 +221,8 @@ pub fn tile_reset_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
         // tiles that have internal EPs do not support external EPs and tiles without internal EPs need
         // external EPs.
         if platform::tile_desc(tile.tile()).has_internal_eps() != r.ep_count.is_none() {
-            return Err(verror!(
-                Code::InvArgs,
-                "Tile-internal EPs vs. external EP range"
-            ));
+            return Err(anyhow!(Error::new(Code::InvArgs))
+                .context("Tile-internal EPs vs. external EP range"));
         }
 
         Some(act_caps.get_kobj::<TempRc<MGateObject>>(r.mux_mem)?.clone())
@@ -255,7 +241,7 @@ pub fn tile_reset_async(act: TempRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn tile_info(act: &TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_info(act: &TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::TileInfo = get_request(&msg)?;
     drop(msg);
@@ -281,7 +267,7 @@ pub fn tile_info(act: &TempRc<Activity>) -> Result<(), VerboseError> {
 }
 
 #[inline(never)]
-pub fn tile_mem(act: &TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_mem(act: &TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::TileMem = get_request(&msg)?;
     drop(msg);
@@ -291,32 +277,29 @@ pub fn tile_mem(act: &TempRc<Activity>) -> Result<(), VerboseError> {
     let mut act_caps = act.obj_caps().borrow_mut();
     let tile: TempRc<TileObject> = act_caps.get_kobj(r.tile)?;
     if platform::tile_desc(tile.tile()).tile_type() == TileType::Mem {
-        return Err(verror!(
-            Code::InvArgs,
-            "Cannot create memory cap for memory tiles"
-        ));
+        return Err(
+            anyhow!(Error::new(Code::InvArgs)).context("Cannot create memory cap for memory tiles")
+        );
     }
     if tile.derived() {
-        return Err(verror!(
-            Code::NoPerm,
-            "Cannot create memory cap for derived tile objects"
-        ));
+        return Err(anyhow!(Error::new(Code::NoPerm))
+            .context("Cannot create memory cap for derived tile objects"));
     }
     if !platform::tile_desc(tile.tile()).has_memory() {
-        return Err(verror!(Code::InvArgs, "Tile has no internal memory"));
+        return Err(anyhow!(Error::new(Code::InvArgs)).context("Tile has no internal memory"));
     }
 
     let mem = tile.memory();
     let mgate = MGateObject::new(mem, kif::Perm::RWX, true);
     let cap = Capability::new(r.dst, mgate);
-    try_cap_insert!(act_caps.insert_as_child(cap, r.tile));
+    act_caps.insert_as_child(cap, r.tile)?;
 
     reply_success(act);
     Ok(())
 }
 
 #[inline(never)]
-pub fn tile_lock(act: &TempRc<Activity>) -> Result<(), VerboseError> {
+pub fn tile_lock(act: &TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::TileLock = get_request(&msg)?;
     drop(msg);
@@ -325,10 +308,10 @@ pub fn tile_lock(act: &TempRc<Activity>) -> Result<(), VerboseError> {
 
     let tile: TempRc<TileObject> = act.obj_caps().borrow().get_kobj(r.tile)?;
     if platform::tile_desc(tile.tile()).tile_type() != TileType::Comp {
-        return Err(verror!(Code::InvArgs, "Can only lock compute tiles"));
+        return Err(anyhow!(Error::new(Code::InvArgs)).context("Can only lock compute tiles"));
     }
     if tile.derived() {
-        return Err(verror!(Code::NoPerm, "Cannot lock derived tile objects"));
+        return Err(anyhow!(Error::new(Code::NoPerm)).context("Cannot lock derived tile objects"));
     }
 
     let tilemux = tilemng::tilemux(tile.tile());

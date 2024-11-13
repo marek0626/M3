@@ -13,6 +13,8 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::{anyhow, Context};
+
 use base::cell::LazyStaticRefCell;
 use base::cfg;
 use base::col::{String, ToString, Vec};
@@ -59,7 +61,7 @@ impl ActivityMng {
         INST.borrow().acts[id as usize].upgrade()
     }
 
-    fn get_id() -> Result<tcu::ActId, Error> {
+    fn get_id() -> anyhow::Result<tcu::ActId> {
         let mut actmng = INST.borrow_mut();
         for id in actmng.next_id..cfg::MAX_ACTS as tcu::ActId {
             if !actmng.acts[id as usize].can_upgrade() {
@@ -75,7 +77,7 @@ impl ActivityMng {
             }
         }
 
-        Err(Error::new(Code::NoSpace))
+        Err(anyhow!(Error::new(Code::NoSpace)))
     }
 
     pub fn create_activity_async(
@@ -85,11 +87,11 @@ impl ActivityMng {
         eps_start: tcu::EpId,
         kmem: TempRc<KMemObject>,
         flags: ActivityFlags,
-    ) -> Result<StrongRc<Activity>, Error> {
-        let id: tcu::ActId = Self::get_id()?;
+    ) -> anyhow::Result<StrongRc<Activity>> {
+        let id: tcu::ActId = Self::get_id().context("all activity ids in use")?;
         let tile_id = tile.tile();
 
-        let act = Activity::new(name, id, parent, tile, eps_start, kmem, flags)?;
+        let act = Activity::new(name, id, parent, tile, eps_start, kmem, flags);
 
         log!(
             LogFlags::KernActs,
@@ -116,14 +118,14 @@ impl ActivityMng {
                 // capability table and thus nobody else will have removed it from the table yet.
                 let mut actmng = INST.borrow_mut();
                 actmng.acts[id as usize] = WeakRc::default();
-                return Err(e);
+                return Err(e.context("init activity"));
             }
         }
 
         Ok(act)
     }
 
-    fn init_activity_async(act: StrongRc<Activity>) -> Result<(), Error> {
+    fn init_activity_async(act: StrongRc<Activity>) -> anyhow::Result<()> {
         let tile_id = act.tile_id();
 
         if platform::tile_desc(tile_id).supports_tilemux() {
@@ -142,7 +144,7 @@ impl ActivityMng {
         Activity::init_async(act)
     }
 
-    pub fn start_activity_async(act_id: ActId, tile_id: TileId) -> Result<(), Error> {
+    pub fn start_activity_async(act_id: ActId, tile_id: TileId) -> anyhow::Result<()> {
         if platform::tile_desc(tile_id).supports_tilemux() {
             TileMux::activity_ctrl_async(
                 tilemng::tilemux(tile_id),
@@ -155,7 +157,7 @@ impl ActivityMng {
         }
     }
 
-    pub fn stop_activity_async(act: TempRc<Activity>) -> Result<(), Error> {
+    pub fn stop_activity_async(act: TempRc<Activity>) -> anyhow::Result<()> {
         if platform::tile_desc(act.tile_id()).supports_tilemux() {
             let id = act.id();
             let tile_id = act.tile_id();
@@ -170,7 +172,7 @@ impl ActivityMng {
         Ok(())
     }
 
-    pub fn start_root_async() -> Result<(), Error> {
+    pub fn start_root_async() -> anyhow::Result<()> {
         // TODO temporary
         let isa = platform::tile_desc(platform::kernel_tile()).isa();
         let tile_emem = kif::TileDesc::new(kif::TileType::Comp, isa, 0);
@@ -219,7 +221,7 @@ impl ActivityMng {
             ep_count,
             true,
         )
-        .expect("Tile reset failed");
+        .expect("Resetting tile for root");
         drop(_tile_clone);
 
         // create root activity
@@ -233,7 +235,7 @@ impl ActivityMng {
             TempRc::new(kmem.clone()),
             ActivityFlags::IS_ROOT,
         )
-        .expect("Unable to create Activity for root");
+        .expect("Creating root activity");
 
         // insert basic caps into cap space
         act.obj_caps()

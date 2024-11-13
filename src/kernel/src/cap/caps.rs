@@ -13,15 +13,17 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::anyhow;
+
 use base::cell::{RefCell, RefMut, StaticCell};
-use base::cfg;
 use base::col::Treap;
-use base::errors::{Code, Error, VerboseError};
+use base::errors::{Code, Error};
 use base::io::LogFlags;
 use base::kif::{CapRngDesc, CapSel};
 use base::log;
 use base::mem::{size_of, GlobOff, VirtAddr};
 use base::tcu::ActId;
+use base::{cfg, format};
 use core::cmp;
 use core::fmt;
 use core::ptr::NonNull;
@@ -121,32 +123,40 @@ impl CapTable {
         true
     }
 
-    pub fn get(&self, sel: CapSel) -> Result<&Capability, Error> {
-        self.caps
-            .get(&SelRange::new(sel))
-            .ok_or_else(|| Error::new(Code::InvCap))
+    pub fn try_get(&self, sel: CapSel) -> Option<&Capability> {
+        self.caps.get(&SelRange::new(sel))
     }
 
-    pub fn get_mut(&mut self, sel: CapSel) -> Result<&mut Capability, Error> {
-        self.caps
-            .get_mut(&SelRange::new(sel))
-            .ok_or_else(|| Error::new(Code::InvCap))
+    pub fn try_get_mut(&mut self, sel: CapSel) -> Option<&mut Capability> {
+        self.caps.get_mut(&SelRange::new(sel))
     }
 
-    pub fn get_kobj<T>(&self, sel: CapSel) -> Result<T, VerboseError>
+    pub fn get(&self, sel: CapSel) -> anyhow::Result<&Capability> {
+        self.try_get(sel).ok_or_else(|| {
+            anyhow!(Error::new(Code::InvCap)).context(format!("Invalid cap at selector {}", sel))
+        })
+    }
+
+    pub fn get_mut(&mut self, sel: CapSel) -> anyhow::Result<&mut Capability> {
+        self.try_get_mut(sel).ok_or_else(|| {
+            anyhow!(Error::new(Code::InvCap)).context(format!("Invalid cap at selector {}", sel))
+        })
+    }
+
+    pub fn get_kobj<T>(&self, sel: CapSel) -> anyhow::Result<T>
     where
-        T: for<'a> TryFrom<&'a KObject, Error = VerboseError>,
+        T: for<'a> TryFrom<&'a KObject, Error = anyhow::Error>,
     {
         self.get(sel)?.get()
     }
 
     #[inline(always)]
-    pub fn insert(&mut self, cap: Capability) -> Result<(), Error> {
+    pub fn insert(&mut self, cap: Capability) -> anyhow::Result<()> {
         self.insert_new(cap, None)
     }
 
     #[inline(always)]
-    pub fn insert_as_child(&mut self, cap: Capability, parent_sel: CapSel) -> Result<(), Error> {
+    pub fn insert_as_child(&mut self, cap: Capability, parent_sel: CapSel) -> anyhow::Result<()> {
         unsafe {
             let parent = self.get_shared(parent_sel);
             self.insert_new(cap, parent)
@@ -159,7 +169,7 @@ impl CapTable {
         cap: Capability,
         mut par_tbl: RefMut<'_, CapTable>,
         par_sel: CapSel,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         unsafe {
             let parent = par_tbl.get_shared(par_sel);
             self.insert_new(cap, parent)
@@ -178,22 +188,23 @@ impl CapTable {
         &mut self,
         cap: Capability,
         parent: Option<NonNull<Capability>>,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         if self.caps.get(cap.sel_range()).is_some() {
-            return Err(Error::new(Code::InvArgs));
+            return Err(anyhow!(Error::new(Code::InvArgs))
+                .context(format!("Caps {:?} exist", cap.sel_range())));
         }
         let act = self.activity();
         // prevent that we insert more capabilities into activities that are already in the
         // process of being killed.
         if act.is_dead() {
-            return Err(Error::new(Code::ObjectGone));
+            return Err(anyhow!(Error::new(Code::ObjectGone)).context("Activity was destroyed"));
         }
         if !act
             .kmem()
             .unwrap()
             .alloc(act, cap.sel(), cap.obj.size() + Capability::size())
         {
-            return Err(Error::new(Code::NoSpace));
+            return Err(anyhow!(Error::new(Code::NoSpace)).context("KMem quota"));
         }
 
         unsafe {
@@ -206,20 +217,20 @@ impl CapTable {
         Ok(())
     }
 
-    pub fn obtain(&mut self, sel: CapSel, cap: &mut Capability) -> Result<(), Error> {
+    pub fn obtain(&mut self, sel: CapSel, cap: &mut Capability) -> anyhow::Result<()> {
         let mut nc: Capability = (*cap).clone();
         nc.sels = SelRange::new(sel);
         nc.origin = false;
 
         if self.caps.get(nc.sel_range()).is_some() {
-            return Err(Error::new(Code::InvArgs));
+            return Err(anyhow!(Error::new(Code::InvArgs)).context(format!("Cap {} exists", sel)));
         }
         let act = self.activity();
         if act.is_dead() {
-            return Err(Error::new(Code::ObjectGone));
+            return Err(anyhow!(Error::new(Code::ObjectGone)).context("Activity was destroyed"));
         }
         if !act.kmem().unwrap().alloc(act, sel, Capability::size()) {
-            return Err(Error::new(Code::NoSpace));
+            return Err(anyhow!(Error::new(Code::NoSpace)).context("KMem quota"));
         }
 
         let nc = self.do_insert(nc);
@@ -239,7 +250,7 @@ impl CapTable {
         let mut sel = crd.start();
         while sel < crd.start() + crd.count() {
             let tbl_ref = tbl.borrow_mut();
-            match RefMut::filter_map(tbl_ref, |t| t.get_mut(sel).ok()) {
+            match RefMut::filter_map(tbl_ref, |t| t.try_get_mut(sel)) {
                 Ok(cap) => {
                     let len = cap.len();
                     if Capability::revoke_single_async(cap, own, revoker) {
@@ -338,9 +349,9 @@ impl Capability {
         self.sels.count
     }
 
-    pub fn get<T>(&self) -> Result<T, VerboseError>
+    pub fn get<T>(&self) -> anyhow::Result<T>
     where
-        T: for<'a> TryFrom<&'a KObject, Error = VerboseError>,
+        T: for<'a> TryFrom<&'a KObject, Error = anyhow::Error>,
     {
         // safety: we directly turn it into a KObjectOwnedRef here, so that it's okay
         unsafe { self.get_unchecked() }.try_into()

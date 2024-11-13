@@ -13,6 +13,8 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::anyhow;
+
 use base::boxed::Box;
 use base::cell::{LazyStaticRefCell, StaticCell};
 use base::col::VecDeque;
@@ -108,7 +110,8 @@ impl MsgSender<MetaData> for KTCUSender {
             msg,
             self.rpl_lbl,
             ktcu::KSRV_EP,
-        )?;
+        )
+        .map_err(|e| e.downcast::<Error>().unwrap())?;
 
         self.cur_event = Some(get_event(meta.id));
         PENDING_MSGS.set(PENDING_MSGS.get() + 1);
@@ -163,7 +166,7 @@ impl SendQueue {
         rep: tcu::EpId,
         lbl: tcu::Label,
         msg: &MsgBuf,
-    ) -> Result<thread::Event, Error> {
+    ) -> anyhow::Result<thread::Event> {
         log!(
             LogFlags::KernSQueue,
             "SendQueue[{:?}]: trying to send msg",
@@ -171,12 +174,16 @@ impl SendQueue {
         );
 
         if self.aborted {
-            return Err(Error::new(Code::RecvGone));
+            return Err(anyhow!(Error::new(Code::RecvGone)));
         }
 
         let id = alloc_qid();
 
-        if !self.queue.send(MetaData { id, rep, lbl }, msg)? {
+        if !self
+            .queue
+            .send(MetaData { id, rep, lbl }, msg)
+            .map_err(|e| anyhow!(e))?
+        {
             log!(
                 LogFlags::KernSQueue,
                 "SendQueue[{:?}]: queuing msg",
@@ -190,9 +197,9 @@ impl SendQueue {
         Ok(get_event(id))
     }
 
-    pub fn receive_async(event: thread::Event) -> Result<&'static tcu::Message, Error> {
+    pub fn receive_async(event: thread::Event) -> anyhow::Result<&'static tcu::Message> {
         thread::wait_for_async(event);
-        thread::fetch_msg().ok_or_else(|| Error::new(Code::RecvGone))
+        thread::fetch_msg().ok_or_else(|| anyhow!(Error::new(Code::RecvGone)))
     }
 
     pub fn received_reply(&mut self, mut msg: tcu::OwnedMessage) {

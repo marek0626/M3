@@ -13,14 +13,16 @@
  * General Public License version 2 for more details.
  */
 
-use base::errors::{Code, Error, VerboseError};
+use anyhow::anyhow;
+
+use base::build_vmsg;
+use base::errors::{Code, Error};
 use base::io::LogFlags;
 use base::kif::{self, CapSel};
-use base::log;
 use base::mem;
 use base::serialize::{Deserialize, M3Deserializer};
 use base::tcu::{self, OwnedMessage};
-use base::{build_vmsg, verror};
+use base::{format, log};
 
 use thread::{Downgradable, TempRc, Upgradable, WeakRc};
 
@@ -37,45 +39,23 @@ macro_rules! sysc_log {
     )
 }
 
-#[cold]
-pub fn cap_insert_error(code: Code) -> VerboseError {
-    match code {
-        Code::NoSpace => verror!(code, "Insufficient kernel memory quota"),
-        Code::InvArgs => verror!(code, "Selector already in use"),
-        Code::ObjectGone => verror!(code, "Activity is dead"),
-        _ => panic!("unexpected capability insert error code"),
-    }
-}
-
-macro_rules! try_cap_insert {
-    ($e:expr) => {
-        if let Err(e) = $e {
-            use crate::syscalls::cap_insert_error;
-            Err(cap_insert_error(e.code()))?;
-        }
-    };
-}
-
 mod create;
 mod derive;
 mod exchange;
 mod misc;
 mod tile;
 
-fn try_upgrade_kobj<T>(weak: WeakRc<T>, sel: CapSel) -> Result<TempRc<T>, VerboseError> {
+fn try_upgrade_kobj<T>(weak: WeakRc<T>, sel: CapSel) -> anyhow::Result<TempRc<T>> {
     weak.upgrade().ok_or_else(|| {
         if sel != kif::INVALID_SEL {
-            verror!(
-                Code::ObjectGone,
+            anyhow!(Error::new(Code::ObjectGone)).context(format!(
                 "Kernel object (Selector {}) was revoked during async call",
-                sel,
-            )
+                sel
+            ))
         }
         else {
-            verror!(
-                Code::ObjectGone,
-                "Kernel object was revoked during async call",
-            )
+            anyhow!(Error::new(Code::ObjectGone))
+                .context("Kernel object was revoked during async call")
         }
     })
 }
@@ -95,29 +75,23 @@ fn reply_success(act: &TempRc<Activity>) {
     reply_result(act, Code::Success);
 }
 
-fn get_request<'m, R: Deserialize<'m>>(msg: &'m OwnedMessage) -> Result<R, Error> {
+fn get_request<'m, R: Deserialize<'m>>(msg: &'m OwnedMessage) -> anyhow::Result<R> {
     let mut de = M3Deserializer::new(msg.as_words());
     de.skip(1);
-    de.pop()
+    de.pop().map_err(|e| anyhow!(e))
 }
 
-fn sync_sys<F>(
-    act: TempRc<Activity>,
-    func: F,
-) -> (Option<TempRc<Activity>>, Result<(), VerboseError>)
+fn sync_sys<F>(act: TempRc<Activity>, func: F) -> (Option<TempRc<Activity>>, anyhow::Result<()>)
 where
-    F: FnOnce(&TempRc<Activity>) -> Result<(), VerboseError>,
+    F: FnOnce(&TempRc<Activity>) -> anyhow::Result<()>,
 {
     let res = func(&act);
     (Some(act), res)
 }
 
-fn async_sys<F>(
-    act: TempRc<Activity>,
-    func: F,
-) -> (Option<TempRc<Activity>>, Result<(), VerboseError>)
+fn async_sys<F>(act: TempRc<Activity>, func: F) -> (Option<TempRc<Activity>>, anyhow::Result<()>)
 where
-    F: FnOnce(TempRc<Activity>) -> Result<(), VerboseError>,
+    F: FnOnce(TempRc<Activity>) -> anyhow::Result<()>,
 {
     // only downgrade for async functions as this causes performance overhead
     let act_weak = act.clone().downgrade_asyn();
@@ -188,18 +162,19 @@ pub fn handle_async(msg: tcu::OwnedMessage) {
 
     if let Err(e) = res {
         if let Some(act) = act {
+            let err: &Error = e.downcast_ref().unwrap();
             log!(
                 LogFlags::Error,
-                "\x1B[37;41m{}:{}@{}: {:?} failed: {} ({:?})\x1B[0m",
+                "\x1B[37;41m{}:{}@{}: {:?} failed: {:#} ({:?})\x1B[0m",
                 act.id(),
                 act.name(),
                 act.tile_id(),
                 Operation::try_from(opcode),
-                e.msg(),
-                e.code()
+                e,
+                err.code()
             );
 
-            reply_result(&act, e.code());
+            reply_result(&act, err.code());
         }
     }
 }

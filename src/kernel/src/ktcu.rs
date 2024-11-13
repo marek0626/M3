@@ -13,6 +13,8 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::anyhow;
+
 use base::cell::{StaticCell, StaticRefCell};
 use base::cfg;
 use base::env;
@@ -54,7 +56,7 @@ where
     TCU::set_ep_regs(ep, &regs);
 }
 
-pub fn config_remote_ep<CFG>(tile: TileId, ep: EpId, cfg: CFG) -> Result<(), Error>
+pub fn config_remote_ep<CFG>(tile: TileId, ep: EpId, cfg: CFG) -> anyhow::Result<()>
 where
     CFG: FnOnce(&mut [Reg], (TileId, EpId)),
 {
@@ -165,12 +167,12 @@ fn rbuf_addrs(virt: VirtAddr) -> (VirtAddr, PhysAddr) {
     }
 }
 
-pub fn recv_msgs(ep: EpId, buf: VirtAddr, ord: u32, msg_ord: u32) -> Result<(), Error> {
+pub fn recv_msgs(ep: EpId, buf: VirtAddr, ord: u32, msg_ord: u32) -> anyhow::Result<()> {
     static REPS: StaticCell<EpId> = StaticCell::new(8);
 
     let ep_count = get_ep_count(platform::kernel_tile()).unwrap() as EpId;
     if REPS.get() + (1 << (ord - msg_ord)) > ep_count {
-        return Err(Error::new(Code::NoSpace));
+        return Err(anyhow!(Error::new(Code::NoSpace)));
     }
 
     let (buf, phys) = rbuf_addrs(buf);
@@ -201,7 +203,7 @@ pub fn send_to(
     msg: &mem::MsgBuf,
     rpl_lbl: Label,
     rpl_ep: EpId,
-) -> Result<(), Error> {
+) -> anyhow::Result<()> {
     config_local_ep(KTMP_EP, |regs, tgtep| {
         // don't calculate the msg order here, because it can take some time and it doesn't really
         // matter what we set here assuming that it's large enough.
@@ -216,14 +218,14 @@ pub fn send_to(
         tile,
         ep
     );
-    TCU::send(KTMP_EP, msg, rpl_lbl, rpl_ep)
+    TCU::send(KTMP_EP, msg, rpl_lbl, rpl_ep).map_err(|e| anyhow!(e))
 }
 
 pub fn read_obj<T: Default>(tile: TileId, addr: GlobOff) -> T {
     try_read_obj(tile, addr).unwrap()
 }
 
-pub fn try_read_obj<T: Default>(tile: TileId, addr: GlobOff) -> Result<T, Error> {
+pub fn try_read_obj<T: Default>(tile: TileId, addr: GlobOff) -> anyhow::Result<T> {
     let mut obj: T = T::default();
     let obj_addr = &mut obj as *mut T as *mut u8;
     try_read_mem(tile, addr, obj_addr, mem::size_of::<T>())?;
@@ -234,7 +236,7 @@ pub fn read_slice<T>(tile: TileId, addr: GlobOff, data: &mut [T]) {
     try_read_slice(tile, addr, data).unwrap();
 }
 
-pub fn try_read_slice<T>(tile: TileId, addr: GlobOff, data: &mut [T]) -> Result<(), Error> {
+pub fn try_read_slice<T>(tile: TileId, addr: GlobOff, data: &mut [T]) -> anyhow::Result<()> {
     try_read_mem(
         tile,
         addr,
@@ -248,7 +250,7 @@ pub fn try_read_mem(
     addr: GlobOff,
     data: *mut u8,
     size: usize,
-) -> Result<(), Error> {
+) -> anyhow::Result<()> {
     config_local_ep(KTMP_EP, |regs, tgtep| {
         config_mem(regs, tgtep, KERNEL_ID, src_tile, addr, size, kif::Perm::R);
     });
@@ -259,7 +261,7 @@ pub fn try_read_mem(
         src_tile,
         addr
     );
-    TCU::read(KTMP_EP, data, size, 0)
+    TCU::read(KTMP_EP, data, size, 0).map_err(|e| anyhow!(e))
 }
 
 pub fn write_slice<T>(tile: TileId, addr: GlobOff, sl: &[T]) {
@@ -267,7 +269,7 @@ pub fn write_slice<T>(tile: TileId, addr: GlobOff, sl: &[T]) {
     write_mem(tile, addr, sl_addr, mem::size_of_val(sl));
 }
 
-pub fn try_write_slice<T>(tile: TileId, addr: GlobOff, sl: &[T]) -> Result<(), Error> {
+pub fn try_write_slice<T>(tile: TileId, addr: GlobOff, sl: &[T]) -> anyhow::Result<()> {
     let sl_addr = sl.as_ptr() as *const u8;
     try_write_mem(tile, addr, sl_addr, mem::size_of_val(sl))
 }
@@ -281,7 +283,7 @@ pub fn try_write_mem(
     addr: GlobOff,
     data: *const u8,
     size: usize,
-) -> Result<(), Error> {
+) -> anyhow::Result<()> {
     config_local_ep(KTMP_EP, |regs, tgtep| {
         config_mem(regs, tgtep, KERNEL_ID, dst_tile, addr, size, kif::Perm::W);
     });
@@ -292,10 +294,10 @@ pub fn try_write_mem(
         dst_tile,
         addr
     );
-    TCU::write(KTMP_EP, data, size, 0)
+    TCU::write(KTMP_EP, data, size, 0).map_err(|e| anyhow!(e))
 }
 
-pub fn clear(dst_tile: TileId, mut dst_addr: GlobOff, size: usize) -> Result<(), Error> {
+pub fn clear(dst_tile: TileId, mut dst_addr: GlobOff, size: usize) -> anyhow::Result<()> {
     use base::libc;
 
     let mut buf = BUF.borrow_mut();
@@ -320,7 +322,7 @@ pub fn copy(
     src_tile: TileId,
     mut src_addr: GlobOff,
     size: usize,
-) -> Result<(), Error> {
+) -> anyhow::Result<()> {
     let mut buf = BUF.borrow_mut();
     let mut rem = size;
     while rem > 0 {
@@ -334,7 +336,7 @@ pub fn copy(
     Ok(())
 }
 
-pub fn get_version(tile: TileId) -> Result<(u16, u8, u8), Error> {
+pub fn get_version(tile: TileId) -> anyhow::Result<(u16, u8, u8)> {
     let features: u64 = try_read_obj(tile, TCU::ext_reg_addr(ExtReg::Features).as_goff())?;
     Ok((
         (features >> 32) as u16,
@@ -343,7 +345,7 @@ pub fn get_version(tile: TileId) -> Result<(u16, u8, u8), Error> {
     ))
 }
 
-pub fn deprivilege_tile(tile: TileId) -> Result<(), Error> {
+pub fn deprivilege_tile(tile: TileId) -> anyhow::Result<()> {
     let reg_addr = TCU::ext_reg_addr(ExtReg::Features).as_goff();
     let mut features: u64 = try_read_obj(tile, reg_addr)?;
     features &= !1;
@@ -351,7 +353,7 @@ pub fn deprivilege_tile(tile: TileId) -> Result<(), Error> {
 }
 
 #[allow(unused_variables)]
-pub fn get_ep_count(tile: TileId) -> Result<usize, Error> {
+pub fn get_ep_count(tile: TileId) -> anyhow::Result<usize> {
     #[cfg(any(feature = "hw22", feature = "hw23"))]
     return Ok(128);
     #[cfg(not(any(feature = "hw22", feature = "hw23")))]
@@ -362,9 +364,9 @@ pub fn get_ep_count(tile: TileId) -> Result<usize, Error> {
 }
 
 #[allow(unused_variables)]
-pub fn set_eps_region(tile: TileId, addr: GlobAddr, size: GlobOff) -> Result<(), Error> {
+pub fn set_eps_region(tile: TileId, addr: GlobAddr, size: GlobOff) -> anyhow::Result<()> {
     #[cfg(any(feature = "hw22", feature = "hw23"))]
-    return Err(Error::new(Code::NotSup));
+    return Err(anyhow!(Error::new(Code::NotSup)));
     #[cfg(not(any(feature = "hw22", feature = "hw23")))]
     {
         // clear this region to ensure that all endpoints are invalid
@@ -379,14 +381,14 @@ pub fn set_eps_region(tile: TileId, addr: GlobAddr, size: GlobOff) -> Result<(),
     }
 }
 
-pub fn lock_tile(tile: TileId) -> Result<(), Error> {
+pub fn lock_tile(tile: TileId) -> anyhow::Result<()> {
     let reg_addr = TCU::ext_reg_addr(ExtReg::Features).as_goff();
     let mut features: u64 = try_read_obj(tile, reg_addr)?;
     features |= FeatureFlags::LOCKED.bits();
     try_write_slice(tile, reg_addr, &[features])
 }
 
-pub fn reset_tile(tile: TileId, start: bool) -> Result<(), Error> {
+pub fn reset_tile(tile: TileId, start: bool) -> anyhow::Result<()> {
     let val: Reg = if start { 1 } else { 0 };
     if env::boot().platform == env::Platform::Hw {
         // TODO put the reset command into the spec so that we can use that on HW as well
@@ -411,7 +413,7 @@ pub fn glob_to_phys_remote(
     tile: TileId,
     glob: GlobAddr,
     flags: kif::PageFlags,
-) -> Result<PhysAddr, Error> {
+) -> anyhow::Result<PhysAddr> {
     glob.to_phys_with(platform::tile_desc(tile), flags, |ep| {
         let mut regs = [0; EP_REGS];
         if read_ep_remote(tile, ep, &mut regs).is_ok() {
@@ -421,18 +423,19 @@ pub fn glob_to_phys_remote(
             None
         }
     })
+    .map_err(|e| anyhow!(e))
 }
 
 pub fn unpack_mem_ep_remote(
     tile: TileId,
     ep: EpId,
-) -> Result<(TileId, GlobOff, GlobOff, kif::Perm), Error> {
+) -> anyhow::Result<(TileId, GlobOff, GlobOff, kif::Perm)> {
     let mut regs = [0; EP_REGS];
     read_ep_remote(tile, ep, &mut regs)?;
-    TCU::unpack_mem_regs(&regs).ok_or_else(|| Error::new(Code::NoMEP))
+    TCU::unpack_mem_regs(&regs).ok_or_else(|| anyhow!(Error::new(Code::NoMEP)))
 }
 
-pub fn read_ep_remote(tile: TileId, ep: EpId, regs: &mut [Reg]) -> Result<(), Error> {
+pub fn read_ep_remote(tile: TileId, ep: EpId, regs: &mut [Reg]) -> anyhow::Result<()> {
     for i in 0..regs.len() {
         try_read_slice(
             tile,
@@ -443,7 +446,7 @@ pub fn read_ep_remote(tile: TileId, ep: EpId, regs: &mut [Reg]) -> Result<(), Er
     Ok(())
 }
 
-pub fn write_ep_remote(tile: TileId, ep: EpId, regs: &[Reg]) -> Result<(), Error> {
+pub fn write_ep_remote(tile: TileId, ep: EpId, regs: &[Reg]) -> anyhow::Result<()> {
     for (i, r) in regs.iter().enumerate() {
         try_write_slice(tile, (TCU::ep_regs_addr(ep) + i * 8).as_goff(), &[*r])?;
     }
@@ -458,7 +461,7 @@ pub fn set_excl_region(
     addr: GlobOff,
     size: GlobOff,
     perm: kif::Perm,
-) -> Result<(), Error> {
+) -> anyhow::Result<()> {
     #[cfg(not(feature = "gem5"))]
     return Ok(());
 
@@ -484,7 +487,7 @@ pub fn set_excl_region(
 }
 
 #[allow(unused)]
-pub fn invalidate_excl_region(mem_tile: TileId, idx: usize) -> Result<(), Error> {
+pub fn invalidate_excl_region(mem_tile: TileId, idx: usize) -> anyhow::Result<()> {
     #[cfg(not(feature = "gem5"))]
     return Ok(());
 
@@ -495,7 +498,7 @@ pub fn invalidate_excl_region(mem_tile: TileId, idx: usize) -> Result<(), Error>
     }
 }
 
-pub fn invalidate_ep_remote(tile: TileId, ep: EpId, force: bool) -> Result<u32, Error> {
+pub fn invalidate_ep_remote(tile: TileId, ep: EpId, force: bool) -> anyhow::Result<u32> {
     log!(LogFlags::KernEPs, "{}:EP{} = invalid", tile, ep);
 
     let reg = ExtCmdOpCode::InvEP as Reg | ((ep as Reg) << 9) as Reg | ((force as Reg) << 25);
@@ -507,7 +510,7 @@ pub fn inv_reply_remote(
     recv_ep: EpId,
     send_tile: TileId,
     send_ep: EpId,
-) -> Result<(), Error> {
+) -> anyhow::Result<()> {
     log!(
         LogFlags::KernEPs,
         "{}:EP{} = invalid reply EPs at {}:EP{}",
@@ -545,13 +548,13 @@ pub fn inv_reply_remote(
     Ok(())
 }
 
-fn do_ext_cmd(tile: TileId, cmd: Reg) -> Result<Reg, Error> {
+fn do_ext_cmd(tile: TileId, cmd: Reg) -> anyhow::Result<Reg> {
     let addr = TCU::ext_reg_addr(ExtReg::ExtCmd).as_goff();
     try_write_slice(tile, addr, &[cmd])?;
     wait_ext_cmd(tile)
 }
 
-fn wait_ext_cmd(tile: TileId) -> Result<Reg, Error> {
+fn wait_ext_cmd(tile: TileId) -> anyhow::Result<Reg> {
     let addr = TCU::ext_reg_addr(ExtReg::ExtCmd).as_goff();
 
     let res = loop {
@@ -563,6 +566,6 @@ fn wait_ext_cmd(tile: TileId) -> Result<Reg, Error> {
 
     match Code::try_from(((res >> 4) & 0x1F) as u32).unwrap() {
         Code::Success => Ok(res >> 9),
-        e => Err(Error::new(e)),
+        e => Err(anyhow!(Error::new(e))),
     }
 }
