@@ -15,6 +15,7 @@
 
 use anyhow::anyhow;
 
+use base::errors::{Code, Error};
 use base::mem::{GlobAddr, GlobOff, MemMap};
 use base::tcu::TileId;
 use core::fmt;
@@ -70,7 +71,7 @@ impl MemMod {
         self.map
             .allocate(size, align)
             .map(|addr| self.gaddr + addr)
-            .map_err(|e| anyhow!(e))
+            .ok_or_else(|| anyhow!(Error::new(Code::OutOfMem)))
     }
 
     pub fn free(&mut self, addr: GlobAddr, size: GlobOff) -> bool {

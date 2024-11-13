@@ -22,7 +22,6 @@ use core::ops;
 use num_traits::PrimInt;
 
 use crate::col::LinkedList;
-use crate::errors::{Code, Error};
 use crate::util::math;
 
 struct Area<T: PrimInt> {
@@ -56,7 +55,7 @@ impl<T: PrimInt + ops::AddAssign + ops::SubAssign> MemMap<T> {
     }
 
     /// Allocates a region of `size` bytes, aligned by `align`.
-    pub fn allocate(&mut self, size: T, align: T) -> Result<T, Error> {
+    pub fn allocate(&mut self, size: T, align: T) -> Option<T> {
         // find an area with sufficient space
         let mut cur = self.areas.cursor_front_mut();
         let a: Option<&mut Area<T>> = loop {
@@ -73,7 +72,7 @@ impl<T: PrimInt + ops::AddAssign + ops::SubAssign> MemMap<T> {
         };
 
         match a {
-            None => Err(Error::new(Code::OutOfMem)),
+            None => None,
             Some(a) => {
                 // if we need to do some alignment, create a new area in front of a
                 let org_addr = a.addr;
@@ -96,7 +95,7 @@ impl<T: PrimInt + ops::AddAssign + ops::SubAssign> MemMap<T> {
                     cur.insert_before(Area::new(org_addr, diff));
                 }
 
-                Ok(res)
+                Some(res)
             },
         }
     }
@@ -193,18 +192,15 @@ mod tests {
     fn basics() {
         let mut m = MemMap::new(0, 0x1000);
 
-        assert_eq!(m.allocate(0x100, 0x10), Ok(0x0));
-        assert_eq!(m.allocate(0x100, 0x10), Ok(0x100));
-        assert_eq!(m.allocate(0x100, 0x10), Ok(0x200));
+        assert_eq!(m.allocate(0x100, 0x10), Some(0x0));
+        assert_eq!(m.allocate(0x100, 0x10), Some(0x100));
+        assert_eq!(m.allocate(0x100, 0x10), Some(0x200));
 
         m.free(0x100, 0x100);
         m.free(0x0, 0x100);
 
-        assert_eq!(
-            m.allocate(0x1000, 0x10).map_err(|e| e.code()),
-            Err(Code::OutOfMem)
-        );
-        assert_eq!(m.allocate(0x200, 0x10), Ok(0x0));
+        assert_eq!(m.allocate(0x1000, 0x10), None);
+        assert_eq!(m.allocate(0x200, 0x10), Some(0x0));
 
         m.free(0x200, 0x100);
         m.free(0x0, 0x200);
@@ -218,10 +214,10 @@ mod tests {
 
         assert_eq!(m.largest_contiguous(), Some(1000));
 
-        assert_eq!(m.allocate(200, 1), Ok(0));
-        assert_eq!(m.allocate(200, 1), Ok(200));
-        assert_eq!(m.allocate(200, 1), Ok(400));
-        assert_eq!(m.allocate(200, 1), Ok(600));
+        assert_eq!(m.allocate(200, 1), Some(0));
+        assert_eq!(m.allocate(200, 1), Some(200));
+        assert_eq!(m.allocate(200, 1), Some(400));
+        assert_eq!(m.allocate(200, 1), Some(600));
 
         assert_eq!(m.largest_contiguous(), Some(200));
 
@@ -236,9 +232,9 @@ mod tests {
     fn alloc() {
         let mut m = MemMap::new(0, 0x1000);
 
-        assert_eq!(m.allocate(0x50, 0x100), Ok(0));
-        assert_eq!(m.allocate(0x50, 0x100), Ok(0x100));
-        assert_eq!(m.allocate(0x50, 0x100), Ok(0x200));
+        assert_eq!(m.allocate(0x50, 0x100), Some(0));
+        assert_eq!(m.allocate(0x50, 0x100), Some(0x100));
+        assert_eq!(m.allocate(0x50, 0x100), Some(0x200));
 
         // each allocation leaves a 0x50 hole after it (@ 0x50, @ 0x150, @ 0x250). the last one
         // goes to the end of the area, making it the largest contiguous region.
@@ -249,12 +245,12 @@ mod tests {
     fn free() {
         let mut m = MemMap::new(0, 1200);
 
-        assert_eq!(m.allocate(200, 1), Ok(0));
-        assert_eq!(m.allocate(200, 1), Ok(200));
-        assert_eq!(m.allocate(200, 1), Ok(400));
-        assert_eq!(m.allocate(200, 1), Ok(600));
-        assert_eq!(m.allocate(200, 1), Ok(800));
-        assert_eq!(m.allocate(200, 1), Ok(1000));
+        assert_eq!(m.allocate(200, 1), Some(0));
+        assert_eq!(m.allocate(200, 1), Some(200));
+        assert_eq!(m.allocate(200, 1), Some(400));
+        assert_eq!(m.allocate(200, 1), Some(600));
+        assert_eq!(m.allocate(200, 1), Some(800));
+        assert_eq!(m.allocate(200, 1), Some(1000));
 
         m.free(800, 200);
         m.free(400, 200);

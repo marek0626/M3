@@ -15,6 +15,8 @@
 
 use core::fmt;
 
+use base::errors::Code;
+
 use crate::cap::Selector;
 use crate::cell::LazyStaticRefCell;
 use crate::cfg;
@@ -79,7 +81,11 @@ impl fmt::Debug for RecvBuf {
 pub(crate) fn alloc_rbuf(size: usize) -> Result<RecvBuf, Error> {
     let vm = Activity::own().tile_desc().has_virtmem();
     let align = if vm { cfg::PAGE_SIZE } else { 1 };
-    let addr = VirtAddr::from(BUFS.borrow_mut().allocate(size, align)?);
+    let addr = VirtAddr::from(
+        BUFS.borrow_mut()
+            .allocate(size, align)
+            .ok_or_else(|| Error::new(Code::OutOfMem))?,
+    );
 
     let mgate = if vm {
         match map_rbuf(addr, size) {

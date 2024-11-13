@@ -219,7 +219,9 @@ impl MemSlice {
     }
 
     pub fn allocate(&mut self, size: GlobOff, align: GlobOff) -> Result<GlobOff, Error> {
-        self.map.allocate(size, align)
+        self.map
+            .allocate(size, align)
+            .ok_or_else(|| Error::new(Code::OutOfMem))
     }
 
     pub fn free(&mut self, addr: GlobOff, size: GlobOff) {
