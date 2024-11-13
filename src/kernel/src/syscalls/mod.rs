@@ -78,7 +78,7 @@ fn reply_success(act: &TempRc<Activity>) {
 fn get_request<'m, R: Deserialize<'m>>(msg: &'m OwnedMessage) -> anyhow::Result<R> {
     let mut de = M3Deserializer::new(msg.as_words());
     de.skip(1);
-    de.pop().map_err(|e| anyhow!(e))
+    de.pop().map_err(|_| anyhow!(Error::new(Code::InvArgs)))
 }
 
 fn sync_sys<F>(act: TempRc<Activity>, func: F) -> (Option<TempRc<Activity>>, anyhow::Result<()>)

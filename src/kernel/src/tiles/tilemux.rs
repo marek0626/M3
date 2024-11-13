@@ -680,9 +680,9 @@ impl TileMux {
         let mut de = M3Deserializer::new(msg.as_words());
         de.skip(pos);
 
-        let r: kif::tilemux::Exit = de
-            .pop()
-            .map_err(|e| anyhow!(e).context("Invalid request from TileMux"))?;
+        let r: kif::tilemux::Exit = de.pop().map_err(|_| {
+            anyhow!(Error::new(Code::InvArgs)).context("Invalid request from TileMux")
+        })?;
 
         let tile_id = tilemux.tile_id();
         log!(LogFlags::KernTMC, "TileMux[{}] received {:?}", tile_id, r);
@@ -981,9 +981,9 @@ impl TileMux {
         let reply = SendQueue::receive_async(event)?;
 
         let mut de = base::serialize::M3Deserializer::new(reply.as_words());
-        let code: Code = de
-            .pop()
-            .map_err(|e| anyhow!(e).context("Invalid reply from TileMux"))?;
+        let code: Code = de.pop().map_err(|_| {
+            anyhow!(Error::new(Code::InvArgs)).context("Invalid reply from TileMux")
+        })?;
 
         log!(
             LogFlags::KernTMC,
@@ -993,8 +993,9 @@ impl TileMux {
         );
 
         if code == Code::Success {
-            de.pop()
-                .map_err(|e| anyhow!(e).context("Invalid reply from TileMux"))
+            de.pop().map_err(|_| {
+                anyhow!(Error::new(Code::InvArgs)).context("Invalid reply from TileMux")
+            })
         }
         else {
             Err(anyhow!(Error::new(code)).context("TileMux request failed"))

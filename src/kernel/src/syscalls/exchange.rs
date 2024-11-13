@@ -178,7 +178,7 @@ pub fn exchange_over_sess_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     let mut de = M3Deserializer::new(rmsg.as_words());
     let err: Code = de
         .pop()
-        .map_err(|e| anyhow!(e).context("Invalid server response"))?;
+        .map_err(|_| anyhow!(Error::new(Code::InvArgs)).context("Invalid server response"))?;
     match err {
         Code::Success => {},
         err => {
@@ -189,7 +189,7 @@ pub fn exchange_over_sess_async(act: TempRc<Activity>) -> anyhow::Result<()> {
 
     let reply: service::ExchangeReply = de
         .pop()
-        .map_err(|e| anyhow!(e).context("Invalid server response"))?;
+        .map_err(|_| anyhow!(Error::new(Code::InvArgs)).context("Invalid server response"))?;
 
     sysc_log!(
         act,

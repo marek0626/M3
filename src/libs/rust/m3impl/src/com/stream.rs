@@ -128,7 +128,7 @@ impl<'r> GateIStream<'r> {
     /// Pops an object of type `T` from the message.
     #[inline(always)]
     pub fn pop<T: Deserialize<'static>>(&mut self) -> Result<T, Error> {
-        T::deserialize(&mut self.source)
+        T::deserialize(&mut self.source).map_err(|e| e.into())
     }
 
     /// Sends the message marshalled by the given [`GateOStream`] as a reply on the received
