@@ -84,6 +84,30 @@ export M3_GEM5_CPUFREQ=3GHz M3_GEM5_MEMFREQ=1GHz
 export M3_CORES=12
 export M3_GEM5_CFG=$inputdir/test-config.py
 
+# NMG Bash is awful
+function array_contains() {
+    bench=$1
+    shift
+    array=("$@")
+    match=0
+    for i in "${array[@]}"
+    do
+	if [ "$bench" = "$i" ]; then
+	    return 0
+	fi
+    done
+    return 1
+}
+
+declare -a normal_tests=(
+    "unittests" "rust-algo-tests" "rust-misc-tests" "rust-vfs-tests"
+    "rust-destr-tests" "hello" "rust-net-tests" "cpp-net-tests" "facever"
+    "hashmux-tests" "msgchan" "resmngtest" "standalone" "vmtest"
+    "rust-sndrcv" "libctest" "rust-std-test" "filterchain"
+    "parchksum" "shell-nested" "chantests"
+)
+declare -a rots_tests=("rots-raser" "rots-hello")
+
 run_bench() {
     export M3_ISA=$4
     export M3_TILETYPE=$3
@@ -107,13 +131,7 @@ run_bench() {
         export M3_GEM5_CPU=TimingSimpleCPU
     fi
 
-    if [ "$bench" = "unittests" ] || [ "$bench" = "rust-algo-tests" ] || [ "$bench" = "rust-misc-tests" ] ||
-        [ "$bench" = "rust-vfs-tests" ] || [ "$bench" = "rust-destr-tests" ] || [ "$bench" = "hello" ] ||
-        [ "$bench" = "rust-net-tests" ] || [ "$bench" = "cpp-net-tests" ] || [ "$bench" = "facever" ] ||
-        [ "$bench" = "hashmux-tests" ] || [ "$bench" = "msgchan" ] || [ "$bench" = "resmngtest" ] ||
-        [ "$bench" = "standalone" ] || [ "$bench" = "vmtest" ] || [ "$bench" = "rust-sndrcv" ] ||
-        [ "$bench" = "libctest" ] || [ "$bench" = "rust-std-test" ] || [ "$bench" = "filterchain" ] ||
-        [ "$bench" = "parchksum" ] || [ "$bench" = "shell-nested" ] || [ "$bench" = "chantests" ]; then
+    if array_contains "$bench" "${normal_tests[@]}" ; then
         if [ -f "boot/${bootprefix}$bench.xml" ]; then
             cp "boot/${bootprefix}$bench.xml" "$M3_OUT/boot.gen.xml"
         else
@@ -126,7 +144,7 @@ run_bench() {
         fi
     elif [[ "$bench" == lx* ]]; then
         cp "boot/linux/${bench#lx}.xml" "$M3_OUT/boot.gen.xml"
-    elif [ "$bench" = "rots-raser" ] || [ "$bench" = "rots-hello" ]; then
+    elif array_contains "$bench" "${rots_tests[@]}" ; then
         export M3_GEM5_HDD=build/$M3_TARGET-$M3_ISA-$M3_BUILD/fsimgs-$bpe/default.img
         unset M3_GEM5_CFG
         cp "boot/$bench.xml" "$M3_OUT/boot.gen.xml"
