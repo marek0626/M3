@@ -29,7 +29,6 @@
 
 mod disk;
 mod evidence;
-mod hash;
 mod m3fs;
 mod network;
 mod pager;
@@ -41,7 +40,6 @@ mod vterm;
 
 pub use self::disk::{Disk, DiskBlockNo, DiskBlockRange};
 pub use self::evidence::EvidenceSession;
-//pub use self::hash::{HashInput, HashOutput, HashSession};
 pub use self::m3fs::M3FS;
 pub use self::network::Network;
 pub use self::pager::{MapFlags, Pager};

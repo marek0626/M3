@@ -263,7 +263,7 @@ dependencies = [
 name = "hashsum"
 version = "0.1.0"
 dependencies = [
- "hex",
+ "hex 0.4.3",
  "m3",
 ]
 
@@ -273,6 +273,13 @@ version = "0.1.0"
 dependencies = [
  "base",
  "bitflags 2.5.0",
+]
+
+[[package]]
+name = "hex"
+version = "0.1.0"
+dependencies = [
+ "hex 0.4.3",
 ]
 
 [[package]]
@@ -498,6 +505,7 @@ name = "pager"
 version = "0.1.0"
 dependencies = [
  "bitflags 2.5.0",
+ "hex 0.1.0",
  "m3",
  "resmng",
  "thread",
@@ -610,7 +618,7 @@ dependencies = [
  "base",
  "cshake",
  "ed25519-dalek",
- "hex",
+ "hex 0.4.3",
  "kecacc",
  "serde_json",
 ]

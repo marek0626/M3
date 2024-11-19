@@ -12,3 +12,4 @@ bitflags = "2.1.0"
 m3 = { path = "../../libs/rust/m3" }
 resmng = { path = "../../libs/rust/resmng" }
 thread = { path = "../../libs/rust/thread" }
+hex = { path = "../../libs/crypto/hex" }

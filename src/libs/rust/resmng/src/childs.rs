@@ -1093,13 +1093,9 @@ impl ChildManager {
 
     #[allow(clippy::borrowed_box)]
     pub fn child_by_attestation_id(&self, att_id: u32) -> Option<&dyn Child> {
-        match self
-            .childs
-            .search(|child: &Box<dyn Child>| child.attestation_id() == att_id)
-        {
-            Some(child_box) => Some(child_box.as_ref()),
-            None => None,
-        }
+        self.childs
+            .find(|child: &Box<dyn Child>| child.attestation_id() == att_id)
+            .map(|child_box| child_box.as_ref())
     }
 
     pub fn child_by_id(&self, id: Id) -> Option<&dyn Child> {

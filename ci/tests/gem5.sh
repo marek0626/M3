@@ -104,9 +104,9 @@ declare -a normal_tests=(
     "rust-destr-tests" "hello" "rust-net-tests" "cpp-net-tests" "facever"
     "hashmux-tests" "msgchan" "resmngtest" "standalone" "vmtest"
     "rust-sndrcv" "libctest" "rust-std-test" "filterchain"
-    "parchksum" "shell-nested" "chantests"
+    "parchksum" "shell-nested" "chantests" "evidence-test"
 )
-declare -a rots_tests=("rots-raser" "rots-hello")
+declare -a rots_tests=("rots-raser" "rots-hello" "rots-evidence-test")
 
 run_bench() {
     export M3_ISA=$4

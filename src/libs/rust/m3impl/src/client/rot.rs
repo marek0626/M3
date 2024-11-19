@@ -16,8 +16,6 @@ use crate::client::ClientSession;
 use crate::com::{opcodes, MemGate, RecvGate, SendGate, EP};
 use crate::crypto::HashAlgorithm;
 use crate::errors::{Code, Error};
-use crate::io::LogFlags;
-use crate::log;
 use crate::mem::GlobOff;
 use crate::serialize::bytes::{ByteBuf, Bytes};
 use crate::vec::Vec;
@@ -34,15 +32,11 @@ impl RoTSession {
     pub fn new(name: &str, algo: &'static HashAlgorithm) -> Result<Self, Error> {
         let sess = ClientSession::new(name)?;
         let sgate = sess.connect()?;
-        let secret_mem = match sess.obtain(1, |is| is.push(opcodes::RoT::GetSecretMem), |_| Ok(()))
-        {
-            Ok(crd) => Some(crd),
-            Err(_) => None,
-        };
-        log!(LogFlags::Info, "ep");
+        let secret_mem = sess
+            .obtain(1, |is| is.push(opcodes::RoT::GetSecretMem), |_| Ok(()))
+            .ok();
         let ep = sess.obtain(1, |is| is.push(opcodes::RoT::GetMem), |_| Ok(()))?;
 
-        log!(LogFlags::Info, "new sess");
         let mut sess = RoTSession {
             sess,
             sgate,
@@ -55,7 +49,6 @@ impl RoTSession {
             algo,
             ep: EP::new_bind(0, ep.start()),
         };
-        log!(LogFlags::Info, "reset algo");
         sess.reset(algo)?;
         Ok(sess)
     }

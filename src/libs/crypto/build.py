@@ -3,6 +3,7 @@ dirs = [
     'kecacc',
     'kecacc-xkcp',
     'rot',
+    'hex',
 ]
 
 

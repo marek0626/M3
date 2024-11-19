@@ -1,0 +1,10 @@
+[package]
+name = "hex"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hex = { version = "0.4.3", default-features = false, features = ["alloc", "serde"] }
+
+[features]
+serde = []

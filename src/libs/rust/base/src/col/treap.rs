@@ -112,7 +112,7 @@ impl<K: Copy + Ord, V> Treap<K, V> {
         }
     }
 
-    pub fn search<F>(&self, f: F) -> Option<&V>
+    pub fn find<F>(&self, f: F) -> Option<&V>
     where
         F: Fn(&V) -> bool,
     {

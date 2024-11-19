@@ -9,9 +9,10 @@ use m3::log;
 pub fn main() -> Result<(), Error> {
     let ev = EvidenceSession::new("evidence")?;
     let attestation_id = 1;
+    let nonce = 42;
 
     log!(LogFlags::Info, "req quote");
-    let quote = ev.quote(attestation_id)?;
+    let quote = ev.quote(attestation_id, nonce)?;
     log!(LogFlags::Info, "received quote: {}", quote);
     Ok(())
 }
