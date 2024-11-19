@@ -270,13 +270,17 @@ for test in $tests; do
                 if [ "$test" = "standalone" ] && [ "$type" != "a" ]; then
                     continue;
                 fi
-                # rots-raser only works on riscv64
+
+		# Don't run ROT tests on x86_64, they aren't supported there.
+		if $(array_contains "$test" "${rots_tests[@]}") && [ "$isa" = "x86_64" ]; then
+		    continue;
+		fi
+
+		# Additionally, rots-raser *only* works on riscv64
                 if [ "$test" = "rots-raser" ] && [ "$isa" != "riscv64" ]; then
                     continue;
                 fi
-                if [ "$test" = "rots-hello" ] && [ "$isa" == "x86_64" ]; then
-                    continue;
-                fi
+
                 # rust-sndrcv and vmtest don't run with SPM
                 if { [ "$test" = "rust-sndrcv" ] || [ "$test" = "vmtest" ]; } && [ "$type" = "a" ]; then
                     continue;
