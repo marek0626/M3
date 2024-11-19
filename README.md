@@ -99,6 +99,19 @@ As bbl contains Linux as the payload, bbl needs to be rebuilt whenever Linux cha
 
 M³Linux can be used via the boot scripts in `boot/linux/`. Note however, that M³Linux currently only works on RISC-V (both gem5 and hw23).
 
+### 6. CI notes
+
+ROT-Enabled Configurations:
+---------------------------
+
+If you want a ROT-enabled XML, note the following:
+
+- You must specify some ROT layers, as in `boot/rots-raser.xml`:
+  `<rot layers="brom,blau.bin,rosa.bin" />`
+- To run successfully under CI, you must modify `ci/tests/gem5.sh` and add
+  your test case to the rots_tests array. Otherwise the gem5 configuration
+  will not be correct and you will get unusual errors.
+  
 References:
 -----------
 
