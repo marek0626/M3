@@ -45,10 +45,8 @@ impl io::Write for Serial {
     fn write(&mut self, mut buf: &[u8]) -> Result<usize, Error> {
         let res = buf.len();
         while !buf.is_empty() {
-            match machine::write(buf) {
-                Err(e) => return Err(e),
-                Ok(n) => buf = &buf[n..],
-            }
+            let n = machine::write(buf);
+            buf = &buf[n..];
         }
         Ok(res)
     }
