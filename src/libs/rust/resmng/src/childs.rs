@@ -13,8 +13,12 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::anyhow;
+
 use bitflags::bitflags;
+
 use core::fmt;
+
 use m3::boxed::Box;
 use m3::cap::{SelSpace, Selector};
 use m3::cell::{Cell, RefCell};
@@ -160,13 +164,13 @@ pub trait Child {
     fn kmem(&self) -> Rc<KMem>;
     fn hash(&self) -> Option<&String>;
 
-    fn delegate(&self, src: Selector, dst: Selector) -> Result<(), Error> {
+    fn delegate(&self, src: Selector, dst: Selector) -> anyhow::Result<()> {
         let crd = CapRngDesc::new_single(CapType::Object, src);
-        syscalls::exchange(self.activity_sel(), crd, dst, false)
+        syscalls::exchange(self.activity_sel(), crd, dst, false).map_err(|e| anyhow!(e))
     }
-    fn obtain(&self, src: Selector) -> Result<Selector, Error> {
+    fn obtain(&self, src: Selector) -> anyhow::Result<Selector> {
         let own = SelSpace::get().alloc_sels(1);
-        syscalls::exchange(self.activity_sel(), own, src, true)?;
+        syscalls::exchange(self.activity_sel(), own, src, true).map_err(|e| anyhow!(e))?;
         Ok(own.start())
     }
 
@@ -181,7 +185,7 @@ pub trait Child {
         sgate_sel: Selector,
         name: String,
         sessions: u32,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         log!(
             LogFlags::ResMngServ,
             "{}: reg_serv(srv_sel={}, sgate_sel={}, name={}, sessions={})",
@@ -193,11 +197,13 @@ pub trait Child {
         );
 
         let cfg = self.cfg();
-        let sdesc = cfg
-            .get_service(&name)
-            .ok_or_else(|| Error::new(Code::InvArgs))?;
+        let sdesc = cfg.get_service(&name).ok_or_else(|| {
+            anyhow!(Error::new(Code::InvArgs)).context(format!("child has no service {}", name))
+        })?;
         if sdesc.is_used() {
-            return Err(Error::new(Code::Exists));
+            return Err(
+                anyhow!(Error::new(Code::Exists)).context(format!("service {} is in use", name))
+            );
         }
 
         let our_srv = self.obtain(srv_sel)?;
@@ -217,7 +223,7 @@ pub trait Child {
         Ok(())
     }
 
-    fn unreg_service(&mut self, res: &mut Resources, sel: Selector) -> Result<(), Error> {
+    fn unreg_service(&mut self, res: &mut Resources, sel: Selector) -> anyhow::Result<()> {
         log!(
             LogFlags::ResMngServ,
             "{}: unreg_serv(sel={})",
@@ -229,7 +235,7 @@ pub trait Child {
         let sid = services
             .iter()
             .position(|t| t.1 == sel)
-            .ok_or_else(|| Error::new(Code::InvArgs))
+            .ok_or_else(|| anyhow!(Error::new(Code::InvArgs)).context("unreg service"))
             .map(|idx| services.remove(idx).0)?;
         let serv = res.services_mut().remove_service(sid);
 
@@ -243,7 +249,7 @@ pub trait Child {
         id: Id,
         dst_sel: Selector,
         name: &str,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         let (sname, sarg) = {
             log!(
                 LogFlags::ResMngServ,
@@ -254,11 +260,12 @@ pub trait Child {
             );
 
             let cfg = self.cfg();
-            let (_idx, sdesc) = cfg
-                .get_session(name)
-                .ok_or_else(|| Error::new(Code::InvArgs))?;
+            let (_idx, sdesc) = cfg.get_session(name).ok_or_else(|| {
+                anyhow!(Error::new(Code::InvArgs)).context(format!("child has no session {}", name))
+            })?;
             if sdesc.is_used() {
-                return Err(Error::new(Code::Exists));
+                return Err(anyhow!(Error::new(Code::Exists))
+                    .context(format!("session {} is already in use", name)));
             }
             (sdesc.name().global().clone(), sdesc.arg().clone())
         };
@@ -269,16 +276,19 @@ pub trait Child {
 
         // get child and session desc again
         let cfg = self.cfg();
-        let (idx, sdesc) = cfg
-            .get_session(name)
-            .ok_or_else(|| Error::new(Code::InvArgs))?;
+        let (idx, sdesc) = cfg.get_session(name).ok_or_else(|| {
+            anyhow!(Error::new(Code::InvArgs))
+                .context(format!("child has no session {} anymore", name))
+        })?;
 
         // check again if it's still unused, because of the async call above
         if sdesc.is_used() {
-            return Err(Error::new(Code::Exists));
+            return Err(anyhow!(Error::new(Code::Exists))
+                .context(format!("session {} is now in use", name)));
         }
 
-        syscalls::get_sess(serv_sel, self.activity_sel(), dst_sel, sess.ident())?;
+        syscalls::get_sess(serv_sel, self.activity_sel(), dst_sel, sess.ident())
+            .map_err(|e| anyhow!(e).context("get session"))?;
 
         sdesc.mark_used();
         self.res_mut().sessions.push((idx, sess));
@@ -291,7 +301,7 @@ pub trait Child {
         res: &mut Resources,
         id: Id,
         sel: Selector,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         log!(
             LogFlags::ResMngServ,
             "{}: close_sess(sel={})",
@@ -304,7 +314,7 @@ pub trait Child {
             sessions
                 .iter()
                 .position(|(_, s)| s.sel() == sel)
-                .ok_or_else(|| Error::new(Code::InvArgs))
+                .ok_or_else(|| anyhow!(Error::new(Code::InvArgs)).context("close session"))
                 .map(|res_idx| sessions.remove(res_idx))
         }?;
 
@@ -313,7 +323,7 @@ pub trait Child {
         sess.close_async(res, id)
     }
 
-    fn alloc_local(&mut self, size: GlobOff, perm: Perm) -> Result<(MemCap, Allocation), Error> {
+    fn alloc_local(&mut self, size: GlobOff, perm: Perm) -> anyhow::Result<(MemCap, Allocation)> {
         log!(
             LogFlags::ResMngMem,
             "{}: allocate_local(size={:#x}, perm={:?})",
@@ -323,17 +333,23 @@ pub trait Child {
         );
 
         if !self.mem().have_quota(size) {
-            return Err(Error::new(Code::NoSpace));
+            return Err(anyhow!(Error::new(Code::NoSpace)).context(format!(
+                "insufficient memory quota ({} vs. {})",
+                size,
+                self.mem().quota()
+            )));
         }
 
         let alloc = self.mem().pool.borrow_mut().allocate(size)?;
         let mem_sel = self.mem().pool.borrow().mem_cap(alloc.slice_id());
-        let mcap = MemCap::new_bind(mem_sel).derive(alloc.addr(), alloc.size(), perm)?;
+        let mcap = MemCap::new_bind(mem_sel)
+            .derive(alloc.addr(), alloc.size(), perm)
+            .map_err(|e| anyhow!(e).context("derive memory region"))?;
         self.add_mem(alloc, None);
         Ok((mcap, alloc))
     }
 
-    fn alloc_mem(&mut self, dst_sel: Selector, size: GlobOff, perm: Perm) -> Result<(), Error> {
+    fn alloc_mem(&mut self, dst_sel: Selector, size: GlobOff, perm: Perm) -> anyhow::Result<()> {
         log!(
             LogFlags::ResMngMem,
             "{}: allocate(dst_sel={}, size={:#x}, perm={:?})",
@@ -344,7 +360,11 @@ pub trait Child {
         );
 
         if !self.mem().have_quota(size) {
-            return Err(Error::new(Code::NoSpace));
+            return Err(anyhow!(Error::new(Code::NoSpace)).context(format!(
+                "insufficient memory quota ({} vs. {})",
+                size,
+                self.mem().quota()
+            )));
         }
 
         let alloc = self.mem().pool.borrow_mut().allocate(size)?;
@@ -357,7 +377,7 @@ pub trait Child {
         mem_sel: Selector,
         dst_sel: Selector,
         perm: Perm,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         syscalls::derive_mem(
             self.activity_sel(),
             dst_sel,
@@ -368,7 +388,7 @@ pub trait Child {
         )
         .map_err(|e| {
             self.mem().pool.borrow_mut().free(alloc);
-            e
+            anyhow!(e).context("child memory derive")
         })?;
 
         self.add_mem(alloc, Some(dst_sel));
@@ -386,7 +406,7 @@ pub trait Child {
         );
     }
 
-    fn free_mem(&mut self, sel: Selector) -> Result<(), Error> {
+    fn free_mem(&mut self, sel: Selector) -> anyhow::Result<()> {
         let idx = self
             .res_mut()
             .mem
@@ -395,7 +415,7 @@ pub trait Child {
                 Some(s) => *s == sel,
                 _ => false,
             })
-            .ok_or_else(|| Error::new(Code::InvArgs))?;
+            .ok_or_else(|| anyhow!(Error::new(Code::InvArgs)).context("free memory"))?;
         self.remove_mem_by_idx(idx);
         Ok(())
     }
@@ -423,7 +443,7 @@ pub trait Child {
         res: &Resources,
         name: &str,
         sel: Selector,
-    ) -> Result<(u32, u32), Error> {
+    ) -> anyhow::Result<(u32, u32)> {
         log!(
             LogFlags::ResMngGate,
             "{}: use_rgate(name={}, sel={})",
@@ -433,18 +453,18 @@ pub trait Child {
         );
 
         let cfg = self.cfg();
-        let rdesc = cfg
-            .get_rgate(name)
-            .ok_or_else(|| Error::new(Code::InvArgs))?;
+        let rdesc = cfg.get_rgate(name).ok_or_else(|| {
+            anyhow!(Error::new(Code::InvArgs)).context(format!("child has no rgate {}", name))
+        })?;
 
         let rgate = res.gates().get(rdesc.name().global()).unwrap();
         self.delegate(rgate.sel(), sel)?;
         Ok((
-            math::next_log2(rgate.size()?),
-            math::next_log2(rgate.max_msg_size()?),
+            math::next_log2(rgate.size().unwrap()),
+            math::next_log2(rgate.max_msg_size().unwrap()),
         ))
     }
-    fn use_sgate(&mut self, res: &Resources, name: &str, sel: Selector) -> Result<(), Error> {
+    fn use_sgate(&mut self, res: &Resources, name: &str, sel: Selector) -> anyhow::Result<()> {
         log!(
             LogFlags::ResMngGate,
             "{}: use_sgate(name={}, sel={})",
@@ -454,11 +474,13 @@ pub trait Child {
         );
 
         let cfg = self.cfg();
-        let sdesc = cfg
-            .get_sgate(name)
-            .ok_or_else(|| Error::new(Code::InvArgs))?;
+        let sdesc = cfg.get_sgate(name).ok_or_else(|| {
+            anyhow!(Error::new(Code::InvArgs)).context(format!("child has no sgate {}", name))
+        })?;
         if sdesc.is_used() {
-            return Err(Error::new(Code::Exists));
+            return Err(
+                anyhow!(Error::new(Code::Exists)).context(format!("sgate {} already in use", name))
+            );
         }
 
         let rgate = res.gates().get(sdesc.name().global()).unwrap();
@@ -467,14 +489,15 @@ pub trait Child {
             SGateArgs::new(rgate)
                 .credits(sdesc.credits())
                 .label(sdesc.label()),
-        )?;
+        )
+        .map_err(|e| anyhow!(e).context("create SendGate"))?;
         self.delegate(sgate.sel(), sel)?;
 
         sdesc.mark_used();
         self.res_mut().scaps.push(sgate);
         Ok(())
     }
-    fn use_sem(&mut self, res: &Resources, name: &str, sel: Selector) -> Result<(), Error> {
+    fn use_sem(&mut self, res: &Resources, name: &str, sel: Selector) -> anyhow::Result<()> {
         log!(
             LogFlags::ResMngSem,
             "{}: use_sem(name={}, sel={})",
@@ -484,15 +507,17 @@ pub trait Child {
         );
 
         let cfg = self.cfg();
-        let sdesc = cfg.get_sem(name).ok_or_else(|| Error::new(Code::InvArgs))?;
+        let sdesc = cfg.get_sem(name).ok_or_else(|| {
+            anyhow!(Error::new(Code::InvArgs)).context(format!("child has no semaphore {}", name))
+        })?;
 
-        let sem = res
-            .semaphores()
-            .get(sdesc.name().global())
-            .ok_or_else(|| Error::new(Code::NotFound))?;
+        let sem = res.semaphores().get(sdesc.name().global()).ok_or_else(|| {
+            anyhow!(Error::new(Code::NotFound))
+                .context(format!("semaphore {} not found", sdesc.name().global()))
+        })?;
         self.delegate(sem.sel(), sel)
     }
-    fn use_mod(&mut self, res: &Resources, name: &str, sel: Selector) -> Result<(), Error> {
+    fn use_mod(&mut self, res: &Resources, name: &str, sel: Selector) -> anyhow::Result<()> {
         log!(
             LogFlags::ResMngMem,
             "{}: use_mod(name={}, sel={})",
@@ -502,19 +527,24 @@ pub trait Child {
         );
 
         let cfg = self.cfg();
-        let mdesc = cfg.get_mod(name).ok_or_else(|| Error::new(Code::InvArgs))?;
-        let bmod = res
-            .mods()
-            .find(mdesc.name().global())
-            .ok_or_else(|| Error::new(Code::NotFound))?;
+        let mdesc = cfg.get_mod(name).ok_or_else(|| {
+            anyhow!(Error::new(Code::InvArgs)).context(format!("child has no mod {}", name))
+        })?;
+        let bmod = res.mods().find(mdesc.name().global()).ok_or_else(|| {
+            anyhow!(Error::new(Code::NotFound))
+                .context(format!("module {} not found", mdesc.name().global()))
+        })?;
 
-        let mcap = bmod.memory().derive(0, bmod.size(), mdesc.perm())?;
+        let mcap = bmod
+            .memory()
+            .derive(0, bmod.size(), mdesc.perm())
+            .map_err(|e| anyhow!(e).context("boot module derive"))?;
         let our_sel = mcap.sel();
         self.res_mut().mods.push(mcap);
         self.delegate(our_sel, sel)
     }
 
-    fn get_serial(&mut self, sel: Selector) -> Result<(), Error> {
+    fn get_serial(&mut self, sel: Selector) -> anyhow::Result<()> {
         log!(
             LogFlags::ResMngSerial,
             "{}: get_serial(sel={})",
@@ -527,7 +557,7 @@ pub trait Child {
             self.delegate(subsys::SERIAL_RGATE_SEL, sel)
         }
         else {
-            Err(Error::new(Code::InvArgs))
+            Err(anyhow!(Error::new(Code::InvArgs)).context("child cannot get serial"))
         }
     }
 
@@ -539,7 +569,7 @@ pub trait Child {
         desc: kif::TileDesc,
         init: bool,
         inherit_pmp: bool,
-    ) -> Result<(tcu::TileId, kif::TileDesc), Error> {
+    ) -> anyhow::Result<(tcu::TileId, kif::TileDesc)> {
         log!(
             LogFlags::ResMngTiles,
             "{}: alloc_tile(sel={}, desc={:?}, init={}, inherit_pmp={})",
@@ -559,7 +589,8 @@ pub trait Child {
             if desc.is_programmable() {
                 let mux = cfg.tile_mux(idx);
                 if mux.is_none() {
-                    return Err(Error::new(Code::InvArgs));
+                    return Err(anyhow!(Error::new(Code::InvArgs))
+                        .context("tile should be initialized, but no mux exists"));
                 }
 
                 tile_usage.state_mut().load_mux(
@@ -570,27 +601,16 @@ pub trait Child {
                     None,
                     None,
                     |size| match self.alloc_local(size as GlobOff, Perm::RWX) {
-                        Ok((mem, alloc)) => Ok((mem.activate()?, Some(alloc))),
-                        Err(e) => {
-                            log!(
-                                LogFlags::Error,
-                                "Unable to allocate {}b for multiplexer",
-                                size
-                            );
-                            Err(e)
-                        },
+                        Ok((mem, alloc)) => Ok((
+                            mem.activate()
+                                .map_err(|e| anyhow!(e).context("activate mux memory"))?,
+                            Some(alloc),
+                        )),
+                        Err(e) => Err(e.context("multiplexer memory")),
                     },
                     |name| match starter.get_bootmod(name) {
                         Ok(mem) => Ok(mem),
-                        Err(e) => {
-                            log!(
-                                LogFlags::Error,
-                                "Unable to get boot module {}: {:?}",
-                                name,
-                                e
-                            );
-                            Err(e)
-                        },
+                        Err(e) => Err(e.context("mux boot module")),
                     },
                 )?;
             }
@@ -617,7 +637,7 @@ pub trait Child {
         Ok((tile_id, desc))
     }
 
-    fn free_tile(&mut self, res: &Resources, sel: Selector) -> Result<(), Error> {
+    fn free_tile(&mut self, res: &Resources, sel: Selector) -> anyhow::Result<()> {
         log!(
             LogFlags::ResMngTiles,
             "{}: free_tile(sel={})",
@@ -630,13 +650,13 @@ pub trait Child {
             .tiles
             .iter()
             .position(|(_, _, psel)| *psel == sel)
-            .ok_or_else(|| Error::new(Code::InvArgs))?;
+            .ok_or_else(|| anyhow!(Error::new(Code::InvArgs)).context("free tile"))?;
         self.remove_pe_by_idx(res, idx)?;
 
         Ok(())
     }
 
-    fn remove_pe_by_idx(&mut self, res: &Resources, idx: usize) -> Result<(), Error> {
+    fn remove_pe_by_idx(&mut self, res: &Resources, idx: usize) -> anyhow::Result<()> {
         let (mut tile_usage, idx, ep_sel) = self.res_mut().tiles.remove(idx);
         log!(
             LogFlags::ResMngTiles,
@@ -1217,11 +1237,13 @@ impl ChildManager {
         res: &Resources,
         id: Id,
         idx: Option<usize>,
-    ) -> Result<resmng::ActInfoResult, Error> {
+    ) -> anyhow::Result<resmng::ActInfoResult> {
         let layer = {
             let child = self.child_by_id_mut(id).unwrap();
             if !child.cfg().can_get_info() {
-                return Err(Error::new(Code::NoPerm));
+                return Err(
+                    anyhow!(Error::new(Code::NoPerm)).context("child has no access to info")
+                );
             }
             child.layer()
         };
@@ -1229,7 +1251,7 @@ impl ChildManager {
         let (parent_num, parent_layer) = if let Some(presmng) = Activity::own().resmng() {
             match presmng.get_activity_count() {
                 Err(e) if e.code() == Code::NoPerm => (0, 0),
-                Err(e) => return Err(e),
+                Err(e) => return Err(anyhow!(e).context("get activity count")),
                 Ok(res) => res,
             }
         }
@@ -1250,19 +1272,29 @@ impl ChildManager {
         if let Some(mut idx) = idx {
             if idx < parent_num {
                 Ok(resmng::ActInfoResult::Info(
-                    Activity::own().resmng().unwrap().get_activity_info(idx)?,
+                    Activity::own()
+                        .resmng()
+                        .unwrap()
+                        .get_activity_info(idx)
+                        .map_err(|e| anyhow!(e).context("get activity info"))?,
                 ))
             }
             else if idx - parent_num >= own_num {
-                Err(Error::new(Code::NotFound))
+                Err(anyhow!(Error::new(Code::NotFound)).context("child index out of bounds"))
             }
             else {
                 idx -= parent_num;
 
                 // the first is always us
                 if idx == 0 {
-                    let kmem_quota = Activity::own().kmem().quota()?;
-                    let tile_quota = Activity::own().tile().quota()?;
+                    let kmem_quota = Activity::own()
+                        .kmem()
+                        .quota()
+                        .map_err(|e| anyhow!(e).context("resmng kmem quota"))?;
+                    let tile_quota = Activity::own()
+                        .tile()
+                        .quota()
+                        .map_err(|e| anyhow!(e).context("resmng tile quota"))?;
                     let mem = res.memory();
                     return Ok(resmng::ActInfoResult::Info(resmng::ActInfo {
                         id: Activity::own().id(),
@@ -1293,8 +1325,15 @@ impl ChildManager {
                     idx += 1;
                 };
 
-                let kmem_quota = act.kmem().quota()?;
-                let tile_quota = act.child_tile().tile_obj().quota()?;
+                let kmem_quota = act
+                    .kmem()
+                    .quota()
+                    .map_err(|e| anyhow!(e).context("child kmem quota"))?;
+                let tile_quota = act
+                    .child_tile()
+                    .tile_obj()
+                    .quota()
+                    .map_err(|e| anyhow!(e).context("child tile quota"))?;
                 Ok(resmng::ActInfoResult::Info(resmng::ActInfo {
                     id: act.activity_id(),
                     layer: parent_layer + act.layer(),
@@ -1331,7 +1370,7 @@ impl ChildManager {
         kmem_sel: Selector,
         sgate_sel: Selector,
         name: String,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         let nid = self.next_id();
         let child = self.child_by_id_mut(id).unwrap();
         // TODO it would be better to disallow activity creation for childs and do that for them so
@@ -1355,14 +1394,16 @@ impl ChildManager {
         );
 
         if child.res().childs.iter().any(|c| c.1 == act_sel) {
-            return Err(Error::new(Code::Exists));
+            return Err(anyhow!(Error::new(Code::Exists))
+                .context(format!("child with selector {} exists", act_sel)));
         }
 
         let sgate = SendCap::new_with(
             SGateArgs::new(rgate)
                 .credits(1)
                 .label(tcu::Label::from(nid)),
-        )?;
+        )
+        .map_err(|e| anyhow!(e).context("create SendGate"))?;
         let our_sg_sel = sgate.sel();
         let nchild = Box::new(ForeignChild::new(
             res,
@@ -1374,7 +1415,9 @@ impl ChildManager {
             // all childs get the same PMP EPs, so that we can also give the same PMP EPs to childs
             // of childs.
             child.our_tile().clone(),
-            TileUsage::new_obj(Rc::new(Tile::new_bind(our_tile)?)),
+            TileUsage::new_obj(Rc::new(
+                Tile::new_bind(our_tile).map_err(|e| anyhow!(e).context("tile bind"))?,
+            )),
             Rc::new(KMem::new_bind(our_kmem)),
             act_id,
             our_act,
@@ -1395,7 +1438,7 @@ impl ChildManager {
         res: &mut Resources,
         id: Id,
         act_sel: Selector,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         let cid = {
             let child = self.child_by_id_mut(id).unwrap();
 
@@ -1411,7 +1454,7 @@ impl ChildManager {
                 .childs
                 .iter()
                 .position(|c| c.1 == act_sel)
-                .ok_or_else(|| Error::new(Code::InvArgs))?;
+                .ok_or_else(|| anyhow!(Error::new(Code::InvArgs)).context("remove child"))?;
             let cid = child.res().childs[idx].0;
             child.res_mut().childs.remove(idx);
             cid

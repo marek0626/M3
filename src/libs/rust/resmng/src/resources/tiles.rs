@@ -13,9 +13,10 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::{anyhow, Context};
+
 use m3::cap::Selector;
 use m3::cell::{Cell, Ref, RefCell, RefMut};
-use m3::cfg;
 use m3::col::Vec;
 use m3::com::{MemCap, MemGate};
 use m3::elf;
@@ -31,6 +32,7 @@ use m3::tcu::{EpId, TileId};
 use m3::tiles::Tile;
 use m3::time::TimeDuration;
 use m3::util::math;
+use m3::{cfg, format};
 
 use crate::resources::memory::Allocation;
 
@@ -97,7 +99,7 @@ impl TileState {
         size: usize,
         set: bool,
         overwrite: bool,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         if set {
             loop {
                 match syscalls::tile_set_pmp(
@@ -107,7 +109,7 @@ impl TileState {
                     overwrite,
                 ) {
                     Err(e) if e.code() == Code::Exists && !overwrite => self.next_pmp_ep += 1,
-                    Err(e) => return Err(e),
+                    Err(e) => return Err(anyhow!(e).context("set PMP region")),
                     Ok(_) => break,
                 }
             }
@@ -118,10 +120,12 @@ impl TileState {
         Ok(())
     }
 
-    pub fn inherit_mem_regions(&mut self, tile: &TileUsage) -> Result<(), Error> {
+    pub fn inherit_mem_regions(&mut self, tile: &TileUsage) -> anyhow::Result<()> {
         for (mgate, size) in tile.state().pmp_regions.iter() {
             self.add_mem_region(
-                mgate.derive(0, *size as GlobOff, Perm::RWX)?,
+                mgate
+                    .derive(0, *size as GlobOff, Perm::RWX)
+                    .map_err(|e| anyhow!(e).context("derive inherited PMP region"))?,
                 *size,
                 true,
                 true,
@@ -137,12 +141,18 @@ impl TileState {
         src_off: usize,
         dst_off: usize,
         size: usize,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         let mut pos = 0;
         while pos < size {
             let amount = (size - pos).min(buf.len());
-            src.read(&mut buf[0..amount], (src_off + pos) as GlobOff)?;
-            dst.write(&buf[0..amount], (dst_off + pos) as GlobOff)?;
+            src.read(&mut buf[0..amount], (src_off + pos) as GlobOff)
+                .map_err(|e| {
+                    anyhow!(e).context(format!("read {} from {}", amount, src_off + pos))
+                })?;
+            dst.write(&buf[0..amount], (dst_off + pos) as GlobOff)
+                .map_err(|e| {
+                    anyhow!(e).context(format!("write {} to {}", amount, dst_off + pos))
+                })?;
             pos += amount;
         }
         Ok(())
@@ -158,10 +168,10 @@ impl TileState {
         dtb: Option<&str>,
         mut alloc_mem: A,
         mut get_mod: M,
-    ) -> Result<(), Error>
+    ) -> anyhow::Result<()>
     where
-        A: FnMut(usize) -> Result<(MemGate, Option<Allocation>), Error>,
-        M: FnMut(&str) -> Result<MemGate, Error>,
+        A: FnMut(usize) -> anyhow::Result<(MemGate, Option<Allocation>)>,
+        M: FnMut(&str) -> anyhow::Result<MemGate>,
     {
         if self.state == State::On {
             return Ok(());
@@ -174,8 +184,11 @@ impl TileState {
                 TileMem { mem, alloc }
             },
         };
-        let mux_elf = get_mod(name)?;
-        let mem_region = mux.mem.region()?;
+        let mux_elf = get_mod(name).with_context(|| format!("get mod {}", name))?;
+        let mem_region = mux
+            .mem
+            .region()
+            .map_err(|e| anyhow!(e).context("mux memory region"))?;
 
         log!(
             LogFlags::ResMngTiles,
@@ -190,20 +203,27 @@ impl TileState {
             mgate: &mux_elf,
             off: 0,
         };
-        let hdr: elf::ElfHeaderCommon = read_object(&mut muxbmod)?;
-        hdr.ident.check_magic()?;
+        let hdr: elf::ElfHeaderCommon =
+            read_object(&mut muxbmod).map_err(|e| anyhow!(e).context("read mux ELF header"))?;
+        hdr.ident
+            .check_magic()
+            .map_err(|e| anyhow!(e).context("mux ELF magic"))?;
 
         let zeros = m3::vec![0u8; 4096];
         let mut buf = m3::vec![0u8; 4096];
 
         muxbmod.seek(0);
-        let hdr = hdr.load_hdr(&mut muxbmod)?;
+        let hdr = hdr
+            .load_hdr(&mut muxbmod)
+            .map_err(|e| anyhow!(e).context("read mux ELF header"))?;
 
         let mut off = hdr.ph_off() as GlobOff;
         for _ in 0..hdr.ph_num() {
             // load program header
             muxbmod.seek(off);
-            let phdr = hdr.load_ph(&mut muxbmod)?;
+            let phdr = hdr
+                .load_ph(&mut muxbmod)
+                .map_err(|e| anyhow!(e).context(format!("load mux PH at {}", off)))?;
             off += size_of_val(&*phdr) as GlobOff;
 
             // we're only interested in non-empty load segments
@@ -240,15 +260,19 @@ impl TileState {
             while segpos < phdr.mem_size() {
                 let amount = (phdr.mem_size() - segpos).min(buf.len());
                 mux.mem
-                    .write(&zeros[0..amount], (phys + segpos) as GlobOff)?;
+                    .write(&zeros[0..amount], (phys + segpos) as GlobOff)
+                    .map_err(|e| anyhow!(e).context("zeroing mux BSS"))?;
                 segpos += amount;
             }
         }
 
         // load initrd to the end of the memory region
         if let Some(initrd) = initrd {
-            let rd_mod = get_mod(initrd)?;
-            let rd_size = rd_mod.region()?.1 as usize;
+            let rd_mod = get_mod(initrd).with_context(|| format!("getting mod {}", initrd))?;
+            let rd_size = rd_mod
+                .region()
+                .map_err(|e| anyhow!(e).context("initrd region"))?
+                .1 as usize;
             let rd_start = mem_size - math::round_up(rd_size, cfg::PAGE_SIZE);
 
             log!(
@@ -259,13 +283,17 @@ impl TileState {
                 self.tile.desc().mem_offset() + rd_start
             );
 
-            Self::copy_data(&mut buf, &rd_mod, &mux.mem, 0, rd_start, rd_size)?;
+            Self::copy_data(&mut buf, &rd_mod, &mux.mem, 0, rd_start, rd_size)
+                .with_context(|| "copying initrd")?;
         }
 
         // load dtb to the expected location
         if let Some(dtb) = dtb {
-            let dtb_mod = get_mod(dtb)?;
-            let dtb_size = dtb_mod.region()?.1 as usize;
+            let dtb_mod = get_mod(dtb).with_context(|| format!("getting mod {}", dtb))?;
+            let dtb_size = dtb_mod
+                .region()
+                .map_err(|e| anyhow!(e).context("DTB region"))?
+                .1 as usize;
             // the payload of bbl starts one page behind the dtb
             assert!(dtb_size <= cfg::PAGE_SIZE);
 
@@ -277,7 +305,8 @@ impl TileState {
                 self.tile.desc().mem_offset() + DTB_OFFSET
             );
 
-            Self::copy_data(&mut buf, &dtb_mod, &mux.mem, 0, DTB_OFFSET, dtb_size)?;
+            Self::copy_data(&mut buf, &dtb_mod, &mux.mem, 0, DTB_OFFSET, dtb_size)
+                .with_context(|| "copying DTB")?;
         }
 
         // pass env vars to multiplexer
@@ -287,7 +316,8 @@ impl TileState {
             &mux.mem,
             &mut off,
             self.tile.desc().mem_offset() as GlobOff,
-        )?;
+        )
+        .map_err(|e| anyhow!(e).context("writing mux env vars"))?;
 
         // init environment
         let env = env::BootEnv {
@@ -299,18 +329,21 @@ impl TileState {
             raw_tile_ids: env::boot().raw_tile_ids,
             ..Default::default()
         };
-        mux.mem.write_obj(
-            &env,
-            (self.tile.desc().env_space().0 - self.tile.desc().mem_offset()).as_goff(),
-        )?;
+        mux.mem
+            .write_obj(
+                &env,
+                (self.tile.desc().env_space().0 - self.tile.desc().mem_offset()).as_goff(),
+            )
+            .map_err(|e| anyhow!(e).context("writing mux env"))?;
 
-        self.start(Some(mux.mem.sel()), ep_count)?;
+        self.start(Some(mux.mem.sel()), ep_count)
+            .with_context(|| "starting mux")?;
 
         self.mux = Some(mux);
         Ok(())
     }
 
-    pub fn unload_mux<F>(&mut self, free: F) -> Result<(), Error>
+    pub fn unload_mux<F>(&mut self, free: F) -> anyhow::Result<()>
     where
         F: FnOnce(Allocation),
     {
@@ -329,10 +362,15 @@ impl TileState {
         Ok(())
     }
 
-    pub fn start(&mut self, mem: Option<Selector>, ep_count: usize) -> Result<(), Error> {
+    pub fn start(&mut self, mem: Option<Selector>, ep_count: usize) -> anyhow::Result<()> {
         let (desired_eps, avail_eps) = match self.tile.desc().has_internal_eps() {
             false => (Some(ep_count), ep_count),
-            true => (None, self.tile.ep_count()?),
+            true => (
+                None,
+                self.tile
+                    .ep_count()
+                    .map_err(|e| anyhow!(e).context("EP count"))?,
+            ),
         };
 
         log!(
@@ -349,17 +387,19 @@ impl TileState {
                 None => INVALID_SEL,
             },
             desired_eps,
-        )?;
+        )
+        .map_err(|e| anyhow!(e).context(format!("reset tile {} for start", self.tile.id())))?;
 
         self.state = State::On;
         Ok(())
     }
 
-    fn stop(&mut self) -> Result<(), Error> {
-        log!(LogFlags::ResMngTiles, "Stopping tile {}", self.tile.id(),);
+    fn stop(&mut self) -> anyhow::Result<()> {
+        log!(LogFlags::ResMngTiles, "Stopping tile {}", self.tile.id());
 
         // reset the tile before we drop the MemGate for its PMP EP
-        syscalls::tile_reset(self.tile.sel(), INVALID_SEL, None)?;
+        syscalls::tile_reset(self.tile.sel(), INVALID_SEL, None)
+            .map_err(|e| anyhow!(e).context(format!("reset tile {} for stop", self.tile.id())))?;
         self.state = State::Off;
         Ok(())
     }
@@ -421,8 +461,11 @@ impl TileUsage {
         eps: Option<usize>,
         time: Option<TimeDuration>,
         pts: Option<usize>,
-    ) -> Result<TileUsage, Error> {
-        let tile = self.tile_obj().derive(eps, None, time, pts)?;
+    ) -> anyhow::Result<TileUsage> {
+        let tile = self
+            .tile_obj()
+            .derive(eps, None, time, pts)
+            .map_err(|e| anyhow!(e).context("tile derive"))?;
         let _quota = tile.quota().unwrap();
         log!(
             LogFlags::ResMngTiles,
@@ -506,16 +549,16 @@ impl TileManager {
         }
     }
 
-    pub fn find_by_id(&self, id: TileId) -> Result<Rc<Tile>, Error> {
+    pub fn find_by_id(&self, id: TileId) -> anyhow::Result<Rc<Tile>> {
         for tile in &self.tiles {
             if tile.id == id {
                 return Ok(tile.tile.clone());
             }
         }
-        Err(Error::new(Code::NotFound))
+        Err(anyhow!(Error::new(Code::NotFound)).context(format!("find tile {}", id)))
     }
 
-    pub fn find(&self, desc: TileDesc) -> Result<TileUsage, Error> {
+    pub fn find(&self, desc: TileDesc) -> anyhow::Result<TileUsage> {
         for (id, tile) in self.tiles.iter().enumerate() {
             if tile.users.get() == 0
                 && tile.tile.desc().isa() == desc.isa()
@@ -525,21 +568,16 @@ impl TileManager {
                 return Ok(TileUsage::new(id, tile.tile.clone()));
             }
         }
-        log!(LogFlags::ResMngTiles, "Unable to find tile with {:?}", desc);
-        Err(Error::new(Code::NotFound))
+        Err(anyhow!(Error::new(Code::NotFound)).context(format!("find tile with {:?}", desc)))
     }
 
-    pub fn find_with_attr(&self, base: TileDesc, attr: &str) -> Result<TileUsage, Error> {
+    pub fn find_with_attr(&self, base: TileDesc, attr: &str) -> anyhow::Result<TileUsage> {
         for props in attr.split('|') {
             if let Ok(usage) = self.find(base.with_properties(props)) {
                 return Ok(usage);
             }
         }
-        log!(
-            LogFlags::ResMngTiles,
-            "Unable to find tile with attributes {}",
-            attr
-        );
-        Err(Error::new(Code::NotFound))
+        Err(anyhow!(Error::new(Code::NotFound))
+            .context(format!("find tile with {:?} and {}", base, attr)))
     }
 }

@@ -13,11 +13,13 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::anyhow;
+
 use m3::col::{String, Vec};
 use m3::com::Semaphore;
 use m3::errors::{Code, Error};
 use m3::io::LogFlags;
-use m3::log;
+use m3::{format, log};
 
 #[derive(Default)]
 pub struct SemManager {
@@ -29,12 +31,13 @@ impl SemManager {
         SemManager { sems: Vec::new() }
     }
 
-    pub fn add_sem(&mut self, name: String) -> Result<(), Error> {
+    pub fn add_sem(&mut self, name: String) -> anyhow::Result<()> {
         if self.get(&name).is_some() {
-            return Err(Error::new(Code::Exists));
+            return Err(anyhow!(Error::new(Code::Exists))
+                .context(format!("semaphore with name {} exists", name)));
         }
 
-        let sem = Semaphore::create(0)?;
+        let sem = Semaphore::create(0).map_err(|e| anyhow!(e).context("semaphore create"))?;
         log!(
             LogFlags::ResMngSem,
             "Created semaphore {} @ {}",

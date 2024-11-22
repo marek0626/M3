@@ -8,6 +8,7 @@ name = "resmng"
 crate-type = ["rlib"]
 
 [dependencies]
+anyhow = { version = "1.0.93", default-features = false }
 bitflags = "2.1.0"
 m3 = { path = "../m3" }
 thread = { path = "../thread" }

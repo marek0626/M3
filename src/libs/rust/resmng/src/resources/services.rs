@@ -13,17 +13,19 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::anyhow;
+
 use m3::cap::{CapFlags, Capability, SelSpace, Selector};
 use m3::col::{String, Vec};
 use m3::com::SendGate;
 use m3::errors::{Code, Error};
 use m3::io::LogFlags;
 use m3::kif::CapRngDesc;
-use m3::log;
 use m3::mem::MsgBuf;
 use m3::serialize::M3Deserializer;
 use m3::syscalls;
 use m3::{build_vmsg, kif};
+use m3::{format, log};
 
 use core::cmp::Reverse;
 
@@ -76,14 +78,18 @@ impl Service {
         name: String,
         sessions: u32,
         owned: bool,
-    ) -> Result<Self, Error> {
+    ) -> anyhow::Result<Self> {
         log!(LogFlags::ResMngServ, "Creating service {}:{}", id, name);
 
         Ok(Service {
             id,
             child,
             cap: Capability::new(srv_sel, CapFlags::empty()),
-            queue: SendQueue::new(id, SendGate::new_bind(sgate_sel)?),
+            queue: SendQueue::new(
+                id,
+                SendGate::new_bind(sgate_sel)
+                    .map_err(|e| anyhow!(e).context("service sendgate activation"))?,
+            ),
             name,
             sessions,
             owned,
@@ -110,7 +116,7 @@ impl Service {
         self.sessions
     }
 
-    pub fn derive_async(&self, child: childs::Id, sessions: u32) -> Result<DerivedService, Error> {
+    pub fn derive_async(&self, child: childs::Id, sessions: u32) -> anyhow::Result<DerivedService> {
         let dst = SelSpace::get().alloc_sels(2);
         let event = events::alloc_event();
         syscalls::derive_srv_req(
@@ -119,13 +125,16 @@ impl Service {
             dst.start() + 1,
             sessions,
             event,
-        )?;
+        )
+        .map_err(|e| anyhow!(e).context("derive service"))?;
 
         let reply = events::wait_for_async(child, event)?;
         let mut de = M3Deserializer::new(reply.as_words());
         de.skip(1);
-        let reply = de.pop::<kif::upcalls::DeriveSrv>()?;
-        Result::from(reply.error)?;
+        let reply = de
+            .pop::<kif::upcalls::DeriveSrv>()
+            .map_err(|e| anyhow!(e).context("derive service unmarshall"))?;
+        Result::from(reply.error).map_err(|e| anyhow!(e).context("derive service reply"))?;
 
         Ok(DerivedService::new(dst))
     }
@@ -163,7 +172,7 @@ impl Session {
         sel: Selector,
         serv: &mut Service,
         arg: &str,
-    ) -> Result<Self, Error> {
+    ) -> anyhow::Result<Self> {
         let sid = serv.id;
 
         let mut smsg_buf = MsgBuf::borrow_def();
@@ -176,12 +185,16 @@ impl Session {
                 let reply = events::wait_for_async(child, event)?;
 
                 let mut de = M3Deserializer::new(reply.as_words());
-                let res: Code = de.pop()?;
+                let res: Code = de
+                    .pop()
+                    .map_err(|e| anyhow!(e).context("session open unmarshall"))?;
                 if res != Code::Success {
-                    return Err(Error::new(res));
+                    return Err(anyhow!(Error::new(res)).context("session open"));
                 }
 
-                let reply: kif::service::OpenReply = de.pop()?;
+                let reply: kif::service::OpenReply = de
+                    .pop()
+                    .map_err(|e| anyhow!(e).context("session open unmarshall"))?;
                 Ok(Session {
                     sel,
                     ident: reply.ident,
@@ -200,7 +213,7 @@ impl Session {
         self.ident
     }
 
-    pub fn close_async(self, res: &mut Resources, child: childs::Id) -> Result<(), Error> {
+    pub fn close_async(self, res: &mut Resources, child: childs::Id) -> anyhow::Result<()> {
         let event = {
             let serv = res.services_mut().get_mut_by_id(self.serv)?;
 
@@ -233,32 +246,32 @@ impl Default for ServiceManager {
 }
 
 impl ServiceManager {
-    pub fn get_with<P: FnMut(&&Service) -> bool>(&self, pred: P) -> Result<&Service, Error> {
+    pub fn get_with<P: FnMut(&&Service) -> bool>(&self, pred: P) -> anyhow::Result<&Service> {
         self.servs
             .iter()
             .find(pred)
-            .ok_or_else(|| Error::new(Code::InvArgs))
+            .ok_or_else(|| anyhow!(Error::new(Code::InvArgs)).context("get service"))
     }
 
     pub fn get_mut_with<P: FnMut(&&mut Service) -> bool>(
         &mut self,
         pred: P,
-    ) -> Result<&mut Service, Error> {
+    ) -> anyhow::Result<&mut Service> {
         self.servs
             .iter_mut()
             .find(pred)
-            .ok_or_else(|| Error::new(Code::InvArgs))
+            .ok_or_else(|| anyhow!(Error::new(Code::InvArgs)).context("get service"))
     }
 
-    pub fn get_mut_by_id(&mut self, id: Id) -> Result<&mut Service, Error> {
+    pub fn get_mut_by_id(&mut self, id: Id) -> anyhow::Result<&mut Service> {
         self.get_mut_with(|s| s.id == id)
     }
 
-    pub fn get_by_name(&self, name: &str) -> Result<&Service, Error> {
+    pub fn get_by_name(&self, name: &str) -> anyhow::Result<&Service> {
         self.get_with(|s| s.name == name)
     }
 
-    pub fn get_mut_by_name(&mut self, name: &str) -> Result<&mut Service, Error> {
+    pub fn get_mut_by_name(&mut self, name: &str) -> anyhow::Result<&mut Service> {
         self.get_mut_with(|s| s.name == name)
     }
 
@@ -270,9 +283,9 @@ impl ServiceManager {
         name: String,
         sessions: u32,
         owned: bool,
-    ) -> Result<Id, Error> {
+    ) -> anyhow::Result<Id> {
         if self.get_mut_by_name(&name).is_ok() {
-            return Err(Error::new(Code::Exists));
+            return Err(anyhow!(Error::new(Code::Exists)).context(format!("add service {}", name)));
         }
 
         let serv = Service::new(

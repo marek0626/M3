@@ -13,6 +13,8 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::anyhow;
+
 use m3::com::{MemCap, MemGate};
 use m3::errors::Code;
 use m3::kif::Perm;
@@ -47,7 +49,8 @@ fn subsys_builder(t: &mut dyn WvTester) {
 
     wv_assert_ok!(
         t,
-        child_sub.add_config("<app args=\"test\"/>", |size| MemGate::new(size, Perm::RW))
+        child_sub.add_config("<app args=\"test\"/>", |size| MemGate::new(size, Perm::RW)
+            .map_err(|e| anyhow!(e)))
     );
     child_sub.add_mod(wv_require_ok!(MemCap::new(0x1000, Perm::RW)), "test");
     child_sub.add_mem(wv_require_ok!(MemCap::new(0x4000, Perm::R)), false);

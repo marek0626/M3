@@ -20,9 +20,11 @@ use m3::mem::GlobAddr;
 use m3::rc::Rc;
 use m3::tcu::TileId;
 use m3::test::WvTester;
-use m3::{wv_assert_eq, wv_assert_err, wv_require_ok, wv_run_test};
+use m3::{wv_assert_eq, wv_require_ok, wv_run_test};
 
 use resmng::resources::memory::{MemMod, MemoryManager};
+
+use crate::wv_assert_anyhow_err;
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, mng_basics);
@@ -74,7 +76,7 @@ fn mng_basics(t: &mut dyn WvTester) {
     wv_assert_eq!(t, mng.capacity(), 0x4000);
     wv_assert_eq!(t, mng.available(), 0x1000);
 
-    wv_assert_err!(t, mng.alloc_mem(0x2000), Code::NoSpace);
+    wv_assert_anyhow_err!(t, mng.alloc_mem(0x2000), Code::NoSpace);
 }
 
 fn mng_multi(t: &mut dyn WvTester) {
@@ -130,7 +132,7 @@ fn mng_multi(t: &mut dyn WvTester) {
     wv_assert_eq!(t, mng.capacity(), 0x40000 + 0x100000);
     wv_assert_eq!(t, mng.available(), 0);
 
-    wv_assert_err!(t, mng.alloc_mem(0x1000), Code::NoSpace);
+    wv_assert_anyhow_err!(t, mng.alloc_mem(0x1000), Code::NoSpace);
 }
 
 fn mng_pool(t: &mut dyn WvTester) {

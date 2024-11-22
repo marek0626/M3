@@ -13,11 +13,12 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::anyhow;
+
 use m3::cap::Selector;
 use m3::cell::StaticRefCell;
 use m3::cfg;
 use m3::com::{MemCap, MemGate};
-use m3::errors::Error;
 use m3::mem::{self, GlobOff};
 
 static ZEROS: mem::AlignedBuf<{ cfg::PAGE_SIZE }> = mem::AlignedBuf::new_zeroed();
@@ -48,11 +49,11 @@ pub struct PhysMem {
 }
 
 impl PhysMem {
-    pub fn new(owner_mem: (Selector, mem::VirtAddr), mem: MemCap) -> Result<Self, Error> {
-        Ok(PhysMem {
+    pub fn new(owner_mem: (Selector, mem::VirtAddr), mem: MemCap) -> Self {
+        PhysMem {
             mcap: mem,
             owner_mem: Some(owner_mem),
-        })
+        }
     }
 
     pub fn new_with_mem(owner_mem: (Selector, mem::VirtAddr), mem: MemCap) -> Self {
@@ -73,8 +74,8 @@ impl PhysMem {
         self.mcap.sel()
     }
 
-    pub fn request_gate(&self) -> Result<MemGate, Error> {
-        MemGate::new_bind(self.mcap.sel())
+    pub fn request_gate(&self) -> anyhow::Result<MemGate> {
+        MemGate::new_bind(self.mcap.sel()).map_err(|e| anyhow!(e).context("bind request gate"))
     }
 
     pub fn replace_mem(&mut self, mem: MemCap) -> MemCap {

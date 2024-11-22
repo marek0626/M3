@@ -28,6 +28,32 @@ use m3::println;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::wv_run_suite;
 
+#[macro_export]
+macro_rules! wv_assert_anyhow_err {
+    ($t:expr, $res:expr, $err:expr) => {{
+        let res = $res;
+        match res {
+            Ok(r) => {
+                ::m3::println!("! {}:{}  received okay: {:?} FAILED", file!(), line!(), r);
+                $t.test_failed();
+            },
+            Err(ref e) if e.downcast_ref::<m3::errors::Error>().unwrap().code() != $err => {
+                ::m3::println!(
+                    "! {}:{}  received error {:?}, expected {:?} FAILED",
+                    file!(),
+                    line!(),
+                    e,
+                    $err
+                );
+                $t.test_failed();
+            },
+            Err(_) => {
+                $t.test_succeeded();
+            },
+        }
+    }};
+}
+
 #[no_mangle]
 pub fn main() -> Result<(), Error> {
     let mut tester = DefaultWvTester::default();

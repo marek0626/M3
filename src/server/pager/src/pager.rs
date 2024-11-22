@@ -21,6 +21,9 @@ mod mapper;
 mod physmem;
 mod regions;
 
+use anyhow::anyhow;
+use m3::crypto::HashAlgorithm;
+
 use core::fmt;
 use core::ops::{Deref, DerefMut};
 
@@ -30,8 +33,7 @@ use m3::client::{ClientSession, Pager, RoTSession, M3FS};
 use m3::col::{String, ToString, Vec};
 use m3::com::GateIStream;
 use m3::com::{opcodes, MemCap, RecvGate, SGateArgs, SendCap};
-use m3::crypto::HashAlgorithm;
-use m3::errors::{Code, Error, VerboseError};
+use m3::errors::{Code, Error};
 use m3::format;
 use m3::kif::syscalls::MuxType;
 use m3::mem::VirtAddr;
@@ -40,7 +42,6 @@ use m3::server::{ExcType, RequestHandler, RequestSession, Server, ServerSession}
 use m3::tcu::Label;
 use m3::tiles::{Activity, ActivityArgs, ChildActivity};
 use m3::util::math;
-use m3::verror;
 use m3::vfs;
 
 use addrspace::AddrSpace;
@@ -69,7 +70,7 @@ struct PagedChildStarter {
 }
 
 impl PagedChildStarter {
-    fn get_mount(&mut self, name: &str) -> Result<String, VerboseError> {
+    fn get_mount(&mut self, name: &str) -> anyhow::Result<String> {
         for (n, mpath) in self.mounts.iter() {
             if n == name {
                 return Ok(mpath.clone());
@@ -78,25 +79,30 @@ impl PagedChildStarter {
 
         let id = self.mounts.len();
         let fs = M3FS::new(id, name)
-            .map_err(|e| verror!(e.code(), "Unable to open m3fs session {}", name))?;
+            .map_err(|e| anyhow!(e).context(format!("open m3fs session {}", name)))?;
         let our_path = format!("/child-mount-{}", name);
-        Activity::own().mounts().add(&our_path, fs)?;
+        Activity::own()
+            .mounts()
+            .add(&our_path, fs)
+            .map_err(|e| anyhow!(e).context("add child mount"))?;
         self.mounts.push((name.to_string(), our_path.to_string()));
         Ok(our_path)
     }
 }
 
 // Extremely simple Karp-Rabin type hash.
-pub fn get_hash(file: &mut dyn File, file_size: usize) -> Result<String, Error> {
+pub fn get_hash(file: &mut dyn File, file_size: usize) -> anyhow::Result<String> {
     let binder = ROT.borrow();
     let rot = binder.deref();
     file.hash_input(rot, file_size)
-        .expect("couldn't get app hash from rot");
+        .map_err(|e| anyhow!(e).context("hash file"))?;
     let mut buf = [0u8; HashAlgorithm::SHA3_256.output_bytes];
-    rot.finish(&mut buf).expect("Couldn't finish hash");
+    rot.finish(&mut buf)
+        .map_err(|e| anyhow!(e).context("finish hash"))?;
     let hex = Hex(&buf[..]);
     log!(LogFlags::Debug, "App hash: {}", hex);
-    file.seek(0, SeekMode::Set)?; // NMG Needed when we use hash_input? Probably not.
+    file.seek(0, SeekMode::Set)
+        .map_err(|e| anyhow!(e).context("seek file for hashing"))?; // NMG Needed when we use hash_input? Probably not.
     Ok(format!("{}", hex))
 }
 
@@ -106,21 +112,25 @@ impl subsys::ChildStarter for PagedChildStarter {
         reqs: &requests::Requests,
         res: &mut Resources,
         child: &mut OwnChild,
-    ) -> Result<(), VerboseError> {
+    ) -> anyhow::Result<()> {
         // send gate for resmng
         let resmng_scap = SendCap::new_with(
             SGateArgs::new(reqs.recv_gate())
                 .credits(1)
                 .label(Label::from(child.id())),
-        )?;
+        )
+        .map_err(|e| anyhow!(e).context("child sendgate"))?;
 
         // create pager session for child (creator=0 here because we create all sessions ourself)
         let (child_sess, child_sgate, pager_sgate, child_sid) = {
             let mut hdl = REQHDL.borrow_mut();
             let cli = hdl.clients_mut();
-            let (crd, nsid) =
-                cli.add_connected(0, |_hdl, serv, _sgate| Ok(AddrSpace::new(serv, None, None)))?;
-            let pf_sgate = cli.add_connection_to(nsid)?;
+            let (crd, nsid) = cli
+                .add_connected(0, |_hdl, serv, _sgate| Ok(AddrSpace::new(serv, None, None)))
+                .map_err(|e| anyhow!(e).context("add client connection"))?;
+            let pf_sgate = cli
+                .add_connection_to(nsid)
+                .map_err(|e| anyhow!(e).context("add client connection for PFs"))?;
             (
                 ClientSession::new_bind(crd.start() + 0),
                 crd.start() + 1,
@@ -135,9 +145,13 @@ impl subsys::ChildStarter for PagedChildStarter {
             tile.clone(),
             ActivityArgs::new(child.name())
                 .resmng(resmng_scap)
-                .pager(Pager::new(child_sess, pager_sgate, child_sgate)?)
+                .pager(
+                    Pager::new(child_sess, pager_sgate, child_sgate)
+                        .map_err(|e| anyhow!(e).context("creating child pager"))?,
+                )
                 .kmem(child.kmem()),
-        )?;
+        )
+        .map_err(|e| anyhow!(e).context("create activity"))?;
 
         // pass subsystem info to child, if it's a subsystem
         let id = child.id();
@@ -153,7 +167,7 @@ impl subsys::ChildStarter for PagedChildStarter {
 
         // if TileMux is running on that tile, we have control about the activity's virtual address
         // space and can thus load the program into the address space.
-        let run = if tile.mux_type()? == MuxType::TileMux {
+        let run = if tile.mux_type().unwrap() == MuxType::TileMux {
             // init address space (give it activity and mgate selector)
             let mut hdl = REQHDL.borrow_mut();
             let aspace = hdl.clients_mut().get_mut(child_sid).unwrap();
@@ -161,14 +175,17 @@ impl subsys::ChildStarter for PagedChildStarter {
 
             // start activity
             let file = vfs::VFS::open(child.name(), vfs::OpenFlags::RX | vfs::OpenFlags::NEW_SESS)
-                .map_err(|e| verror!(e.code(), "Unable to open {}", child.name()))?;
+                .map_err(|e| anyhow!(e).context(format!("open {}", child.name())))?;
             let mut mapper = mapper::ChildMapper::new(aspace, act.tile_desc().has_virtmem());
 
             // if we don't run the evidence service, nobody can ask for the hashes and therefore we
             // don't need to compute them.
             if EVREQHDL.is_some() {
                 let mut rawfile = file.borrow();
-                let size = rawfile.stat()?.size;
+                let size = rawfile
+                    .stat()
+                    .map_err(|e| anyhow!(e).context("stat for hash"))?
+                    .size;
                 // Acquire hash
                 {
                     let rawfile_ref = rawfile.deref_mut();
@@ -179,11 +196,11 @@ impl subsys::ChildStarter for PagedChildStarter {
             }
 
             act.exec_file(Some((&mut mapper, file.into_generic())), child.arguments())
-                .map_err(|e| verror!(e.code(), "Unable to execute {}", child.name()))?
+                .map_err(|e| anyhow!(e).context(format!("execute {}", child.name())))?
         }
         else {
             act.exec_file(None, child.arguments())
-                .map_err(|e| verror!(e.code(), "Unable to start Activity"))?
+                .map_err(|e| anyhow!(e).context("start Activity"))?
         };
 
         child.set_running(Box::new(run));
@@ -196,16 +213,17 @@ impl subsys::ChildStarter for PagedChildStarter {
         _res: &mut Resources,
         tile: &mut tiles::TileUsage,
         domain: &config::Domain,
-    ) -> Result<(), VerboseError> {
+    ) -> anyhow::Result<()> {
         assert!(!domain.tee(), "TEEs are currently unsupported by the pager");
-        let fs_mod = MemCap::new_bind_bootmod("fs")?;
-        let fs_mod_size = fs_mod.region()?.1 as usize;
+        let fs_mod =
+            MemCap::new_bind_bootmod("fs").map_err(|e| anyhow!(e).context("bind bootmod 'fs'"))?;
+        let fs_mod_size = fs_mod.region().map_err(|e| anyhow!(e))?.1 as usize;
         // don't overwrite PMP EPs here, but use the next free one. this is required in case we
         // share our tile with this child and therefore need to add a PMP EP for ourself. Since our
         // parent has already set PMP EPs, we don't want to overwrite them.
         tile.state_mut()
             .add_mem_region(fs_mod, fs_mod_size, true, false)
-            .map_err(|e| verror!(e.code(), "Unable to add PMP EP for FS image"))
+            .map_err(|e| anyhow!(e).context("add PMP EP for FS image"))
     }
 }
 
@@ -245,9 +263,9 @@ fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_, '_, '_>) {
                 EVREQHDL
                     .borrow_mut()
                     .fetch_and_handle_msg_with(|_handler, opcode, sess, is| match opcode {
-                        o if o == opcodes::Pager::Quote.into() => {
-                            sess.quote(is, childmng, ROT.borrow_mut().deref_mut())
-                        },
+                        o if o == opcodes::Pager::Quote.into() => sess
+                            .quote(is, childmng, ROT.borrow_mut().deref_mut())
+                            .map_err(|e| e.downcast::<Error>().unwrap()),
                         _ => Err(Error::new(Code::InvArgs)),
                     });
             }
@@ -270,7 +288,7 @@ fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_, '_, '_>) {
 
 #[no_mangle]
 #[cfg_attr(dylint_lib = "m3_lints", allow(unexpected_async))]
-pub fn main() -> Result<(), Error> {
+pub fn main() -> anyhow::Result<()> {
     let (subsys, mut res) = subsys::Subsystem::new().expect("Unable to read subsystem info");
 
     let args = subsys.parse_args();
@@ -393,21 +411,26 @@ impl EvidenceSession {
         is: &mut GateIStream<'_>,
         childmgr: &ChildManager,
         rot: &RoTSession,
-    ) -> Result<(), Error> {
-        let nonce: usize = is.pop()?;
-        let att_id: u32 = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let nonce: usize = is.pop().map_err(|e| anyhow!(e))?;
+        let att_id: u32 = is.pop().map_err(|e| anyhow!(e))?;
 
-        let child = childmgr
-            .child_by_attestation_id(att_id)
-            .ok_or_else(|| Error::new(Code::NotFound))?;
+        let child = childmgr.child_by_attestation_id(att_id).ok_or_else(|| {
+            anyhow!(Error::new(Code::NotFound))
+                .context(format!("child with attestation id {}", att_id))
+        })?;
 
-        let app_hash = child.hash().ok_or_else(|| Error::new(Code::InvArgs))?;
+        let app_hash = child
+            .hash()
+            .ok_or_else(|| anyhow!(Error::new(Code::InvArgs)).context("child hash"))?;
         let xml = child.cfg().to_string();
         let hash: String = format!("Hash:{}:{}:{}", nonce, app_hash, xml);
         log!(LogFlags::Debug, "Raw quote: {}", hash);
-        let quote: [u8; 64] = rot.sign(hash.as_bytes())?;
+        let quote: [u8; 64] = rot
+            .sign(hash.as_bytes())
+            .map_err(|e| anyhow!(e).context("hash signature"))?;
         let quote_str = format!("{:x}", SigWrap(quote));
 
-        reply_vmsg!(is, Code::Success, quote_str)
+        reply_vmsg!(is, Code::Success, quote_str).map_err(|e| anyhow!(e).context("reply to quote"))
     }
 }

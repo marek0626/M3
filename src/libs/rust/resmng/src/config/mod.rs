@@ -16,15 +16,18 @@
 pub mod parser;
 pub mod validator;
 
+use anyhow::anyhow;
+
 use core::fmt;
+
 use m3::cell::Cell;
-use m3::cfg;
 use m3::col::{String, Vec};
 use m3::errors::{Code, Error};
 use m3::kif;
 use m3::rc::Rc;
 use m3::tcu::Label;
 use m3::time::TimeDuration;
+use m3::{cfg, format};
 
 #[derive(Default, Eq, PartialEq)]
 pub struct DualName {
@@ -593,18 +596,22 @@ impl AppConfig {
         self.sessions[idx].used.replace(false);
     }
 
-    pub fn get_tile_idx(&self, desc: kif::TileDesc) -> Result<usize, Error> {
+    pub fn get_tile_idx(&self, desc: kif::TileDesc) -> anyhow::Result<usize> {
         let idx = self
             .tiles
             .iter()
             .position(|tile| tile.count.get() > 0 && tile.tile_type().matches(desc))
-            .ok_or_else(|| Error::new(Code::InvArgs))?;
+            .ok_or_else(|| {
+                anyhow!(Error::new(Code::InvArgs))
+                    .context(format!("child has no tile with desc {:?}", desc))
+            })?;
 
         if self.tiles[idx].count.get() > 0 {
             Ok(idx)
         }
         else {
-            Err(Error::new(Code::NoSpace))
+            Err(anyhow!(Error::new(Code::NoSpace))
+                .context(format!("tile count exhausted for {:?}", desc)))
         }
     }
 

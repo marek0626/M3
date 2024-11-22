@@ -13,6 +13,7 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::anyhow;
 use bitflags::bitflags;
 use core::cmp;
 use core::fmt;
@@ -23,6 +24,7 @@ use m3::cfg;
 use m3::col::Vec;
 use m3::com::{GateCap, MemGate};
 use m3::errors::{Code, Error};
+use m3::format;
 use m3::io::LogFlags;
 use m3::kif::{CapRngDesc, CapType, Perm, INVALID_SEL};
 use m3::log;
@@ -137,7 +139,7 @@ impl Region {
         &mut self,
         childs: &mut childs::ChildManager,
         ds_perms: Perm,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         self.flags.remove(RegionFlags::COW);
 
         // writable memory needs to be copied
@@ -163,9 +165,10 @@ impl Region {
                 };
 
                 // allocate new memory for our copy
-                let child = childs
-                    .child_by_id_mut(self.child)
-                    .ok_or_else(|| Error::new(Code::ObjectGone))?;
+                let child = childs.child_by_id_mut(self.child).ok_or_else(|| {
+                    anyhow!(Error::new(Code::ObjectGone))
+                        .context(format!("child with id {}", self.child))
+                })?;
                 // TODO this memory is currently only free'd on child exit
                 let (ncap, _alloc) = child.alloc_local(self.size, Perm::RWX)?;
 
@@ -189,13 +192,16 @@ impl Region {
                 );
 
                 let ncap = {
-                    let ngate = ncap.activate()?;
+                    let ngate = ncap
+                        .activate()
+                        .map_err(|e| anyhow!(e).context("activate child mem for PF"))?;
                     if osel == INVALID_SEL {
                         copy_block(&mem.request_gate()?, &ngate, off, self.size);
                     }
                     else {
                         let omem =
-                            MemGate::new_foreign(osel, VirtAddr::new(off), self.size, Perm::R)?;
+                            MemGate::new_foreign(osel, VirtAddr::new(off), self.size, Perm::R)
+                                .map_err(|e| anyhow!(e).context("new foreign gate for PF"))?;
                         copy_block(&omem, &ngate, 0, self.size);
                     }
 
@@ -241,7 +247,7 @@ impl Region {
         }
     }
 
-    pub fn copy_from(&self, src: &MemGate) -> Result<(), Error> {
+    pub fn copy_from(&self, src: &MemGate) -> anyhow::Result<()> {
         if let Some(ref mem) = self.mem {
             copy_block(
                 src,
@@ -253,13 +259,13 @@ impl Region {
         Ok(())
     }
 
-    pub fn clear(&self) -> Result<(), Error> {
+    pub fn clear(&self) -> anyhow::Result<()> {
         let mem = self.mem.as_ref().unwrap();
         clear_block(&mem.borrow().request_gate()?, self.size);
         Ok(())
     }
 
-    pub fn map(&mut self, perm: Perm) -> Result<(), Error> {
+    pub fn map(&mut self, perm: Perm) -> anyhow::Result<()> {
         if let Some(ref mem) = self.mem {
             syscalls::create_map(
                 self.virt(),
@@ -268,7 +274,8 @@ impl Region {
                 (self.mem_off >> cfg::PAGE_BITS as GlobOff) as Selector,
                 (self.size as usize >> cfg::PAGE_BITS) as Selector,
                 perm,
-            )?;
+            )
+            .map_err(|e| anyhow!(e).context("create map"))?;
             self.flags.insert(RegionFlags::MAPPED);
         }
 
@@ -337,7 +344,7 @@ impl RegionList {
         self.regs.is_empty()
     }
 
-    pub fn clone(&mut self, rl: &mut RegionList, ds_perms: Perm) -> Result<(), Error> {
+    pub fn clone(&mut self, rl: &mut RegionList, ds_perms: Perm) -> anyhow::Result<()> {
         // for the case that we already have regions and the DS is writable, just remove them.
         // because there is no point in trying to keep them:
         // 1. we have already our own copy

@@ -504,6 +504,7 @@ dependencies = [
 name = "pager"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bitflags 2.5.0",
  "hex 0.1.0",
  "m3",
@@ -589,6 +590,7 @@ dependencies = [
 name = "resmng"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bitflags 2.5.0",
  "m3",
  "thread",
@@ -598,6 +600,7 @@ dependencies = [
 name = "resmngtest"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "m3",
  "resmng",
 ]
@@ -606,6 +609,7 @@ dependencies = [
 name = "root"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "m3",
  "resmng",
  "thread",

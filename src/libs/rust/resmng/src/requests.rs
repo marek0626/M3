@@ -13,13 +13,16 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::anyhow;
+
 use m3::boxed::Box;
 use m3::client::resmng;
 use m3::com::{opcodes, GateIStream, RecvGate};
-use m3::errors::{Code, Error, VerboseError};
+use m3::errors::{Code, Error};
 use m3::io::LogFlags;
 use m3::log;
 use m3::reply_vmsg;
+use m3::serde::Deserialize;
 use m3::tiles::OwnActivity;
 use m3::vec::Vec;
 
@@ -48,7 +51,7 @@ impl Requests {
         res: &mut Resources,
         mut func: F,
         starter: &mut dyn ChildStarter,
-    ) -> Result<(), VerboseError>
+    ) -> anyhow::Result<()>
     where
         F: FnMut(&mut ChildManager, &mut Resources),
     {
@@ -140,18 +143,23 @@ impl Requests {
 
             Ok(opcodes::ResMng::GetInfo) => self.get_info(childs, res, &mut is, id),
 
-            _ => Err(Error::new(Code::InvArgs)),
+            _ => Err(anyhow!(Error::new(Code::InvArgs))),
         };
 
         match res {
             Err(e) => {
                 let child = childs.child_by_id_mut(id).unwrap();
                 log!(LogFlags::Error, "{}: {:?} failed: {}", child.name(), op, e);
-                is.reply_error(e.code())
+                let err: &Error = e.downcast_ref().unwrap();
+                is.reply_error(err.code())
             },
             Ok(_) => is.reply_error(Code::Success),
         }
         .ok(); // ignore errors; we might have removed the child in the meantime
+    }
+
+    fn unmarshall<R: Deserialize<'static>>(is: &mut GateIStream<'_>) -> anyhow::Result<R> {
+        is.pop().map_err(|e| anyhow!(e).context("unmarshall"))
     }
 
     fn reg_serv(
@@ -160,8 +168,8 @@ impl Requests {
         res: &mut Resources,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::RegServiceReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::RegServiceReq = Self::unmarshall(is)?;
 
         let child = childs.child_by_id_mut(id).unwrap();
         child.reg_service(res, req.dst, req.sgate, req.name, req.sessions)
@@ -173,8 +181,8 @@ impl Requests {
         res: &mut Resources,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::FreeReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::FreeReq = Self::unmarshall(is)?;
 
         let child = childs.child_by_id_mut(id).unwrap();
         child.unreg_service(res, req.sel)
@@ -186,8 +194,8 @@ impl Requests {
         res: &mut Resources,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::OpenSessionReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::OpenSessionReq = Self::unmarshall(is)?;
 
         let child = childs.child_by_id_mut(id).unwrap();
         child.open_session_async(res, id, req.dst, &req.name)
@@ -199,8 +207,8 @@ impl Requests {
         res: &mut Resources,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::FreeReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::FreeReq = Self::unmarshall(is)?;
 
         let child = childs.child_by_id_mut(id).unwrap();
         child.close_session_async(res, id, req.sel)
@@ -212,8 +220,8 @@ impl Requests {
         res: &mut Resources,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::AddChildReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::AddChildReq = Self::unmarshall(is)?;
 
         childs.add_child(
             res,
@@ -234,8 +242,8 @@ impl Requests {
         res: &mut Resources,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::FreeReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::FreeReq = Self::unmarshall(is)?;
 
         childs.rem_child_async(self, res, id, req.sel)
     }
@@ -246,8 +254,8 @@ impl Requests {
         _res: &mut Resources,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::AllocMemReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::AllocMemReq = Self::unmarshall(is)?;
 
         let child = childs.child_by_id_mut(id).unwrap();
         child.alloc_mem(req.dst, req.size, req.perms)
@@ -259,8 +267,8 @@ impl Requests {
         _res: &mut Resources,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::FreeReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::FreeReq = Self::unmarshall(is)?;
 
         let child = childs.child_by_id_mut(id).unwrap();
         child.free_mem(req.sel)
@@ -273,14 +281,15 @@ impl Requests {
         starter: &mut dyn ChildStarter,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::AllocTileReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::AllocTileReq = Self::unmarshall(is)?;
 
         let child = childs.child_by_id_mut(id).unwrap();
         child
             .alloc_tile(res, starter, req.dst, req.desc, req.init, req.inherit_pmp)
             .and_then(|(id, desc)| {
                 reply_vmsg!(is, Code::Success, resmng::AllocTileReply { id, desc })
+                    .map_err(|e| anyhow!(e).context("alloc-tile reply"))
             })
     }
 
@@ -290,8 +299,8 @@ impl Requests {
         res: &mut Resources,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::FreeReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::FreeReq = Self::unmarshall(is)?;
 
         let child = childs.child_by_id_mut(id).unwrap();
         child.free_tile(res, req.sel)
@@ -303,8 +312,8 @@ impl Requests {
         res: &mut Resources,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::UseReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::UseReq = Self::unmarshall(is)?;
 
         let child = childs.child_by_id_mut(id).unwrap();
         child
@@ -314,6 +323,7 @@ impl Requests {
                     order,
                     msg_order
                 })
+                .map_err(|e| anyhow!(e).context("use-rgate reply"))
             })
     }
 
@@ -323,8 +333,8 @@ impl Requests {
         res: &mut Resources,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::UseReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::UseReq = Self::unmarshall(is)?;
 
         let child = childs.child_by_id_mut(id).unwrap();
         child.use_sgate(res, &req.name, req.dst)
@@ -336,8 +346,8 @@ impl Requests {
         res: &mut Resources,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::UseReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::UseReq = Self::unmarshall(is)?;
 
         let child = childs.child_by_id_mut(id).unwrap();
         child.use_sem(res, &req.name, req.dst)
@@ -349,8 +359,8 @@ impl Requests {
         res: &mut Resources,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::UseReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::UseReq = Self::unmarshall(is)?;
 
         let child = childs.child_by_id_mut(id).unwrap();
         child.use_mod(res, &req.name, req.dst)
@@ -362,8 +372,8 @@ impl Requests {
         _res: &mut Resources,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::GetSerialReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::GetSerialReq = Self::unmarshall(is)?;
 
         let child = childs.child_by_id_mut(id).unwrap();
         child.get_serial(req.dst)
@@ -375,16 +385,16 @@ impl Requests {
         res: &mut Resources,
         is: &mut GateIStream<'_>,
         id: Id,
-    ) -> Result<(), Error> {
-        let req: resmng::GetInfoReq = is.pop()?;
+    ) -> anyhow::Result<()> {
+        let req: resmng::GetInfoReq = Self::unmarshall(is)?;
 
         let idx = match req.idx {
             usize::MAX => None,
             n => Some(n),
         };
 
-        childs
-            .get_info(res, id, idx)
-            .and_then(|info| reply_vmsg!(is, Code::Success, info))
+        childs.get_info(res, id, idx).and_then(|info| {
+            reply_vmsg!(is, Code::Success, info).map_err(|e| anyhow!(e).context("get-info reply"))
+        })
     }
 }
