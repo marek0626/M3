@@ -89,7 +89,7 @@ impl<'d> CapExchange<'d> {
     }
 }
 
-impl<'d> fmt::Debug for CapExchange<'d> {
+impl fmt::Debug for CapExchange<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(
             fmt,

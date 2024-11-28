@@ -102,7 +102,7 @@ fn tcp_server() -> Result<(), Error> {
     // connect to netmng explicitly here to specify a different session name
     wv_assert_eq!(
         t,
-        unsafe { __m3c_init_netmng(b"netserv\0".as_ptr() as *const i8) },
+        unsafe { __m3c_init_netmng(c"netserv".as_ptr() as *const i8) },
         Code::Success
     );
 

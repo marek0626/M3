@@ -302,7 +302,7 @@ pub fn main() -> Result<(), Error> {
             .memory_mut()
             .alloc_mem((buf_size + sendqueue::RBUF_SIZE) as GlobOff)
             .expect("Unable to allocate memory for receive buffers");
-        let pages = (buf_mem.capacity() as usize + cfg::PAGE_SIZE - 1) / cfg::PAGE_SIZE;
+        let pages = (buf_mem.capacity() as usize).div_ceil(cfg::PAGE_SIZE);
         syscalls::create_map(
             rbuf_addr,
             Activity::own().sel(),

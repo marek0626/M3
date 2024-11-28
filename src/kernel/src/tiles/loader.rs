@@ -219,7 +219,7 @@ impl KernelBootMod<'_> {
     }
 }
 
-impl<'a> Read for KernelBootMod<'a> {
+impl Read for KernelBootMod<'_> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
         if self.off + buf.len() as GlobOff > self.bm.size {
             return Err(Error::new(Code::InvalidElf));

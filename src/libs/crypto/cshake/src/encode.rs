@@ -14,6 +14,8 @@
 
 //! Implementations of the encoding functions from NIST SP 800-185.
 
+/// Encode integer with prepended length
+///
 /// From NIST SP 800-185, section 2.3.1 "Integer to Byte String Encoding":
 /// left_encode(x) encodes the integer x as a byte string in a way that can be unambiguously parsed
 /// from the beginning of the string by inserting the length of the byte string before the byte string
@@ -32,6 +34,8 @@ pub fn left_encode(buf: &mut [u8], x: usize) -> usize {
     size + 1
 }
 
+/// Encode integer with appended length
+///
 /// From NIST SP 800-185, section 2.3.1 "Integer to Byte String Encoding":
 /// right_encode(x) encodes the integer x as a byte string in a way that can be unambiguously parsed
 /// from the end of the string by inserting the length of the byte string after the byte string
@@ -50,6 +54,8 @@ pub fn right_encode(buf: &mut [u8], x: usize) -> usize {
     size + 1
 }
 
+/// Encode string
+///
 /// From NIST SP 800-185, section 2.3.2 "String Encoding":
 /// The encode_string function is used to encode bit strings in a way that may be parsed
 /// unambiguously from the beginning of the string, S.
@@ -69,6 +75,8 @@ pub(crate) fn encode_string_extra(buf: &mut [u8], s: &[u8], extra_len: usize) ->
     len_size + len
 }
 
+/// Zero-pads the given integer
+///
 /// From NIST SP 800-185, section 2.3.3 "Padding":
 /// The bytepad(X, w) function prepends an encoding of the integer w to an input string X, then pads
 /// the result with zeros until it is a byte string whose length in bytes is a multiple of w. In general,

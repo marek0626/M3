@@ -215,7 +215,7 @@ impl<'a> BootMapper<'a> {
     }
 }
 
-impl<'a> Mapper for BootMapper<'a> {
+impl Mapper for BootMapper<'_> {
     fn buffer(&mut self) -> Option<&mut [u8]> {
         Some(&mut self.buf)
     }

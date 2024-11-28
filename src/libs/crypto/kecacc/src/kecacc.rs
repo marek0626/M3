@@ -82,6 +82,7 @@ impl Cmd {
 
 /// A simple wrapper around the Keccak/SHA-3 accelerator ("KecAcc"), mapped
 /// to the specified memory address.
+///
 /// NOTE: All the functions start the operation asynchronously (only waiting
 /// for previous commands to complete) so [poll_complete()] should be used
 /// if the result of the accelerator should be available before proceeding.

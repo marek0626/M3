@@ -74,7 +74,7 @@ impl MuxBootMod<'_> {
     }
 }
 
-impl<'a> Read for MuxBootMod<'a> {
+impl Read for MuxBootMod<'_> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
         self.mgate.read(buf, self.off)?;
         self.off += buf.len() as GlobOff;

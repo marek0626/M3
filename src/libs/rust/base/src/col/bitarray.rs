@@ -42,7 +42,7 @@ fn bitpos(bit: usize) -> usize {
 impl BitArray {
     /// Creates a new `BitArray` with the given number of bits
     pub fn new(bits: usize) -> Self {
-        let word_count = (bits + word_bits() - 1) / word_bits();
+        let word_count = bits.div_ceil(word_bits());
         BitArray {
             bits,
             words: vec![0; word_count],

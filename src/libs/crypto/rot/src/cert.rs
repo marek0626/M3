@@ -98,7 +98,7 @@ impl PayloadPubKey for BinaryPayload {
     }
 }
 
-impl<'a> PayloadPubKey for M3Payload<'a> {
+impl PayloadPubKey for M3Payload<'_> {
     fn pub_key(&self) -> &[u8; ed25519::PUBLIC_KEY_LENGTH] {
         &self.pub_key.0
     }

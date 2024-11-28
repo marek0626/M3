@@ -175,8 +175,8 @@ fn nonblocking_server(t: &mut dyn WvTester) {
 
     let mut dst = act.data_sink();
     dst.push(sem.sel());
-    dst.push(&m3::format!("{}", crate::NET0_IP.get()));
-    dst.push(&m3::format!("{}", crate::NET1_IP.get()));
+    dst.push(m3::format!("{}", crate::NET0_IP.get()));
+    dst.push(m3::format!("{}", crate::NET1_IP.get()));
 
     let act = wv_require_ok!(act.run(|| {
         let mut t = DefaultWvTester::default();
@@ -267,7 +267,7 @@ fn receive_after_close(t: &mut dyn WvTester) {
 
     let mut dst = act.data_sink();
     dst.push(sem.sel());
-    dst.push(&m3::format!("{}", crate::NET0_IP.get()));
+    dst.push(m3::format!("{}", crate::NET0_IP.get()));
 
     let act = wv_require_ok!(act.run(|| {
         let mut t = DefaultWvTester::default();

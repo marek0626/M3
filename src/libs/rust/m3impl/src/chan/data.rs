@@ -203,7 +203,10 @@ impl Sender {
 }
 
 impl BlockSender for Sender {
-    type Block<'a, U, T> = Block<'a, U, T> where T: Clone + 'a;
+    type Block<'a, U, T>
+        = Block<'a, U, T>
+    where
+        T: Clone + 'a;
 
     fn credits(&self) -> u32 {
         self.credits
@@ -413,7 +416,10 @@ impl Receiver {
 }
 
 impl BlockReceiver for Receiver {
-    type Block<'a, U, T> = Block<'a, U, T> where T: Clone + 'a;
+    type Block<'a, U, T>
+        = Block<'a, U, T>
+    where
+        T: Clone + 'a;
 
     fn buf_range(&self) -> (VirtAddr, GlobOff) {
         self.buf_range
@@ -480,7 +486,7 @@ pub struct Block<'a, U, T> {
     is: GateIStream<'a>,
 }
 
-impl<'a, U, T> Block<'a, U, T> {
+impl<U, T> Block<'_, U, T> {
     pub fn buf(&self) -> &[T] {
         self.buf
     }
@@ -498,7 +504,7 @@ impl<'a, U, T> Block<'a, U, T> {
     }
 }
 
-impl<'a, U, T> Drop for Block<'a, U, T> {
+impl<U, T> Drop for Block<'_, U, T> {
     fn drop(&mut self) {
         log!(LogFlags::LibDataChan, "{}: sending reply", self.name);
         self.is.reply_error(Code::Success).ok();
@@ -514,7 +520,10 @@ pub struct BlockIterator<'a, U, T> {
 impl<'a, U: Serialize + Deserialize<'static> + Debug, T: Clone + 'a> Iterator
     for BlockIterator<'a, U, T>
 {
-    type Item = Block<'a, U, T> where T: Clone + 'a;
+    type Item
+        = Block<'a, U, T>
+    where
+        T: Clone + 'a;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.seen_last {

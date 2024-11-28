@@ -110,7 +110,7 @@ impl<'a, T: BoxItem> Iterator for BoxListIterMut<'a, T> {
     }
 }
 
-impl<'a, T: BoxItem> BoxListIterMut<'a, T> {
+impl<T: BoxItem> BoxListIterMut<'_, T> {
     /// Removes the current element from the list and returns it
     ///
     /// # Examples

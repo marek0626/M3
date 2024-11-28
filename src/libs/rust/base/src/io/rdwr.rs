@@ -148,14 +148,14 @@ pub trait Write {
         for (i, b) in slice.iter().enumerate() {
             if i % 16 == 0 {
                 if i > 0 {
-                    self.write(&[b'\n'])?;
+                    self.write(b"\n")?;
                 }
                 self.write_fmt(format_args!("{:#x}: ", addr + i))?;
             }
             self.write_fmt(format_args!("{:02x} ", b))?;
         }
         if !slice.is_empty() {
-            self.write(&[b'\n'])?;
+            self.write(b"\n")?;
         }
         Ok(())
     }
@@ -186,7 +186,7 @@ pub trait Write {
             error: Result<(), Error>,
         }
 
-        impl<'a, T: Write + ?Sized> fmt::Write for Adaptor<'a, T> {
+        impl<T: Write + ?Sized> fmt::Write for Adaptor<'_, T> {
             fn write_str(&mut self, s: &str) -> fmt::Result {
                 match self.inner.write_all(s.as_bytes()) {
                     Ok(()) => Ok(()),

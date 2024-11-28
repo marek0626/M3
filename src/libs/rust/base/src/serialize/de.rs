@@ -110,7 +110,7 @@ impl<'de> M3Deserializer<'de> {
     }
 }
 
-impl<'de, 'a> Deserializer<'de> for &'a mut M3Deserializer<'de> {
+impl<'de> Deserializer<'de> for &mut M3Deserializer<'de> {
     type Error = SerdeError;
 
     fn is_human_readable(&self) -> bool {
@@ -390,7 +390,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut M3Deserializer<'de> {
     }
 }
 
-impl<'de, 'a> SeqAccess<'de> for &'a mut M3Deserializer<'de> {
+impl<'de> SeqAccess<'de> for &mut M3Deserializer<'de> {
     type Error = SerdeError;
 
     #[inline(always)]
@@ -408,7 +408,7 @@ struct SizedSeqAccess<'de, 'a> {
     len: usize,
 }
 
-impl<'de, 'a> SeqAccess<'de> for SizedSeqAccess<'de, 'a> {
+impl<'de> SeqAccess<'de> for SizedSeqAccess<'de, '_> {
     type Error = SerdeError;
 
     #[inline(always)]
@@ -430,7 +430,7 @@ impl<'de, 'a> SeqAccess<'de> for SizedSeqAccess<'de, 'a> {
     }
 }
 
-impl<'de, 'a> EnumAccess<'de> for &'a mut M3Deserializer<'de> {
+impl<'de> EnumAccess<'de> for &mut M3Deserializer<'de> {
     type Error = SerdeError;
     type Variant = Self;
 
@@ -444,7 +444,7 @@ impl<'de, 'a> EnumAccess<'de> for &'a mut M3Deserializer<'de> {
     }
 }
 
-impl<'de, 'a> VariantAccess<'de> for &'a mut M3Deserializer<'de> {
+impl<'de> VariantAccess<'de> for &mut M3Deserializer<'de> {
     type Error = SerdeError;
 
     #[inline(always)]

@@ -46,7 +46,7 @@ impl SuperBlock {
     }
 
     pub fn inodebm_block(&self) -> BlockNo {
-        (((self.total_inodes + 7) / 8) + self.block_size - 1) / self.block_size
+        ((self.total_inodes + 7) / 8).div_ceil(self.block_size)
     }
 
     pub fn first_blockbm_block(&self) -> BlockNo {
@@ -54,7 +54,7 @@ impl SuperBlock {
     }
 
     pub fn blockbm_blocks(&self) -> BlockNo {
-        (((self.total_blocks + 7) / 8) + self.block_size - 1) / self.block_size
+        ((self.total_blocks + 7) / 8).div_ceil(self.block_size)
     }
 
     pub fn first_inode_block(&self) -> BlockNo {

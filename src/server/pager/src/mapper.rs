@@ -40,7 +40,7 @@ impl<'a> ChildMapper<'a> {
     }
 }
 
-impl<'a> Mapper for ChildMapper<'a> {
+impl Mapper for ChildMapper<'_> {
     fn buffer(&mut self) -> Option<&mut [u8]> {
         self.def_mapper.buffer()
     }

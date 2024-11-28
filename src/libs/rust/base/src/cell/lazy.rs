@@ -19,6 +19,8 @@
 use crate::cell::{Ref, RefMut, StaticCell, StaticRefCell, UnsafeCell};
 use crate::mem;
 
+/// A lazily initialized [`StaticCell`](super::StaticCell)
+///
 /// A `LazyStaticCell` is the same as the [`StaticCell`](super::StaticCell), but contains an
 /// [`Option<T>`](Option). At construction, the value is `None` and it needs to be set before other
 /// functions can be used. That is, all access functions assume that the value has been set before.
@@ -54,6 +56,8 @@ impl<T: Copy> LazyStaticCell<T> {
     }
 }
 
+/// A lazily initialized [`StaticRefCell`](super::StaticRefCell)
+///
 /// A `LazyStaticRefCell` is the same as the [`StaticRefCell`](super::StaticRefCell), but contains an
 /// [`Option<T>`](Option). At construction, the value is `None` and it needs to be set before other
 /// functions can be used. That is, all access functions assume that the value has been set before.
@@ -99,6 +103,8 @@ impl<T: Sized> LazyStaticRefCell<T> {
     }
 }
 
+/// A lazily initialized read-only cell
+///
 /// A `LazyReadOnlyCell` is a cell that can be used for a static variable. It has to be initialized
 /// (once) lazily and can afterwards only be read.
 pub struct LazyReadOnlyCell<T: Sized> {
