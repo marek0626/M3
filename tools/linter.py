@@ -21,7 +21,7 @@ def main():
     lints_path = os.path.join(os.path.abspath(os.path.dirname(sys.argv[0])), "lints")
 
     subprocess.run(
-        ("cargo", "install", "cargo-dylint@3.1.2", "dylint-link@3.1.2"), check=True
+        ("cargo", "install", "--locked", "cargo-dylint@3.1.2", "dylint-link@3.1.2"), check=True
     )
 
     for crate in args.crates:
