@@ -1,45 +1,46 @@
+<?xml version="1.0"?>
 <config>
     <mods>
-        <mod name="fs" file="bench.img" />
+        <mod name="fs" file="bench.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>
                 <app args="m3fs mem" daemon="1">
-                    <serv name="m3fs" />
-                    <mod name="fs" />
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
                 </app>
             </dom>
             <dom>
                 <app args="pager maxcli=4 sem=net">
-                    <sess name="m3fs" />
-                    <mod name="fs" perm="r" />
-                    <mod name="tilemux" perm="r" />
-                    <tiles type="effi|core" count="1" />
-                    <tiles type="perf|core" count="3" />
+                    <sess name="m3fs"/>
+                    <mod name="fs" perm="r"/>
+                    <mod name="tilemux" perm="r"/>
+                    <tiles type="effi|core" count="1"/>
+                    <tiles type="perf|core" count="3"/>
                     <dom tile="perf|core">
                         <app args="/sbin/net -d lo -m 2 net 127.0.0.1" daemon="1">
-                            <serv name="net" />
+                            <serv name="net"/>
                         </app>
                     </dom>
                     <dom tile="effi|core">
                         <app args="/bin/vamic /testcase1.wav" daemon="1">
-                            <mount fs="m3fs" path="/" />
-                            <serv name="vamic" />
+                            <mount fs="m3fs" path="/"/>
+                            <serv name="vamic"/>
                         </app>
                     </dom>
                     <dom tile="perf|core">
                         <app args="/bin/vasnd -w 2 -r 8 -p udp 127.0.0.1 1337">
-                            <sess name="net" args="bufs=1M socks=1" />
-                            <sess name="vamic" />
-                            <sem name="net" />
+                            <sess name="net" args="bufs=1M socks=1"/>
+                            <sess name="vamic"/>
+                            <sem name="net"/>
                         </app>
                     </dom>
                     <dom tile="perf|core">
                         <app args="/bin/varcv udp 1337 10" daemon="1">
-                            <sess name="net" args="bufs=1M socks=1 udp=1337" />
-                            <sem name="net" />
+                            <sess name="net" args="bufs=1M socks=1 udp=1337"/>
+                            <sem name="net"/>
                         </app>
                     </dom>
                 </app>

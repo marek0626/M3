@@ -1,18 +1,19 @@
+<?xml version="1.0"?>
 <config>
     <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py M3_GEM5_O3_CORES=1 M3_GEM5_MINOR_CORES=3</env>
-    <rot layers="brom,blau.bin,rosa.bin" />
-    <kernel args="kernel" />
+    <rot layers="brom,blau.bin,rosa.bin"/>
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom tile="core+rot">
                 <app args="rots" daemon="1">
-                    <serv name="rot" />
-                    <mod name="rot-certificate.json" perm="r" />
+                    <serv name="rot"/>
+                    <mod name="rot-certificate.json" perm="r"/>
                 </app>
             </dom>
             <dom tile="effi|core">
                 <app args="raser">
-                    <sess name="rot" args="rotc" />
+                    <sess name="rot" args="rotc"/>
                 </app>
             </dom>
         </app>

@@ -1,31 +1,32 @@
+<?xml version="1.0"?>
 <config>
     <mods>
-        <mod name="fs" file="bench.img" />
+        <mod name="fs" file="bench.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>
                 <app args="m3fs mem" daemon="1">
-                    <serv name="m3fs" />
-                    <mod name="fs" />
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
                 </app>
             </dom>
             <dom tile="perf+nic">
                 <app args="pager maxcli=3" usermem="768M">
-                    <sess name="m3fs" />
-                    <mod name="fs" perm="r" />
-                    <mod name="tilemux" perm="r" />
+                    <sess name="m3fs"/>
+                    <mod name="fs" perm="r"/>
+                    <mod name="tilemux" perm="r"/>
                     <app args="/sbin/m3fs -m 1 mem" daemon="1">
-                        <serv lname="m3fs" gname="app_m3fs" />
-                        <mod name="fs" />
+                        <serv lname="m3fs" gname="app_m3fs"/>
+                        <mod name="fs"/>
                     </app>
                     <app args="/sbin/net -m 1 net 192.168.41.11" daemon="1">
-                        <serv name="net" />
+                        <serv name="net"/>
                     </app>
                     <app args="/bin/lvldbserver /tmp/foo 1 udp 192.168.41.10 1339 /data/small-workload.wl">
-                        <sess name="net" args="bufs=1M socks=1" />
-                        <sess lname="m3fs" gname="app_m3fs" />
+                        <sess name="net" args="bufs=1M socks=1"/>
+                        <sess lname="m3fs" gname="app_m3fs"/>
                     </app>
                 </app>
             </dom>

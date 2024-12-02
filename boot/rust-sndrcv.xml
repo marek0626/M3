@@ -1,11 +1,12 @@
+<?xml version="1.0"?>
 <config>
     <env>M3_GEM5_CFG=platform/gem5/configs/m3/caches.py M3_GEM5_CORES=8</env>
-    <kernel args="stdareceiver" />
-    <kernel args="stdasender" />
-    <kernel args="stdasender" />
-    <kernel args="stdasender" />
-    <kernel args="stdasender" />
-    <kernel args="stdasender" />
-    <kernel args="stdasender" />
-    <kernel args="stdasender" />
+    <kernel args="stdareceiver"/>
+    <kernel args="stdasender"/>
+    <kernel args="stdasender"/>
+    <kernel args="stdasender"/>
+    <kernel args="stdasender"/>
+    <kernel args="stdasender"/>
+    <kernel args="stdasender"/>
+    <kernel args="stdasender"/>
 </config>

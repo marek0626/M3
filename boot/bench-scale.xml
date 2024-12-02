@@ -1,33 +1,34 @@
+<?xml version="1.0"?>
 <config>
     <mods>
-        <mod name="fs1" file="bench.img" />
-        <mod name="fs2" file="bench.img" />
+        <mod name="fs1" file="bench.img"/>
+        <mod name="fs2" file="bench.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>
                 <app args="m3fs mem" daemon="1">
-                    <serv name="m3fs" />
-                    <mod gname="fs1" lname="fs" />
+                    <serv name="m3fs"/>
+                    <mod gname="fs1" lname="fs"/>
                 </app>
             </dom>
             <dom>
                 <app args="pager">
-                    <sess name="m3fs" />
-                    <mod gname="fs1" lname="fs" perm="r" />
-                    <mod name="tilemux" perm="r" />
-                    <tiles type="core" count="1" />
+                    <sess name="m3fs"/>
+                    <mod gname="fs1" lname="fs" perm="r"/>
+                    <mod name="tilemux" perm="r"/>
+                    <tiles type="core" count="1"/>
                     <dom>
                         <app args="/bin/bench-scale -i 2 -r 1 find">
-                            <mount fs="m3fs" path="/" />
-                            <tiles type="perf|core" count="2" />
-                            <serv name="m3fs-0" />
-                            <serv name="m3fs-1" />
-                            <sess name="m3fs-0" dep="false" />
-                            <sess name="m3fs-1" dep="false" />
-                            <mod name="fs1" />
-                            <mod name="fs2" />
+                            <mount fs="m3fs" path="/"/>
+                            <tiles type="perf|core" count="2"/>
+                            <serv name="m3fs-0"/>
+                            <serv name="m3fs-1"/>
+                            <sess name="m3fs-0" dep="false"/>
+                            <sess name="m3fs-1" dep="false"/>
+                            <mod name="fs1"/>
+                            <mod name="fs2"/>
                         </app>
                     </dom>
                 </app>

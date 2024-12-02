@@ -1,9 +1,10 @@
+<?xml version="1.0"?>
 <config>
-    <kernel args="tilemux" />
-    <kernel args="tilemux" />
-    <kernel args="tilemux" />
-    <kernel args="tilemux" />
-    <kernel args="tilemux" />
-    <kernel args="tilemux" />
-    <kernel args="axi_ethernet_driver" />
+    <kernel args="tilemux"/>
+    <kernel args="tilemux"/>
+    <kernel args="tilemux"/>
+    <kernel args="tilemux"/>
+    <kernel args="tilemux"/>
+    <kernel args="tilemux"/>
+    <kernel args="axi_ethernet_driver"/>
 </config>

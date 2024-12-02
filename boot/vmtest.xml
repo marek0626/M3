@@ -1,4 +1,5 @@
+<?xml version="1.0"?>
 <config>
     <env>M3_GEM5_CFG=platform/gem5/configs/m3/caches.py M3_GEM5_CORES=8</env>
-    <kernel args="vmtest" />
+    <kernel args="vmtest"/>
 </config>

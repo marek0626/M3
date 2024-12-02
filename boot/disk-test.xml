@@ -1,22 +1,23 @@
+<?xml version="1.0"?>
 <config>
-    <kernel args="kernel -m 16M" />
+    <kernel args="kernel -m 16M"/>
     <dom>
         <app args="root">
             <dom>
                 <app args="disk -d -i" daemon="1">
-                    <serv name="disk" />
-                    <tiles type="idedev" />
+                    <serv name="disk"/>
+                    <tiles type="idedev"/>
                 </app>
             </dom>
             <dom>
                 <app args="m3fs -c -b 2 disk" daemon="1">
-                    <sess name="disk" args="0" />
-                    <serv name="m3fs" />
+                    <sess name="disk" args="0"/>
+                    <serv name="m3fs"/>
                 </app>
             </dom>
             <dom>
                 <app args="disktest">
-                    <sess name="m3fs" args="files=4" />
+                    <sess name="m3fs" args="files=4"/>
                 </app>
             </dom>
         </app>

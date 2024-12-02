@@ -1,19 +1,20 @@
+<?xml version="1.0"?>
 <config>
     <mods>
-        <mod name="fs" file="default.img" />
+        <mod name="fs" file="default.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>
                 <app args="m3fs mem" daemon="1">
-                    <serv name="m3fs" />
-                    <mod name="fs" />
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
                 </app>
             </dom>
             <dom>
                 <app args="noopbench">
-                    <sess name="m3fs" />
+                    <sess name="m3fs"/>
                 </app>
             </dom>
         </app>

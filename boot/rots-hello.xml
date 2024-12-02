@@ -1,7 +1,8 @@
+<?xml version="1.0"?>
 <config>
     <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py</env>
-    <rot layers="brom,blau.bin,rosa.bin" />
-    <kernel args="kernel" />
+    <rot layers="brom,blau.bin,rosa.bin"/>
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>

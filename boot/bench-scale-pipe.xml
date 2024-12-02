@@ -1,32 +1,33 @@
+<?xml version="1.0"?>
 <config>
     <mods>
-        <mod name="fs" file="bench.img" />
+        <mod name="fs" file="bench.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>
                 <app args="m3fs mem" daemon="1">
-                    <serv name="m3fs" />
-                    <mod name="fs" />
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
                 </app>
             </dom>
             <dom>
                 <app args="pipes" daemon="1">
-                    <serv name="pipes" />
+                    <serv name="pipes"/>
                 </app>
             </dom>
             <dom>
                 <app args="pager">
-                    <sess name="m3fs" />
-                    <mod name="fs" perm="r" />
-                    <mod name="tilemux" perm="r" />
-                    <tiles type="core" count="1" />
+                    <sess name="m3fs"/>
+                    <mod name="fs" perm="r"/>
+                    <mod name="tilemux" perm="r"/>
+                    <tiles type="core" count="1"/>
                     <dom>
                         <app args="/bin/bench-scale-pipe -i 1 -r 1 cat_wc_cat cat_wc_wc">
-                            <mount fs="m3fs" path="/" />
-                            <sess name="pipes" />
-                            <tiles type="perf|core" count="2" />
+                            <mount fs="m3fs" path="/"/>
+                            <sess name="pipes"/>
+                            <tiles type="perf|core" count="2"/>
                         </app>
                     </dom>
                 </app>

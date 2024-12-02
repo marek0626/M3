@@ -1,31 +1,32 @@
+<?xml version="1.0"?>
 <config>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>
                 <app args="timer" daemon="1">
-                    <serv name="timer" />
+                    <serv name="timer"/>
                 </app>
             </dom>
             <dom>
                 <app args="queuesrv" daemon="1">
-                    <sess name="timer" />
-                    <serv name="queuetest" />
+                    <sess name="timer"/>
+                    <serv name="queuetest"/>
                 </app>
             </dom>
             <dom>
                 <app args="queuecli">
-                    <sess name="queuetest" />
+                    <sess name="queuetest"/>
                 </app>
             </dom>
             <dom>
                 <app args="queuecli">
-                    <sess name="queuetest" />
+                    <sess name="queuetest"/>
                 </app>
             </dom>
             <dom>
                 <app args="queuecli">
-                    <sess name="queuetest" />
+                    <sess name="queuetest"/>
                 </app>
             </dom>
         </app>

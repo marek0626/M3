@@ -1,26 +1,27 @@
+<?xml version="1.0"?>
 <config>
     <mods>
-        <mod name="fs" file="default.img" />
+        <mod name="fs" file="default.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>
                 <app args="m3fs mem" daemon="1">
-                    <serv name="m3fs" />
-                    <mod name="fs" />
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
                 </app>
             </dom>
             <dom tile="perf+nic">
                 <app args="pager maxcli=3" usermem="768M">
-                    <sess name="m3fs" />
-                    <mod name="fs" perm="r" />
-                    <mod name="tilemux" perm="r" />
+                    <sess name="m3fs"/>
+                    <mod name="fs" perm="r"/>
+                    <mod name="tilemux" perm="r"/>
                     <app args="/sbin/net net 192.168.41.11" daemon="1">
-                        <serv name="net" />
+                        <serv name="net"/>
                     </app>
                     <app args="/bin/netlat 192.168.41.10 1338">
-                        <sess name="net" args="bufs=1M socks=1" />
+                        <sess name="net" args="bufs=1M socks=1"/>
                     </app>
                 </app>
             </dom>

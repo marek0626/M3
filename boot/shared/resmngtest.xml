@@ -1,27 +1,28 @@
+<?xml version="1.0"?>
 <config>
     <mods>
-        <mod name="fs" file="default.img" />
+        <mod name="fs" file="default.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <app args="m3fs -c mem" daemon="1">
-                <serv name="m3fs" />
-                <mod name="fs" />
+                <serv name="m3fs"/>
+                <mod name="fs"/>
             </app>
             <dom>
                 <app args="pager" usermem="768M">
-                    <sess name="m3fs" />
-                    <mod name="fs" perm="r" />
-                    <mod name="tilemux" perm="r" />
-                    <tiles type="core" count="1" />
+                    <sess name="m3fs"/>
+                    <mod name="fs" perm="r"/>
+                    <mod name="tilemux" perm="r"/>
+                    <tiles type="core" count="1"/>
                     <dom>
                         <app args="/bin/resmngtest" usermem="512M">
-                            <mount fs="m3fs" path="/" />
-                            <mod name="tilemux" perm="r" />
-                            <tiles type="core" count="5" />
+                            <mount fs="m3fs" path="/"/>
+                            <mod name="tilemux" perm="r"/>
+                            <tiles type="core" count="5"/>
                             <dom>
-                                <app args="rusthello" />
+                                <app args="rusthello"/>
                             </dom>
                         </app>
                     </dom>

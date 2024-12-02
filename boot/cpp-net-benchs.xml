@@ -1,31 +1,32 @@
+<?xml version="1.0"?>
 <config>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root sem=net-udp sem=net-tcp">
             <dom>
                 <app args="net net0 192.168.112.2" daemon="1">
-                    <serv name="net0" />
-                    <tiles type="nicdev" />
+                    <serv name="net0"/>
+                    <tiles type="nicdev"/>
                 </app>
             </dom>
             <dom>
                 <app args="net net1 192.168.112.1" daemon="1">
-                    <serv name="net1" />
-                    <tiles type="nicdev" />
+                    <serv name="net1"/>
+                    <tiles type="nicdev"/>
                 </app>
             </dom>
             <dom>
                 <app args="netechoserver" daemon="1">
-                    <sess lname="net" gname="net1" args="bufs=1M socks=2 udp=1337 tcp=1338" />
-                    <sem name="net-udp" />
-                    <sem name="net-tcp" />
+                    <sess lname="net" gname="net1" args="bufs=1M socks=2 udp=1337 tcp=1338"/>
+                    <sem name="net-udp"/>
+                    <sem name="net-tcp"/>
                 </app>
             </dom>
             <dom>
                 <app args="cppnetbenchs">
-                    <sess lname="net" gname="net0" args="bufs=1M socks=2" />
-                    <sem name="net-udp" />
-                    <sem name="net-tcp" />
+                    <sess lname="net" gname="net0" args="bufs=1M socks=2"/>
+                    <sem name="net-udp"/>
+                    <sem name="net-tcp"/>
                 </app>
             </dom>
         </app>

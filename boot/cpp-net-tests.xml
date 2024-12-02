@@ -1,50 +1,51 @@
+<?xml version="1.0"?>
 <config>
     <env>M3_GEM5_CFG=platform/gem5/configs/m3/default.py</env>
     <mods>
-        <mod name="fs" file="default.img" />
+        <mod name="fs" file="default.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>
                 <app args="m3fs mem" daemon="1">
-                    <serv name="m3fs" />
-                    <mod name="fs" />
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
                 </app>
             </dom>
             <dom>
                 <app args="net net0 192.168.112.2" daemon="1">
-                    <serv name="net0" />
-                    <tiles type="nicdev" />
+                    <serv name="net0"/>
+                    <tiles type="nicdev"/>
                 </app>
             </dom>
             <dom>
                 <app args="net net1 192.168.112.1" daemon="1">
-                    <serv name="net1" />
-                    <tiles type="nicdev" />
+                    <serv name="net1"/>
+                    <tiles type="nicdev"/>
                 </app>
             </dom>
             <dom>
                 <app args="pager sem=net-udp sem=net-tcp">
-                    <sess name="m3fs" />
-                    <mod name="fs" perm="r" />
-                    <mod name="tilemux" perm="r" />
-                    <tiles type="core" count="2" />
+                    <sess name="m3fs"/>
+                    <mod name="fs" perm="r"/>
+                    <mod name="tilemux" perm="r"/>
+                    <tiles type="core" count="2"/>
                     <dom>
                         <app args="/bin/netechoserver" daemon="1">
-                            <sess lname="net" gname="net1" args="bufs=1M socks=2 udp=1337 tcp=1338" />
-                            <sem name="net-udp" />
-                            <sem name="net-tcp" />
+                            <sess lname="net" gname="net1" args="bufs=1M socks=2 udp=1337 tcp=1338"/>
+                            <sem name="net-udp"/>
+                            <sem name="net-tcp"/>
                         </app>
                     </dom>
                     <dom>
                         <app args="/bin/cppnettests">
-                            <mount fs="m3fs" path="/" />
-                            <sess name="net0" args="bufs=64K socks=2 udp=2000-2001" />
-                            <sess name="net1" args="bufs=64K socks=2 tcp=3000" />
-                            <tiles type="core" count="1" />
-                            <sem name="net-udp" />
-                            <sem name="net-tcp" />
+                            <mount fs="m3fs" path="/"/>
+                            <sess name="net0" args="bufs=64K socks=2 udp=2000-2001"/>
+                            <sess name="net1" args="bufs=64K socks=2 tcp=3000"/>
+                            <tiles type="core" count="1"/>
+                            <sem name="net-udp"/>
+                            <sem name="net-tcp"/>
                         </app>
                     </dom>
                 </app>

@@ -1,29 +1,30 @@
+<?xml version="1.0"?>
 <config>
     <env>M3_GEM5_CFG=platform/gem5/configs/m3/default.py</env>
     <mods>
-        <mod name="fs" file="bench.img" />
+        <mod name="fs" file="bench.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root sem=net-udp sem=net-tcp">
             <app args="net net0 192.168.112.2" daemon="1">
-                <serv name="net0" />
-                <tiles type="nicdev" />
+                <serv name="net0"/>
+                <tiles type="nicdev"/>
             </app>
             <app args="rustnetbenchs 192.168.112.1">
-                <sess lname="net" gname="net0" args="bufs=1M socks=2" />
-                <sem name="net-udp" />
-                <sem name="net-tcp" />
+                <sess lname="net" gname="net0" args="bufs=1M socks=2"/>
+                <sem name="net-udp"/>
+                <sem name="net-tcp"/>
             </app>
             <dom>
                 <app args="net net1 192.168.112.1" daemon="1">
-                    <serv name="net1" />
-                    <tiles type="nicdev" />
+                    <serv name="net1"/>
+                    <tiles type="nicdev"/>
                 </app>
                 <app args="netechoserver" daemon="1">
-                    <sess lname="net" gname="net1" args="bufs=1M socks=2 udp=1337 tcp=1338" />
-                    <sem name="net-udp" />
-                    <sem name="net-tcp" />
+                    <sess lname="net" gname="net1" args="bufs=1M socks=2 udp=1337 tcp=1338"/>
+                    <sem name="net-udp"/>
+                    <sem name="net-tcp"/>
                 </app>
             </dom>
         </app>
