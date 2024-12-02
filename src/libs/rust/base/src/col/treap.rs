@@ -89,6 +89,36 @@ impl<K: Copy + Ord, V> Treap<K, V> {
         self.prio = Wrapping(314_159_265);
     }
 
+    fn do_search<'a, F>(node: &'a Option<NonNull<Node<K, V>>>, f: &F) -> Option<&'a V>
+    where
+        F: Fn(&V) -> bool,
+    {
+        unsafe {
+            if let Some(valid_node) = node {
+                if let Some(matched_value) = Self::do_search(&valid_node.as_ref().left, f) {
+                    return Some(matched_value);
+                }
+                if f(&valid_node.as_ref().value) {
+                    return Some(&valid_node.as_ref().value);
+                }
+                if let Some(matched_value) = Self::do_search(&valid_node.as_ref().right, f) {
+                    return Some(matched_value);
+                }
+                None
+            }
+            else {
+                None
+            }
+        }
+    }
+
+    pub fn find<F>(&self, f: F) -> Option<&V>
+    where
+        F: Fn(&V) -> bool,
+    {
+        Self::do_search(&self.root, &f)
+    }
+
     fn remove_rec(node: NonNull<Node<K, V>>) {
         unsafe {
             if let Some(l) = (*node.as_ptr()).left {

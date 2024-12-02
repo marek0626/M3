@@ -14,7 +14,7 @@
 
 #![no_std]
 
-use m3::client::{HashInput, HashOutput, HashSession};
+use m3::client::{HashInput, HashOutput, RoTSession};
 use m3::crypto::HashAlgorithm;
 use m3::errors::{Code, Error};
 use m3::io::{STDIN_FILENO, STDOUT_FILENO};
@@ -35,7 +35,7 @@ fn open_file(path: &str, flags: OpenFlags, stdfd: Fd) -> Result<FileRef<dyn File
 }
 
 fn hash(
-    sess: &mut HashSession,
+    sess: &mut RoTSession,
     path: &str,
     output_bytes: usize,
     output_file: Option<&mut FileRef<dyn File>>,
@@ -109,7 +109,7 @@ pub fn main() -> Result<(), Error> {
         return Err(Error::new(Code::InvArgs));
     }
 
-    let mut sess = HashSession::new("hash", algo).expect("Failed to get hash session");
+    let mut sess = RoTSession::new("hash", algo).expect("Failed to get hash session");
 
     let mut res = Ok(());
     next = next.or(Some("-"));

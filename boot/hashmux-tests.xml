@@ -12,14 +12,14 @@
                     <mod name="fs" />
                 </app>
             </dom>
-            <dom>
-                <app args="pipes" daemon="1">
-                    <serv name="pipes" />
-                </app>
+	    <dom>
+	      <app args="pipes" daemon="1">
+                <serv name="pipes" />
+              </app>
             </dom>
             <dom tile="core+kecacc">
-                <app args="hashmux" daemon="1">
-                    <serv name="hash"/>
+                <app args="rots" daemon="1">
+                    <serv name="rot" />
                 </app>
             </dom>
             <dom>
@@ -29,14 +29,14 @@
                     <mod name="tilemux" perm="r" />
                     <tiles type="core" count="1" />
                     <dom>
-                        <app args="/bin/hashmuxtests">
+                        <app args="/bin/rotshashtests">
                             <mount fs="m3fs" path="/" />
-                            <sess name="pipes" />
-                            <sess name="hash" />
-                            <sess lname="hash1" gname="hash" args="20000" />
-                            <sess lname="hash2" gname="hash" args="20000" />
-                            <sess lname="hash3" gname="hash" args="20000" />
-                            <sess lname="hash4" gname="hash" args="20000" />
+                            <sess lname="hash" gname="rot" />
+                            <sess lname="hash1" gname="rot" args="20000" />
+                            <sess lname="hash2" gname="rot" args="20000" />
+                            <sess lname="hash3" gname="rot" args="20000" />
+                            <sess lname="hash4" gname="rot" args="20000" />
+			    <sess name="pipes" />
                             <tiles type="core" count="1" />
                         </app>
                     </dom>

@@ -15,7 +15,7 @@
 use crate::util;
 
 use m3::cap::Selector;
-use m3::client::HashSession;
+use m3::client::RoTSession;
 use m3::col::Vec;
 use m3::com::{
     recv_msg, recv_reply, GateIStream, MemCap, MemGate, Perm, RecvGate, SGateArgs, SendCap,
@@ -72,7 +72,7 @@ fn _run_client_bench<F>(
     mut fun: F,
 ) -> Results<CycleDuration>
 where
-    F: FnMut(&HashSession) -> Result<(), Error>,
+    F: FnMut(&RoTSession) -> Result<(), Error>,
 {
     let mut t = DefaultWvTester::default();
 
@@ -88,7 +88,7 @@ where
     let mut res = Results::new(params.runs as usize);
     if SYNC_EVERY_RUN {
         for i in 0..(params.warm + params.runs) {
-            let hash = wv_require_ok!(HashSession::new(&name, algo));
+            let hash = wv_require_ok!(RoTSession::new(&name, algo));
 
             // Wait until everyone is ready to start
             wv_assert_ok!(t, send_recv!(&sgate, &rgate, hash.ep().sel()));
@@ -118,7 +118,7 @@ where
         }
     }
     else {
-        let hash = wv_require_ok!(HashSession::new(&name, algo));
+        let hash = wv_require_ok!(RoTSession::new(&name, algo));
 
         // Wait until everyone is ready to start
         wv_assert_ok!(t, send_recv!(&sgate, &rgate, hash.ep().sel()));

@@ -23,7 +23,7 @@ use core::fmt;
 use crate::boxed::Box;
 use crate::cap::Selector;
 use crate::cell::RefCell;
-use crate::client::{ClientSession, HashInput, HashOutput, HashSession, MapFlags, Pager};
+use crate::client::{ClientSession, HashInput, HashOutput, MapFlags, Pager, RoTSession};
 use crate::col::{String, ToString};
 use crate::com::recv_result;
 use crate::com::GateIStream;
@@ -732,7 +732,7 @@ impl Map for GenericFile {
 }
 
 impl HashInput for GenericFile {
-    fn hash_input(&mut self, sess: &HashSession, len: usize) -> Result<usize, Error> {
+    fn hash_input(&mut self, sess: &RoTSession, len: usize) -> Result<usize, Error> {
         self.delegate_ep(sess.ep().sel(), sess.ep().id())?;
 
         let mut remaining = len;
@@ -751,7 +751,7 @@ impl HashInput for GenericFile {
 }
 
 impl HashOutput for GenericFile {
-    fn hash_output(&mut self, sess: &HashSession, len: usize) -> Result<usize, Error> {
+    fn hash_output(&mut self, sess: &RoTSession, len: usize) -> Result<usize, Error> {
         self.delegate_ep(sess.ep().sel(), sess.ep().id())?;
 
         let mut remaining = len;

@@ -1,12 +1,16 @@
 <config>
-    <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py M3_GEM5_O3_CORES=1 M3_GEM5_MINOR_CORES=6</env>
+    <env>M3_GEM5_CFG=platform/gem5/configs/m3/default.py</env>
     <mods>
       <mod name="fs" file="default.img" />
     </mods>
-    <rot layers="brom,blau.bin,rosa.bin" />
     <kernel args="kernel" />
     <dom>
       <app args="root">
+        <dom tile="core+kecacc">
+          <app args="rots" daemon="1">
+            <serv name="rot" />
+          </app>
+        </dom>
         <dom>
           <app args="m3fs mem" daemon="1">
             <serv name="m3fs" />
@@ -16,11 +20,12 @@
 	<dom>
           <app args="pager">
 	    <sess name="m3fs" />
+	    <sess name="rot" />
             <mod name="fs" perm="r" />
             <mod name="tilemux" perm="r" />
 	    <tiles type="perf|core|effi" count="3" />
 	    <dom tile="effi|perf|core">
-	      <app args="/bin/sleep 2" attestation_id="1" >
+	      <app args="/bin/sleep 2" attestation_id="1">
 		<tiles type="perf|core|effi" count="1" />
 	      </app>
 	    </dom>

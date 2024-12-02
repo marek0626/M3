@@ -21,9 +21,8 @@ mod mapper;
 mod physmem;
 mod regions;
 
-use core::num::Wrapping;
-use core::ops::DerefMut;
-use core::{cmp, fmt};
+use core::fmt;
+use core::ops::{Deref, DerefMut};
 
 use m3::boxed::Box;
 use m3::cell::LazyStaticRefCell;
@@ -31,6 +30,7 @@ use m3::client::{ClientSession, Pager, RoTSession, M3FS};
 use m3::col::{String, ToString, Vec};
 use m3::com::GateIStream;
 use m3::com::{opcodes, MemCap, RecvGate, SGateArgs, SendCap};
+use m3::crypto::HashAlgorithm;
 use m3::errors::{Code, Error, VerboseError};
 use m3::format;
 use m3::kif::syscalls::MuxType;
@@ -55,10 +55,13 @@ use resmng::resources::{tiles, Resources};
 use resmng::sendqueue;
 use resmng::subsys;
 
+use hex::Hex;
+
 static REQHDL: LazyStaticRefCell<RequestHandler<AddrSpace, opcodes::Pager>> =
     LazyStaticRefCell::default();
 static EVREQHDL: LazyStaticRefCell<RequestHandler<EvidenceSession, opcodes::Pager>> =
     LazyStaticRefCell::default();
+static ROT: LazyStaticRefCell<RoTSession> = LazyStaticRefCell::default();
 
 #[derive(Default)]
 struct PagedChildStarter {
@@ -85,20 +88,16 @@ impl PagedChildStarter {
 
 // Extremely simple Karp-Rabin type hash.
 pub fn get_hash(file: &mut dyn File, file_size: usize) -> Result<String, Error> {
-    let mut hash = Wrapping::<usize>(0);
-    let mut buf: [u8; 1024] = [0; 1024];
-    let constant = Wrapping::<usize>(42);
-    let mut count = file_size;
-    while count > 0 {
-        let amount = cmp::min(count, buf.len());
-        let amount = file.read(&mut buf[0..amount])?;
-        for byte in buf.iter() {
-            hash = hash * constant + Wrapping(*byte as usize);
-        }
-        count -= amount;
-    }
-    file.seek(0, SeekMode::Set)?;
-    Ok(hash.to_string())
+    let binder = ROT.borrow();
+    let rot = binder.deref();
+    file.hash_input(rot, file_size)
+        .expect("couldn't get app hash from rot");
+    let mut buf = [0u8; HashAlgorithm::SHA3_256.output_bytes];
+    rot.finish(&mut buf).expect("Couldn't finish hash");
+    let hex = Hex(&buf[..]);
+    log!(LogFlags::Debug, "App hash: {}", hex);
+    file.seek(0, SeekMode::Set)?; // NMG Needed when we use hash_input? Probably not.
+    Ok(format!("{}", hex))
 }
 
 impl subsys::ChildStarter for PagedChildStarter {
@@ -219,7 +218,6 @@ struct WorkloopArgs<'t, 'c, 'd, 'r, 'q, 's, 'v> {
     reqs: &'q requests::Requests,
     serv: &'s mut Server,
     evserv: &'v mut Option<Server>,
-    rot: &'v mut Option<RoTSession>,
 }
 
 fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_, '_, '_>) {
@@ -231,7 +229,6 @@ fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_, '_, '_>) {
         reqs,
         serv,
         evserv,
-        rot,
     } = args;
 
     reqs.run_loop_async(
@@ -249,7 +246,7 @@ fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_, '_, '_>) {
                     .borrow_mut()
                     .fetch_and_handle_msg_with(|_handler, opcode, sess, is| match opcode {
                         o if o == opcodes::Pager::Quote.into() => {
-                            sess.quote(is, childmng, rot.as_mut().unwrap())
+                            sess.quote(is, childmng, ROT.borrow_mut().deref_mut())
                         },
                         _ => Err(Error::new(Code::InvArgs)),
                     });
@@ -297,11 +294,12 @@ pub fn main() -> Result<(), Error> {
 
     let mut evhdl: RequestHandler<EvidenceSession, opcodes::Pager> =
         RequestHandler::new_with(1, 128, 1).expect("couldn't create evidence req hdl");
-    let mut rot = None;
     let mut evsrv = match Server::new("evidence", &mut evhdl) {
         Ok(result) => {
             EVREQHDL.set(evhdl);
-            rot = Some(RoTSession::new("rot").expect("couldn't open RoT session"));
+            let rot = RoTSession::new("rot", &HashAlgorithm::SHA3_256)
+                .expect("Couldn't open RoT session");
+            ROT.set(rot);
             Some(result)
         },
         Err(_) => {
@@ -346,7 +344,6 @@ pub fn main() -> Result<(), Error> {
         reqs: &reqs,
         serv: &mut srv,
         evserv: &mut evsrv,
-        rot: &mut rot,
     };
 
     thread::init();
@@ -398,15 +395,16 @@ impl EvidenceSession {
         rot: &RoTSession,
     ) -> Result<(), Error> {
         let nonce: usize = is.pop()?;
-        let app_id: usize = is.pop()?;
+        let att_id: u32 = is.pop()?;
 
         let child = childmgr
-            .child_by_id(app_id as u32)
-            .ok_or_else(|| Error::new(Code::InvArgs))?;
+            .child_by_attestation_id(att_id)
+            .ok_or_else(|| Error::new(Code::NotFound))?;
 
         let app_hash = child.hash().ok_or_else(|| Error::new(Code::InvArgs))?;
         let xml = child.cfg().to_string();
         let hash: String = format!("Hash:{}:{}:{}", nonce, app_hash, xml);
+        log!(LogFlags::Debug, "Raw quote: {}", hash);
         let quote: [u8; 64] = rot.sign(hash.as_bytes())?;
         let quote_str = format!("{:x}", SigWrap(quote));
 

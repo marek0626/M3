@@ -1,5 +1,5 @@
 <config>
-    <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py M3_GEM5_O3_CORES=1 M3_GEM5_MINOR_CORES=6</env>
+    <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py M3_GEM5_O3_CORES=2 M3_GEM5_MINOR_CORES=4</env>
     <mods>
       <mod name="fs" file="default.img" />
     </mods>
@@ -7,6 +7,12 @@
     <kernel args="kernel" />
     <dom>
       <app args="root">
+        <dom tile="core+kecacc+rot">
+          <app args="rots" daemon="1">
+            <serv name="rot" />
+            <mod name="rot-certificate.json" perm="r" />
+          </app>
+        </dom>
         <dom>
           <app args="m3fs mem" daemon="1">
             <serv name="m3fs" />
@@ -16,14 +22,21 @@
 	<dom>
           <app args="pager">
 	    <sess name="m3fs" />
+	    <serv name="evidence" />
+	    <sess name="rot" />
             <mod name="fs" perm="r" />
             <mod name="tilemux" perm="r" />
 	    <tiles type="perf|core|effi" count="3" />
 	    <dom tile="effi|perf|core">
-	      <app args="/bin/sleep 2" attestation_id="1" >
+	      <app args="/bin/sleep 2" attestation_id="1">
 		<tiles type="perf|core|effi" count="1" />
 	      </app>
 	    </dom>
+	  </app>
+	</dom>
+	<dom>
+	  <app args="teetest">
+	    <sess name="evidence" />
 	  </app>
 	</dom>
       </app>

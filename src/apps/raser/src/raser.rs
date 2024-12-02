@@ -15,6 +15,7 @@
 #![no_std]
 
 use m3::client::RoTSession;
+use m3::crypto::HashAlgorithm;
 use m3::errors::Error;
 use m3::io::LogFlags;
 use m3::vfs::VFS;
@@ -33,7 +34,7 @@ pub fn main() -> Result<(), Error> {
         log!(LogFlags::Error, "Cannot mount file system: {}", e);
     }
 
-    let rot = RoTSession::new("rot").expect("failed to open RoT session");
+    let rot = RoTSession::new("rot", &HashAlgorithm::SHA3_256).expect("failed to open RoT session");
     log!(LogFlags::Info, "Asking RoTS to derive secret key");
     let seed: Secret<SecretKey> = Secret::new(
         rot.read_derived_secret("ED25519")

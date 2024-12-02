@@ -143,6 +143,7 @@ pub trait Child {
     fn arguments(&self) -> &[String];
     fn daemon(&self) -> bool;
     fn foreign(&self) -> bool;
+    fn attestation_id(&self) -> u32;
 
     fn our_tile(&self) -> &TileUsage;
     fn child_tile(&self) -> &TileUsage;
@@ -709,6 +710,7 @@ pub struct OwnChild {
     tee: bool,
     kmem: Rc<KMem>,
     hash: Option<String>,
+    attestation_id: u32,
 }
 
 impl OwnChild {
@@ -733,6 +735,7 @@ impl OwnChild {
             child_tile,
             name: cfg.name().to_string(),
             args,
+            attestation_id: cfg.attestation_id(),
             cfg,
             mem,
             res: ChildResources::default(),
@@ -855,6 +858,10 @@ impl Child for OwnChild {
 
     fn hash(&self) -> Option<&String> {
         self.hash.as_ref()
+    }
+
+    fn attestation_id(&self) -> u32 {
+        self.attestation_id
     }
 }
 
@@ -998,6 +1005,10 @@ impl Child for ForeignChild {
     fn hash(&self) -> Option<&String> {
         None
     }
+
+    fn attestation_id(&self) -> u32 {
+        0
+    }
 }
 
 impl fmt::Debug for ForeignChild {
@@ -1078,6 +1089,13 @@ impl ChildManager {
         self.childs.insert(child.id(), child);
         // now that we have a child, we want to stop as soon as we've no childs anymore
         self.flags.remove(Flags::STARTING);
+    }
+
+    #[allow(clippy::borrowed_box)]
+    pub fn child_by_attestation_id(&self, att_id: u32) -> Option<&dyn Child> {
+        self.childs
+            .find(|child: &Box<dyn Child>| child.attestation_id() == att_id)
+            .map(|child_box| child_box.as_ref())
     }
 
     pub fn child_by_id(&self, id: Id) -> Option<&dyn Child> {

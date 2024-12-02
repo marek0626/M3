@@ -10,8 +10,8 @@
                 <mod name="fs" />
             </app>
             <dom tile="core+kecacc">
-                <app args="hashmux" daemon="1">
-                    <serv name="hash"/>
+                <app args="rots" daemon="1">
+                    <serv name="rot"/>
                 </app>
             </dom>
             <dom>
@@ -22,17 +22,17 @@
                     <tiles type="core" count="1" />
                     <app args="/bin/hashmuxbenchs">
                         <mount fs="m3fs" path="/" />
-                        <sess lname="hash-prepare" gname="hash" />
-                        <sess lname="hash-bench" gname="hash" />
-                        <sess lname="hash-client0" gname="hash" />
-                        <sess lname="hash-client1" gname="hash" />
-                        <sess lname="hash-client2" gname="hash" />
-                        <sess lname="hash-client3" gname="hash" />
-                        <sess lname="hash-client4" gname="hash" />
-                        <sess lname="hash-client5" gname="hash" />
-                        <sess lname="hash-client6" gname="hash" />
-                        <sess lname="hash-client7" gname="hash" />
-                        <sess lname="hash-latency" gname="hash" />
+                        <sess lname="hash-prepare" gname="rot" />
+                        <sess lname="hash-bench" gname="rot" />
+                        <sess lname="hash-client0" gname="rot" />
+                        <sess lname="hash-client1" gname="rot" />
+                        <sess lname="hash-client2" gname="rot" />
+                        <sess lname="hash-client3" gname="rot" />
+                        <sess lname="hash-client4" gname="rot" />
+                        <sess lname="hash-client5" gname="rot" />
+                        <sess lname="hash-client6" gname="rot" />
+                        <sess lname="hash-client7" gname="rot" />
+                        <sess lname="hash-latency" gname="rot" />
                         <tiles type="core" count="8" />
                     </app>
                 </app>

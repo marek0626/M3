@@ -19,6 +19,7 @@ members = [
     "apps/coreutils/hashsum",
     "apps/disktest",
     "apps/hashmuxtests",
+    "apps/rotshashtests",
     "apps/info",
     "apps/msgchan/msgchansnd",
     "apps/netechoserver",
