@@ -1,34 +1,35 @@
+<?xml version="1.0"?>
 <config>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>
                 <app args="disk -d -i" daemon="1">
-                    <serv name="disk" />
-                    <tiles type="idedev" />
+                    <serv name="disk"/>
+                    <tiles type="idedev"/>
                 </app>
             </dom>
             <dom>
                 <app args="m3fs -b 2 disk" daemon="1">
-                    <sess name="disk" args="0" />
-                    <serv name="m3fs" />
+                    <sess name="disk" args="0"/>
+                    <serv name="m3fs"/>
                 </app>
             </dom>
             <dom>
                 <app args="pipes" daemon="1">
-                    <serv name="pipes" />
+                    <serv name="pipes"/>
                 </app>
             </dom>
             <dom>
                 <app args="pager">
-                    <sess name="m3fs" args="files=4" />
-                    <mod name="tilemux" perm="r" />
-                    <tiles type="core" count="1" />
+                    <sess name="m3fs" args="files=4"/>
+                    <mod name="tilemux" perm="r"/>
+                    <tiles type="core" count="1"/>
                     <dom>
                         <app args="/bin/shell">
-                            <mount fs="m3fs" path="/" />
-                            <sess name="pipes" />
-                            <tiles type="core" count="3" />
+                            <mount fs="m3fs" path="/"/>
+                            <sess name="pipes"/>
+                            <tiles type="core" count="3"/>
                         </app>
                     </dom>
                 </app>

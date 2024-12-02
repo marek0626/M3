@@ -1,12 +1,13 @@
+<?xml version="1.0"?>
 <config>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom tee="1">
-                <app args="hello" />
+                <app args="hello"/>
             </dom>
             <dom>
-                <app args="hello" />
+                <app args="hello"/>
             </dom>
         </app>
     </dom>

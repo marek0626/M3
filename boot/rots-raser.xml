@@ -1,44 +1,45 @@
+<?xml version="1.0"?>
 <config>
     <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py M3_GEM5_O3_CORES=2 M3_GEM5_MINOR_CORES=4</env>
-    <rot layers="brom,blau.bin,rosa.bin" />
-    <kernel args="kernel" />
+    <rot layers="brom,blau.bin,rosa.bin"/>
+    <kernel args="kernel"/>
     <dom>
         <app args="root sem=net-tcp">
             <dom tile="core+rot">
                 <app args="rots" daemon="1">
-                    <serv name="rot" />
-                    <mod name="rot-certificate.json" perm="r" />
+                    <serv name="rot"/>
+                    <mod name="rot-certificate.json" perm="r"/>
                 </app>
             </dom>
             <dom tile="effi|core">
                 <app args="disk -d -i" daemon="1">
-                    <serv name="disk" />
-                    <tiles type="idedev" />
+                    <serv name="disk"/>
+                    <tiles type="idedev"/>
                 </app>
             </dom>
             <dom tile="perf|core">
                 <app args="m3fs -m 4 disk" daemon="1">
-                    <serv name="m3fs" />
-                    <sess name="disk" args="0" />
+                    <serv name="m3fs"/>
+                    <sess name="disk" args="0"/>
                 </app>
             </dom>
             <dom tile="perf|core">
                 <app args="net -m 4 -d lo net 127.0.0.1" daemon="1">
-                    <serv name="net" />
+                    <serv name="net"/>
                 </app>
             </dom>
             <dom tile="effi|core">
                 <app args="raser" daemon="1">
-                    <sess name="m3fs" />
-                    <sess name="rot" args="RASer" />
-                    <sess name="net" args="socks=1 tcp=4242" />
-                    <sem name="net-tcp" />
+                    <sess name="m3fs"/>
+                    <sess name="rot" args="RASer"/>
+                    <sess name="net" args="socks=1 tcp=4242"/>
+                    <sem name="net-tcp"/>
                 </app>
             </dom>
             <dom tile="effi|core">
                 <app args="rasertest 127.0.0.1">
-                    <sess name="net" args="socks=1" />
-                    <sem name="net-tcp" />
+                    <sess name="net" args="socks=1"/>
+                    <sem name="net-tcp"/>
                 </app>
             </dom>
         </app>

@@ -1,15 +1,16 @@
+<?xml version="1.0"?>
 <config>
     <env>M3_HW_M3LX=1 M3_HW_UARTNOBUF=1</env>
     <mods>
-        <mod name="bbl" file="bbl" />
-        <mod name="initrd" file="rootfs.cpio" />
-        <mod name="dtb" file="m3lx.dtb" />
+        <mod name="bbl" file="bbl"/>
+        <mod name="initrd" file="rootfs.cpio"/>
+        <mod name="dtb" file="m3lx.dtb"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom tile="perf+nic|core" mux="bbl" muxmem="64M" initrd="initrd" dtb="dtb">
-                <app args="/bin/sh" />
+                <app args="/bin/sh"/>
             </dom>
         </app>
     </dom>

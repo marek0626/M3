@@ -1,11 +1,12 @@
+<?xml version="1.0"?>
 <config>
     <env>M3_HW_VM=0 M3_GEM5_CFG=platform/gem5/configs/m3/spm.py M3_GEM5_CORES=8</env>
-    <kernel args="standalone-mem" />
-    <kernel args="standalone-mem" />
-    <kernel args="standalone-mem" />
-    <kernel args="standalone-mem" />
-    <kernel args="standalone-mem" />
-    <kernel args="standalone-mem" />
-    <kernel args="standalone-mem" />
-    <kernel args="standalone-mem" />
+    <kernel args="standalone-mem"/>
+    <kernel args="standalone-mem"/>
+    <kernel args="standalone-mem"/>
+    <kernel args="standalone-mem"/>
+    <kernel args="standalone-mem"/>
+    <kernel args="standalone-mem"/>
+    <kernel args="standalone-mem"/>
+    <kernel args="standalone-mem"/>
 </config>

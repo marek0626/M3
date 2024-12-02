@@ -1,9 +1,10 @@
+<?xml version="1.0"?>
 <config>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>
-                <app args="rusthello" />
+                <app args="rusthello"/>
             </dom>
         </app>
     </dom>

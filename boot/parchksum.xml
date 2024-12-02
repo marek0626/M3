@@ -1,26 +1,27 @@
+<?xml version="1.0"?>
 <config>
     <mods>
-        <mod name="fs" file="default.img" />
+        <mod name="fs" file="default.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>
                 <app args="m3fs mem" daemon="1">
-                    <serv name="m3fs" />
-                    <mod name="fs" />
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
                 </app>
             </dom>
             <dom>
                 <app args="pager">
-                    <sess name="m3fs" />
-                    <mod name="fs" perm="r" />
-                    <mod name="tilemux" perm="r" />
-                    <tiles type="core" count="1" />
+                    <sess name="m3fs"/>
+                    <mod name="fs" perm="r"/>
+                    <mod name="tilemux" perm="r"/>
+                    <tiles type="core" count="1"/>
                     <dom>
                         <app args="/bin/parchksum 4 131072">
-                            <mount fs="m3fs" path="/" />
-                            <tiles type="core" count="4" />
+                            <mount fs="m3fs" path="/"/>
+                            <tiles type="core" count="4"/>
                         </app>
                     </dom>
                 </app>

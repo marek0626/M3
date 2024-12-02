@@ -1,39 +1,40 @@
+<?xml version="1.0"?>
 <config>
     <mods>
-        <mod name="fs" file="default.img" />
+        <mod name="fs" file="default.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root maxcli=4">
             <app args="vterm" daemon="1">
-                <serv name="vterm" />
-                <serial />
+                <serv name="vterm"/>
+                <serial/>
             </app>
             <app args="pipes" daemon="1">
-                <serv name="pipes" />
+                <serv name="pipes"/>
             </app>
             <dom>
                 <app args="m3fs -m 8 mem" daemon="1">
-                    <serv name="m3fs" />
-                    <mod name="fs" />
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
                 </app>
                 <app args="net -m 4 -d lo net 127.0.0.1" daemon="1">
-                    <serv name="net" />
+                    <serv name="net"/>
                 </app>
             </dom>
             <dom>
                 <app args="pager maxcli=4" usermem="256M" getinfo="1">
-                    <sess name="m3fs" />
-                    <mod name="fs" perm="r" />
-                    <mod name="tilemux" perm="r" />
-                    <tiles type="core" count="1" />
+                    <sess name="m3fs"/>
+                    <mod name="fs" perm="r"/>
+                    <mod name="tilemux" perm="r"/>
+                    <tiles type="core" count="1"/>
                     <app args="/bin/shell" getinfo="1">
-                        <mount fs="m3fs" path="/" />
-                        <sess name="pipes" />
-                        <sess name="vterm" />
-                        <sess name="net" args="raw=yes bufs=256K" />
-                        <tiles type="core" count="3" />
-                        <tiles type="rot13" count="2" optional="1" />
+                        <mount fs="m3fs" path="/"/>
+                        <sess name="pipes"/>
+                        <sess name="vterm"/>
+                        <sess name="net" args="raw=yes bufs=256K"/>
+                        <tiles type="core" count="3"/>
+                        <tiles type="rot13" count="2" optional="1"/>
                     </app>
                 </app>
             </dom>

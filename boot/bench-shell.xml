@@ -1,39 +1,40 @@
+<?xml version="1.0"?>
 <config>
     <mods>
-        <mod name="fs" file="default.img" />
+        <mod name="fs" file="default.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>
                 <app args="m3fs mem" daemon="1">
-                    <serv name="m3fs" />
-                    <mod name="fs" />
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
                 </app>
             </dom>
             <dom>
                 <app args="pipes" daemon="1">
-                    <serv name="pipes" />
+                    <serv name="pipes"/>
                 </app>
             </dom>
             <dom>
                 <app args="vterm" daemon="1">
-                    <serv name="vterm" />
-                    <serial />
+                    <serv name="vterm"/>
+                    <serial/>
                 </app>
             </dom>
             <dom>
                 <app args="pager">
-                    <sess name="m3fs" />
-                    <mod name="fs" perm="r" />
-                    <mod name="tilemux" perm="r" />
-                    <tiles type="core" count="1" />
+                    <sess name="m3fs"/>
+                    <mod name="fs" perm="r"/>
+                    <mod name="tilemux" perm="r"/>
+                    <tiles type="core" count="1"/>
                     <dom tile="core">
                         <app args="/bin/shell cat test.txt">
-                            <mount fs="m3fs" path="/" />
-                            <sess name="pipes" />
-                            <sess name="vterm" />
-                            <tiles type="perf|core" count="1" />
+                            <mount fs="m3fs" path="/"/>
+                            <sess name="pipes"/>
+                            <sess name="vterm"/>
+                            <tiles type="perf|core" count="1"/>
                         </app>
                     </dom>
                 </app>

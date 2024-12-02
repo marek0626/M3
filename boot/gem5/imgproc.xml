@@ -1,33 +1,34 @@
+<?xml version="1.0"?>
 <config>
     <env>M3_GEM5_CFG=platform/gem5/configs/m3/accels.py</env>
     <mods>
-        <mod name="fs" file="bench.img" />
+        <mod name="fs" file="bench.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>
                 <app args="m3fs mem" daemon="1">
-                    <serv name="m3fs" />
-                    <mod name="fs" />
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
                 </app>
             </dom>
             <dom>
                 <app args="pipes" daemon="1">
-                    <serv name="pipes" />
+                    <serv name="pipes"/>
                 </app>
             </dom>
             <dom>
                 <app args="pager">
-                    <sess name="m3fs" />
-                    <mod name="fs" perm="r" />
-                    <mod name="tilemux" perm="r" />
-                    <tiles type="core" />
+                    <sess name="m3fs"/>
+                    <mod name="fs" perm="r"/>
+                    <mod name="tilemux" perm="r"/>
+                    <tiles type="core"/>
                     <dom>
                         <app args="/bin/imgproc -m dir -n 1 -r 8 /large.txt">
-                            <mount fs="m3fs" path="/" />
-                            <sess name="pipes" />
-                            <tiles type="copy" count="3" />
+                            <mount fs="m3fs" path="/"/>
+                            <sess name="pipes"/>
+                            <tiles type="copy" count="3"/>
                         </app>
                     </dom>
                 </app>

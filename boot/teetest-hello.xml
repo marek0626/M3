@@ -1,31 +1,32 @@
+<?xml version="1.0"?>
 <config>
     <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py M3_GEM5_O3_CORES=1 M3_GEM5_MINOR_CORES=6</env>
     <mods>
-      <mod name="fs" file="default.img" />
+        <mod name="fs" file="default.img"/>
     </mods>
-    <rot layers="brom,blau.bin,rosa.bin" />
-    <kernel args="kernel" />
+    <rot layers="brom,blau.bin,rosa.bin"/>
+    <kernel args="kernel"/>
     <dom>
-      <app args="root">
-        <dom>
-          <app args="m3fs mem" daemon="1">
-            <serv name="m3fs" />
-            <mod name="fs" />
-          </app>
-        </dom>
-	<dom>
-          <app args="pager">
-	    <sess name="m3fs" />
-            <mod name="fs" perm="r" />
-            <mod name="tilemux" perm="r" />
-	    <tiles type="perf|core|effi" count="3" />
-	    <dom tile="effi|perf|core">
-	      <app args="/bin/sleep 2" attestation_id="1" >
-		<tiles type="perf|core|effi" count="1" />
-	      </app>
-	    </dom>
-	  </app>
-	</dom>
-      </app>
+        <app args="root">
+            <dom>
+                <app args="m3fs mem" daemon="1">
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
+                </app>
+            </dom>
+            <dom>
+                <app args="pager">
+                    <sess name="m3fs"/>
+                    <mod name="fs" perm="r"/>
+                    <mod name="tilemux" perm="r"/>
+                    <tiles type="perf|core|effi" count="3"/>
+                    <dom tile="effi|perf|core">
+                        <app args="/bin/sleep 2" attestation_id="1">
+                            <tiles type="perf|core|effi" count="1"/>
+                        </app>
+                    </dom>
+                </app>
+            </dom>
+        </app>
     </dom>
 </config>

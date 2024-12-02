@@ -1,13 +1,14 @@
+<?xml version="1.0"?>
 <config>
     <mods>
-        <mod name="fs" file="bench.img" />
+        <mod name="fs" file="bench.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <app args="m3fs mem" daemon="1">
-                <serv name="m3fs" />
-                <mod name="fs" />
+                <serv name="m3fs"/>
+                <mod name="fs"/>
             </app>
             <dom tile="core+kecacc">
                 <app args="rots" daemon="1">
@@ -16,24 +17,24 @@
             </dom>
             <dom>
                 <app args="pager" usermem="768M">
-                    <sess name="m3fs" />
-                    <mod name="fs" perm="r" />
-                    <mod name="tilemux" perm="r" />
-                    <tiles type="core" count="1" />
+                    <sess name="m3fs"/>
+                    <mod name="fs" perm="r"/>
+                    <mod name="tilemux" perm="r"/>
+                    <tiles type="core" count="1"/>
                     <app args="/bin/hashmuxbenchs">
-                        <mount fs="m3fs" path="/" />
-                        <sess lname="hash-prepare" gname="rot" />
-                        <sess lname="hash-bench" gname="rot" />
-                        <sess lname="hash-client0" gname="rot" />
-                        <sess lname="hash-client1" gname="rot" />
-                        <sess lname="hash-client2" gname="rot" />
-                        <sess lname="hash-client3" gname="rot" />
-                        <sess lname="hash-client4" gname="rot" />
-                        <sess lname="hash-client5" gname="rot" />
-                        <sess lname="hash-client6" gname="rot" />
-                        <sess lname="hash-client7" gname="rot" />
-                        <sess lname="hash-latency" gname="rot" />
-                        <tiles type="core" count="8" />
+                        <mount fs="m3fs" path="/"/>
+                        <sess lname="hash-prepare" gname="rot"/>
+                        <sess lname="hash-bench" gname="rot"/>
+                        <sess lname="hash-client0" gname="rot"/>
+                        <sess lname="hash-client1" gname="rot"/>
+                        <sess lname="hash-client2" gname="rot"/>
+                        <sess lname="hash-client3" gname="rot"/>
+                        <sess lname="hash-client4" gname="rot"/>
+                        <sess lname="hash-client5" gname="rot"/>
+                        <sess lname="hash-client6" gname="rot"/>
+                        <sess lname="hash-client7" gname="rot"/>
+                        <sess lname="hash-latency" gname="rot"/>
+                        <tiles type="core" count="8"/>
                     </app>
                 </app>
             </dom>

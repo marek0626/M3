@@ -704,10 +704,12 @@ case "$cmd" in
             clangargs=(--dry-run --Werror)
             cargoargs=(--check)
             pythonargs=(--diff --exit-code)
+            xmlargs=()
         else
             clangargs=(-i)
             cargoargs=()
             pythonargs=(-i)
+            xmlargs=(-i)
         fi
         errors=0
         while IFS= read -r -d '' f; do
@@ -740,11 +742,17 @@ case "$cmd" in
                     autopep8 --global-config .python-format "${pythonargs[@]}" "$f" \
                         || errors=$((errors + 1))
                     ;;
+                *.xml)
+                    XMLLINT_INDENT="    " \
+                        "$root/tools/wrapfmt.py" "${xmlargs[@]}" "xmllint --format" "$f" \
+                        || errors=$((errors + 1))
+                    ;;
             esac
-        done < <(find src tools -mindepth 1 \( -name Cargo.toml -or \
-                                               -name "*.py" -or \
-                                               -name "*.cc" -or \
-                                               -name "*.h" \) -print0)
+        done < <(find src tools boot -mindepth 1 \( -name Cargo.toml -or \
+                                                    -name "*.py" -or \
+                                                    -name "*.cc" -or \
+                                                    -name "*.h" -or \
+                                                    -name "*.xml" \) -print0)
         [ $errors -eq 0 ] || exit 1
         ;;
 

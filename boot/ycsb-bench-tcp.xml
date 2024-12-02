@@ -1,45 +1,46 @@
+<?xml version="1.0"?>
 <config>
     <mods>
-        <mod name="fs" file="bench.img" />
+        <mod name="fs" file="bench.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>
                 <app args="m3fs mem" daemon="1">
-                    <serv name="m3fs" />
-                    <mod name="fs" />
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
                 </app>
             </dom>
             <dom>
                 <app args="pager maxcli=4 sem=net" usermem="768M">
-                    <sess name="m3fs" />
-                    <mod name="fs" perm="r" />
-                    <mod name="tilemux" perm="r" />
-                    <tiles type="core" count="4" />
+                    <sess name="m3fs"/>
+                    <mod name="fs" perm="r"/>
+                    <mod name="tilemux" perm="r"/>
+                    <tiles type="core" count="4"/>
                     <dom>
                         <app args="/sbin/m3fs mem" daemon="1">
-                            <serv lname="m3fs" gname="app_m3fs" />
-                            <mod name="fs" />
+                            <serv lname="m3fs" gname="app_m3fs"/>
+                            <mod name="fs"/>
                         </app>
                     </dom>
                     <dom>
                         <app args="/sbin/net -m 2 -d lo net 127.0.0.1" daemon="1">
-                            <serv name="net" />
+                            <serv name="net"/>
                         </app>
                     </dom>
                     <dom>
                         <app args="/bin/lvldbserver /tmp/foo 4 tcp 1337">
-                            <sess name="net" args="bufs=1M socks=1 tcp=1337" />
-                            <sess lname="m3fs" gname="app_m3fs" />
-                            <sem name="net" />
+                            <sess name="net" args="bufs=1M socks=1 tcp=1337"/>
+                            <sess lname="m3fs" gname="app_m3fs"/>
+                            <sem name="net"/>
                         </app>
                     </dom>
                     <dom>
                         <app args="/bin/ycsbclient tcp 127.0.0.1 1337 /data/small-workload.wl 4" daemon="1">
-                            <sess name="net" args="bufs=1M socks=1" />
-                            <sess lname="m3fs" gname="app_m3fs" />
-                            <sem name="net" />
+                            <sess name="net" args="bufs=1M socks=1"/>
+                            <sess lname="m3fs" gname="app_m3fs"/>
+                            <sem name="net"/>
                         </app>
                     </dom>
                 </app>

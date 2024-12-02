@@ -1,40 +1,41 @@
+<?xml version="1.0"?>
 <config>
     <mods>
-        <mod name="fs" file="default.img" />
+        <mod name="fs" file="default.img"/>
     </mods>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <app args="m3fs mem" daemon="1">
-                <serv name="m3fs" />
-                <mod name="fs" />
+                <serv name="m3fs"/>
+                <mod name="fs"/>
             </app>
             <app args="net -m 3 -d lo net 127.0.0.1" daemon="1">
-                <serv name="net" />
+                <serv name="net"/>
             </app>
             <app args="pipes" daemon="1">
-                <serv name="pipes" />
+                <serv name="pipes"/>
             </app>
             <dom>
                 <app args="pager sem=net-udp sem=net-tcp">
-                    <sess name="m3fs" />
-                    <mod name="fs" perm="r" />
-                    <mod name="tilemux" perm="r" />
-                    <tiles type="core" count="1" />
+                    <sess name="m3fs"/>
+                    <mod name="fs" perm="r"/>
+                    <mod name="tilemux" perm="r"/>
+                    <tiles type="core" count="1"/>
                     <app args="/bin/netechoserver" daemon="1">
-                        <sess name="net" args="bufs=1M socks=2 udp=1337 tcp=1338" />
-                        <sem name="net-udp" />
-                        <sem name="net-tcp" />
+                        <sess name="net" args="bufs=1M socks=2 udp=1337 tcp=1338"/>
+                        <sem name="net-udp"/>
+                        <sem name="net-tcp"/>
                     </app>
                     <app args="/bin/rustnettests 127.0.0.1 127.0.0.1 127.0.0.1">
-                        <mount fs="m3fs" path="/" />
-                        <sess lname="net0" gname="net" args="bufs=64K socks=2 udp=2000-2001" />
-                        <sess lname="net1" gname="net" args="bufs=64K socks=2 tcp=3000" />
-                        <sess name="net" args="bufs=256K raw=yes" />
-                        <sess name="pipes" />
-                        <tiles type="core" count="1" />
-                        <sem name="net-udp" />
-                        <sem name="net-tcp" />
+                        <mount fs="m3fs" path="/"/>
+                        <sess lname="net0" gname="net" args="bufs=64K socks=2 udp=2000-2001"/>
+                        <sess lname="net1" gname="net" args="bufs=64K socks=2 tcp=3000"/>
+                        <sess name="net" args="bufs=256K raw=yes"/>
+                        <sess name="pipes"/>
+                        <tiles type="core" count="1"/>
+                        <sem name="net-udp"/>
+                        <sem name="net-tcp"/>
                     </app>
                 </app>
             </dom>

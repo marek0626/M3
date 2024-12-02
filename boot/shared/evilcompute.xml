@@ -1,10 +1,11 @@
+<?xml version="1.0"?>
 <config>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom>
-                <app args="evilcompute 1" />
-                <app args="evilcompute 2" />
+                <app args="evilcompute 1"/>
+                <app args="evilcompute 2"/>
             </dom>
         </app>
     </dom>

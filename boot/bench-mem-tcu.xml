@@ -1,9 +1,10 @@
+<?xml version="1.0"?>
 <config>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
             <dom tile="perf|core">
-                <app args="mem tcu" />
+                <app args="mem tcu"/>
             </dom>
         </app>
     </dom>

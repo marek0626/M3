@@ -1,9 +1,10 @@
+<?xml version="1.0"?>
 <config>
-    <kernel args="kernel" />
+    <kernel args="kernel"/>
     <dom>
         <app args="root">
-            <app args="hello" />
-            <app args="hello" />
+            <app args="hello"/>
+            <app args="hello"/>
         </app>
     </dom>
 </config>
