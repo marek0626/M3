@@ -13,13 +13,11 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use base::build_vmsg;
 use base::cell::RefMut;
 use base::col::{BitArray, Vec};
 use base::env;
-use base::errors::{Code, Error};
+use base::errors::Code;
 use base::io::LogFlags;
 use base::kif::{self, Perm, TileAttr, TileISA};
 use base::log;
@@ -37,6 +35,7 @@ use crate::cap::{
     EPCategory, EPObject, GateObject, InvalidateType, MGateObject, RGateObject, SGateObject,
     TileObject, TileQuota,
 };
+use crate::kerrno;
 use crate::mem;
 use crate::platform;
 use crate::tiles::{tilemng, Activity, INVAL_ID};
@@ -72,7 +71,7 @@ impl TileState {
             Some(count) => {
                 // more EPs are not supported as we only have 16-bit for EP ids
                 if count < tcu::FIRST_USER_EP as usize || count >= tcu::INVALID_EP as usize {
-                    return Err(anyhow!(Error::new(Code::InvArgs)));
+                    return Err(kerrno(Code::InvArgs));
                 }
 
                 let ep_reg_size = count * (tcu::EP_REGS * size_of::<tcu::Reg>());
@@ -128,8 +127,7 @@ impl TileState {
         }
 
         if bit != start + count {
-            Err(anyhow!(Error::new(Code::NoSpace))
-                .context(format!("No contiguous {} EPs found", count)))
+            Err(kerrno(Code::NoSpace).context(format!("No contiguous {} EPs found", count)))
         }
         else {
             Ok(start as EpId)
@@ -286,9 +284,7 @@ impl TileMux {
         root: bool,
     ) -> anyhow::Result<()> {
         if tilemng::tilemux(tile_id).has_activities() {
-            return Err(
-                anyhow!(Error::new(Code::InvState)).context("Cannot reset tile with activities")
-            );
+            return Err(kerrno(Code::InvState).context("Cannot reset tile with activities"));
         }
 
         let start = {
@@ -312,8 +308,9 @@ impl TileMux {
                 if platform::tile_desc(tile_id).is_programmable() {
                     // here we need a multiplexer and therefore memory
                     if mux_mem.is_none() {
-                        return Err(anyhow!(Error::new(Code::InvArgs))
-                            .context("Need memory cap for multiplexer"));
+                        return Err(
+                            kerrno(Code::InvArgs).context("Need memory cap for multiplexer")
+                        );
                     }
 
                     let mux_mem = mux_mem.unwrap();
@@ -448,14 +445,13 @@ impl TileMux {
         mg: Option<TempRc<MGateObject>>,
         overwrite: bool,
     ) -> anyhow::Result<()> {
-        let ep_obj = self
-            .pmp_ep(ep)
-            .ok_or_else(|| anyhow!(Error::new(Code::InvState)))?;
+        let ep_obj = self.pmp_ep(ep).ok_or_else(|| kerrno(Code::InvState))?;
 
         // if overwrite is disabled, the EP needs to be invalid
         if mg.is_some() && ep_obj.is_configured() && !overwrite {
-            return Err(anyhow!(Error::new(Code::Exists))
-                .context("EP already configured and overwrite is disabled"));
+            return Err(
+                kerrno(Code::Exists).context("EP already configured and overwrite is disabled")
+            );
         }
 
         // deconfigure the EP first to ensure that it is not already configured for another gate
@@ -474,7 +470,7 @@ impl TileMux {
     pub fn find_eps(&self, count: usize) -> anyhow::Result<EpId> {
         self.state
             .as_ref()
-            .ok_or_else(|| anyhow!(Error::new(Code::InvState)))?
+            .ok_or_else(|| kerrno(Code::InvState))?
             .find_eps(count)
     }
 
@@ -521,9 +517,7 @@ impl TileMux {
     }
 
     pub fn config_snd_ep(&mut self, ep: EpId, act: ActId, obj: &SGateObject) -> anyhow::Result<()> {
-        let rgate = obj
-            .rgate()
-            .ok_or_else(|| anyhow!(Error::new(Code::ObjectGone)))?;
+        let rgate = obj.rgate().ok_or_else(|| kerrno(Code::ObjectGone))?;
         assert!(rgate.activated());
 
         ktcu::config_remote_ep(self.tile_id(), ep, |regs, tgtep| {
@@ -575,7 +569,7 @@ impl TileMux {
     ) -> anyhow::Result<()> {
         if let Some(extile) = obj.exclusive_tile() {
             if self.tile_id() != extile {
-                return Err(anyhow!(Error::new(Code::NoPerm)).context(format!(
+                return Err(kerrno(Code::NoPerm).context(format!(
                     "{} has no permissions to exclusive region of {} ({}..{})",
                     self.tile_id(),
                     extile,
@@ -680,9 +674,9 @@ impl TileMux {
         let mut de = M3Deserializer::new(msg.as_words());
         de.skip(pos);
 
-        let r: kif::tilemux::Exit = de.pop().map_err(|_| {
-            anyhow!(Error::new(Code::InvArgs)).context("Invalid request from TileMux")
-        })?;
+        let r: kif::tilemux::Exit = de
+            .pop()
+            .map_err(|_| kerrno(Code::InvArgs).context("Invalid request from TileMux"))?;
 
         let tile_id = tilemux.tile_id();
         log!(LogFlags::KernTMC, "TileMux[{}] received {:?}", tile_id, r);
@@ -940,7 +934,7 @@ impl TileMux {
 
         // if tilemux is not initialized, we cannot talk to it
         if check_init && !self.is_initialized() {
-            return Err(anyhow!(Error::new(Code::RecvGone)).context("TileMux is not initialized"));
+            return Err(kerrno(Code::RecvGone).context("TileMux is not initialized"));
         }
 
         // if the activity has no app anymore, don't send the notify
@@ -949,8 +943,7 @@ impl TileMux {
                 .map(|v| !v.is_dead())
                 .unwrap_or(false)
             {
-                return Err(anyhow!(Error::new(Code::ObjectGone))
-                    .context(format!("Activity {} is dead", id)));
+                return Err(kerrno(Code::ObjectGone).context(format!("Activity {} is dead", id)));
             }
         }
 
@@ -981,9 +974,9 @@ impl TileMux {
         let reply = SendQueue::receive_async(event)?;
 
         let mut de = base::serialize::M3Deserializer::new(reply.as_words());
-        let code: Code = de.pop().map_err(|_| {
-            anyhow!(Error::new(Code::InvArgs)).context("Invalid reply from TileMux")
-        })?;
+        let code: Code = de
+            .pop()
+            .map_err(|_| kerrno(Code::InvArgs).context("Invalid reply from TileMux"))?;
 
         log!(
             LogFlags::KernTMC,
@@ -993,12 +986,11 @@ impl TileMux {
         );
 
         if code == Code::Success {
-            de.pop().map_err(|_| {
-                anyhow!(Error::new(Code::InvArgs)).context("Invalid reply from TileMux")
-            })
+            de.pop()
+                .map_err(|_| kerrno(Code::InvArgs).context("Invalid reply from TileMux"))
         }
         else {
-            Err(anyhow!(Error::new(code)).context("TileMux request failed"))
+            Err(kerrno(code).context("TileMux request failed"))
         }
     }
 }

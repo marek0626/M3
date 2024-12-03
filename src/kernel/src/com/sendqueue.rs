@@ -13,8 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use base::boxed::Box;
 use base::cell::{LazyStaticRefCell, StaticCell};
 use base::col::VecDeque;
@@ -26,6 +24,7 @@ use base::msgqueue::{MsgQueue, MsgSender};
 use base::tcu;
 
 use crate::ktcu;
+use crate::{kerrno, kerror};
 
 pub const MAX_PENDING_MSGS: usize = 4;
 
@@ -174,7 +173,7 @@ impl SendQueue {
         );
 
         if self.aborted {
-            return Err(anyhow!(Error::new(Code::RecvGone)));
+            return Err(kerrno(Code::RecvGone));
         }
 
         let id = alloc_qid();
@@ -182,7 +181,7 @@ impl SendQueue {
         if !self
             .queue
             .send(MetaData { id, rep, lbl }, msg)
-            .map_err(|e| anyhow!(e))?
+            .map_err(kerror)?
         {
             log!(
                 LogFlags::KernSQueue,
@@ -199,7 +198,7 @@ impl SendQueue {
 
     pub fn receive_async(event: thread::Event) -> anyhow::Result<&'static tcu::Message> {
         thread::wait_for_async(event);
-        thread::fetch_msg().ok_or_else(|| anyhow!(Error::new(Code::RecvGone)))
+        thread::fetch_msg().ok_or_else(|| kerrno(Code::RecvGone))
     }
 
     pub fn received_reply(&mut self, mut msg: tcu::OwnedMessage) {

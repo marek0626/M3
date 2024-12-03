@@ -13,10 +13,8 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use base::build_vmsg;
-use base::errors::{Code, Error};
+use base::errors::Code;
 use base::io::LogFlags;
 use base::kif::{service, syscalls, CapRngDesc, CapType, INVALID_SEL, SEL_ACT};
 use base::mem::MsgBuf;
@@ -29,6 +27,7 @@ use thread::{Downgradable, TempRc, Upgradable};
 use crate::cap::{ServObject, SessObject};
 use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::Activity;
+use crate::{kerrno, kerror};
 
 fn do_exchange(
     act1: &TempRc<Activity>,
@@ -43,17 +42,17 @@ fn do_exchange(
     let dst_rng = if obtain { c1 } else { c2 };
 
     if act1.id() == act2.id() {
-        return Err(anyhow!(Error::new(Code::InvArgs)).context("Cap exchange with same Activity"));
+        return Err(kerrno(Code::InvArgs).context("Cap exchange with same Activity"));
     }
     if c1.cap_type() != c2.cap_type() {
-        return Err(anyhow!(Error::new(Code::InvArgs)).context(format!(
+        return Err(kerrno(Code::InvArgs).context(format!(
             "Cap types differ ({:?} vs {:?})",
             c1.cap_type(),
             c2.cap_type(),
         )));
     }
     if (obtain && c2.count() > c1.count()) || (!obtain && c2.count() != c1.count()) {
-        return Err(anyhow!(Error::new(Code::InvArgs)).context(format!(
+        return Err(kerrno(Code::InvArgs).context(format!(
             "Cap counts differ ({} vs {})",
             c2.count(),
             c1.count(),
@@ -62,9 +61,7 @@ fn do_exchange(
 
     // No TOCTOU as we do not have an async call in-between.
     if !dst.obj_caps().borrow().range_unused(dst_rng) {
-        return Err(
-            anyhow!(Error::new(Code::InvArgs)).context("Destination selectors already in use")
-        );
+        return Err(kerrno(Code::InvArgs).context("Destination selectors already in use"));
     }
 
     for i in 0..c2.count() {
@@ -89,7 +86,7 @@ pub fn exchange(act: &TempRc<Activity>) -> anyhow::Result<()> {
     drop(msg);
 
     let other_crd = CapRngDesc::new(r.own.cap_type(), r.other, r.own.count()).map_err(|e| {
-        anyhow!(e).context(format!("Invalid cap range {}:{}", r.other, r.own.count()))
+        kerror(e).context(format!("Invalid cap range {}:{}", r.other, r.own.count()))
     })?;
 
     sysc_log!(
@@ -149,7 +146,7 @@ pub fn exchange_over_sess_async(act: TempRc<Activity>) -> anyhow::Result<()> {
 
     let serv = sess
         .service()
-        .ok_or_else(|| anyhow!(Error::new(Code::ObjectGone)).context("Service was destroyed"))?;
+        .ok_or_else(|| kerrno(Code::ObjectGone).context("Service was destroyed"))?;
     let label = sess.creator() as tcu::Label;
 
     log!(
@@ -178,18 +175,17 @@ pub fn exchange_over_sess_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     let mut de = M3Deserializer::new(rmsg.as_words());
     let err: Code = de
         .pop()
-        .map_err(|_| anyhow!(Error::new(Code::InvArgs)).context("Invalid server response"))?;
+        .map_err(|_| kerrno(Code::InvArgs).context("Invalid server response"))?;
     match err {
         Code::Success => {},
         err => {
-            return Err(anyhow!(Error::new(err))
-                .context(format!("Server {} denied cap exchange", serv.name())))
+            return Err(kerrno(err).context(format!("Server {} denied cap exchange", serv.name())))
         },
     }
 
     let reply: service::ExchangeReply = de
         .pop()
-        .map_err(|_| anyhow!(Error::new(Code::InvArgs)).context("Invalid server response"))?;
+        .map_err(|_| kerrno(Code::InvArgs).context("Invalid server response"))?;
 
     sysc_log!(
         act,
@@ -226,7 +222,7 @@ pub fn revoke_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     sysc_log!(act, "revoke(act={}, crd={}, own={})", r.act, r.crd, r.own);
 
     if r.crd.cap_type() == CapType::Object && r.crd.start() <= SEL_ACT {
-        return Err(anyhow!(Error::new(Code::InvArgs)).context("Cap 0, 1 and 2 are not revokeable"));
+        return Err(kerrno(Code::InvArgs).context("Cap 0, 1 and 2 are not revokeable"));
     }
 
     let actcap = {

@@ -13,8 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use base::build_vmsg;
 use base::errors::{Code, Error};
 use base::io::LogFlags;
@@ -26,6 +24,7 @@ use base::{format, log};
 
 use thread::{Downgradable, TempRc, Upgradable, WeakRc};
 
+use crate::kerrno;
 use crate::tiles::{Activity, ActivityMng};
 
 #[macro_export]
@@ -48,14 +47,13 @@ mod tile;
 fn try_upgrade_kobj<T>(weak: WeakRc<T>, sel: CapSel) -> anyhow::Result<TempRc<T>> {
     weak.upgrade().ok_or_else(|| {
         if sel != kif::INVALID_SEL {
-            anyhow!(Error::new(Code::ObjectGone)).context(format!(
+            kerrno(Code::ObjectGone).context(format!(
                 "Kernel object (Selector {}) was revoked during async call",
                 sel
             ))
         }
         else {
-            anyhow!(Error::new(Code::ObjectGone))
-                .context("Kernel object was revoked during async call")
+            kerrno(Code::ObjectGone).context("Kernel object was revoked during async call")
         }
     })
 }
@@ -78,7 +76,7 @@ fn reply_success(act: &TempRc<Activity>) {
 fn get_request<'m, R: Deserialize<'m>>(msg: &'m OwnedMessage) -> anyhow::Result<R> {
     let mut de = M3Deserializer::new(msg.as_words());
     de.skip(1);
-    de.pop().map_err(|_| anyhow!(Error::new(Code::InvArgs)))
+    de.pop().map_err(|_| kerrno(Code::InvArgs))
 }
 
 fn sync_sys<F>(act: TempRc<Activity>, func: F) -> (Option<TempRc<Activity>>, anyhow::Result<()>)

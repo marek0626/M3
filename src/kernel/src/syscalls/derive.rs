@@ -13,8 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use base::build_vmsg;
 use base::errors::{Code, Error};
 use base::io::LogFlags;
@@ -28,6 +26,7 @@ use thread::{Downgradable, TempRc, Upgradable};
 use crate::cap::{
     Capability, KMemObject, MGateObject, SGateObject, SelRange, ServObject, TileObject,
 };
+use crate::kerrno;
 use crate::syscalls::{get_request, reply_success, try_upgrade_kobj};
 use crate::tiles::{Activity, DeriveSrv};
 
@@ -96,7 +95,7 @@ pub fn derive_kmem(act: &TempRc<Activity>) -> anyhow::Result<()> {
 
     let kmem: TempRc<KMemObject> = act.get_kobj(r.kmem)?;
     if !kmem.has_quota(r.quota) {
-        return Err(anyhow!(Error::new(Code::NoSpace)).context("Insufficient quota"));
+        return Err(kerrno(Code::NoSpace).context("Insufficient quota"));
     }
 
     let cap = Capability::new(r.dst, KMemObject::new(r.quota));
@@ -156,7 +155,7 @@ pub fn derive_srv_req(act: &TempRc<Activity>) -> anyhow::Result<()> {
     );
 
     if r.sessions == 0 {
-        return Err(anyhow!(Error::new(Code::InvArgs)).context("Invalid session count"));
+        return Err(kerrno(Code::InvArgs).context("Invalid session count"));
     }
 
     let srv: TempRc<ServObject> = act.get_kobj(r.srv)?;
@@ -217,7 +216,7 @@ pub fn derive_srv_fin(act: &TempRc<Activity>) -> anyhow::Result<()> {
     let der_act = srv.fetch_derive_act()?;
     let derive = der_act
         .finish_derive()
-        .ok_or_else(|| anyhow!(Error::new(Code::InvState)).context("Derive service"))?;
+        .ok_or_else(|| kerrno(Code::InvState).context("Derive service"))?;
 
     let res = if r.result == Code::Success {
         // don't return here via ? but catch the error and always sent the upcall with the result
@@ -258,7 +257,7 @@ pub fn derive_srv_fin(act: &TempRc<Activity>) -> anyhow::Result<()> {
 
     // return Err here to get the error print from the syscall handler
     if res != Code::Success {
-        return Err(anyhow!(Error::new(res)).context("Derive service"));
+        return Err(kerrno(res).context("Derive service"));
     }
 
     reply_success(act);

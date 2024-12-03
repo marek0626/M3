@@ -13,14 +13,13 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use base::col::{BitArray, Vec};
-use base::errors::{Code, Error};
+use base::errors::Code;
 use base::tcu::TileId;
 use thread::{Downgradable, TempRc, Upgradable, WeakRc};
 
 use crate::cap::{MGateObject, TileObject};
+use crate::kerrno;
 use crate::{ktcu, platform};
 
 struct ExclRegion {
@@ -55,7 +54,7 @@ impl MemMux {
         assert!(mem_tile.tile() == self.tile);
 
         if mem_tile.exregs_quota().left() == 0 {
-            return Err(anyhow!(Error::new(Code::NoSpace)).context("Exclusive-region quota"));
+            return Err(kerrno(Code::NoSpace).context("Exclusive-region quota"));
         }
         mgate.make_exclusive(&user_tile)?;
 

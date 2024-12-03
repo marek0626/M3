@@ -13,12 +13,12 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 
 use base::cell::LazyStaticRefCell;
 use base::cfg;
 use base::col::{String, ToString, Vec};
-use base::errors::{Code, Error};
+use base::errors::Code;
 use base::io::LogFlags;
 use base::kif::{self, CapSel, Perm};
 use base::log;
@@ -31,6 +31,7 @@ use thread::{Downgradable, StrongRc, TempRc, Upgradable, WeakRc};
 
 use crate::args;
 use crate::cap::{Capability, KMemObject, MGateObject, RGateObject, SelRange, TileObject};
+use crate::kerrno;
 use crate::mem::{self, Allocation};
 use crate::platform;
 use crate::tiles::{loader, tilemng, Activity, ActivityFlags, TileMux};
@@ -77,7 +78,7 @@ impl ActivityMng {
             }
         }
 
-        Err(anyhow!(Error::new(Code::NoSpace)))
+        Err(kerrno(Code::NoSpace))
     }
 
     pub fn create_activity_async(

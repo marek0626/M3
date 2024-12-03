@@ -13,11 +13,8 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use base::cfg;
 use base::errors::Code;
-use base::errors::Error;
 use base::kif::{self, syscalls};
 use base::mem::{GlobOff, MsgBuf, PhysAddr, PhysAddrRaw};
 use base::tcu;
@@ -33,6 +30,7 @@ use crate::ktcu;
 use crate::platform;
 use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
 use crate::tiles::{tilemng, Activity, TileMux};
+use crate::{kerrno, kerror};
 
 #[inline(never)]
 pub fn alloc_ep_async(act: TempRc<Activity>) -> anyhow::Result<()> {
@@ -50,14 +48,13 @@ pub fn alloc_ep_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     );
 
     if r.replies > cfg::MAX_RB_SIZE {
-        return Err(anyhow!(Error::new(Code::InvArgs))
-            .context(format!("Invalid reply count ({})", r.replies)));
+        return Err(kerrno(Code::InvArgs).context(format!("Invalid reply count ({})", r.replies)));
     }
 
     let ep_count = 1 + r.replies as usize;
     let dst_act: TempRc<Activity> = act.get_kobj(r.act)?;
     if !dst_act.tile().has_quota(ep_count) {
-        return Err(anyhow!(Error::new(Code::NoSpace)).context(format!(
+        return Err(kerrno(Code::NoSpace).context(format!(
             "Tile cap has insufficient EPs (have {}, need {})",
             dst_act.tile().ep_quota().left(),
             ep_count
@@ -90,11 +87,11 @@ pub fn alloc_ep_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     else {
         let avail_eps = tilemux.ep_count().unwrap();
         if r.epid as usize > avail_eps || r.epid as usize + ep_count > avail_eps {
-            return Err(anyhow!(Error::new(Code::InvArgs))
+            return Err(kerrno(Code::InvArgs)
                 .context(format!("Invalid endpoint id ({}:{})", r.epid, ep_count)));
         }
         if !tilemux.eps_free(r.epid, ep_count) {
-            return Err(anyhow!(Error::new(Code::InvArgs)).context(format!(
+            return Err(kerrno(Code::InvArgs).context(format!(
                 "Endpoints {}..{} not free",
                 r.epid,
                 r.epid as usize + ep_count - 1
@@ -166,21 +163,16 @@ pub fn mgate_mkexcl(act: &TempRc<Activity>) -> anyhow::Result<()> {
     let user_tile: TempRc<TileObject> = act_caps.get_kobj(r.user_tile)?;
 
     if mem_tile.tile() != mgate.tile_id() {
-        return Err(
-            anyhow!(Error::new(Code::InvArgs)).context("MGate needs to belong to the memory tile")
-        );
+        return Err(kerrno(Code::InvArgs).context("MGate needs to belong to the memory tile"));
     }
 
     let addr = mgate.offset();
     let size = mgate.size();
     if (size & 0x7) != 0 || !size.is_power_of_two() {
-        return Err(anyhow!(Error::new(Code::InvArgs))
-            .context("Invalid size (need 8-byte aligned power of 2)"));
+        return Err(kerrno(Code::InvArgs).context("Invalid size (need 8-byte aligned power of 2)"));
     }
     if (addr & 0x3) != 0 || ((addr >> 2) & ((size >> 3) - 1)) != 0 {
-        return Err(
-            anyhow!(Error::new(Code::InvArgs)).context("Invalid address (need size-aligned)")
-        );
+        return Err(kerrno(Code::InvArgs).context("Invalid address (need size-aligned)"));
     }
 
     let mut memmux = tilemng::memmux(mem_tile.tile());
@@ -250,9 +242,7 @@ pub fn get_sess(act: &TempRc<Activity>) -> anyhow::Result<()> {
 
     let actcap: TempRc<Activity> = act.get_kobj(r.act)?;
     if TempRc::ptr_eq(act, &actcap) {
-        return Err(
-            anyhow!(Error::new(Code::InvArgs)).context("Cannot get session for own Activity")
-        );
+        return Err(kerrno(Code::InvArgs).context("Cannot get session for own Activity"));
     }
 
     // get service cap
@@ -277,9 +267,7 @@ pub fn get_sess(act: &TempRc<Activity>) -> anyhow::Result<()> {
         .and_then(|c| c.get::<TempRc<SessObject>>().ok())
     {
         if s.creator() != creator {
-            return Err(
-                anyhow!(Error::new(Code::NoPerm)).context("Cannot get access to foreign session")
-            );
+            return Err(kerrno(Code::NoPerm).context("Cannot get access to foreign session"));
         }
 
         actcap
@@ -288,9 +276,7 @@ pub fn get_sess(act: &TempRc<Activity>) -> anyhow::Result<()> {
             .obtain(r.dst, csess.unwrap())?;
     }
     else {
-        return Err(
-            anyhow!(Error::new(Code::InvArgs)).context(format!("Unknown session id {}", r.sid))
-        );
+        return Err(kerrno(Code::InvArgs).context(format!("Unknown session id {}", r.sid)));
     }
 
     reply_success(act);
@@ -307,9 +293,7 @@ pub fn activate_mgate(act: &TempRc<Activity>) -> anyhow::Result<()> {
 
     let ep: TempRc<EPObject> = act.get_kobj(r.ep)?;
     if ep.replies() != 0 {
-        return Err(
-            anyhow!(Error::new(Code::InvArgs)).context("Only rgates use EP caps with reply slots")
-        );
+        return Err(kerrno(Code::InvArgs).context("Only rgates use EP caps with reply slots"));
     }
 
     // invalidation not required as there is nothing to check and we'll overwrite it anyway
@@ -324,7 +308,7 @@ pub fn activate_mgate(act: &TempRc<Activity>) -> anyhow::Result<()> {
     let mg: TempRc<MGateObject> = act.get_kobj(r.gate)?;
 
     if mg.gate_ep().get_ep().is_some() {
-        return Err(anyhow!(Error::new(Code::Exists)).context("MemGate is already activated"));
+        return Err(kerrno(Code::Exists).context("MemGate is already activated"));
     }
 
     let tile_id = mg.tile_id();
@@ -370,7 +354,7 @@ pub fn activate_rgate(act: &TempRc<Activity>) -> anyhow::Result<()> {
 
     let rg: TempRc<RGateObject> = act.get_kobj(r.gate)?;
     if rg.activated() {
-        return Err(anyhow!(Error::new(Code::Exists)).context("RecvGate is already activated"));
+        return Err(kerrno(Code::Exists).context("RecvGate is already activated"));
     }
 
     // determine receive buffer address
@@ -387,12 +371,10 @@ pub fn activate_rgate(act: &TempRc<Activity>) -> anyhow::Result<()> {
     else if dst_desc.has_virtmem() {
         let rbuf: TempRc<MGateObject> = act.get_kobj(r.rbuf_mem)?;
         if r.rbuf_off >= rbuf.size() || r.rbuf_off + rg.size() as GlobOff > rbuf.size() {
-            return Err(anyhow!(Error::new(Code::InvArgs)).context("Invalid receive buffer memory"));
+            return Err(kerrno(Code::InvArgs).context("Invalid receive buffer memory"));
         }
         if platform::tile_desc(rbuf.tile_id()).tile_type() != kif::TileType::Mem {
-            return Err(
-                anyhow!(Error::new(Code::InvArgs)).context("rbuffer not in physical memory")
-            );
+            return Err(kerrno(Code::InvArgs).context("rbuffer not in physical memory"));
         }
         let rbuf_phys = ktcu::glob_to_phys_remote(dst_tile, rbuf.addr(), kif::PageFlags::RW)
             .map_err(|e| {
@@ -405,9 +387,7 @@ pub fn activate_rgate(act: &TempRc<Activity>) -> anyhow::Result<()> {
     }
     else {
         if r.rbuf_mem != kif::INVALID_SEL {
-            return Err(
-                anyhow!(Error::new(Code::InvArgs)).context("rbuffer mem cap given for SPM tile")
-            );
+            return Err(kerrno(Code::InvArgs).context("rbuffer mem cap given for SPM tile"));
         }
         PhysAddr::new_raw(dst_desc, r.rbuf_off as PhysAddrRaw)
     };
@@ -415,7 +395,7 @@ pub fn activate_rgate(act: &TempRc<Activity>) -> anyhow::Result<()> {
     let replies = if ep.replies() > 0 {
         let slots = 1 << (rg.order() - rg.msg_order());
         if ep.replies() != slots {
-            return Err(anyhow!(Error::new(Code::InvArgs)).context(format!(
+            return Err(kerrno(Code::InvArgs).context(format!(
                 "EP cap has {} reply slots, need {}",
                 ep.replies(),
                 slots
@@ -450,9 +430,7 @@ pub fn activate_sgate_async(act: TempRc<Activity>) -> anyhow::Result<()> {
 
     let ep: TempRc<EPObject> = act.get_kobj(r.ep)?;
     if ep.replies() != 0 {
-        return Err(
-            anyhow!(Error::new(Code::InvArgs)).context("Only rgates use EP caps with reply slots")
-        );
+        return Err(kerrno(Code::InvArgs).context("Only rgates use EP caps with reply slots"));
     }
 
     let epid = ep.ep();
@@ -464,12 +442,12 @@ pub fn activate_sgate_async(act: TempRc<Activity>) -> anyhow::Result<()> {
 
     let sg: TempRc<SGateObject> = act.get_kobj(r.gate)?;
     if sg.gate_ep().get_ep().is_some() {
-        return Err(anyhow!(Error::new(Code::Exists)).context("SendGate is already activated"));
+        return Err(kerrno(Code::Exists).context("SendGate is already activated"));
     }
 
     let rgate = sg
         .rgate()
-        .ok_or_else(|| anyhow!(Error::new(Code::ObjectGone)).context("RGate was destroyed"))?;
+        .ok_or_else(|| kerrno(Code::ObjectGone).context("RGate was destroyed"))?;
 
     let (act, ep, sg) = if !rgate.activated() {
         sysc_log!(act, "activate: waiting for rgate {:?}", *rgate);
@@ -578,9 +556,7 @@ pub fn activity_ctrl_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     match r.op {
         kif::syscalls::ActivityOp::Start => {
             if TempRc::ptr_eq(&act, &actcap) {
-                return Err(
-                    anyhow!(Error::new(Code::InvArgs)).context("Activity can't start itself")
-                );
+                return Err(kerrno(Code::InvArgs).context("Activity can't start itself"));
             }
             drop(act);
 
@@ -594,7 +570,7 @@ pub fn activity_ctrl_async(act: TempRc<Activity>) -> anyhow::Result<()> {
             let act_id = act.id();
             drop(act);
 
-            let exitcode = Code::try_from(r.arg as u32).map_err(|e| anyhow!(e))?;
+            let exitcode = Code::try_from(r.arg as u32).map_err(kerror)?;
             Activity::stop_app_async(actcap, exitcode, act_id);
 
             if is_self {

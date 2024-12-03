@@ -13,7 +13,7 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 
 use core::mem::size_of_val;
 
@@ -34,6 +34,7 @@ use crate::cap::{Capability, MapObject, SelRange};
 use crate::ktcu;
 use crate::mem;
 use crate::tiles::{tilemng, Activity, TileMux};
+use crate::{kerrno, kerror};
 
 use crate::platform;
 
@@ -105,7 +106,7 @@ pub fn load_mux_async(tile: tcu::TileId, mem: &mem::Allocation) -> anyhow::Resul
     let desc = platform::tile_desc(tile);
 
     let app = get_mod("tilemux")
-        .ok_or_else(|| anyhow!(Error::new(Code::NoSuchFile)).context("No bootmodule 'tilemux'"))?;
+        .ok_or_else(|| kerrno(Code::NoSuchFile).context("No bootmodule 'tilemux'"))?;
     log!(
         LogFlags::KernActs,
         "Loading multiplexer '{}' onto {}",
@@ -147,7 +148,7 @@ pub fn load_mux_async(tile: tcu::TileId, mem: &mem::Allocation) -> anyhow::Resul
 fn load_root_async(mut loader: ActivityELFLoader, env_phys: PhysAddr) -> anyhow::Result<()> {
     let entry = {
         let app = get_mod("root")
-            .ok_or_else(|| anyhow!(Error::new(Code::NoSuchFile)).context("No bootmodule 'root'"))?;
+            .ok_or_else(|| kerrno(Code::NoSuchFile).context("No bootmodule 'root'"))?;
         log!(LogFlags::KernActs, "Loading boot module '{}'", app.name());
         load_mod_async(&mut loader, app).context("Loading root")?
     };
@@ -241,13 +242,13 @@ where
 
     let mut kbm = KernelBootMod { bm, off: 0 };
     let hdr: elf::ElfHeaderCommon =
-        read_object(&mut kbm).map_err(|e| anyhow!(e).context("Reading ELF header"))?;
+        read_object(&mut kbm).map_err(|e| kerror(e).context("Reading ELF header"))?;
     hdr.ident
         .check_magic()
-        .map_err(|e| anyhow!(e).context("Invalid ELF magic"))?;
+        .map_err(|e| kerror(e).context("Invalid ELF magic"))?;
 
     kbm.seek(0);
-    let hdr = hdr.load_hdr(&mut kbm).map_err(|e| anyhow!(e))?;
+    let hdr = hdr.load_hdr(&mut kbm).map_err(kerror)?;
 
     // copy load segments to destination tile
     let mut end = VirtAddr::default();
@@ -257,7 +258,7 @@ where
         kbm.seek(off as GlobOff);
         let phdr = hdr
             .load_ph(&mut kbm)
-            .map_err(|e| anyhow!(e).context("Loading PH"))?;
+            .map_err(|e| kerror(e).context("Loading PH"))?;
         off += size_of_val(&*phdr);
 
         // we're only interested in non-empty load segments
