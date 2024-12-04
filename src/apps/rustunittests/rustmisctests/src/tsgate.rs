@@ -52,21 +52,21 @@ fn send_errors(t: &mut dyn WvTester) {
         let mut is = wv_require_ok!(recv_msg(&rgate));
         wv_assert_eq!(t, is.pop(), Ok(1));
         wv_assert_eq!(t, is.pop(), Ok(2));
-        wv_assert_err!(t, is.pop::<u32>(), Code::InvArgs);
+        wv_assert_err!(t, is.pop::<u32>(), Code::DeserFailed);
     }
 
     {
         wv_assert_ok!(t, send_vmsg!(&sgate, &rgate, 4));
 
         let mut is = wv_require_ok!(recv_msg(&rgate));
-        wv_assert_err!(t, is.pop::<String>(), Code::InvArgs);
+        wv_assert_err!(t, is.pop::<String>(), Code::DeserFailed);
     }
 
     {
         wv_assert_ok!(t, send_vmsg!(&sgate, &rgate, 0, "123"));
 
         let mut is = wv_require_ok!(recv_msg(&rgate));
-        wv_assert_err!(t, is.pop::<String>(), Code::InvArgs);
+        wv_assert_err!(t, is.pop::<String>(), Code::DeserFailed);
     }
 }
 

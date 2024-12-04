@@ -52,7 +52,7 @@ impl RequestSession for SocketSession {
     {
         log!(LogFlags::NetSess, "[{}] net::open(arg={})", serv.id(), arg,);
 
-        let settings = settings::parse_arguments(arg)?;
+        let settings = settings::parse_arguments(arg).ok_or_else(|| Error::new(Code::InvArgs))?;
         Ok(SocketSession {
             serv,
             sockets: vec![None; settings.socks],

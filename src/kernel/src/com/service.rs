@@ -13,12 +13,10 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use base::boxed::Box;
 use base::cell::RefCell;
 use base::col::String;
-use base::errors::{Code, Error};
+use base::errors::Code;
 use base::mem::MsgBuf;
 use base::rc::Rc;
 use base::{format, tcu};
@@ -28,6 +26,7 @@ use thread::{Downgradable, TempRc, Upgradable, WeakRc};
 
 use crate::cap::RGateObject;
 use crate::com::{QueueId, SendQueue};
+use crate::kerrno;
 use crate::tiles::Activity;
 
 pub struct Service {
@@ -68,7 +67,7 @@ impl Service {
     pub fn set_derive_act(&self, act: TempRc<Activity>) -> anyhow::Result<()> {
         let mut cur_derive = self.cur_derive.borrow_mut();
         if cur_derive.is_some() {
-            return Err(anyhow!(Error::new(Code::Exists))
+            return Err(kerrno(Code::Exists)
                 .context(format!("Derive in progress for activity {}", act.id())));
         }
         *cur_derive = Some(act.downgrade_store());
@@ -80,18 +79,19 @@ impl Service {
             .cur_derive
             .borrow_mut()
             .take()
-            .ok_or_else(|| anyhow!(Error::new(Code::NotFound)).context("No derive found"))?;
+            .ok_or_else(|| kerrno(Code::NotFound).context("No derive found"))?;
         act.upgrade()
-            .ok_or_else(|| anyhow!(Error::new(Code::ObjectGone)).context("Activity was destroyed"))
+            .ok_or_else(|| kerrno(Code::ObjectGone).context("Activity was destroyed"))
     }
 
     pub fn send(&self, lbl: tcu::Label, msg: &MsgBuf) -> anyhow::Result<thread::Event> {
-        let rg = self.rgate.upgrade().ok_or_else(|| {
-            anyhow!(Error::new(Code::ObjectGone)).context("RecvGate was destroyed")
-        })?;
-        let (_, rep) = rg.location().ok_or_else(|| {
-            anyhow!(Error::new(Code::RecvGone)).context("RecvGate was deactivated")
-        })?;
+        let rg = self
+            .rgate
+            .upgrade()
+            .ok_or_else(|| kerrno(Code::ObjectGone).context("RecvGate was destroyed"))?;
+        let (_, rep) = rg
+            .location()
+            .ok_or_else(|| kerrno(Code::RecvGone).context("RecvGate was deactivated"))?;
         self.queue.borrow_mut().send(rep, lbl, msg)
     }
 

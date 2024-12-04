@@ -176,13 +176,13 @@ impl<'m> ActivityRef<'m> {
     }
 }
 
-impl<'m> Drop for ActivityRef<'m> {
+impl Drop for ActivityRef<'_> {
     fn drop(&mut self) {
         self.act.has_refs = false;
     }
 }
 
-impl<'m> Deref for ActivityRef<'m> {
+impl Deref for ActivityRef<'_> {
     type Target = Activity;
 
     fn deref(&self) -> &Self::Target {
@@ -190,7 +190,7 @@ impl<'m> Deref for ActivityRef<'m> {
     }
 }
 
-impl<'m> DerefMut for ActivityRef<'m> {
+impl DerefMut for ActivityRef<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.act
     }
@@ -474,7 +474,7 @@ fn do_schedule(mut action: ScheduleAction) -> VirtAddr {
                     make_ready(next, next_budget);
                 }
                 else {
-                    Box::into_raw(next);
+                    let _ = Box::into_raw(next);
                 }
                 let last_sched = old.scheduled;
                 old.cpu_time += now - last_sched;
@@ -564,7 +564,7 @@ fn do_schedule(mut action: ScheduleAction) -> VirtAddr {
         else {
             old.state = ActState::Blocked;
             // don't drop the idle activity
-            Box::into_raw(old);
+            let _ = Box::into_raw(old);
         }
     }
     else {

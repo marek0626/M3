@@ -18,7 +18,6 @@
 use base::io::LogFlags;
 
 use m3::col::Vec;
-use m3::errors::{Code, Error};
 use m3::log;
 use m3::net::Port;
 use m3::util::parse;
@@ -45,7 +44,7 @@ impl Default for Settings {
     }
 }
 
-fn parse_ports(port_descs: &str, ports: &mut Vec<(Port, Port)>) -> Result<(), Error> {
+fn parse_ports(port_descs: &str, ports: &mut Vec<(Port, Port)>) -> Option<()> {
     // comma separated list of "x-y" or "x"
     for port_desc in port_descs.split(',') {
         let range = if let Some(pos) = port_desc.find('-') {
@@ -60,15 +59,15 @@ fn parse_ports(port_descs: &str, ports: &mut Vec<(Port, Port)>) -> Result<(), Er
 
         if ports::is_ephemeral(range.0) || ports::is_ephemeral(range.1) {
             log!(LogFlags::Error, "Cannot bind/listen on ephemeral ports");
-            return Err(Error::new(Code::InvArgs));
+            return None;
         }
 
         ports.push(range);
     }
-    Ok(())
+    Some(())
 }
 
-pub fn parse_arguments(args_str: &str) -> Result<Settings, Error> {
+pub fn parse_arguments(args_str: &str) -> Option<Settings> {
     let mut args = Settings::default();
     for arg in args_str.split_whitespace() {
         if let Some(bufs) = arg.strip_prefix("bufs=") {
@@ -87,8 +86,8 @@ pub fn parse_arguments(args_str: &str) -> Result<Settings, Error> {
             parse_ports(portdesc, &mut args.udp_ports)?;
         }
         else {
-            return Err(Error::new(Code::InvArgs));
+            return None;
         }
     }
-    Ok(args)
+    Some(args)
 }

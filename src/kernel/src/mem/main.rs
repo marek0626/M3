@@ -13,8 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use base::cell::{RefMut, StaticRefCell};
 use base::col::Vec;
 use base::io::LogFlags;
@@ -23,6 +21,7 @@ use base::{format, log};
 
 use core::fmt;
 
+use crate::kerrno;
 use crate::mem::{MemMod, MemType};
 
 pub struct MainMemory {
@@ -74,7 +73,7 @@ impl MainMemory {
         size: GlobOff,
         align: GlobOff,
     ) -> anyhow::Result<Allocation> {
-        use base::errors::{Code, Error};
+        use base::errors::Code;
 
         for m in &mut self.mods {
             if m.mem_type() != mtype {
@@ -92,7 +91,7 @@ impl MainMemory {
             }
         }
 
-        Err(anyhow!(Error::new(Code::OutOfMem)).context(format!(
+        Err(kerrno(Code::OutOfMem).context(format!(
             "Unable to allocate {}b with align={}b and type={:?}",
             size, align, mtype
         )))

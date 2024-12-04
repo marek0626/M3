@@ -17,16 +17,31 @@ use core::fmt::Display;
 
 use crate::errors::{Code, Error};
 
-impl serde::ser::Error for Error {
-    fn custom<T: Display>(_msg: T) -> Self {
-        // TODO use/pass-on the message somehow
-        Error::new(Code::InvArgs)
+#[derive(Debug, PartialEq)]
+pub struct SerdeError;
+
+impl From<SerdeError> for Error {
+    fn from(_value: SerdeError) -> Self {
+        Error::new(Code::DeserFailed)
     }
 }
 
-impl serde::de::Error for Error {
+impl Display for SerdeError {
+    fn fmt(&self, f: &mut _core::fmt::Formatter<'_>) -> _core::fmt::Result {
+        write!(f, "(de)serialization failed")
+    }
+}
+
+impl serde::ser::Error for SerdeError {
     fn custom<T: Display>(_msg: T) -> Self {
         // TODO use/pass-on the message somehow
-        Error::new(Code::InvArgs)
+        Self
+    }
+}
+
+impl serde::de::Error for SerdeError {
+    fn custom<T: Display>(_msg: T) -> Self {
+        // TODO use/pass-on the message somehow
+        Self
     }
 }

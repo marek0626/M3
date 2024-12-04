@@ -80,7 +80,10 @@ impl MultiSender {
 }
 
 impl BlockSender for MultiSender {
-    type Block<'a, U, T> = MultiBlock<'a, U, T> where T: Clone + 'a;
+    type Block<'a, U, T>
+        = MultiBlock<'a, U, T>
+    where
+        T: Clone + 'a;
 
     fn credits(&self) -> u32 {
         self.sender[0].credits()
@@ -208,7 +211,10 @@ impl MultiReceiver {
 }
 
 impl BlockReceiver for MultiReceiver {
-    type Block<'a, U, T> = MultiBlock<'a, U, T> where T: Clone + 'a;
+    type Block<'a, U, T>
+        = MultiBlock<'a, U, T>
+    where
+        T: Clone + 'a;
 
     fn buf_range(&self) -> (VirtAddr, GlobOff) {
         self.receiver[0].buf_range()

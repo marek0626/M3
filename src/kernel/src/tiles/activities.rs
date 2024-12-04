@@ -13,13 +13,11 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use base::boxed::Box;
 use base::build_vmsg;
 use base::cell::{Cell, RefCell, StaticRefCell};
 use base::col::{String, Vec};
-use base::errors::{Code, Error};
+use base::errors::Code;
 use base::io::LogFlags;
 use base::kif::{self, CapRngDesc, CapSel, CapType, TileDesc};
 use base::log;
@@ -40,6 +38,7 @@ use crate::ktcu;
 use crate::thread_startup_async;
 use crate::tiles::{loader, tilemng, ActivityMng};
 use crate::{impl_from_kobj, platform};
+use crate::{kerrno, kerror};
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -351,15 +350,12 @@ impl Activity {
         // note that we cannot hand out a mutable reference to the OwnedMessage, because that would
         // allow the caller to swap it with something else. Thus, we replicate this method and call
         // reply ourself.
-        self.cur_sysc
-            .borrow_mut()
-            .reply(reply)
-            .map_err(|e| anyhow!(e))
+        self.cur_sysc.borrow_mut().reply(reply).map_err(kerror)
     }
 
     pub fn start_derive(&self, derive: DeriveSrv) -> anyhow::Result<()> {
         if self.cur_derive_srv.borrow().is_some() {
-            return Err(anyhow!(Error::new(Code::Exists)).context("Derive already running"));
+            return Err(kerrno(Code::Exists).context("Derive already running"));
         }
 
         *self.cur_derive_srv.borrow_mut() = Some(derive);
@@ -402,9 +398,9 @@ impl Activity {
         let act_weak = act.downgrade_asyn();
 
         let res = loop {
-            let act = act_weak.upgrade().ok_or_else(|| {
-                anyhow!(Error::new(Code::ObjectGone)).context("Activity was destroyed")
-            })?;
+            let act = act_weak
+                .upgrade()
+                .ok_or_else(|| kerrno(Code::ObjectGone).context("Activity was destroyed"))?;
 
             // independent of how we notify the activity, check for exits in case the activity we wait for
             // already exited.

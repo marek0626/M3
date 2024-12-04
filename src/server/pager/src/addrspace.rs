@@ -179,7 +179,9 @@ impl AddrSpace {
                 ds_idx.replace(self.ds.len() - 1);
             }
 
-            self.ds[ds_idx.unwrap()].inherit(ds)?;
+            self.ds[ds_idx.unwrap()]
+                .inherit(ds)
+                .map_err(|e| e.downcast::<Error>().unwrap())?;
         }
 
         is.reply_error(Code::Success)
@@ -231,6 +233,7 @@ impl AddrSpace {
             }
 
             ds.handle_pf(childs, virt)
+                .map_err(|e| e.downcast::<Error>().unwrap())
         }
         else {
             log!(LogFlags::Error, "No dataspace at {}", virt);

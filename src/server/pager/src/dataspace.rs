@@ -15,17 +15,18 @@
 
 use m3::cap::Selector;
 use m3::cell::{RefCell, StaticCell};
-use m3::cfg;
 use m3::client::{ClientSession, MapFlags, M3FS};
 use m3::com::MemGate;
-use m3::errors::{Code, Error};
+use m3::errors::Code;
 use m3::io::LogFlags;
 use m3::kif;
 use m3::log;
 use m3::mem::{GlobOff, VirtAddr};
 use m3::rc::Rc;
 use m3::util::math;
-use resmng::childs;
+use m3::{cfg, format};
+
+use resmng::{childs, rerrno, rerror};
 
 use crate::physmem::PhysMem;
 use crate::regions::RegionList;
@@ -152,7 +153,7 @@ impl DataSpace {
         self.perms
     }
 
-    pub fn inherit(&mut self, ds: &mut DataSpace) -> Result<(), Error> {
+    pub fn inherit(&mut self, ds: &mut DataSpace) -> anyhow::Result<()> {
         self.id = ds.id;
 
         // if it's not writable, but we have already regions, we can simply keep them
@@ -172,7 +173,7 @@ impl DataSpace {
         &mut self,
         childs: &mut childs::ChildManager,
         virt: VirtAddr,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<()> {
         let pf_off = math::round_dn((virt - self.virt).as_goff(), cfg::PAGE_SIZE as GlobOff);
         let reg = self.regions.pagefault(pf_off);
 
@@ -181,7 +182,8 @@ impl DataSpace {
             if let Some(ref f) = self.file {
                 // get memory cap for the region
                 // TODO add a cache for that; we request the same caps over and over again
-                let (off, len, sel) = M3FS::get_mem(&f.sess, f.offset + pf_off)?;
+                let (off, len, sel) = M3FS::get_mem(&f.sess, f.offset + pf_off)
+                    .map_err(|e| rerror(e).context("get_mem from M3FS"))?;
 
                 // first, resize the region to not be too large
                 reg.limit_to(pf_off, MAX_EXT_PAGES as GlobOff);
@@ -209,13 +211,14 @@ impl DataSpace {
 
                 // if it's writable and should not be shared, create a copy
                 if !self.flags.contains(MapFlags::SHARED) && self.perms.contains(kif::Perm::W) {
-                    let src = MemGate::new_owned_bind(sel)?;
-                    let child = childs
-                        .child_by_id_mut(self.child)
-                        .ok_or_else(|| Error::new(Code::ObjectGone))?;
+                    let src = MemGate::new_owned_bind(sel)
+                        .map_err(|e| rerror(e).context("bind memory for copy"))?;
+                    let child = childs.child_by_id_mut(self.child).ok_or_else(|| {
+                        rerrno(Code::ObjectGone).context(format!("child with id {}", self.child))
+                    })?;
                     // TODO this memory is currently only free'd on child exit
                     let (mgate, _alloc) = child.alloc_local(reg.size(), kif::Perm::RWX)?;
-                    let mem = Rc::new(RefCell::new(PhysMem::new((self.owner, self.virt), mgate)?));
+                    let mem = Rc::new(RefCell::new(PhysMem::new((self.owner, self.virt), mgate)));
                     reg.set_mem(mem);
                     reg.copy_from(&src)?;
                     reg.set_mem_off(0);
@@ -255,15 +258,15 @@ impl DataSpace {
                     reg.virt() + reg.size() - 1
                 );
 
-                let child = childs
-                    .child_by_id_mut(self.child)
-                    .ok_or_else(|| Error::new(Code::ObjectGone))?;
+                let child = childs.child_by_id_mut(self.child).ok_or_else(|| {
+                    rerrno(Code::ObjectGone).context(format!("child with id {}", self.child))
+                })?;
                 // TODO this memory is currently only free'd on child exit
                 let (mgate, _alloc) = child.alloc_local(reg.size(), kif::Perm::RWX)?;
                 reg.set_mem(Rc::new(RefCell::new(PhysMem::new(
                     (self.owner, self.virt),
                     mgate,
-                )?)));
+                ))));
 
                 if !self.flags.contains(MapFlags::UNINIT) {
                     // zero the memory

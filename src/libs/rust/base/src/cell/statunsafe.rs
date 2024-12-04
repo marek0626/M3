@@ -75,6 +75,8 @@ impl<T: Sized> StaticUnsafeCell<T> {
     }
 }
 
+/// A lazily initialized [`StaticUnsafeCell`](super::StaticUnsafeCell)
+///
 /// A `LazyStaticUnsafeCell` is the same as the [`StaticUnsafeCell`](super::StaticUnsafeCell), but
 /// contains an [`Option<T>`](Option). At construction, the value is `None` and it needs to be set
 /// before other functions can be used. That is, all access functions assume that the value has been

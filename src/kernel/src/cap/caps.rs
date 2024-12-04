@@ -13,11 +13,9 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use base::cell::{RefCell, RefMut, StaticCell};
 use base::col::Treap;
-use base::errors::{Code, Error};
+use base::errors::Code;
 use base::io::LogFlags;
 use base::kif::{CapRngDesc, CapSel};
 use base::log;
@@ -31,6 +29,7 @@ use core::ptr::NonNull;
 use thread::{NonWeak, StrongRc, TempRc};
 
 use crate::cap::{EPObject, GateEP, KMemObject, KObject, MapObject, TileObject};
+use crate::kerrno;
 use crate::ktcu;
 use crate::tiles::{tilemng, Activity, INVAL_ID};
 
@@ -132,15 +131,13 @@ impl CapTable {
     }
 
     pub fn get(&self, sel: CapSel) -> anyhow::Result<&Capability> {
-        self.try_get(sel).ok_or_else(|| {
-            anyhow!(Error::new(Code::InvCap)).context(format!("Invalid cap at selector {}", sel))
-        })
+        self.try_get(sel)
+            .ok_or_else(|| kerrno(Code::InvCap).context(format!("Invalid cap at selector {}", sel)))
     }
 
     pub fn get_mut(&mut self, sel: CapSel) -> anyhow::Result<&mut Capability> {
-        self.try_get_mut(sel).ok_or_else(|| {
-            anyhow!(Error::new(Code::InvCap)).context(format!("Invalid cap at selector {}", sel))
-        })
+        self.try_get_mut(sel)
+            .ok_or_else(|| kerrno(Code::InvCap).context(format!("Invalid cap at selector {}", sel)))
     }
 
     pub fn get_kobj<T>(&self, sel: CapSel) -> anyhow::Result<T>
@@ -190,21 +187,20 @@ impl CapTable {
         parent: Option<NonNull<Capability>>,
     ) -> anyhow::Result<()> {
         if self.caps.get(cap.sel_range()).is_some() {
-            return Err(anyhow!(Error::new(Code::InvArgs))
-                .context(format!("Caps {:?} exist", cap.sel_range())));
+            return Err(kerrno(Code::InvArgs).context(format!("Caps {:?} exist", cap.sel_range())));
         }
         let act = self.activity();
         // prevent that we insert more capabilities into activities that are already in the
         // process of being killed.
         if act.is_dead() {
-            return Err(anyhow!(Error::new(Code::ObjectGone)).context("Activity was destroyed"));
+            return Err(kerrno(Code::ObjectGone).context("Activity was destroyed"));
         }
         if !act
             .kmem()
             .unwrap()
             .alloc(act, cap.sel(), cap.obj.size() + Capability::size())
         {
-            return Err(anyhow!(Error::new(Code::NoSpace)).context("KMem quota"));
+            return Err(kerrno(Code::NoSpace).context("KMem quota"));
         }
 
         unsafe {
@@ -223,14 +219,14 @@ impl CapTable {
         nc.origin = false;
 
         if self.caps.get(nc.sel_range()).is_some() {
-            return Err(anyhow!(Error::new(Code::InvArgs)).context(format!("Cap {} exists", sel)));
+            return Err(kerrno(Code::InvArgs).context(format!("Cap {} exists", sel)));
         }
         let act = self.activity();
         if act.is_dead() {
-            return Err(anyhow!(Error::new(Code::ObjectGone)).context("Activity was destroyed"));
+            return Err(kerrno(Code::ObjectGone).context("Activity was destroyed"));
         }
         if !act.kmem().unwrap().alloc(act, sel, Capability::size()) {
-            return Err(anyhow!(Error::new(Code::NoSpace)).context("KMem quota"));
+            return Err(kerrno(Code::NoSpace).context("KMem quota"));
         }
 
         let nc = self.do_insert(nc);

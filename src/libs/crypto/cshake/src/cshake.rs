@@ -16,6 +16,8 @@
 
 use crate::encode::*;
 
+/// Write cSHAKE header to the given buffer
+///
 /// Writes the cSHAKE header (function name and customization string) to the start of the buffer.
 /// This should be absorbed before (or prepended to) the actual input data to produce valid cSHAKE
 /// hashes. Block bytes is the block size of the underlying hash function (cSHAKE128 or cSHAKE256).

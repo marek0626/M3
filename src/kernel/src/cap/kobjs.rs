@@ -13,7 +13,7 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 
 use base::build_vmsg;
 use base::cell::{Cell, Ref, RefCell, RefMut, StaticCell};
@@ -34,6 +34,7 @@ use core::fmt;
 use core::ops::Deref;
 
 use crate::com::{SendQueue, Service};
+use crate::kerrno;
 use crate::ktcu;
 use crate::mem;
 use crate::platform;
@@ -85,10 +86,8 @@ macro_rules! impl_from_kobj {
             fn try_from(kobj: &KObject) -> Result<Self, Self::Error> {
                 match kobj {
                     KObject::$name(s) => Ok(thread::TempRc::new(s.clone())),
-                    _ => Err(anyhow::anyhow!(base::errors::Error::new(
-                        base::errors::Code::InvArgs
-                    ))
-                    .context(concat!("Expected ", stringify!($name)))),
+                    _ => Err($crate::kerrno(base::errors::Code::InvArgs)
+                        .context(concat!("Expected ", stringify!($name)))),
                 }
             }
         }
@@ -440,7 +439,7 @@ impl MGateObject {
         perms: kif::Perm,
     ) -> anyhow::Result<StrongRc<Self>> {
         if offset.checked_add(size).is_none() || offset + size > self.size() || size == 0 {
-            return Err(anyhow!(Error::new(Code::InvArgs)).context("Size or offset invalid"));
+            return Err(kerrno(Code::InvArgs).context("Size or offset invalid"));
         }
 
         let addr = self.addr().raw() + offset;
@@ -460,7 +459,7 @@ impl MGateObject {
             if extile == user_tile.tile() {
                 return Ok(());
             }
-            return Err(anyhow!(Error::new(Code::Exists)).context("MGate is exclusive"));
+            return Err(kerrno(Code::Exists).context("MGate is exclusive"));
         }
 
         self.exclusive.set(Some(user_tile.tile()));
@@ -677,9 +676,9 @@ impl SemObject {
     pub fn down_async(s: TempRc<Self>) -> anyhow::Result<()> {
         let sem_weak = s.downgrade_asyn();
         loop {
-            let sem = sem_weak.upgrade().ok_or_else(|| {
-                anyhow!(Error::new(Code::ObjectGone)).context("Semaphore was destroyed")
-            })?;
+            let sem = sem_weak
+                .upgrade()
+                .ok_or_else(|| kerrno(Code::ObjectGone).context("Semaphore was destroyed"))?;
             if sem.counter.get() != 0 {
                 sem.counter.set(sem.counter.get() - 1);
                 break;
@@ -691,9 +690,9 @@ impl SemObject {
 
             thread::wait_for_async(event);
 
-            let sem = tmp_weak.upgrade().ok_or_else(|| {
-                anyhow!(Error::new(Code::ObjectGone)).context("Semaphore was destroyed")
-            })?;
+            let sem = tmp_weak
+                .upgrade()
+                .ok_or_else(|| kerrno(Code::ObjectGone).context("Semaphore was destroyed"))?;
             sem.waiters.set(sem.waiters.get() - 1);
         }
         Ok(())
@@ -842,9 +841,7 @@ impl TileObject {
         // only allocate it from the tile here, but don't keep an Rc to the EPQuota
         if let Some(num) = eps {
             if !tile.has_quota(num) {
-                return Err(
-                    anyhow!(Error::new(Code::NoSpace)).context("Insufficient EPs for tile derive")
-                );
+                return Err(kerrno(Code::NoSpace).context("Insufficient EPs for tile derive"));
             }
             tile.alloc_eps(num);
         }
@@ -863,16 +860,16 @@ impl TileObject {
             // note that we don't need to give the EP quota back to the tile as the tile was
             // destroyed in this case, meaning that we already gave the quota back in
             // TileObject::revoke_async.
-            let tile = tile_weak.upgrade().ok_or_else(|| {
-                anyhow!(Error::new(Code::ObjectGone)).context("Tile was destroyed")
-            })?;
+            let tile = tile_weak
+                .upgrade()
+                .ok_or_else(|| kerrno(Code::ObjectGone).context("Tile was destroyed"))?;
 
             match res {
                 Err(e) => {
                     if let Some(num) = eps {
                         tile.free_eps(num);
                     }
-                    return Err(anyhow!(e).context("TileMux declined tile derive"));
+                    return Err(e.context("TileMux declined tile derive"));
                 },
                 Ok(v) => (v.0, v.1, tile),
             }

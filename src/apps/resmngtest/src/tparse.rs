@@ -14,11 +14,10 @@
  */
 
 use m3::col::ToString;
-use m3::errors::Code;
 use m3::kif::Perm;
 use m3::test::WvTester;
 use m3::time::TimeDuration;
-use m3::{wv_assert_eq, wv_assert_err, wv_require_ok, wv_run_test};
+use m3::{wv_assert_eq, wv_assert_none, wv_require_some, wv_run_test};
 
 use resmng::config::{
     AppConfig, DualName, ModDesc, MountDesc, RGateDesc, SGateDesc, SemDesc, ServiceDesc,
@@ -44,38 +43,34 @@ pub fn run(t: &mut dyn WvTester) {
 }
 
 fn errors(t: &mut dyn WvTester) {
-    wv_assert_err!(t, AppConfig::parse(""), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("<"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse(">"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("\""), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("/>"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("<>"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("app/"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("<foo"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("<app"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("<app>"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("app/>"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("</app>"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("<app><app>"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("<app></app"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("<app></foo>"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("<app></app2>"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("<app args=test/>"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("<app a=/>"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("<app args=\"/>"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("<app args=\"\">"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("<app/>"), Code::InvArgs);
-    wv_assert_err!(t, AppConfig::parse("<app args=\"\"/>"), Code::InvArgs);
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\"/><app>"),
-        Code::InvArgs
-    );
+    wv_assert_none!(t, AppConfig::parse(""));
+    wv_assert_none!(t, AppConfig::parse("<"));
+    wv_assert_none!(t, AppConfig::parse(">"));
+    wv_assert_none!(t, AppConfig::parse("\""));
+    wv_assert_none!(t, AppConfig::parse("/>"));
+    wv_assert_none!(t, AppConfig::parse("<>"));
+    wv_assert_none!(t, AppConfig::parse("app/"));
+    wv_assert_none!(t, AppConfig::parse("<foo"));
+    wv_assert_none!(t, AppConfig::parse("<app"));
+    wv_assert_none!(t, AppConfig::parse("<app>"));
+    wv_assert_none!(t, AppConfig::parse("app/>"));
+    wv_assert_none!(t, AppConfig::parse("</app>"));
+    wv_assert_none!(t, AppConfig::parse("<app><app>"));
+    wv_assert_none!(t, AppConfig::parse("<app></app"));
+    wv_assert_none!(t, AppConfig::parse("<app></foo>"));
+    wv_assert_none!(t, AppConfig::parse("<app></app2>"));
+    wv_assert_none!(t, AppConfig::parse("<app args=test/>"));
+    wv_assert_none!(t, AppConfig::parse("<app a=/>"));
+    wv_assert_none!(t, AppConfig::parse("<app args=\"/>"));
+    wv_assert_none!(t, AppConfig::parse("<app args=\"\">"));
+    wv_assert_none!(t, AppConfig::parse("<app/>"));
+    wv_assert_none!(t, AppConfig::parse("<app args=\"\"/>"));
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\"/><app>"));
 }
 
 fn app_short(t: &mut dyn WvTester) {
     let cfg_str = "<app args=\"foo\"/>";
-    let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+    let cfg = wv_require_some!(AppConfig::parse(cfg_str));
     wv_assert_eq!(t, cfg.name(), "foo");
     wv_assert_eq!(t, cfg.args(), &["foo"]);
     wv_assert_eq!(t, cfg.cfg_range(), (0, cfg_str.len()));
@@ -83,54 +78,29 @@ fn app_short(t: &mut dyn WvTester) {
 
 fn app_long(t: &mut dyn WvTester) {
     let cfg_str = "<app args=\"foo\"></app>";
-    let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+    let cfg = wv_require_some!(AppConfig::parse(cfg_str));
     wv_assert_eq!(t, cfg.name(), "foo");
     wv_assert_eq!(t, cfg.args(), &["foo"]);
     wv_assert_eq!(t, cfg.cfg_range(), (0, cfg_str.len()));
 }
 
 fn app_args(t: &mut dyn WvTester) {
-    wv_assert_err!(
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\" daemon=\"bar\"/>"));
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\" usermem=\"4x\"/>"));
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\" kernmem=\"\"/>"));
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\" time=\"1k\"/>"));
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\" daemon=\"bar\"/>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\" pagetables=\"foo\"/>")
     );
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\" usermem=\"4x\"/>"),
-        Code::InvArgs
-    );
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\" kernmem=\"\"/>"),
-        Code::InvArgs
-    );
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\" time=\"1k\"/>"),
-        Code::InvArgs
-    );
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\" pagetables=\"foo\"/>"),
-        Code::InvArgs
-    );
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\" eps=\"bar\"/>"),
-        Code::InvArgs
-    );
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\" getinfo=\"a\"/>"),
-        Code::InvArgs
-    );
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\" eps=\"bar\"/>"));
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\" getinfo=\"a\"/>"));
 
     let cfg_str = "<app args=\"foo test 22\" daemon=\"1\"
                         usermem=\"4M\" kernmem=\"32M\"
                         time=\"4ms\" pagetables=\"18\"
                         eps=\"64\" getinfo=\"1\"/>";
-    let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+    let cfg = wv_require_some!(AppConfig::parse(cfg_str));
     wv_assert_eq!(t, cfg.name(), "foo");
     wv_assert_eq!(t, cfg.args(), &["foo", "test", "22"]);
     wv_assert_eq!(t, cfg.cfg_range(), (0, cfg_str.len()));
@@ -144,19 +114,14 @@ fn app_args(t: &mut dyn WvTester) {
 }
 
 fn app_mounts(t: &mut dyn WvTester) {
-    wv_assert_err!(
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\"><mount /></app>"));
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\"><mount /></app>"),
-        Code::InvArgs
-    );
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\"><mount fs=\"\" /></app>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\"><mount fs=\"\" /></app>")
     );
 
     {
-        let cfg = wv_require_ok!(AppConfig::parse(
+        let cfg = wv_require_some!(AppConfig::parse(
             "<app  \t\n args = \"foo\"   > < mount  fs=\"myfs\" path=\"\"   / > < / app >"
         ));
         wv_assert_eq!(t, cfg.mounts(), &[MountDesc::new(
@@ -166,7 +131,7 @@ fn app_mounts(t: &mut dyn WvTester) {
     }
 
     {
-        let cfg = wv_require_ok!(AppConfig::parse(
+        let cfg = wv_require_some!(AppConfig::parse(
             "<app args=\"foo\"><mount fs=\"myfs\" path=\"/bar\"/></app>"
         ));
         wv_assert_eq!(t, cfg.mounts(), &[MountDesc::new(
@@ -177,35 +142,26 @@ fn app_mounts(t: &mut dyn WvTester) {
 }
 
 fn app_mods(t: &mut dyn WvTester) {
-    wv_assert_err!(
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\"><mod/></app>"));
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\"><mod/></app>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\"><mod foo=\"bar\"/></app>")
     );
-    wv_assert_err!(
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\"><mod foo=\"bar\"/></app>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\"><mod name=\"\"/></app>")
     );
-    wv_assert_err!(
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\"><mod name=\"\"/></app>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\"><mod gname=\"global\"/></app>")
     );
-    wv_assert_err!(
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\"><mod gname=\"global\"/></app>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\"><mod lname=\"local\"/></app>")
     );
-    wv_assert_err!(
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\"><mod lname=\"local\"/></app>"),
-        Code::InvArgs
-    );
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\"><mod name=\"test\" perm=\"y\"/></app>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\"><mod name=\"test\" perm=\"y\"/></app>")
     );
 
     let cfg_str = "<app args=\"foo\">
@@ -214,7 +170,7 @@ fn app_mods(t: &mut dyn WvTester) {
         <mod name=\"mod3\" perm=\"\"/>
         <mod lname=\"mod4\" gname=\"gmod4\" perm=\"rx\"/>
     </app>";
-    let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+    let cfg = wv_require_some!(AppConfig::parse(cfg_str));
     wv_assert_eq!(t, cfg.mods(), &[
         ModDesc::new(DualName::new_simple("mod1".to_string()), Perm::RW),
         ModDesc::new(DualName::new_simple("mod2".to_string()), Perm::RWX),
@@ -227,17 +183,13 @@ fn app_mods(t: &mut dyn WvTester) {
 }
 
 fn app_services(t: &mut dyn WvTester) {
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\"><serv/></app>"),
-        Code::InvArgs
-    );
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\"><serv/></app>"));
 
     let cfg_str = "<app args=\"foo\">
         <serv name=\"service\"/>
         <serv lname=\"lserv\" gname=\"gserv\"/>
     </app>";
-    let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+    let cfg = wv_require_some!(AppConfig::parse(cfg_str));
     wv_assert_eq!(t, cfg.services(), &[
         ServiceDesc::new(DualName::new_simple("service".to_string())),
         ServiceDesc::new(DualName::new("lserv".to_string(), "gserv".to_string()))
@@ -245,22 +197,17 @@ fn app_services(t: &mut dyn WvTester) {
 }
 
 fn app_sesscrts(t: &mut dyn WvTester) {
-    wv_assert_err!(
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\"><sesscrt/></app>"));
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\"><sesscrt/></app>"),
-        Code::InvArgs
-    );
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\"><sesscrt name=\"test\" count=\"bar\"/></app>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\"><sesscrt name=\"test\" count=\"bar\"/></app>")
     );
 
     let cfg_str = "<app args=\"foo\">
         <sesscrt name=\"service\"/>
         <sesscrt name=\"service2\" count=\"4\"/>
     </app>";
-    let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+    let cfg = wv_require_some!(AppConfig::parse(cfg_str));
     wv_assert_eq!(t, cfg.sess_creators(), &[
         SessCrtDesc::new("service".to_string(), None),
         SessCrtDesc::new("service2".to_string(), Some(4))
@@ -268,27 +215,21 @@ fn app_sesscrts(t: &mut dyn WvTester) {
 }
 
 fn app_sessions(t: &mut dyn WvTester) {
-    wv_assert_err!(
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\"><sess/></app>"));
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\"><sess/></app>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\"><sess gname=\"g\"/></app>")
     );
-    wv_assert_err!(
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\"><sess gname=\"g\"/></app>"),
-        Code::InvArgs
-    );
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\"><sess name=\"test\" dep=\"invalid\"/></app>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\"><sess name=\"test\" dep=\"invalid\"/></app>")
     );
 
     let cfg_str = "<app args=\"foo\">
         <sess name=\"myserv\" args=\"test 1 2 3\"/>
         <sess lname=\"lserv\" gname=\"gserv\" dep=\"false\"/>
     </app>";
-    let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+    let cfg = wv_require_some!(AppConfig::parse(cfg_str));
     wv_assert_eq!(t, cfg.sessions(), &[
         SessionDesc::new(
             DualName::new_simple("myserv".to_string()),
@@ -304,20 +245,14 @@ fn app_sessions(t: &mut dyn WvTester) {
 }
 
 fn app_tiles(t: &mut dyn WvTester) {
-    wv_assert_err!(
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\"><tiles/></app>"));
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\"><tiles/></app>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\"><tiles type=\"core\" count=\"a\"/></app>")
     );
-    wv_assert_err!(
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\"><tiles type=\"core\" count=\"a\"/></app>"),
-        Code::InvArgs
-    );
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\"><tiles type=\"core\" optional=\"a\"/></app>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\"><tiles type=\"core\" optional=\"a\"/></app>")
     );
 
     let cfg_str = "<app args=\"foo\">
@@ -327,7 +262,7 @@ fn app_tiles(t: &mut dyn WvTester) {
         <tiles type=\"boom\" mux=\"mymux\"/>
         <tiles type=\"rocket\" mux=\"-\"/>
     </app>";
-    let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+    let cfg = wv_require_some!(AppConfig::parse(cfg_str));
     wv_assert_eq!(t, cfg.tiles(), &[
         TileDesc::new("core".to_string(), 1, Some("tilemux".to_string()), false),
         TileDesc::new(
@@ -343,20 +278,14 @@ fn app_tiles(t: &mut dyn WvTester) {
 }
 
 fn app_rgates(t: &mut dyn WvTester) {
-    wv_assert_err!(
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\"><rgate/></app>"));
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\"><rgate/></app>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\"><rgate msgsize=\"a\"/></app>")
     );
-    wv_assert_err!(
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\"><rgate msgsize=\"a\"/></app>"),
-        Code::InvArgs
-    );
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\"><rgate slots=\"a\"/></app>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\"><rgate slots=\"a\"/></app>")
     );
 
     let cfg_str = "<app args=\"foo\">
@@ -364,7 +293,7 @@ fn app_rgates(t: &mut dyn WvTester) {
         <rgate gname=\"g\" lname=\"l\" msgsize=\"64\"/>
         <rgate name=\"test\" msgsize=\"128\" slots=\"4\"/>
     </app>";
-    let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+    let cfg = wv_require_some!(AppConfig::parse(cfg_str));
     wv_assert_eq!(t, cfg.rgates(), &[
         RGateDesc::new(DualName::new_simple("rg".to_string()), 64, 1),
         RGateDesc::new(DualName::new("l".to_string(), "g".to_string()), 64, 1),
@@ -373,20 +302,14 @@ fn app_rgates(t: &mut dyn WvTester) {
 }
 
 fn app_sgates(t: &mut dyn WvTester) {
-    wv_assert_err!(
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\"><sgate/></app>"));
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\"><sgate/></app>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\"><sgate credits=\"a\"/></app>")
     );
-    wv_assert_err!(
+    wv_assert_none!(
         t,
-        AppConfig::parse("<app args=\"foo\"><sgate credits=\"a\"/></app>"),
-        Code::InvArgs
-    );
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\"><sgate label=\"a\"/></app>"),
-        Code::InvArgs
+        AppConfig::parse("<app args=\"foo\"><sgate label=\"a\"/></app>")
     );
 
     let cfg_str = "<app args=\"foo\">
@@ -394,7 +317,7 @@ fn app_sgates(t: &mut dyn WvTester) {
         <sgate gname=\"g\" lname=\"l\" credits=\"2\"/>
         <sgate name=\"test\" credits=\"4\" label=\"4000\"/>
     </app>";
-    let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+    let cfg = wv_require_some!(AppConfig::parse(cfg_str));
     wv_assert_eq!(t, cfg.sgates(), &[
         SGateDesc::new(DualName::new_simple("sg".to_string()), 1, 0),
         SGateDesc::new(DualName::new("l".to_string(), "g".to_string()), 2, 0),
@@ -403,17 +326,13 @@ fn app_sgates(t: &mut dyn WvTester) {
 }
 
 fn app_sems(t: &mut dyn WvTester) {
-    wv_assert_err!(
-        t,
-        AppConfig::parse("<app args=\"foo\"><sem/></app>"),
-        Code::InvArgs
-    );
+    wv_assert_none!(t, AppConfig::parse("<app args=\"foo\"><sem/></app>"));
 
     let cfg_str = "<app args=\"foo\">
         <sem name=\"a\"/>
         <sem lname=\"l\" gname=\"g\"/>
     </app>";
-    let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+    let cfg = wv_require_some!(AppConfig::parse(cfg_str));
     wv_assert_eq!(t, cfg.semaphores(), &[
         SemDesc::new(DualName::new_simple("a".to_string())),
         SemDesc::new(DualName::new("l".to_string(), "g".to_string()))
@@ -424,7 +343,7 @@ fn app_serial(t: &mut dyn WvTester) {
     let cfg_str = "<app args=\"foo\">
         <serial/>
     </app>";
-    let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+    let cfg = wv_require_some!(AppConfig::parse(cfg_str));
     wv_assert_eq!(t, cfg.alloc_serial(), true);
 }
 
@@ -433,7 +352,7 @@ fn app_domains(t: &mut dyn WvTester) {
             <app args=\"bar\"/>
             <dom tile=\"perf\"><app args=\"zap\"/></dom>
         </app>";
-    let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+    let cfg = wv_require_some!(AppConfig::parse(cfg_str));
 
     // compare the relevant properties manually here, because we cannot compare AppConfig's as we
     // don't know/can't set the cfg_range.

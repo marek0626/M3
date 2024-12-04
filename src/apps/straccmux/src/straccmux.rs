@@ -62,12 +62,12 @@ fn side_rbuf_addr() -> VirtAddr {
 fn get_request<'de, R: Deserialize<'de>>(msg: &'static tcu::Message) -> Result<R, Error> {
     let mut de = M3Deserializer::new(msg.as_words());
     de.skip(1);
-    de.pop()
+    de.pop().map_err(|e| e.into())
 }
 
 fn get_reply<'de, R: Deserialize<'de>>(msg: &'static tcu::Message) -> Result<R, Error> {
     let mut de = M3Deserializer::new(msg.as_words());
-    de.pop()
+    de.pop().map_err(|e| e.into())
 }
 
 fn reply_msg(msg: &'static tcu::Message, reply: &MsgBuf) {

@@ -18,10 +18,12 @@
 
 use m3::cell::{StaticCell, StaticRefCell};
 use m3::col::Treap;
-use m3::errors::{Code, Error};
+use m3::errors::Code;
+use m3::format;
 use m3::tcu;
 
 use crate::childs::Id;
+use crate::rerrno;
 
 static CHILD_EVENTS: StaticRefCell<Treap<Id, Option<u64>>> = StaticRefCell::new(Treap::new());
 
@@ -31,7 +33,7 @@ pub fn alloc_event() -> thread::Event {
     0x8000_0000_0000_0000 | NEXT_ID.get()
 }
 
-pub fn wait_for_async(child: Id, event: thread::Event) -> Result<&'static tcu::Message, Error> {
+pub fn wait_for_async(child: Id, event: thread::Event) -> anyhow::Result<&'static tcu::Message> {
     // remember that the child waits for this event in case we remove it in the meantime
     CHILD_EVENTS.borrow_mut().set(child, Some(event));
 
@@ -41,7 +43,9 @@ pub fn wait_for_async(child: Id, event: thread::Event) -> Result<&'static tcu::M
     CHILD_EVENTS.borrow_mut().set(child, None);
 
     // fetch message for caller
-    thread::fetch_msg().ok_or_else(|| Error::new(Code::RecvGone))
+    thread::fetch_msg().ok_or_else(|| {
+        rerrno(Code::RecvGone).context(format!("thread fetch message for child {}", child))
+    })
 }
 
 pub fn remove_child(child: Id) {

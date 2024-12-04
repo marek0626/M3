@@ -13,12 +13,10 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use base::cell::{StaticCell, StaticRefCell};
 use base::cfg;
 use base::env;
-use base::errors::{Code, Error};
+use base::errors::Code;
 use base::io::LogFlags;
 use base::kif;
 use base::log;
@@ -31,6 +29,7 @@ use base::tcu::{
 use crate::platform;
 use crate::runtime::paging;
 use crate::tiles::{tilemng, KERNEL_ID};
+use crate::{kerrno, kerror};
 
 pub const KSYS_EP: EpId = PMEM_PROT_EPS as EpId + 0;
 pub const KSRV_EP: EpId = PMEM_PROT_EPS as EpId + 1;
@@ -172,7 +171,7 @@ pub fn recv_msgs(ep: EpId, buf: VirtAddr, ord: u32, msg_ord: u32) -> anyhow::Res
 
     let ep_count = get_ep_count(platform::kernel_tile()).unwrap() as EpId;
     if REPS.get() + (1 << (ord - msg_ord)) > ep_count {
-        return Err(anyhow!(Error::new(Code::NoSpace)));
+        return Err(kerrno(Code::NoSpace));
     }
 
     let (buf, phys) = rbuf_addrs(buf);
@@ -218,7 +217,7 @@ pub fn send_to(
         tile,
         ep
     );
-    TCU::send(KTMP_EP, msg, rpl_lbl, rpl_ep).map_err(|e| anyhow!(e))
+    TCU::send(KTMP_EP, msg, rpl_lbl, rpl_ep).map_err(kerror)
 }
 
 pub fn read_obj<T: Default>(tile: TileId, addr: GlobOff) -> T {
@@ -261,7 +260,7 @@ pub fn try_read_mem(
         src_tile,
         addr
     );
-    TCU::read(KTMP_EP, data, size, 0).map_err(|e| anyhow!(e))
+    TCU::read(KTMP_EP, data, size, 0).map_err(kerror)
 }
 
 pub fn write_slice<T>(tile: TileId, addr: GlobOff, sl: &[T]) {
@@ -294,7 +293,7 @@ pub fn try_write_mem(
         dst_tile,
         addr
     );
-    TCU::write(KTMP_EP, data, size, 0).map_err(|e| anyhow!(e))
+    TCU::write(KTMP_EP, data, size, 0).map_err(kerror)
 }
 
 pub fn clear(dst_tile: TileId, mut dst_addr: GlobOff, size: usize) -> anyhow::Result<()> {
@@ -366,7 +365,7 @@ pub fn get_ep_count(tile: TileId) -> anyhow::Result<usize> {
 #[allow(unused_variables)]
 pub fn set_eps_region(tile: TileId, addr: GlobAddr, size: GlobOff) -> anyhow::Result<()> {
     #[cfg(any(feature = "hw22", feature = "hw23"))]
-    return Err(anyhow!(Error::new(Code::NotSup)));
+    return Err(kerrno(Code::NotSup));
     #[cfg(not(any(feature = "hw22", feature = "hw23")))]
     {
         // clear this region to ensure that all endpoints are invalid
@@ -423,7 +422,7 @@ pub fn glob_to_phys_remote(
             None
         }
     })
-    .map_err(|e| anyhow!(e))
+    .map_err(kerror)
 }
 
 pub fn unpack_mem_ep_remote(
@@ -432,7 +431,7 @@ pub fn unpack_mem_ep_remote(
 ) -> anyhow::Result<(TileId, GlobOff, GlobOff, kif::Perm)> {
     let mut regs = [0; EP_REGS];
     read_ep_remote(tile, ep, &mut regs)?;
-    TCU::unpack_mem_regs(&regs).ok_or_else(|| anyhow!(Error::new(Code::NoMEP)))
+    TCU::unpack_mem_regs(&regs).ok_or_else(|| kerrno(Code::NoMEP))
 }
 
 pub fn read_ep_remote(tile: TileId, ep: EpId, regs: &mut [Reg]) -> anyhow::Result<()> {
@@ -566,6 +565,6 @@ fn wait_ext_cmd(tile: TileId) -> anyhow::Result<Reg> {
 
     match Code::try_from(((res >> 4) & 0x1F) as u32).unwrap() {
         Code::Success => Ok(res >> 9),
-        e => Err(anyhow!(Error::new(e))),
+        e => Err(kerrno(e)),
     }
 }

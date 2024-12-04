@@ -30,8 +30,12 @@ mod slab;
 mod syscalls;
 mod tiles;
 
+use anyhow::anyhow;
+
 use base::cfg;
 use base::env;
+use base::errors::Code;
+use base::errors::Error;
 use base::io::{self, LogFlags};
 use base::log;
 use base::machine;
@@ -50,6 +54,14 @@ extern "C" {
     fn __m3_heap_get_end() -> usize;
     fn __m3_heap_set_area(begin: usize, end: usize);
     fn __m3_heap_append(pages: usize);
+}
+
+pub fn kerrno(code: Code) -> anyhow::Error {
+    kerror(Error::new(code))
+}
+
+pub fn kerror(err: Error) -> anyhow::Error {
+    anyhow!(err)
 }
 
 #[no_mangle]

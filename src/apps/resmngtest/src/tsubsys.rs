@@ -22,6 +22,7 @@ use m3::time::TimeDuration;
 use m3::{wv_assert, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_require_some, wv_run_test};
 
 use resmng::childs::Child;
+use resmng::rerror;
 use resmng::subsys::{Subsystem, SubsystemBuilder};
 
 use crate::helper::{run_subsys, setup_resmng, TestStarter};
@@ -47,7 +48,8 @@ fn subsys_builder(t: &mut dyn WvTester) {
 
     wv_assert_ok!(
         t,
-        child_sub.add_config("<app args=\"test\"/>", |size| MemGate::new(size, Perm::RW))
+        child_sub.add_config("<app args=\"test\"/>", |size| MemGate::new(size, Perm::RW)
+            .map_err(rerror))
     );
     child_sub.add_mod(wv_require_ok!(MemCap::new(0x1000, Perm::RW)), "test");
     child_sub.add_mem(wv_require_ok!(MemCap::new(0x4000, Perm::R)), false);

@@ -23,6 +23,8 @@ pub const FUNCTION_NAME: &str = "KMAC";
 /// The output length to append for KMACXOF128 and KMACXOF256 as defined in NIST SP 800-185.
 pub const XOF_OUTPUT_LENGTH: usize = 0;
 
+/// Writes KMAC header to given buffer
+///
 /// Writes the KMAC header (function name and customization string) to the start of the buffer.
 /// This should be absorbed **before** (or prepended to) the key and actual input data to produce
 /// valid KMAC hashes. Block bytes is the block size of the underlying hash function (cSHAKE128 for
@@ -31,6 +33,8 @@ pub fn prepend_header(buf: &mut [u8], s: &str, block_bytes: usize) -> usize {
     cshake::prepend_header(buf, FUNCTION_NAME, s, block_bytes)
 }
 
+/// Writes KMAC key to given buffer
+///
 /// Writes the KMAC key to the start of the buffer. This should be absorbed **before**
 /// (or prepended to) the actual input data to produce valid KMAC hashes. Block bytes is the block
 /// size of the underlying hash function (cSHAKE128 for KMAC128 or cSHAKE256 for KMAC256).
@@ -38,6 +42,8 @@ pub fn prepend_key(buf: &mut [u8], key: &[u8], block_bytes: usize) -> usize {
     bytepad(buf, block_bytes, |buf| encode_string(buf, key))
 }
 
+/// Writes partial KMAC key to given buffer
+///
 /// Writes a partial KMAC key to the start of the buffer, leaving room for extra
 /// key bytes to be appended separately. Returns the offset where the extra key
 /// bytes should be written into the buffer. This should be absorbed **before**
@@ -55,6 +61,8 @@ pub fn write_partial_key<const B: usize>(
     off
 }
 
+/// Writes KMAC output length to given buffer
+///
 /// Writes the KMAC output length (in bits) to the start of the buffer. This should be absorbed
 /// **after** (or appended to) the actual input data to produce valid KMAC hashes.
 pub fn append_output_length(buf: &mut [u8], bits: usize) -> usize {

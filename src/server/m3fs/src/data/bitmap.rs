@@ -80,7 +80,7 @@ impl<'a> Bitmap<'a> {
     }
 }
 
-impl<'a> fmt::Debug for Bitmap<'a> {
+impl fmt::Debug for Bitmap<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         writeln!(f, "Bitmap[")?;
         for (idx, byte) in self.bytes.iter().enumerate() {

@@ -15,10 +15,11 @@
 
 use m3::col::{String, Vec};
 use m3::com::{RGateArgs, RecvCap};
-use m3::errors::Error;
 use m3::io::LogFlags;
-use m3::log;
 use m3::util::math;
+use m3::{format, log};
+
+use crate::rerror;
 
 #[derive(Default)]
 pub struct GateManager {
@@ -30,10 +31,11 @@ impl GateManager {
         Self { gates: Vec::new() }
     }
 
-    pub fn add_rgate(&mut self, name: String, msg_size: usize, slots: usize) -> Result<(), Error> {
+    pub fn add_rgate(&mut self, name: String, msg_size: usize, slots: usize) -> anyhow::Result<()> {
         let msg_order = math::next_log2(msg_size);
         let order = msg_order + math::next_log2(slots);
-        let rgate = RecvCap::new_with(RGateArgs::default().order(order).msg_order(msg_order))?;
+        let rgate = RecvCap::new_with(RGateArgs::default().order(order).msg_order(msg_order))
+            .map_err(|e| rerror(e).context(format!("create recv cap for rgate {}", name)))?;
 
         log!(
             LogFlags::ResMngGate,

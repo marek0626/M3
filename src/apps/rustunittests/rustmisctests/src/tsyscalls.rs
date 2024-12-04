@@ -18,18 +18,21 @@
 
 use m3::cap::{CapFlags, Capability, SelSpace, Selector};
 use m3::cfg::{self, PAGE_SIZE};
-use m3::client::M3FS;
+use m3::client::ClientSession;
 use m3::com::{EpMng, GateCap, MemCap, MemGate, RecvCap, RecvGate, SendCap};
 use m3::cpu::{CPUOps, CPU};
 use m3::errors::{Code, Error};
 use m3::kif::syscalls::{ActivityOp, SemOp};
 use m3::kif::{CapRngDesc, CapSel, CapType, Perm, INVALID_SEL, SEL_ACT, SEL_KMEM, SEL_TILE};
 use m3::mem::{GlobOff, VirtAddr};
-use m3::server::{CapExchange, Handler, Server, ServerSession, SessId, SessionContainer};
+use m3::server::{
+    CapExchange, ClientManager, ExcType, Handler, RequestHandler, RequestSession, Server,
+    ServerSession, SessId, SessionContainer,
+};
 use m3::syscalls;
 use m3::tcu::{EpId, FIRST_USER_EP, INVALID_EP};
-use m3::test::WvTester;
-use m3::tiles::{Activity, ActivityArgs, ChildActivity, Tile};
+use m3::test::{DefaultWvTester, WvTester};
+use m3::tiles::{Activity, ActivityArgs, ChildActivity, RunningProgramActivity, Tile};
 use m3::time::TimeDuration;
 use m3::util::math;
 use m3::vec::Vec;
@@ -1105,31 +1108,94 @@ fn exchange(t: &mut dyn WvTester) {
     );
 }
 
+struct DummySession {
+    _serv: ServerSession,
+}
+
+impl RequestSession for DummySession {
+    fn new(_serv: ServerSession, _arg: &str) -> Result<Self, Error>
+    where
+        Self: Sized,
+    {
+        Ok(Self { _serv })
+    }
+}
+
+impl DummySession {
+    fn dummy(
+        _cli: &mut ClientManager<Self>,
+        _crt: usize,
+        _sid: SessId,
+        xchg: &mut CapExchange<'_>,
+    ) -> Result<(), Error> {
+        xchg.out_caps(SelSpace::get().alloc_sels(1));
+        Ok(())
+    }
+}
+
+fn server_main() -> Result<(), Error> {
+    let mut t = DefaultWvTester::default();
+
+    let mut hdl = wv_require_ok!(RequestHandler::new());
+    let mut srv = wv_require_ok!(Server::new("test", &mut hdl));
+
+    hdl.reg_cap_handler(0usize, ExcType::Obt(1), DummySession::dummy);
+    hdl.reg_cap_handler(1usize, ExcType::Del(1), DummySession::dummy);
+
+    wv_assert_ok!(t, hdl.run(&mut srv));
+
+    Ok(())
+}
+
+fn create_server() -> RunningProgramActivity {
+    let server_tile = wv_require_ok!(Tile::get("compat|own"));
+    let serv = wv_require_ok!(ChildActivity::new_with(
+        server_tile,
+        ActivityArgs::new("server")
+    ));
+
+    wv_require_ok!(serv.run(server_main))
+}
+
+fn open_session(name: &str) -> ClientSession {
+    loop {
+        let sess_res = ClientSession::new(name);
+        if let Result::Ok(sess) = sess_res {
+            break sess;
+        }
+    }
+}
+
 fn delegate(t: &mut dyn WvTester) {
-    let m3fs = wv_require_ok!(M3FS::new(1, "m3fs-clone"));
-    let m3fs = m3fs.borrow();
-    let sess = m3fs.as_any().downcast_ref::<M3FS>().unwrap().sess();
+    let _serv = create_server();
+    let sess = open_session("test");
     let crd = CapRngDesc::new_single(CapType::Object, SEL_ACT);
 
     // invalid activity selector
     wv_assert_err!(
         t,
-        syscalls::delegate(SEL_KMEM, sess.sel(), crd, |_| {}, |_| Ok(())),
+        syscalls::delegate(SEL_KMEM, sess.sel(), crd, |is| is.push(1usize), |_| Ok(())),
         Code::InvArgs
     );
     // invalid sess selector
     wv_assert_err!(
         t,
-        syscalls::delegate(Activity::own().sel(), SEL_ACT, crd, |_| {}, |_| Ok(())),
+        syscalls::delegate(
+            Activity::own().sel(),
+            SEL_ACT,
+            crd,
+            |is| is.push(1usize),
+            |_| Ok(())
+        ),
         Code::InvArgs
     );
     // CRD can be anything (depends on server)
 }
 
 fn obtain(t: &mut dyn WvTester) {
-    let m3fs = wv_require_ok!(M3FS::new(1, "m3fs-clone"));
-    let m3fs = m3fs.borrow();
-    let sess = m3fs.as_any().downcast_ref::<M3FS>().unwrap().sess();
+    let _serv = create_server();
+    let sess = open_session("test");
+
     let sel = SelSpace::get().alloc_sel();
     let crd = CapRngDesc::new_single(CapType::Object, sel);
     let inval = CapRngDesc::new_single(CapType::Object, SEL_ACT);
@@ -1137,19 +1203,31 @@ fn obtain(t: &mut dyn WvTester) {
     // invalid activity selector
     wv_assert_err!(
         t,
-        syscalls::obtain(SEL_KMEM, sess.sel(), crd, |_| {}, |_| Ok(())),
+        syscalls::obtain(SEL_KMEM, sess.sel(), crd, |is| is.push(0usize), |_| Ok(())),
         Code::InvArgs
     );
     // invalid sess selector
     wv_assert_err!(
         t,
-        syscalls::obtain(Activity::own().sel(), SEL_ACT, crd, |_| {}, |_| Ok(())),
+        syscalls::obtain(
+            Activity::own().sel(),
+            SEL_ACT,
+            crd,
+            |is| is.push(0usize),
+            |_| Ok(())
+        ),
         Code::InvArgs
     );
     // invalid CRD
     wv_assert_err!(
         t,
-        syscalls::obtain(Activity::own().sel(), sess.sel(), inval, |_| {}, |_| Ok(())),
+        syscalls::obtain(
+            Activity::own().sel(),
+            sess.sel(),
+            inval,
+            |is| is.push(0usize),
+            |_| Ok(())
+        ),
         Code::InvArgs
     );
 }
@@ -1182,7 +1260,7 @@ fn revoke(t: &mut dyn WvTester) {
     wv_assert_err!(
         t,
         syscalls::revoke(Activity::own().sel(), crd_inv, true),
-        Code::InvArgs
+        Code::DeserFailed
     );
 }
 

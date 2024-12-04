@@ -91,6 +91,7 @@ static const char *errmsgs[] = {
     /* 60 */
     "Unspecified error",
     "Invalid capability",
+    "Deserialization failed",
     "Last cap would overflow",
     "Cap count too large",
 

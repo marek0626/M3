@@ -18,14 +18,14 @@ use m3::cell::LazyStaticRefCell;
 use m3::com::{MsgQueue, MsgSender, RecvGate, SendGate};
 use m3::errors::Error;
 use m3::io::LogFlags;
-use m3::log;
 use m3::mem::MsgBuf;
 use m3::server::DEF_MAX_CLIENTS;
 use m3::tcu;
+use m3::{format, log};
 
 use crate::childs::Id;
-use crate::events;
 use crate::resources::Resources;
+use crate::{events, rerror};
 
 pub const RBUF_MSG_SIZE: usize = 1 << 6;
 pub const RBUF_SIZE: usize = RBUF_MSG_SIZE * DEF_MAX_CLIENTS;
@@ -94,9 +94,13 @@ impl SendQueue {
         self.queue.sender().sgate.sel()
     }
 
-    pub fn send(&mut self, msg: &MsgBuf) -> Result<thread::Event, Error> {
+    pub fn send(&mut self, msg: &MsgBuf) -> anyhow::Result<thread::Event> {
         let event = events::alloc_event();
-        if !self.queue.send(event, msg)? {
+        if !self
+            .queue
+            .send(event, msg)
+            .map_err(|e| rerror(e).context(format!("message queue send to {}", self.sid())))?
+        {
             log!(LogFlags::ResMngSQueue, "{}:squeue: queuing msg", self.sid());
         }
         Ok(event)

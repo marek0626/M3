@@ -518,7 +518,7 @@ impl FileSession {
         // add new extent?
         if let Some(ref mut append_ext) = self.append_ext.take() {
             let blocksize = crate::superblock().block_size as usize;
-            let blocks = (submit + blocksize - 1) / blocksize;
+            let blocks = submit.div_ceil(blocksize);
             let old_len = append_ext.length;
 
             // append extent to file

@@ -44,11 +44,11 @@ pub fn parse_symbols<P>(syms: &mut BTreeMap<usize, Symbol>, file: P) -> Result<(
 where
     P: AsRef<Path>,
 {
-    let path = file.as_ref().to_str().ok_or_else(|| Error::InvalPath)?;
+    let path = file.as_ref().to_str().ok_or(Error::InvalPath)?;
     let (path, offset) = if path.contains("+0x") {
         let mut parts = path.split("+0x");
-        let path = parts.next().ok_or_else(|| Error::InvalPath)?;
-        let offset = parts.next().ok_or_else(|| Error::InvalPath)?;
+        let path = parts.next().ok_or(Error::InvalPath)?;
+        let offset = parts.next().ok_or(Error::InvalPath)?;
         let offset = usize::from_str_radix(offset, 16)?;
         (path, offset)
     }

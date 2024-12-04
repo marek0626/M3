@@ -20,7 +20,7 @@ use m3::col::Vec;
 use m3::mem::MemMap;
 use m3::test::WvTester;
 use m3::time::{CycleInstant, Profiler, Runner};
-use m3::{wv_assert_ok, wv_perf, wv_require_ok, wv_run_test};
+use m3::{wv_assert_some, wv_perf, wv_require_some, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, perf_alloc);
@@ -42,7 +42,7 @@ fn perf_alloc(t: &mut dyn WvTester) {
 
         fn run(&mut self) {
             for _ in 0..100 {
-                wv_assert_ok!(self.tester, self.map.allocate(0x1000, 0x1000));
+                wv_assert_some!(self.tester, self.map.allocate(0x1000, 0x1000));
             }
         }
     }
@@ -73,7 +73,7 @@ fn perf_free(_t: &mut dyn WvTester) {
             self.addrs.clear();
             for _ in 0..100 {
                 self.addrs
-                    .push(wv_require_ok!(self.map.allocate(0x1000, 0x1000)));
+                    .push(wv_require_some!(self.map.allocate(0x1000, 0x1000)));
             }
         }
 

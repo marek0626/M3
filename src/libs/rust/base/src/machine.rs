@@ -20,7 +20,6 @@
 
 use crate::cfg;
 use crate::env;
-use crate::errors::Error;
 use crate::tcu;
 
 #[cfg(feature = "coverage")]
@@ -92,7 +91,7 @@ pub fn write_coverage(_act: u64) {
     }
 }
 
-pub fn write(buf: &[u8]) -> Result<usize, Error> {
+pub fn write(buf: &[u8]) -> usize {
     let amount = tcu::TCU::print(buf);
     #[cfg(all(feature = "linux", feature = "gem5"))]
     unsafe {
@@ -116,7 +115,7 @@ pub fn write(buf: &[u8]) -> Result<usize, Error> {
             }
         }
     }
-    Ok(amount)
+    amount
 }
 
 /// Flushes the cache

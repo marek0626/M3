@@ -18,10 +18,11 @@
  */
 
 use crate::col::{String, Vec};
-use crate::errors::{Code, Error};
 use crate::serialize::{copy_str_from, str_slice_from};
 use serde::de::{DeserializeSeed, EnumAccess, SeqAccess, VariantAccess, Visitor};
 use serde::{Deserialize, Deserializer};
+
+use super::SerdeError;
 
 // The deserializer for recreating values from message
 #[derive(Debug)]
@@ -53,14 +54,14 @@ impl<'de> M3Deserializer<'de> {
 
     // retrieves an element of type T from the message slice
     #[inline(always)]
-    pub fn pop<T: Deserialize<'de>>(&mut self) -> Result<T, Error> {
+    pub fn pop<T: Deserialize<'de>>(&mut self) -> Result<T, SerdeError> {
         T::deserialize(self)
     }
 
     #[inline(always)]
-    fn pop_word(&mut self) -> Result<u64, Error> {
+    fn pop_word(&mut self) -> Result<u64, SerdeError> {
         if self.pos >= self.slice.len() {
-            return Err(Error::new(Code::InvArgs));
+            return Err(SerdeError);
         }
 
         self.pos += 1;
@@ -68,31 +69,31 @@ impl<'de> M3Deserializer<'de> {
     }
 
     #[inline(always)]
-    fn pop_str(&mut self) -> Result<String, Error> {
+    fn pop_str(&mut self) -> Result<String, SerdeError> {
         // safety: we know that the pointer and length are okay
         self.do_pop_str(|slice, pos, len| unsafe { copy_str_from(&slice[pos..], len - 1) })
     }
 
     #[inline(always)]
-    fn pop_str_slice(&mut self) -> Result<&'static str, Error> {
+    fn pop_str_slice(&mut self) -> Result<&'static str, SerdeError> {
         // safety: we know that the pointer and length are okay
         self.do_pop_str(|slice, pos, len| unsafe { str_slice_from(&slice[pos..], len - 1) })
     }
 
     #[inline(always)]
-    fn pop_byte_vec(&mut self) -> Result<Vec<u8>, Error> {
+    fn pop_byte_vec(&mut self) -> Result<Vec<u8>, SerdeError> {
         Ok(self.pop_byte_slice()?.to_vec())
     }
 
     #[inline(always)]
-    fn pop_byte_slice(&mut self) -> Result<&'static [u8], Error> {
+    fn pop_byte_slice(&mut self) -> Result<&'static [u8], SerdeError> {
         // safety: we know that the pointer and length are okay
         self.do_pop_str(|slice, pos, len| unsafe {
             core::slice::from_raw_parts(slice[pos..].as_ptr() as *const u8, len)
         })
     }
 
-    fn do_pop_str<T, F>(&mut self, f: F) -> Result<T, Error>
+    fn do_pop_str<T, F>(&mut self, f: F) -> Result<T, SerdeError>
     where
         F: Fn(&'de [u64], usize, usize) -> T,
     {
@@ -100,7 +101,7 @@ impl<'de> M3Deserializer<'de> {
 
         let npos = self.pos + (len + 7) / 8;
         if len == 0 || npos > self.slice.len() {
-            return Err(Error::new(Code::InvArgs));
+            return Err(SerdeError);
         }
 
         let res = f(self.slice, self.pos, len);
@@ -109,8 +110,8 @@ impl<'de> M3Deserializer<'de> {
     }
 }
 
-impl<'de, 'a> Deserializer<'de> for &'a mut M3Deserializer<'de> {
-    type Error = Error;
+impl<'de> Deserializer<'de> for &mut M3Deserializer<'de> {
+    type Error = SerdeError;
 
     fn is_human_readable(&self) -> bool {
         // we never want to have a human-readable serialization
@@ -218,9 +219,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut M3Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        visitor.visit_char(
-            char::from_u32(self.pop_word()? as u32).ok_or_else(|| Error::new(Code::InvArgs))?,
-        )
+        visitor.visit_char(char::from_u32(self.pop_word()? as u32).ok_or(SerdeError)?)
     }
 
     #[inline(always)]
@@ -261,7 +260,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut M3Deserializer<'de> {
         V: Visitor<'de>,
     {
         if self.pos >= self.slice.len() {
-            return Err(Error::new(Code::InvArgs));
+            return Err(SerdeError);
         }
 
         // only supported for primitive integers
@@ -391,8 +390,8 @@ impl<'de, 'a> Deserializer<'de> for &'a mut M3Deserializer<'de> {
     }
 }
 
-impl<'de, 'a> SeqAccess<'de> for &'a mut M3Deserializer<'de> {
-    type Error = Error;
+impl<'de> SeqAccess<'de> for &mut M3Deserializer<'de> {
+    type Error = SerdeError;
 
     #[inline(always)]
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
@@ -409,8 +408,8 @@ struct SizedSeqAccess<'de, 'a> {
     len: usize,
 }
 
-impl<'de, 'a> SeqAccess<'de> for SizedSeqAccess<'de, 'a> {
-    type Error = Error;
+impl<'de> SeqAccess<'de> for SizedSeqAccess<'de, '_> {
+    type Error = SerdeError;
 
     #[inline(always)]
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
@@ -431,8 +430,8 @@ impl<'de, 'a> SeqAccess<'de> for SizedSeqAccess<'de, 'a> {
     }
 }
 
-impl<'de, 'a> EnumAccess<'de> for &'a mut M3Deserializer<'de> {
-    type Error = Error;
+impl<'de> EnumAccess<'de> for &mut M3Deserializer<'de> {
+    type Error = SerdeError;
     type Variant = Self;
 
     #[inline(always)]
@@ -445,8 +444,8 @@ impl<'de, 'a> EnumAccess<'de> for &'a mut M3Deserializer<'de> {
     }
 }
 
-impl<'de, 'a> VariantAccess<'de> for &'a mut M3Deserializer<'de> {
-    type Error = Error;
+impl<'de> VariantAccess<'de> for &mut M3Deserializer<'de> {
+    type Error = SerdeError;
 
     #[inline(always)]
     fn unit_variant(self) -> Result<(), Self::Error> {

@@ -95,7 +95,7 @@ impl<'n> ThreadId<'n> {
     }
 }
 
-impl<'n> fmt::Display for ThreadId<'n> {
+impl fmt::Display for ThreadId<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(fmt, "{} [tid={:#x}]", self.bin, self.stack)
     }

@@ -8,6 +8,7 @@ path = "src/root.rs"
 crate-type = ["staticlib"]
 
 [dependencies]
+anyhow = { version = "1.0.93", default-features = false }
 m3 = { path = "../../libs/rust/m3" }
 resmng = { path = "../../libs/rust/resmng" }
 thread = { path = "../../libs/rust/thread" }

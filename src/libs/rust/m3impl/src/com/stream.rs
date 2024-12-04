@@ -128,7 +128,7 @@ impl<'r> GateIStream<'r> {
     /// Pops an object of type `T` from the message.
     #[inline(always)]
     pub fn pop<T: Deserialize<'static>>(&mut self) -> Result<T, Error> {
-        T::deserialize(&mut self.source)
+        T::deserialize(&mut self.source).map_err(|e| e.into())
     }
 
     /// Sends the message marshalled by the given [`GateOStream`] as a reply on the received
@@ -164,7 +164,7 @@ impl<'r> GateIStream<'r> {
     }
 }
 
-impl<'r> ops::Drop for GateIStream<'r> {
+impl ops::Drop for GateIStream<'_> {
     fn drop(&mut self) {
         if self.ack {
             self.rgate.ack_msg(self.msg).ok();
@@ -192,7 +192,7 @@ macro_rules! reply_vmsg {
     });
 }
 
-impl<'r> GateIStream<'r> {
+impl GateIStream<'_> {
     /// Sends the given error code as a reply.
     #[inline(always)]
     pub fn reply_error(&mut self, err: Code) -> Result<(), Error> {
@@ -216,6 +216,8 @@ pub fn recv_reply<'r>(
     rgate.receive(sgate).map(|m| GateIStream::new(m, rgate))
 }
 
+/// Receive message and unmarshall error code
+///
 /// Receives a message from `rgate` as a reply to the message that has been sent over `sgate` and
 /// unmarshalls the result (error code). If the result is an error, it returns the error and
 /// otherwise the [`GateIStream`] for the message.
@@ -232,6 +234,8 @@ pub fn recv_result<'r>(
     }
 }
 
+/// Send message and receive reply
+///
 /// Marshalls a message from `$args` and sends it via `$sg`, using `$rg` to receive the reply.
 /// Afterwards, it waits for the reply and returns the [`GateIStream`] for the reply.
 #[macro_export]
@@ -244,6 +248,8 @@ macro_rules! send_recv {
     });
 }
 
+/// Send message, receive reply, and unmarshall error code
+///
 /// Marshalls a message from `$args` and sends it via `$sg`, using `$rg` to receive the reply.
 /// Afterwards, it waits for the reply and unmarshalls the result (error code). If the result is an
 /// error, it returns the error and otherwise the [`GateIStream`] for the reply.

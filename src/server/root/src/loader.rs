@@ -36,6 +36,7 @@ use m3::util::math;
 use m3::vec;
 use m3::vfs;
 
+use resmng::rerror;
 use resmng::resources::Resources;
 
 use crate::memory;
@@ -171,7 +172,7 @@ impl<'a> BootMapper<'a> {
         tile: Rc<Tile>,
         mem_pool: Rc<RefCell<memory::MemPool>>,
         res: &'a mut Resources,
-    ) -> Result<Self, Error> {
+    ) -> anyhow::Result<Self> {
         Ok(BootMapper {
             act_sel,
             mem_sel,
@@ -194,7 +195,7 @@ impl<'a> BootMapper<'a> {
         virt: VirtAddr,
         size: usize,
         perm: Perm,
-    ) -> Result<(Selector, GlobOff), Error> {
+    ) -> anyhow::Result<(Selector, GlobOff)> {
         let alloc = self.mem_pool.borrow_mut().allocate(size as GlobOff)?;
         let msel = self.mem_pool.borrow().mem_cap(alloc.slice_id());
 
@@ -205,14 +206,15 @@ impl<'a> BootMapper<'a> {
             (alloc.addr() >> PAGE_BITS) as Selector,
             (size >> PAGE_BITS) as Selector,
             perm,
-        )?;
+        )
+        .map_err(|e| rerror(e).context("create map"))?;
 
         self.allocs.push(alloc);
         Ok((msel, alloc.addr()))
     }
 }
 
-impl<'a> Mapper for BootMapper<'a> {
+impl Mapper for BootMapper<'_> {
     fn buffer(&mut self) -> Option<&mut [u8]> {
         Some(&mut self.buf)
     }
@@ -233,7 +235,9 @@ impl<'a> Mapper for BootMapper<'a> {
         // TEEs get a copy for every region
         if self.tee || perm.contains(Perm::W) {
             let (mgate, moff) = if self.has_virtmem {
-                let (msel, moff) = self.map_mem(virt, size, perm)?;
+                let (msel, moff) = self
+                    .map_mem(virt, size, perm)
+                    .map_err(|e| e.downcast::<Error>().unwrap())?;
                 (MemGate::new_bind(msel)?, moff)
             }
             else {
@@ -270,7 +274,9 @@ impl<'a> Mapper for BootMapper<'a> {
     ) -> Result<(), Error> {
         let size = math::round_up(mem_size, PAGE_SIZE);
         if self.has_virtmem {
-            let (msel, moff) = self.map_mem(virt, size, perm)?;
+            let (msel, moff) = self
+                .map_mem(virt, size, perm)
+                .map_err(|e| e.downcast::<Error>().unwrap())?;
 
             if !flags.contains(MapFlags::UNINIT) {
                 let mgate = MemGate::new_bind(msel)?;
@@ -288,7 +294,8 @@ impl<'a> Mapper for BootMapper<'a> {
         if self.tee {
             self.mem_pool
                 .borrow_mut()
-                .make_exclusive(self.res, &self.tile)?;
+                .make_exclusive(self.res, &self.tile)
+                .map_err(|e| e.downcast::<Error>().unwrap())?;
 
             self.tile.lock()?;
         }

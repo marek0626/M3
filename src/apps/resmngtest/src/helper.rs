@@ -15,15 +15,16 @@
 
 use m3::boxed::Box;
 use m3::com::{MemCap, MemGate, RGateArgs, RecvGate};
-use m3::errors::{Code, Error, VerboseError};
+use m3::errors::{Code, Error};
 use m3::kif::Perm;
 use m3::test::WvTester;
 use m3::tiles::{ActivityArgs, ChildActivity, RunningActivity, RunningDeviceActivity, Tile};
-use m3::{wv_assert_eq, wv_assert_ok, wv_require_ok};
+use m3::{format, wv_assert_eq, wv_assert_ok, wv_require_ok};
 
 use resmng::childs::{Child, ChildManager, OwnChild};
 use resmng::config::Domain;
 use resmng::requests::Requests;
+use resmng::rerror;
 use resmng::resources::{tiles::TileUsage, Resources};
 use resmng::subsys::{ChildStarter, Subsystem, SubsystemBuilder};
 
@@ -34,7 +35,7 @@ impl ChildStarter for TestStarter {
         _reqs: &Requests,
         _res: &mut Resources,
         child: &mut OwnChild,
-    ) -> Result<(), VerboseError> {
+    ) -> anyhow::Result<()> {
         let act = wv_require_ok!(ChildActivity::new(
             child.child_tile().tile_obj().clone(),
             child.name(),
@@ -51,7 +52,7 @@ impl ChildStarter for TestStarter {
         _res: &mut Resources,
         _tile: &mut TileUsage,
         _dom: &Domain,
-    ) -> Result<(), VerboseError> {
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 }
@@ -75,7 +76,9 @@ pub fn run_subsys<F>(
 
     wv_assert_ok!(
         t,
-        child_sub.add_config(cfg, |size| MemGate::new(size, Perm::RW))
+        child_sub.add_config(cfg, |size| MemGate::new(size, Perm::RW).map_err(|e| {
+            rerror(e).context(format!("alloc MemGate with {} bytes", size))
+        }))
     );
     let tile_quota = wv_require_ok!(tile.quota());
     child_sub.add_tile(wv_require_ok!(tile.derive(

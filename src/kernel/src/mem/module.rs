@@ -13,11 +13,12 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
+use base::errors::Code;
 use base::mem::{GlobAddr, GlobOff, MemMap};
 use base::tcu::TileId;
 use core::fmt;
+
+use crate::kerrno;
 
 #[allow(dead_code)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -70,7 +71,7 @@ impl MemMod {
         self.map
             .allocate(size, align)
             .map(|addr| self.gaddr + addr)
-            .map_err(|e| anyhow!(e))
+            .ok_or_else(|| kerrno(Code::OutOfMem))
     }
 
     pub fn free(&mut self, addr: GlobAddr, size: GlobOff) -> bool {

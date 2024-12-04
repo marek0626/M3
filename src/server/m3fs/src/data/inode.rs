@@ -197,7 +197,7 @@ pub struct ExtentIterator<'e> {
     extno: usize,
 }
 
-impl<'e> core::iter::Iterator for ExtentIterator<'e> {
+impl core::iter::Iterator for ExtentIterator<'_> {
     type Item = ExtentRef;
 
     fn next(&mut self) -> Option<Self::Item> {

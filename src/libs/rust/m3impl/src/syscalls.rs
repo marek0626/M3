@@ -158,6 +158,8 @@ pub fn create_rgate(dst: Selector, order: u32, msg_order: u32) -> Result<(), Err
     send_receive_result(&buf)
 }
 
+/// Create new session for given service
+///
 /// Creates a new session at selector `dst` for service `srv` and given identifier. `auto_close`
 /// specifies whether the CLOSE message should be sent to the server as soon as all derived session
 /// capabilities have been revoked.
@@ -179,6 +181,8 @@ pub fn create_sess(
     send_receive_result(&buf)
 }
 
+/// Create virtual-memory mapping
+///
 /// Creates a new mapping at given virtual address for the given activity. The syscall maps `pages`
 /// pages to the physical memory given by `mgate`, starting at the page `first` within the physical
 /// memory using the given permissions.

@@ -21,10 +21,12 @@ use m3::tcu::TileId;
 use m3::tiles::Tile;
 
 use m3::test::WvTester;
-use m3::{wv_assert_err, wv_assert_ok, wv_require_ok, wv_run_test};
+use m3::{wv_assert_ok, wv_require_some, wv_run_test};
 
 use resmng::config::{validator, AppConfig};
 use resmng::resources::Resources;
+
+use crate::wv_assert_anyhow_err;
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, services);
@@ -43,8 +45,8 @@ fn services(t: &mut dyn WvTester) {
                 <serv name=\"s1\"/>
             </app>
         </app>";
-        let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
-        wv_assert_err!(t, validator::validate(&cfg, &res), Code::Exists);
+        let cfg = wv_require_some!(AppConfig::parse(cfg_str));
+        wv_assert_anyhow_err!(t, validator::validate(&cfg, &res), Code::Exists);
     }
 
     {
@@ -56,8 +58,8 @@ fn services(t: &mut dyn WvTester) {
                 <serv gname=\"s1\" lname=\"something\"/>
             </app>
         </app>";
-        let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
-        wv_assert_err!(t, validator::validate(&cfg, &res), Code::Exists);
+        let cfg = wv_require_some!(AppConfig::parse(cfg_str));
+        wv_assert_anyhow_err!(t, validator::validate(&cfg, &res), Code::Exists);
     }
 
     {
@@ -67,8 +69,8 @@ fn services(t: &mut dyn WvTester) {
                 <sess name=\"s2\"/>
             </app>
         </app>";
-        let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
-        wv_assert_err!(t, validator::validate(&cfg, &res), Code::NotFound);
+        let cfg = wv_require_some!(AppConfig::parse(cfg_str));
+        wv_assert_anyhow_err!(t, validator::validate(&cfg, &res), Code::NotFound);
     }
 
     {
@@ -78,8 +80,8 @@ fn services(t: &mut dyn WvTester) {
                 <sess lname=\"s1\" gname=\"s2\"/>
             </app>
         </app>";
-        let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
-        wv_assert_err!(t, validator::validate(&cfg, &res), Code::NotFound);
+        let cfg = wv_require_some!(AppConfig::parse(cfg_str));
+        wv_assert_anyhow_err!(t, validator::validate(&cfg, &res), Code::NotFound);
     }
 
     {
@@ -91,7 +93,7 @@ fn services(t: &mut dyn WvTester) {
                 <sess name=\"s1\"/>
             </app>
         </app>";
-        let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+        let cfg = wv_require_some!(AppConfig::parse(cfg_str));
         wv_assert_ok!(t, validator::validate(&cfg, &res));
     }
 }
@@ -106,8 +108,8 @@ fn gates(t: &mut dyn WvTester) {
                 <sgate name=\"s\"/>
             </app>
         </app>";
-        let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
-        wv_assert_err!(t, validator::validate(&cfg, &res), Code::NotFound);
+        let cfg = wv_require_some!(AppConfig::parse(cfg_str));
+        wv_assert_anyhow_err!(t, validator::validate(&cfg, &res), Code::NotFound);
     }
 
     {
@@ -119,8 +121,8 @@ fn gates(t: &mut dyn WvTester) {
                 <sgate lname=\"g\" gname=\"s\"/>
             </app>
         </app>";
-        let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
-        wv_assert_err!(t, validator::validate(&cfg, &res), Code::NotFound);
+        let cfg = wv_require_some!(AppConfig::parse(cfg_str));
+        wv_assert_anyhow_err!(t, validator::validate(&cfg, &res), Code::NotFound);
     }
 
     {
@@ -130,8 +132,8 @@ fn gates(t: &mut dyn WvTester) {
                 <rgate name=\"g1\"/>
             </app>
         </app>";
-        let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
-        wv_assert_err!(t, validator::validate(&cfg, &res), Code::Exists);
+        let cfg = wv_require_some!(AppConfig::parse(cfg_str));
+        wv_assert_anyhow_err!(t, validator::validate(&cfg, &res), Code::Exists);
     }
 
     {
@@ -143,8 +145,8 @@ fn gates(t: &mut dyn WvTester) {
                 <sgate name=\"g1\"/>
             </app>
         </app>";
-        let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
-        wv_assert_err!(t, validator::validate(&cfg, &res), Code::NoSpace);
+        let cfg = wv_require_some!(AppConfig::parse(cfg_str));
+        wv_assert_anyhow_err!(t, validator::validate(&cfg, &res), Code::NoSpace);
     }
 
     {
@@ -155,7 +157,7 @@ fn gates(t: &mut dyn WvTester) {
                 <sgate name=\"g1\"/>
             </app>
         </app>";
-        let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+        let cfg = wv_require_some!(AppConfig::parse(cfg_str));
         wv_assert_ok!(t, validator::validate(&cfg, &res));
     }
 }
@@ -179,8 +181,8 @@ fn tiles(t: &mut dyn WvTester) {
                 <tiles type=\"core\" count=\"2\"/>
             </app>
         </app>";
-        let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
-        wv_assert_err!(t, validator::validate(&cfg, &res), Code::NotFound);
+        let cfg = wv_require_some!(AppConfig::parse(cfg_str));
+        wv_assert_anyhow_err!(t, validator::validate(&cfg, &res), Code::NotFound);
     }
 
     {
@@ -189,8 +191,8 @@ fn tiles(t: &mut dyn WvTester) {
                 <tiles type=\"copy\" count=\"1\"/>
             </app>
         </app>";
-        let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
-        wv_assert_err!(t, validator::validate(&cfg, &res), Code::NotFound);
+        let cfg = wv_require_some!(AppConfig::parse(cfg_str));
+        wv_assert_anyhow_err!(t, validator::validate(&cfg, &res), Code::NotFound);
     }
 
     {
@@ -200,7 +202,7 @@ fn tiles(t: &mut dyn WvTester) {
                 <tiles type=\"indir\" count=\"1\"/>
             </app>
         </app>";
-        let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+        let cfg = wv_require_some!(AppConfig::parse(cfg_str));
         wv_assert_ok!(t, validator::validate(&cfg, &res));
     }
 }
@@ -218,8 +220,8 @@ fn mods(t: &mut dyn WvTester) {
                 <mod name=\"nope\"/>
             </app>
         </app>";
-        let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
-        wv_assert_err!(t, validator::validate(&cfg, &res), Code::NotFound);
+        let cfg = wv_require_some!(AppConfig::parse(cfg_str));
+        wv_assert_anyhow_err!(t, validator::validate(&cfg, &res), Code::NotFound);
     }
 
     {
@@ -229,7 +231,7 @@ fn mods(t: &mut dyn WvTester) {
                 <mod lname=\"test\" gname=\"bar\"/>
             </app>
         </app>";
-        let cfg = wv_require_ok!(AppConfig::parse(cfg_str));
+        let cfg = wv_require_some!(AppConfig::parse(cfg_str));
         wv_assert_ok!(t, validator::validate(&cfg, &res));
     }
 }
