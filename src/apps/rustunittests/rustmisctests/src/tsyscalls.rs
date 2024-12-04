@@ -1260,7 +1260,7 @@ fn revoke(t: &mut dyn WvTester) {
     wv_assert_err!(
         t,
         syscalls::revoke(Activity::own().sel(), crd_inv, true),
-        Code::InvArgs
+        Code::DeserFailed
     );
 }
 

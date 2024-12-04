@@ -22,7 +22,7 @@ pub struct SerdeError;
 
 impl From<SerdeError> for Error {
     fn from(_value: SerdeError) -> Self {
-        Error::new(Code::InvArgs)
+        Error::new(Code::DeserFailed)
     }
 }
 

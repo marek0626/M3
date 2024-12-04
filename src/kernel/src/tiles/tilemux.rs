@@ -35,10 +35,10 @@ use crate::cap::{
     EPCategory, EPObject, GateObject, InvalidateType, MGateObject, RGateObject, SGateObject,
     TileObject, TileQuota,
 };
-use crate::kerrno;
 use crate::mem;
 use crate::platform;
 use crate::tiles::{tilemng, Activity, INVAL_ID};
+use crate::{kerrno, kerror};
 use crate::{ktcu, thread_startup_async};
 
 struct TileState {
@@ -676,7 +676,7 @@ impl TileMux {
 
         let r: kif::tilemux::Exit = de
             .pop()
-            .map_err(|_| kerrno(Code::InvArgs).context("Invalid request from TileMux"))?;
+            .map_err(|e| kerror(e.into()).context("Invalid request from TileMux"))?;
 
         let tile_id = tilemux.tile_id();
         log!(LogFlags::KernTMC, "TileMux[{}] received {:?}", tile_id, r);
@@ -976,7 +976,7 @@ impl TileMux {
         let mut de = base::serialize::M3Deserializer::new(reply.as_words());
         let code: Code = de
             .pop()
-            .map_err(|_| kerrno(Code::InvArgs).context("Invalid reply from TileMux"))?;
+            .map_err(|e| kerror(e.into()).context("Invalid reply from TileMux"))?;
 
         log!(
             LogFlags::KernTMC,
@@ -987,7 +987,7 @@ impl TileMux {
 
         if code == Code::Success {
             de.pop()
-                .map_err(|_| kerrno(Code::InvArgs).context("Invalid reply from TileMux"))
+                .map_err(|e| kerror(e.into()).context("Invalid reply from TileMux"))
         }
         else {
             Err(kerrno(code).context("TileMux request failed"))

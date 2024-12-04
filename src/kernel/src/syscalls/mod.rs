@@ -24,8 +24,8 @@ use base::{format, log};
 
 use thread::{Downgradable, TempRc, Upgradable, WeakRc};
 
-use crate::kerrno;
 use crate::tiles::{Activity, ActivityMng};
+use crate::{kerrno, kerror};
 
 #[macro_export]
 macro_rules! sysc_log {
@@ -76,7 +76,7 @@ fn reply_success(act: &TempRc<Activity>) {
 fn get_request<'m, R: Deserialize<'m>>(msg: &'m OwnedMessage) -> anyhow::Result<R> {
     let mut de = M3Deserializer::new(msg.as_words());
     de.skip(1);
-    de.pop().map_err(|_| kerrno(Code::InvArgs))
+    de.pop().map_err(|e| kerror(e.into()))
 }
 
 fn sync_sys<F>(act: TempRc<Activity>, func: F) -> (Option<TempRc<Activity>>, anyhow::Result<()>)

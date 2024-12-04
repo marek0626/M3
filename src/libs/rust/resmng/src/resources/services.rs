@@ -185,14 +185,14 @@ impl Session {
                 let mut de = M3Deserializer::new(reply.as_words());
                 let res: Code = de
                     .pop()
-                    .map_err(|_| rerrno(Code::InvArgs).context("session open unmarshall"))?;
+                    .map_err(|e| rerror(e.into()).context("session open unmarshall"))?;
                 if res != Code::Success {
                     return Err(rerrno(res).context("session open"));
                 }
 
                 let reply: kif::service::OpenReply = de
                     .pop()
-                    .map_err(|_| rerrno(Code::InvArgs).context("session open unmarshall"))?;
+                    .map_err(|e| rerror(e.into()).context("session open unmarshall"))?;
                 Ok(Session {
                     sel,
                     ident: reply.ident,
