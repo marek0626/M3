@@ -21,7 +21,6 @@
                     <dom>
                         <app args="/bin/rustmisctests">
                             <mount fs="m3fs" path="/"/>
-                            <sess lname="m3fs-clone" gname="m3fs"/>
                             <serv name="test"/>
                             <sess name="test" dep="false"/>
                             <tiles type="core" count="2"/>
