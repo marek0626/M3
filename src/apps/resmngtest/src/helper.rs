@@ -13,8 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use m3::boxed::Box;
 use m3::com::{MemCap, MemGate, RGateArgs, RecvGate};
 use m3::errors::{Code, Error};
@@ -26,6 +24,7 @@ use m3::{format, wv_assert_eq, wv_assert_ok, wv_require_ok};
 use resmng::childs::{Child, ChildManager, OwnChild};
 use resmng::config::Domain;
 use resmng::requests::Requests;
+use resmng::rerror;
 use resmng::resources::{tiles::TileUsage, Resources};
 use resmng::subsys::{ChildStarter, Subsystem, SubsystemBuilder};
 
@@ -78,7 +77,7 @@ pub fn run_subsys<F>(
     wv_assert_ok!(
         t,
         child_sub.add_config(cfg, |size| MemGate::new(size, Perm::RW).map_err(|e| {
-            anyhow!(e).context(format!("alloc MemGate with {} bytes", size))
+            rerror(e).context(format!("alloc MemGate with {} bytes", size))
         }))
     );
     let tile_quota = wv_require_ok!(tile.quota());

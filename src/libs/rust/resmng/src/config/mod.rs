@@ -16,18 +16,18 @@
 pub mod parser;
 pub mod validator;
 
-use anyhow::anyhow;
-
 use core::fmt;
 
 use m3::cell::Cell;
 use m3::col::{String, Vec};
-use m3::errors::{Code, Error};
+use m3::errors::Code;
 use m3::kif;
 use m3::rc::Rc;
 use m3::tcu::Label;
 use m3::time::TimeDuration;
 use m3::{cfg, format};
+
+use crate::rerrno;
 
 #[derive(Default, Eq, PartialEq)]
 pub struct DualName {
@@ -602,16 +602,14 @@ impl AppConfig {
             .iter()
             .position(|tile| tile.count.get() > 0 && tile.tile_type().matches(desc))
             .ok_or_else(|| {
-                anyhow!(Error::new(Code::InvArgs))
-                    .context(format!("child has no tile with desc {:?}", desc))
+                rerrno(Code::InvArgs).context(format!("child has no tile with desc {:?}", desc))
             })?;
 
         if self.tiles[idx].count.get() > 0 {
             Ok(idx)
         }
         else {
-            Err(anyhow!(Error::new(Code::NoSpace))
-                .context(format!("tile count exhausted for {:?}", desc)))
+            Err(rerrno(Code::NoSpace).context(format!("tile count exhausted for {:?}", desc)))
         }
     }
 

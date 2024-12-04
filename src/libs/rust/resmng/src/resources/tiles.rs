@@ -13,7 +13,7 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 
 use m3::cap::Selector;
 use m3::cell::{Cell, Ref, RefCell, RefMut};
@@ -35,6 +35,7 @@ use m3::util::math;
 use m3::{cfg, format};
 
 use crate::resources::memory::Allocation;
+use crate::{rerrno, rerror};
 
 // PMP EPs start at 1, because 0 is reserved for TileMux
 const FIRST_FREE_PMP_EP: EpId = 1;
@@ -109,7 +110,7 @@ impl TileState {
                     overwrite,
                 ) {
                     Err(e) if e.code() == Code::Exists && !overwrite => self.next_pmp_ep += 1,
-                    Err(e) => return Err(anyhow!(e).context("set PMP region")),
+                    Err(e) => return Err(rerror(e).context("set PMP region")),
                     Ok(_) => break,
                 }
             }
@@ -125,7 +126,7 @@ impl TileState {
             self.add_mem_region(
                 mgate
                     .derive(0, *size as GlobOff, Perm::RWX)
-                    .map_err(|e| anyhow!(e).context("derive inherited PMP region"))?,
+                    .map_err(|e| rerror(e).context("derive inherited PMP region"))?,
                 *size,
                 true,
                 true,
@@ -147,12 +148,10 @@ impl TileState {
             let amount = (size - pos).min(buf.len());
             src.read(&mut buf[0..amount], (src_off + pos) as GlobOff)
                 .map_err(|e| {
-                    anyhow!(e).context(format!("read {} from {}", amount, src_off + pos))
+                    rerror(e).context(format!("read {} from {}", amount, src_off + pos))
                 })?;
             dst.write(&buf[0..amount], (dst_off + pos) as GlobOff)
-                .map_err(|e| {
-                    anyhow!(e).context(format!("write {} to {}", amount, dst_off + pos))
-                })?;
+                .map_err(|e| rerror(e).context(format!("write {} to {}", amount, dst_off + pos)))?;
             pos += amount;
         }
         Ok(())
@@ -188,7 +187,7 @@ impl TileState {
         let mem_region = mux
             .mem
             .region()
-            .map_err(|e| anyhow!(e).context("mux memory region"))?;
+            .map_err(|e| rerror(e).context("mux memory region"))?;
 
         log!(
             LogFlags::ResMngTiles,
@@ -204,10 +203,10 @@ impl TileState {
             off: 0,
         };
         let hdr: elf::ElfHeaderCommon =
-            read_object(&mut muxbmod).map_err(|e| anyhow!(e).context("read mux ELF header"))?;
+            read_object(&mut muxbmod).map_err(|e| rerror(e).context("read mux ELF header"))?;
         hdr.ident
             .check_magic()
-            .map_err(|e| anyhow!(e).context("mux ELF magic"))?;
+            .map_err(|e| rerror(e).context("mux ELF magic"))?;
 
         let zeros = m3::vec![0u8; 4096];
         let mut buf = m3::vec![0u8; 4096];
@@ -215,7 +214,7 @@ impl TileState {
         muxbmod.seek(0);
         let hdr = hdr
             .load_hdr(&mut muxbmod)
-            .map_err(|e| anyhow!(e).context("read mux ELF header"))?;
+            .map_err(|e| rerror(e).context("read mux ELF header"))?;
 
         let mut off = hdr.ph_off() as GlobOff;
         for _ in 0..hdr.ph_num() {
@@ -223,7 +222,7 @@ impl TileState {
             muxbmod.seek(off);
             let phdr = hdr
                 .load_ph(&mut muxbmod)
-                .map_err(|e| anyhow!(e).context(format!("load mux PH at {}", off)))?;
+                .map_err(|e| rerror(e).context(format!("load mux PH at {}", off)))?;
             off += size_of_val(&*phdr) as GlobOff;
 
             // we're only interested in non-empty load segments
@@ -261,7 +260,7 @@ impl TileState {
                 let amount = (phdr.mem_size() - segpos).min(buf.len());
                 mux.mem
                     .write(&zeros[0..amount], (phys + segpos) as GlobOff)
-                    .map_err(|e| anyhow!(e).context("zeroing mux BSS"))?;
+                    .map_err(|e| rerror(e).context("zeroing mux BSS"))?;
                 segpos += amount;
             }
         }
@@ -271,7 +270,7 @@ impl TileState {
             let rd_mod = get_mod(initrd).with_context(|| format!("getting mod {}", initrd))?;
             let rd_size = rd_mod
                 .region()
-                .map_err(|e| anyhow!(e).context("initrd region"))?
+                .map_err(|e| rerror(e).context("initrd region"))?
                 .1 as usize;
             let rd_start = mem_size - math::round_up(rd_size, cfg::PAGE_SIZE);
 
@@ -292,7 +291,7 @@ impl TileState {
             let dtb_mod = get_mod(dtb).with_context(|| format!("getting mod {}", dtb))?;
             let dtb_size = dtb_mod
                 .region()
-                .map_err(|e| anyhow!(e).context("DTB region"))?
+                .map_err(|e| rerror(e).context("DTB region"))?
                 .1 as usize;
             // the payload of bbl starts one page behind the dtb
             assert!(dtb_size <= cfg::PAGE_SIZE);
@@ -317,7 +316,7 @@ impl TileState {
             &mut off,
             self.tile.desc().mem_offset() as GlobOff,
         )
-        .map_err(|e| anyhow!(e).context("writing mux env vars"))?;
+        .map_err(|e| rerror(e).context("writing mux env vars"))?;
 
         // init environment
         let env = env::BootEnv {
@@ -334,7 +333,7 @@ impl TileState {
                 &env,
                 (self.tile.desc().env_space().0 - self.tile.desc().mem_offset()).as_goff(),
             )
-            .map_err(|e| anyhow!(e).context("writing mux env"))?;
+            .map_err(|e| rerror(e).context("writing mux env"))?;
 
         self.start(Some(mux.mem.sel()), ep_count)
             .with_context(|| "starting mux")?;
@@ -369,7 +368,7 @@ impl TileState {
                 None,
                 self.tile
                     .ep_count()
-                    .map_err(|e| anyhow!(e).context("EP count"))?,
+                    .map_err(|e| rerror(e).context("EP count"))?,
             ),
         };
 
@@ -388,7 +387,7 @@ impl TileState {
             },
             desired_eps,
         )
-        .map_err(|e| anyhow!(e).context(format!("reset tile {} for start", self.tile.id())))?;
+        .map_err(|e| rerror(e).context(format!("reset tile {} for start", self.tile.id())))?;
 
         self.state = State::On;
         Ok(())
@@ -399,7 +398,7 @@ impl TileState {
 
         // reset the tile before we drop the MemGate for its PMP EP
         syscalls::tile_reset(self.tile.sel(), INVALID_SEL, None)
-            .map_err(|e| anyhow!(e).context(format!("reset tile {} for stop", self.tile.id())))?;
+            .map_err(|e| rerror(e).context(format!("reset tile {} for stop", self.tile.id())))?;
         self.state = State::Off;
         Ok(())
     }
@@ -465,7 +464,7 @@ impl TileUsage {
         let tile = self
             .tile_obj()
             .derive(eps, None, time, pts)
-            .map_err(|e| anyhow!(e).context("tile derive"))?;
+            .map_err(|e| rerror(e).context("tile derive"))?;
         let _quota = tile.quota().unwrap();
         log!(
             LogFlags::ResMngTiles,
@@ -555,7 +554,7 @@ impl TileManager {
                 return Ok(tile.tile.clone());
             }
         }
-        Err(anyhow!(Error::new(Code::NotFound)).context(format!("find tile {}", id)))
+        Err(rerrno(Code::NotFound).context(format!("find tile {}", id)))
     }
 
     pub fn find(&self, desc: TileDesc) -> anyhow::Result<TileUsage> {
@@ -568,7 +567,7 @@ impl TileManager {
                 return Ok(TileUsage::new(id, tile.tile.clone()));
             }
         }
-        Err(anyhow!(Error::new(Code::NotFound)).context(format!("find tile with {:?}", desc)))
+        Err(rerrno(Code::NotFound).context(format!("find tile with {:?}", desc)))
     }
 
     pub fn find_with_attr(&self, base: TileDesc, attr: &str) -> anyhow::Result<TileUsage> {
@@ -577,7 +576,6 @@ impl TileManager {
                 return Ok(usage);
             }
         }
-        Err(anyhow!(Error::new(Code::NotFound))
-            .context(format!("find tile with {:?} and {}", base, attr)))
+        Err(rerrno(Code::NotFound).context(format!("find tile with {:?} and {}", base, attr)))
     }
 }

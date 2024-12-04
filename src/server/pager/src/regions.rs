@@ -13,17 +13,19 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
 use bitflags::bitflags;
+use resmng::rerror;
+
 use core::cmp;
 use core::fmt;
+
 use m3::boxed::Box;
 use m3::cap::Selector;
 use m3::cell::RefCell;
 use m3::cfg;
 use m3::col::Vec;
 use m3::com::{GateCap, MemGate};
-use m3::errors::{Code, Error};
+use m3::errors::Code;
 use m3::format;
 use m3::io::LogFlags;
 use m3::kif::{CapRngDesc, CapType, Perm, INVALID_SEL};
@@ -31,7 +33,8 @@ use m3::log;
 use m3::mem::{GlobOff, VirtAddr};
 use m3::rc::Rc;
 use m3::syscalls;
-use resmng::childs;
+
+use resmng::{childs, rerrno};
 
 use crate::physmem::clear_block;
 use crate::physmem::{copy_block, PhysMem};
@@ -166,8 +169,7 @@ impl Region {
 
                 // allocate new memory for our copy
                 let child = childs.child_by_id_mut(self.child).ok_or_else(|| {
-                    anyhow!(Error::new(Code::ObjectGone))
-                        .context(format!("child with id {}", self.child))
+                    rerrno(Code::ObjectGone).context(format!("child with id {}", self.child))
                 })?;
                 // TODO this memory is currently only free'd on child exit
                 let (ncap, _alloc) = child.alloc_local(self.size, Perm::RWX)?;
@@ -194,14 +196,14 @@ impl Region {
                 let ncap = {
                     let ngate = ncap
                         .activate()
-                        .map_err(|e| anyhow!(e).context("activate child mem for PF"))?;
+                        .map_err(|e| rerror(e).context("activate child mem for PF"))?;
                     if osel == INVALID_SEL {
                         copy_block(&mem.request_gate()?, &ngate, off, self.size);
                     }
                     else {
                         let omem =
                             MemGate::new_foreign(osel, VirtAddr::new(off), self.size, Perm::R)
-                                .map_err(|e| anyhow!(e).context("new foreign gate for PF"))?;
+                                .map_err(|e| rerror(e).context("new foreign gate for PF"))?;
                         copy_block(&omem, &ngate, 0, self.size);
                     }
 
@@ -275,7 +277,7 @@ impl Region {
                 (self.size as usize >> cfg::PAGE_BITS) as Selector,
                 perm,
             )
-            .map_err(|e| anyhow!(e).context("create map"))?;
+            .map_err(|e| rerror(e).context("create map"))?;
             self.flags.insert(RegionFlags::MAPPED);
         }
 

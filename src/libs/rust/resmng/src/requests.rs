@@ -13,8 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use m3::boxed::Box;
 use m3::client::resmng;
 use m3::com::{opcodes, GateIStream, RecvGate};
@@ -28,8 +26,8 @@ use m3::vec::Vec;
 
 use crate::childs::{ChildManager, Id, OwnChild};
 use crate::resources::Resources;
-use crate::sendqueue;
 use crate::subsys::{ChildStarter, Subsystem};
+use crate::{rerrno, rerror, sendqueue};
 
 pub struct Requests {
     rgate: RecvGate,
@@ -143,7 +141,7 @@ impl Requests {
 
             Ok(opcodes::ResMng::GetInfo) => self.get_info(childs, res, &mut is, id),
 
-            _ => Err(anyhow!(Error::new(Code::InvArgs))),
+            _ => Err(rerrno(Code::InvArgs)),
         };
 
         match res {
@@ -159,7 +157,7 @@ impl Requests {
     }
 
     fn unmarshall<R: Deserialize<'static>>(is: &mut GateIStream<'_>) -> anyhow::Result<R> {
-        is.pop().map_err(|e| anyhow!(e).context("unmarshall"))
+        is.pop().map_err(|e| rerror(e).context("unmarshall"))
     }
 
     fn reg_serv(
@@ -289,7 +287,7 @@ impl Requests {
             .alloc_tile(res, starter, req.dst, req.desc, req.init, req.inherit_pmp)
             .and_then(|(id, desc)| {
                 reply_vmsg!(is, Code::Success, resmng::AllocTileReply { id, desc })
-                    .map_err(|e| anyhow!(e).context("alloc-tile reply"))
+                    .map_err(|e| rerror(e).context("alloc-tile reply"))
             })
     }
 
@@ -323,7 +321,7 @@ impl Requests {
                     order,
                     msg_order
                 })
-                .map_err(|e| anyhow!(e).context("use-rgate reply"))
+                .map_err(|e| rerror(e).context("use-rgate reply"))
             })
     }
 
@@ -394,7 +392,7 @@ impl Requests {
         };
 
         childs.get_info(res, id, idx).and_then(|info| {
-            reply_vmsg!(is, Code::Success, info).map_err(|e| anyhow!(e).context("get-info reply"))
+            reply_vmsg!(is, Code::Success, info).map_err(|e| rerror(e).context("get-info reply"))
         })
     }
 }

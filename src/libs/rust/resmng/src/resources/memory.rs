@@ -13,8 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use core::cmp;
 use core::fmt;
 
@@ -22,7 +20,7 @@ use m3::cap::Selector;
 use m3::cfg;
 use m3::col::Vec;
 use m3::com::MemCap;
-use m3::errors::{Code, Error};
+use m3::errors::Code;
 use m3::format;
 use m3::io::LogFlags;
 use m3::kif::Perm;
@@ -31,6 +29,9 @@ use m3::mem::{GlobAddr, GlobOff, MemMap};
 use m3::rc::Rc;
 use m3::tiles::Tile;
 use m3::util::math;
+
+use crate::rerrno;
+use crate::rerror;
 
 use super::Resources;
 
@@ -126,8 +127,7 @@ impl MemoryManager {
                 ));
             }
         }
-        Err(anyhow!(Error::new(Code::InvArgs))
-            .context(format!("find memory with {}:{} {:?}", addr, size, perm)))
+        Err(rerrno(Code::InvArgs).context(format!("find memory with {}:{} {:?}", addr, size, perm)))
     }
 
     pub fn alloc_mem(&mut self, mut size: GlobOff) -> anyhow::Result<MemSlice> {
@@ -139,7 +139,7 @@ impl MemoryManager {
                 return Ok(sl);
             }
         }
-        Err(anyhow!(Error::new(Code::NoSpace)).context(format!("allocate {}", size)))
+        Err(rerrno(Code::NoSpace).context(format!("allocate {}", size)))
     }
 
     pub fn alloc_pool(&mut self, mut size: GlobOff, size_aligned: bool) -> anyhow::Result<MemPool> {
@@ -159,8 +159,7 @@ impl MemoryManager {
             Ok(res)
         }
         else {
-            Err(anyhow!(Error::new(Code::NoSpace))
-                .context(format!("allocate pool {}, {}", size, size_aligned)))
+            Err(rerrno(Code::NoSpace).context(format!("allocate pool {}, {}", size, size_aligned)))
         }
     }
 
@@ -220,19 +219,19 @@ impl MemSlice {
         self.mem
             .mcap
             .derive(self.offset, self.size, self.perm)
-            .map_err(|e| anyhow!(e))
+            .map_err(rerror)
     }
 
     pub fn derive_with(&self, off: GlobOff, size: GlobOff) -> anyhow::Result<MemCap> {
         self.mem
             .mcap
             .derive(self.offset + off, size, self.perm)
-            .map_err(|e| anyhow!(e))
+            .map_err(rerror)
     }
 
     pub fn allocate(&mut self, size: GlobOff, align: GlobOff) -> anyhow::Result<GlobOff> {
         self.map.allocate(size, align).ok_or_else(|| {
-            anyhow!(Error::new(Code::OutOfMem))
+            rerrno(Code::OutOfMem)
                 .context(format!("memory map has no space for {}, {}", size, align))
         })
     }
@@ -356,12 +355,12 @@ impl MemPool {
                 s.mem
                     .mcap
                     .region()
-                    .map_err(|e| anyhow!(e).context("exclusive MemGate region"))?
+                    .map_err(|e| rerror(e).context("exclusive MemGate region"))?
                     .0
                     .tile(),
             )?;
             mem.make_exclusive(&mem_tile, user_tile)
-                .map_err(|e| anyhow!(e).context("make MemGate exclusive"))?;
+                .map_err(|e| rerror(e).context("make MemGate exclusive"))?;
             let slice = MemSlice::new(
                 Rc::new(MemMod::new(
                     mem,
@@ -409,7 +408,7 @@ impl MemPool {
                 return Ok(alloc);
             }
         }
-        Err(anyhow!(Error::new(Code::OutOfMem)).context(format!("allocate {} from pool", size)))
+        Err(rerrno(Code::OutOfMem).context(format!("allocate {} from pool", size)))
     }
 
     pub fn free(&mut self, alloc: Allocation) {

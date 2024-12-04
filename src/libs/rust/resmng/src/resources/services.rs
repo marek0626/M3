@@ -13,12 +13,10 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use m3::cap::{CapFlags, Capability, SelSpace, Selector};
 use m3::col::{String, Vec};
 use m3::com::SendGate;
-use m3::errors::{Code, Error};
+use m3::errors::Code;
 use m3::io::LogFlags;
 use m3::kif::CapRngDesc;
 use m3::mem::MsgBuf;
@@ -29,10 +27,10 @@ use m3::{format, log};
 
 use core::cmp::Reverse;
 
-use crate::childs;
-use crate::events;
 use crate::resources::Resources;
 use crate::sendqueue::SendQueue;
+use crate::{childs, rerrno};
+use crate::{events, rerror};
 
 pub type Id = u32;
 
@@ -88,7 +86,7 @@ impl Service {
             queue: SendQueue::new(
                 id,
                 SendGate::new_bind(sgate_sel)
-                    .map_err(|e| anyhow!(e).context("service sendgate activation"))?,
+                    .map_err(|e| rerror(e).context("service sendgate activation"))?,
             ),
             name,
             sessions,
@@ -126,15 +124,15 @@ impl Service {
             sessions,
             event,
         )
-        .map_err(|e| anyhow!(e).context("derive service"))?;
+        .map_err(|e| rerror(e).context("derive service"))?;
 
         let reply = events::wait_for_async(child, event)?;
         let mut de = M3Deserializer::new(reply.as_words());
         de.skip(1);
         let reply = de
             .pop::<kif::upcalls::DeriveSrv>()
-            .map_err(|e| anyhow!(e).context("derive service unmarshall"))?;
-        Result::from(reply.error).map_err(|e| anyhow!(e).context("derive service reply"))?;
+            .map_err(|_| rerrno(Code::InvArgs).context("derive service unmarshall"))?;
+        Result::from(reply.error).map_err(|e| rerror(e).context("derive service reply"))?;
 
         Ok(DerivedService::new(dst))
     }
@@ -187,14 +185,14 @@ impl Session {
                 let mut de = M3Deserializer::new(reply.as_words());
                 let res: Code = de
                     .pop()
-                    .map_err(|e| anyhow!(e).context("session open unmarshall"))?;
+                    .map_err(|_| rerrno(Code::InvArgs).context("session open unmarshall"))?;
                 if res != Code::Success {
-                    return Err(anyhow!(Error::new(res)).context("session open"));
+                    return Err(rerrno(res).context("session open"));
                 }
 
                 let reply: kif::service::OpenReply = de
                     .pop()
-                    .map_err(|e| anyhow!(e).context("session open unmarshall"))?;
+                    .map_err(|_| rerrno(Code::InvArgs).context("session open unmarshall"))?;
                 Ok(Session {
                     sel,
                     ident: reply.ident,
@@ -250,7 +248,7 @@ impl ServiceManager {
         self.servs
             .iter()
             .find(pred)
-            .ok_or_else(|| anyhow!(Error::new(Code::InvArgs)).context("get service"))
+            .ok_or_else(|| rerrno(Code::InvArgs).context("get service"))
     }
 
     pub fn get_mut_with<P: FnMut(&&mut Service) -> bool>(
@@ -260,7 +258,7 @@ impl ServiceManager {
         self.servs
             .iter_mut()
             .find(pred)
-            .ok_or_else(|| anyhow!(Error::new(Code::InvArgs)).context("get service"))
+            .ok_or_else(|| rerrno(Code::InvArgs).context("get service"))
     }
 
     pub fn get_mut_by_id(&mut self, id: Id) -> anyhow::Result<&mut Service> {
@@ -285,7 +283,7 @@ impl ServiceManager {
         owned: bool,
     ) -> anyhow::Result<Id> {
         if self.get_mut_by_name(&name).is_ok() {
-            return Err(anyhow!(Error::new(Code::Exists)).context(format!("add service {}", name)));
+            return Err(rerrno(Code::Exists).context(format!("add service {}", name)));
         }
 
         let serv = Service::new(

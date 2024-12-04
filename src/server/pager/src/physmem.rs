@@ -13,13 +13,12 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use m3::cap::Selector;
 use m3::cell::StaticRefCell;
 use m3::cfg;
 use m3::com::{MemCap, MemGate};
 use m3::mem::{self, GlobOff};
+use resmng::rerror;
 
 static ZEROS: mem::AlignedBuf<{ cfg::PAGE_SIZE }> = mem::AlignedBuf::new_zeroed();
 static BUF: StaticRefCell<mem::AlignedBuf<{ cfg::PAGE_SIZE }>> =
@@ -75,7 +74,7 @@ impl PhysMem {
     }
 
     pub fn request_gate(&self) -> anyhow::Result<MemGate> {
-        MemGate::new_bind(self.mcap.sel()).map_err(|e| anyhow!(e).context("bind request gate"))
+        MemGate::new_bind(self.mcap.sel()).map_err(|e| rerror(e).context("bind request gate"))
     }
 
     pub fn replace_mem(&mut self, mem: MemCap) -> MemCap {

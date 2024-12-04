@@ -17,8 +17,6 @@
 
 mod loader;
 
-use anyhow::anyhow;
-
 use m3::boxed::Box;
 use m3::cap::Selector;
 use m3::col::Vec;
@@ -37,11 +35,11 @@ use m3::vfs::FileRef;
 use m3::{cfg, format};
 
 use resmng::childs::{self, Child, ChildManager, OwnChild};
-use resmng::config;
-use resmng::requests;
 use resmng::resources::{memory, tiles, Resources};
 use resmng::sendqueue;
 use resmng::subsys;
+use resmng::{config, rerrno};
+use resmng::{requests, rerror};
 
 struct RootChildStarter {
     bmods: Vec<kif::boot::Mod>,
@@ -87,8 +85,7 @@ impl RootChildStarter {
 
         for app in domain.apps() {
             let (_mgate, addr, size) = self.fetch_mod(app.name(), true).ok_or_else(|| {
-                anyhow!(Error::new(Code::NotFound))
-                    .context(format!("Unable to find boot module {}", app.name()))
+                rerrno(Code::NotFound).context(format!("Unable to find boot module {}", app.name()))
             })?;
 
             start = start.min(addr.raw());
@@ -106,12 +103,11 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
             .iter()
             .position(|m| m.name() == name)
             .ok_or_else(|| {
-                anyhow!(Error::new(Code::NotFound))
-                    .context(format!("Boot module {} not found", name))
+                rerrno(Code::NotFound).context(format!("Boot module {} not found", name))
             })?;
         subsys::Subsystem::get_mod(idx)
             .activate()
-            .map_err(|e| anyhow!(e).context("activate boot module memory"))
+            .map_err(|e| rerror(e).context("activate boot module memory"))
     }
 
     fn start_async(
@@ -124,10 +120,9 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
 
         // if TileMux is running on that tile, we have control about the activity's virtual address
         // space and can thus load the program into the address space.
-        let bmod = if tile.mux_type().map_err(|e| anyhow!(e))? == MuxType::TileMux {
+        let bmod = if tile.mux_type().map_err(rerror)? == MuxType::TileMux {
             Some(self.fetch_mod(child.cfg().name(), false).ok_or_else(|| {
-                anyhow!(Error::new(Code::NotFound))
-                    .context(format!("fetch mod {}", child.cfg().name()))
+                rerrno(Code::NotFound).context(format!("fetch mod {}", child.cfg().name()))
             })?)
         }
         else {
@@ -139,7 +134,7 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
                 .credits(1)
                 .label(tcu::Label::from(child.id())),
         )
-        .map_err(|e| anyhow!(e).context("child sendgate"))?;
+        .map_err(|e| rerror(e).context("child sendgate"))?;
 
         let mut act = ChildActivity::new_with(
             tile.clone(),
@@ -147,7 +142,7 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
                 .resmng(resmng_scap)
                 .kmem(child.kmem()),
         )
-        .map_err(|e| anyhow!(e).context("create activity"))?;
+        .map_err(|e| rerror(e).context("create activity"))?;
 
         if Activity::own().mounts().get_by_path("/").is_some() {
             act.add_mount("/", "/");
@@ -172,12 +167,12 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
             let bmod_gate = bmod
                 .0
                 .activate()
-                .map_err(|e| anyhow!(e).context("activate boot mod"))?;
+                .map_err(|e| rerror(e).context("activate boot mod"))?;
             let bfile = loader::BootFile::new(bmod_gate, bmod.2 as usize);
             let fd = Activity::own()
                 .files()
                 .add(Box::new(bfile))
-                .map_err(|e| anyhow!(e).context("add file to activity"))?;
+                .map_err(|e| rerror(e).context("add file to activity"))?;
 
             let run = act
                 .exec_file(
@@ -185,7 +180,7 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
                     child.arguments(),
                 )
                 .map_err(|e| {
-                    anyhow!(e).context(format!("Unable to execute boot module {}", child.name()))
+                    rerror(e).context(format!("Unable to execute boot module {}", child.name()))
                 })?;
 
             for a in bmapper.fetch_allocs() {
@@ -196,7 +191,7 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
         }
         else {
             act.exec_file(None, child.arguments())
-                .map_err(|e| anyhow!(e).context("execute activity"))?
+                .map_err(|e| rerror(e).context("execute activity"))?
         };
 
         child.set_running(Box::new(run));
@@ -210,7 +205,7 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
         tile: &mut tiles::TileUsage,
         domain: &config::Domain,
     ) -> anyhow::Result<()> {
-        if tile.tile_obj().mux_type().map_err(|e| anyhow!(e))? == MuxType::TileMux {
+        if tile.tile_obj().mux_type().map_err(rerror)? == MuxType::TileMux {
             // fetch the module range in any case
             let range = self.fetch_mod_range(domain)?;
 
@@ -228,12 +223,12 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
             // create memory gate for this range
             let mgate = mslice
                 .derive()
-                .map_err(|e| anyhow!(e).context("derive from boot module"))?;
+                .map_err(|e| e.context("derive from boot module"))?;
 
             // configure PMP EP
             tile.state_mut()
                 .add_mem_region(mgate, range.1 as usize, true, true)
-                .map_err(|e| anyhow!(e).context("add PMP region for boot module"))
+                .map_err(|e| e.context("add PMP region for boot module"))
         }
         else {
             // for tiles that don't run TileMux (e.g., M³Linux), we don't need additional PMP EPs

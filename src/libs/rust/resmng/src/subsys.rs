@@ -13,7 +13,7 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 
 use m3::boxed::Box;
 use m3::cap::Selector;
@@ -21,7 +21,7 @@ use m3::cell::RefCell;
 use m3::cfg::{self, DEF_EP_COUNT, PAGE_SIZE};
 use m3::col::{String, ToString, Vec};
 use m3::com::{GateCap, MemCap, MemGate};
-use m3::errors::{Code, Error};
+use m3::errors::Code;
 use m3::io::LogFlags;
 use m3::kif::{boot, CapRngDesc, CapType, Perm, TileDesc, FIRST_FREE_SEL};
 use m3::mem::{size_of, GlobOff};
@@ -33,11 +33,11 @@ use m3::time::TimeDuration;
 use m3::util::math;
 use m3::{format, log};
 
-use crate::childs;
-use crate::config;
 use crate::config::validator;
 use crate::requests::Requests;
 use crate::resources::{memory, mods, services, tiles, Resources};
+use crate::{childs, rerrno};
+use crate::{config, rerror};
 
 //
 // Our parent/kernel initializes our cap space as follows:
@@ -72,7 +72,7 @@ pub trait ChildStarter {
     /// Returns a [`MemGate`] for the boot module with given name
     fn get_bootmod(&mut self, name: &str) -> anyhow::Result<MemGate> {
         MemGate::new_bind_bootmod(name)
-            .map_err(|e| anyhow!(e).context(format!("bootmod with name {}", name)))
+            .map_err(|e| rerror(e).context(format!("bootmod with name {}", name)))
     }
 
     /// Creates a new activity for the given child and starts it
@@ -106,32 +106,32 @@ impl Subsystem {
     pub fn new() -> anyhow::Result<(Self, Resources)> {
         let mut res = Resources::default();
         let mgate =
-            MemGate::new_bind(SUBSYS_SELS).map_err(|e| anyhow!(e).context("bootinfo MemGate"))?;
+            MemGate::new_bind(SUBSYS_SELS).map_err(|e| rerror(e).context("bootinfo MemGate"))?;
         let mut off: GlobOff = 0;
 
         let info: boot::Info = mgate
             .read_obj(0)
-            .map_err(|e| anyhow!(e).context("reading boot::Info"))?;
+            .map_err(|e| rerror(e).context("reading boot::Info"))?;
         off += size_of::<boot::Info>() as GlobOff;
 
         let mods = mgate
             .read_into_vec::<boot::Mod>(info.mod_count as usize, off)
-            .map_err(|e| anyhow!(e).context("reading boot::Mod"))?;
+            .map_err(|e| rerror(e).context("reading boot::Mod"))?;
         off += size_of::<boot::Mod>() as GlobOff * info.mod_count;
 
         let tiles = mgate
             .read_into_vec::<boot::Tile>(info.tile_count as usize, off)
-            .map_err(|e| anyhow!(e).context("reading boot::Tile"))?;
+            .map_err(|e| rerror(e).context("reading boot::Tile"))?;
         off += size_of::<boot::Tile>() as GlobOff * info.tile_count;
 
         let mems = mgate
             .read_into_vec::<boot::Mem>(info.mem_count as usize, off)
-            .map_err(|e| anyhow!(e).context("reading boot::Mem"))?;
+            .map_err(|e| rerror(e).context("reading boot::Mem"))?;
         off += size_of::<boot::Mem>() as GlobOff * info.mem_count;
 
         let servs = mgate
             .read_into_vec::<boot::Service>(info.serv_count as usize, off)
-            .map_err(|e| anyhow!(e).context("reading boot::Service"))?;
+            .map_err(|e| rerror(e).context("reading boot::Service"))?;
 
         let cfg = Self::parse_config(&mods).with_context(|| "Parsing config")?;
         let sub = Self {
@@ -232,17 +232,16 @@ impl Subsystem {
         // read boot config
         let cfg_mem = cfg_mem.unwrap();
         let memgate = MemGate::new_bind(SUBSYS_SELS + 2 + cfg_mem.0 as Selector)
-            .map_err(|e| anyhow!(e).context("boot config"))?;
+            .map_err(|e| rerror(e).context("boot config"))?;
         let xml = memgate
             .read_into_vec::<u8>(cfg_mem.1 as usize, 0)
-            .map_err(|e| anyhow!(e).context("reading boot config"))?;
+            .map_err(|e| rerror(e).context("reading boot config"))?;
 
         // parse boot config
-        let xml_str = String::from_utf8(xml).map_err(|_| {
-            anyhow!(Error::new(Code::Utf8Error)).context("XML file is not valid UTF-8")
-        })?;
+        let xml_str = String::from_utf8(xml)
+            .map_err(|_| rerrno(Code::Utf8Error).context("XML file is not valid UTF-8"))?;
         let cfg = config::AppConfig::parse(&xml_str)
-            .ok_or_else(|| anyhow!(Error::new(Code::InvArgs)).context("XML file is invalid"))?;
+            .ok_or_else(|| rerrno(Code::InvArgs).context("XML file is invalid"))?;
         Ok((xml_str, cfg))
     }
 
@@ -330,13 +329,11 @@ impl Subsystem {
             let own = res
                 .tiles()
                 .find(Activity::own().tile_desc())
-                .map_err(|e| anyhow!(e).context("allocate own tile"))?;
+                .map_err(|e| e.context("allocate own tile"))?;
             res.tiles().add_user(&own);
         }
         else if !Activity::own().tile_desc().has_virtmem() {
-            return Err(
-                anyhow!(Error::new(Code::InvArgs)).context("Can't share tile without VM support")
-            );
+            return Err(rerrno(Code::InvArgs).context("Can't share tile without VM support"));
         }
 
         // determine default mem and kmem per child
@@ -352,7 +349,7 @@ impl Subsystem {
                 .find_by_id(mem_tile)
                 .unwrap()
                 .quota()
-                .map_err(|e| anyhow!(e).context("memory tile quota"))?
+                .map_err(|e| rerror(e).context("memory tile quota"))?
                 .exclusive_regions()
                 .remaining();
             total_exregs / total_tees
@@ -369,7 +366,7 @@ impl Subsystem {
                 let own_desc = Activity::own().tile_desc();
                 let base = TileDesc::new(own_desc.tile_type(), own_desc.isa(), 0);
                 res.tiles().find_with_attr(base, &dom.tile.0).map_err(|e| {
-                    anyhow!(e).context(format!(
+                    e.context(format!(
                         "Unable to allocate tile for domain {} with {}",
                         idx, dom.tile.0,
                     ))
@@ -382,7 +379,7 @@ impl Subsystem {
                     &dom.tile.0,
                     TileArgs::default().init(false).inherit_pmp(false),
                 )
-                .map_err(|e| anyhow!(e).context(format!("Unable to get tile {}", dom.tile.0)))?;
+                .map_err(|e| rerror(e).context(format!("Unable to get tile {}", dom.tile.0)))?;
                 tiles::TileUsage::new_obj(child_tile)
             };
 
@@ -398,8 +395,7 @@ impl Subsystem {
                 res.memory_mut()
                     .alloc_pool(dom_mem, dom.tee())
                     .map_err(|e| {
-                        anyhow!(e)
-                            .context(format!("Unable to allocate memory pool with {} b", dom_mem))
+                        e.context(format!("Unable to allocate memory pool with {} b", dom_mem))
                     })?,
             ));
 
@@ -423,7 +419,7 @@ impl Subsystem {
                         let mux_mem_slice = match res.memory_mut().alloc_mem(size as GlobOff) {
                             Ok(mem) => mem,
                             Err(e) => {
-                                return Err(anyhow!(e).context(format!(
+                                return Err(e.context(format!(
                                     "Unable to allocate {}b for multiplexer",
                                     size
                                 )));
@@ -431,16 +427,14 @@ impl Subsystem {
                         };
                         mux_mem_slice
                             .derive()
-                            .map_err(|e| anyhow!(e).context("mux mem derive"))?
+                            .map_err(|e| e.context("mux mem derive"))?
                             .activate()
-                            .map_err(|e| anyhow!(e).context("mux mem activate"))
+                            .map_err(|e| rerror(e).context("mux mem activate"))
                             .map(|m| (m, None))
                     },
                     |name| match starter.get_bootmod(name) {
                         Ok(mem) => Ok(mem),
-                        Err(e) => {
-                            Err(anyhow!(e).context(format!("Unable to get boot module {}", name)))
-                        },
+                        Err(e) => Err(e.context(format!("Unable to get boot module {}", name))),
                     },
                 )?;
 
@@ -454,7 +448,7 @@ impl Subsystem {
                             true,
                             true,
                         )
-                        .map_err(|e| anyhow!(e).context("Unable to add PMP region"))?;
+                        .map_err(|e| e.context("Unable to add PMP region"))?;
                 }
             }
             else {
@@ -467,7 +461,7 @@ impl Subsystem {
                         .add_mem_region(
                             m.mgate()
                                 .derive(0, m.capacity(), Perm::RWX)
-                                .map_err(|e| anyhow!(e).context("PMP region derive"))?,
+                                .map_err(|e| rerror(e).context("PMP region derive"))?,
                             m.capacity() as usize,
                             false,
                             false,
@@ -485,7 +479,7 @@ impl Subsystem {
             let tile_quota = tile_usage
                 .tile_obj()
                 .quota()
-                .map_err(|e| anyhow!(e).context("tile quota"))?;
+                .map_err(|e| rerror(e).context("tile quota"))?;
             let (mut pt_sharer, shared_pts) = split_pts(tile_quota.page_tables().remaining(), dom);
 
             let mut domain_total_eps = tile_quota.endpoints().remaining();
@@ -512,7 +506,7 @@ impl Subsystem {
                 .kmem()
                 .derive(domain_kmem_bytes)
                 .map_err(|e| {
-                    anyhow!(e).context(format!(
+                    rerror(e).context(format!(
                         "Unable to derive {}b of kernel memory",
                         domain_kmem_bytes,
                     ))
@@ -535,7 +529,7 @@ impl Subsystem {
                 .tile_obj()
                 .set_quota(child_total_time, tile_quota.page_tables().total())
                 .map_err(|e| {
-                    anyhow!(e).context(format!(
+                    rerror(e).context(format!(
                         "Unable to set quota for tile to time={:?}, pts={}",
                         child_total_time,
                         tile_quota.page_tables().total(),
@@ -552,7 +546,7 @@ impl Subsystem {
                     tile_usage
                         .derive(domain_eps, domain_time, domain_pts)
                         .map_err(|e| {
-                            anyhow!(e).context(format!(
+                            e.context(format!(
                                 "Unable to derive new tile with eps={:?}, time={:?}, pts={:?}",
                                 domain_eps, domain_time, domain_pts,
                             ))
@@ -578,7 +572,7 @@ impl Subsystem {
                         Some(base.clone()),
                         base.derive(cfg.eps(), cfg.time(), cfg.page_tables())
                             .map_err(|e| {
-                                anyhow!(e).context(format!(
+                                e.context(format!(
                                     "Unable to derive new tile with {:?} EPs, {:?} time, {:?} pts",
                                     cfg.eps(),
                                     cfg.time(),
@@ -599,7 +593,7 @@ impl Subsystem {
                 // kernel memory for child
                 let kmem = if let Some(kmem_bytes) = cfg.kernel_mem() {
                     domain_kmem.derive(kmem_bytes).map_err(|e| {
-                        anyhow!(e)
+                        rerror(e)
                             .context(format!("Unable to derive {}b of kernel memory", kmem_bytes))
                     })?
                 }
@@ -716,9 +710,9 @@ impl Subsystem {
             cfg_slice
                 .derive_with(0, size)?
                 .activate()
-                .map_err(|e| anyhow!(e).context("activate child config MemGate"))
+                .map_err(|e| rerror(e).context("activate child config MemGate"))
         })
-        .map_err(|e| anyhow!(e).context("passing boot.xml to child"))?;
+        .map_err(|e| e.context("passing boot.xml to child"))?;
 
         // add remaining boot modules
         pass_down_mods(res.mods(), &mut sub, cfg).with_context(|| "pass down mods")?;
@@ -737,9 +731,10 @@ impl Subsystem {
         let sub_mem = old_umem_quota - child_mem.quota();
 
         // add memory
-        let sub_slice = mem_pool.borrow_mut().allocate_slice(sub_mem).map_err(|e| {
-            anyhow!(e).context(format!("Unable to allocate {}b for subsys", sub_mem))
-        })?;
+        let sub_slice = mem_pool
+            .borrow_mut()
+            .allocate_slice(sub_mem)
+            .map_err(|e| e.context(format!("Unable to allocate {}b for subsys", sub_mem)))?;
         sub.add_mem(sub_slice.derive()?, sub_slice.in_reserved_mem());
 
         // pass down memory tile with quota for exclusive regions
@@ -749,7 +744,7 @@ impl Subsystem {
             sub.add_tile(
                 mem_tile
                     .derive(None, Some(tee_count * exregs_per_tee), None, None)
-                    .map_err(|e| anyhow!(e).context("TEE memory tile derive"))?,
+                    .map_err(|e| rerror(e).context("TEE memory tile derive"))?,
             );
         }
 
@@ -782,7 +777,7 @@ impl SubsystemBuilder {
         let cfg_mem = alloc(cfg.len() as GlobOff).with_context(|| "alloc config memory")?;
         cfg_mem
             .write(cfg.as_bytes(), 0)
-            .map_err(|e| anyhow!(e).context("writing config"))?;
+            .map_err(|e| rerror(e).context("writing config"))?;
 
         // deactivate the memory gates so that the child can activate them for itself
         let cfg_mem = cfg_mem.deactivate();
@@ -834,14 +829,14 @@ impl SubsystemBuilder {
             .memory_mut()
             .alloc_mem(self.desc_size() as GlobOff)
             .map_err(|e| {
-                anyhow!(e).context(format!(
+                e.context(format!(
                     "Unable to allocate {}b for subsys info",
                     self.desc_size(),
                 ))
             })?
             .derive()?
             .activate()
-            .map_err(|e| anyhow!(e).context("activate child desc MemGate"))?;
+            .map_err(|e| rerror(e).context("activate child desc MemGate"))?;
 
         // boot info
         let info = boot::Info {
@@ -851,9 +846,9 @@ impl SubsystemBuilder {
             serv_count: self.servs.len() as u64,
         };
         mem.write_obj(&info, off)
-            .map_err(|e| anyhow!(e).context("writing child desc"))?;
+            .map_err(|e| rerror(e).context("writing child desc"))?;
         act.delegate_to(CapRngDesc::new_single(CapType::Object, mem.sel()), sel)
-            .map_err(|e| anyhow!(e).context("delegate child desc"))?;
+            .map_err(|e| rerror(e).context("delegate child desc"))?;
         off += size_of::<boot::Info>() as GlobOff;
         sel += 1;
 
@@ -863,21 +858,21 @@ impl SubsystemBuilder {
                 CapRngDesc::new_single(CapType::Object, SERIAL_RGATE_SEL),
                 sel,
             )
-            .map_err(|e| anyhow!(e).context("delegate serial rgate"))?;
+            .map_err(|e| rerror(e).context("delegate serial rgate"))?;
         }
         sel += 1;
 
         // boot modules
         for (mgate, name) in &self.mods {
             let (addr, size) = mgate.region().map_err(|e| {
-                anyhow!(e).context(format!("getting boot module region of {}", name))
+                rerror(e).context(format!("getting boot module region of {}", name))
             })?;
             let m = boot::Mod::new(addr, size, name);
             mem.write_obj(&m, off)
-                .map_err(|e| anyhow!(e).context(format!("writing boot module desc of {}", name)))?;
+                .map_err(|e| rerror(e).context(format!("writing boot module desc of {}", name)))?;
 
             act.delegate_to(CapRngDesc::new_single(CapType::Object, mgate.sel()), sel)
-                .map_err(|e| anyhow!(e).context(format!("delegate boot module {}", name)))?;
+                .map_err(|e| rerror(e).context(format!("delegate boot module {}", name)))?;
 
             off += size_of::<boot::Mod>() as GlobOff;
             sel += 1;
@@ -887,10 +882,10 @@ impl SubsystemBuilder {
         for tile in &self.tiles {
             let boot_tile = boot::Tile::new(tile.id(), tile.desc());
             mem.write_obj(&boot_tile, off)
-                .map_err(|e| anyhow!(e).context(format!("writing tile desc of {}", tile.id())))?;
+                .map_err(|e| rerror(e).context(format!("writing tile desc of {}", tile.id())))?;
 
             act.delegate_to(CapRngDesc::new_single(CapType::Object, tile.sel()), sel)
-                .map_err(|e| anyhow!(e).context(format!("delegate tile {}", tile.id())))?;
+                .map_err(|e| rerror(e).context(format!("delegate tile {}", tile.id())))?;
 
             off += size_of::<boot::Tile>() as GlobOff;
             sel += 1;
@@ -900,14 +895,14 @@ impl SubsystemBuilder {
         for (mgate, reserved) in &self.mems {
             let (addr, size) = mgate
                 .region()
-                .map_err(|e| anyhow!(e).context("getting memory region"))?;
+                .map_err(|e| rerror(e).context("getting memory region"))?;
             let boot_mem = boot::Mem::new(addr, size, *reserved);
             mem.write_obj(&boot_mem, off).map_err(|e| {
-                anyhow!(e).context(format!("writing memory desc of {}:{}", addr, size))
+                rerror(e).context(format!("writing memory desc of {}:{}", addr, size))
             })?;
 
             act.delegate_to(CapRngDesc::new_single(CapType::Object, mgate.sel()), sel)
-                .map_err(|e| anyhow!(e).context(format!("delegate memory {}:{}", addr, size)))?;
+                .map_err(|e| rerror(e).context(format!("delegate memory {}:{}", addr, size)))?;
 
             off += size_of::<boot::Mem>() as GlobOff;
             sel += 1;
@@ -921,7 +916,7 @@ impl SubsystemBuilder {
             }
             else {
                 if *sess_frac > (serv.sessions() - sess_fixed) {
-                    return Err(anyhow!(Error::new(Code::NoSpace)).context(format!(
+                    return Err(rerrno(Code::NoSpace).context(format!(
                         "insufficient session quota for {} (have {}, need {})",
                         name,
                         serv.sessions() - sess_fixed,
@@ -932,21 +927,21 @@ impl SubsystemBuilder {
             };
             let subserv = serv
                 .derive_async(child, sessions)
-                .map_err(|e| anyhow!(e).context(format!("derive from service {}", name)))?;
+                .map_err(|e| e.context(format!("derive from service {}", name)))?;
             let boot_serv = boot::Service::new(name, sessions);
             mem.write_obj(&boot_serv, off)
-                .map_err(|e| anyhow!(e).context(format!("writing service desc for {}", name)))?;
+                .map_err(|e| rerror(e).context(format!("writing service desc for {}", name)))?;
 
             act.delegate_to(
                 CapRngDesc::new_single(CapType::Object, subserv.serv_sel()),
                 sel,
             )
-            .map_err(|e| anyhow!(e).context(format!("delegate service {}", name)))?;
+            .map_err(|e| rerror(e).context(format!("delegate service {}", name)))?;
             act.delegate_to(
                 CapRngDesc::new_single(CapType::Object, subserv.sgate_sel()),
                 sel + 1,
             )
-            .map_err(|e| anyhow!(e).context(format!("delegate service SendGate {}", name)))?;
+            .map_err(|e| rerror(e).context(format!("delegate service SendGate {}", name)))?;
 
             off += size_of::<boot::Service>() as GlobOff;
             sel += 2;
@@ -1003,7 +998,7 @@ fn pass_down_mods(
             for m in child.mods() {
                 // find mod with desired name
                 let bmod = mods.find(m.name().global()).ok_or_else(|| {
-                    anyhow!(Error::new(Code::NotFound)).context(format!(
+                    rerrno(Code::NotFound).context(format!(
                         "Unable to find boot module {} for subsys",
                         m.name().global()
                     ))
@@ -1013,7 +1008,7 @@ fn pass_down_mods(
                 let mgate = bmod
                     .memory()
                     .derive(0, bmod.size(), m.perm())
-                    .map_err(|e| anyhow!(e).context("boot module derive"))?;
+                    .map_err(|e| rerror(e).context("boot module derive"))?;
 
                 sub.add_mod(mgate, bmod.name());
             }
@@ -1062,7 +1057,7 @@ fn split_mem(res: &Resources, cfg: &config::AppConfig) -> anyhow::Result<(usize,
     let mut total_kmem = Activity::own()
         .kmem()
         .quota()
-        .map_err(|e| anyhow!(e).context("kmem quota"))?
+        .map_err(|e| rerror(e).context("kmem quota"))?
         .total();
 
     let mut total_kparties = cfg.count_apps() + 1;
@@ -1074,7 +1069,7 @@ fn split_mem(res: &Resources, cfg: &config::AppConfig) -> anyhow::Result<(usize,
         for a in d.apps() {
             if let Some(kmem) = a.kernel_mem() {
                 if total_kmem < kmem {
-                    return Err(anyhow!(Error::new(Code::OutOfMem)).context(format!(
+                    return Err(rerrno(Code::OutOfMem).context(format!(
                         "Insufficient kernel memory (need {}, have {})",
                         kmem, total_kmem
                     )));
@@ -1085,7 +1080,7 @@ fn split_mem(res: &Resources, cfg: &config::AppConfig) -> anyhow::Result<(usize,
 
             if let Some(amem) = a.user_mem() {
                 if total_umem < amem as GlobOff {
-                    return Err(anyhow!(Error::new(Code::OutOfMem)).context(format!(
+                    return Err(rerrno(Code::OutOfMem).context(format!(
                         "Insufficient user memory (need {}, have {})",
                         amem, total_umem
                     )));

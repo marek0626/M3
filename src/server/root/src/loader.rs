@@ -13,8 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use core::any::Any;
 use core::cmp;
 use core::fmt;
@@ -38,6 +36,7 @@ use m3::util::math;
 use m3::vec;
 use m3::vfs;
 
+use resmng::rerror;
 use resmng::resources::Resources;
 
 use crate::memory;
@@ -208,7 +207,7 @@ impl<'a> BootMapper<'a> {
             (size >> PAGE_BITS) as Selector,
             perm,
         )
-        .map_err(|e| anyhow!(e).context("create map"))?;
+        .map_err(|e| rerror(e).context("create map"))?;
 
         self.allocs.push(alloc);
         Ok((msel, alloc.addr()))

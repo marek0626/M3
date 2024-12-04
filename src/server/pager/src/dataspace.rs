@@ -13,13 +13,11 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use m3::cap::Selector;
 use m3::cell::{RefCell, StaticCell};
 use m3::client::{ClientSession, MapFlags, M3FS};
 use m3::com::MemGate;
-use m3::errors::{Code, Error};
+use m3::errors::Code;
 use m3::io::LogFlags;
 use m3::kif;
 use m3::log;
@@ -28,7 +26,7 @@ use m3::rc::Rc;
 use m3::util::math;
 use m3::{cfg, format};
 
-use resmng::childs;
+use resmng::{childs, rerrno, rerror};
 
 use crate::physmem::PhysMem;
 use crate::regions::RegionList;
@@ -185,7 +183,7 @@ impl DataSpace {
                 // get memory cap for the region
                 // TODO add a cache for that; we request the same caps over and over again
                 let (off, len, sel) = M3FS::get_mem(&f.sess, f.offset + pf_off)
-                    .map_err(|e| anyhow!(e).context("get_mem from M3FS"))?;
+                    .map_err(|e| rerror(e).context("get_mem from M3FS"))?;
 
                 // first, resize the region to not be too large
                 reg.limit_to(pf_off, MAX_EXT_PAGES as GlobOff);
@@ -214,10 +212,9 @@ impl DataSpace {
                 // if it's writable and should not be shared, create a copy
                 if !self.flags.contains(MapFlags::SHARED) && self.perms.contains(kif::Perm::W) {
                     let src = MemGate::new_owned_bind(sel)
-                        .map_err(|e| anyhow!(e).context("bind memory for copy"))?;
+                        .map_err(|e| rerror(e).context("bind memory for copy"))?;
                     let child = childs.child_by_id_mut(self.child).ok_or_else(|| {
-                        anyhow!(Error::new(Code::ObjectGone))
-                            .context(format!("child with id {}", self.child))
+                        rerrno(Code::ObjectGone).context(format!("child with id {}", self.child))
                     })?;
                     // TODO this memory is currently only free'd on child exit
                     let (mgate, _alloc) = child.alloc_local(reg.size(), kif::Perm::RWX)?;
@@ -262,8 +259,7 @@ impl DataSpace {
                 );
 
                 let child = childs.child_by_id_mut(self.child).ok_or_else(|| {
-                    anyhow!(Error::new(Code::ObjectGone))
-                        .context(format!("child with id {}", self.child))
+                    rerrno(Code::ObjectGone).context(format!("child with id {}", self.child))
                 })?;
                 // TODO this memory is currently only free'd on child exit
                 let (mgate, _alloc) = child.alloc_local(reg.size(), kif::Perm::RWX)?;

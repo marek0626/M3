@@ -18,6 +18,10 @@
 
 #![no_std]
 
+use anyhow::anyhow;
+
+use m3::errors::{Code, Error};
+
 pub mod childs;
 pub mod config;
 mod events;
@@ -25,3 +29,11 @@ pub mod requests;
 pub mod resources;
 pub mod sendqueue;
 pub mod subsys;
+
+pub fn rerrno(code: Code) -> anyhow::Error {
+    rerror(Error::new(code))
+}
+
+pub fn rerror(err: Error) -> anyhow::Error {
+    anyhow!(err)
+}

@@ -16,15 +16,14 @@
  * General Public License version 2 for more details.
  */
 
-use anyhow::anyhow;
-
 use m3::cell::{StaticCell, StaticRefCell};
 use m3::col::Treap;
-use m3::errors::{Code, Error};
+use m3::errors::Code;
 use m3::format;
 use m3::tcu;
 
 use crate::childs::Id;
+use crate::rerrno;
 
 static CHILD_EVENTS: StaticRefCell<Treap<Id, Option<u64>>> = StaticRefCell::new(Treap::new());
 
@@ -45,8 +44,7 @@ pub fn wait_for_async(child: Id, event: thread::Event) -> anyhow::Result<&'stati
 
     // fetch message for caller
     thread::fetch_msg().ok_or_else(|| {
-        anyhow!(Error::new(Code::RecvGone))
-            .context(format!("thread fetch message for child {}", child))
+        rerrno(Code::RecvGone).context(format!("thread fetch message for child {}", child))
     })
 }
 
