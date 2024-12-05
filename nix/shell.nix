@@ -1,4 +1,4 @@
-{ nixpkgs ? <nixpkgs>, current ? <nixpkgs>, system ? builtins.currentSystem }:
+{ nixpkgs ? <nixpkgs>, system ? builtins.currentSystem }:
 with import nixpkgs { inherit system; };
 
 let
@@ -25,8 +25,7 @@ let
     # we want to have clang 15 for clang-format (the clang package is still at 11.1.0)
     m3Inputs = [
         rustup ninja llvmPackages_15.clang-unwrapped libxml2
-        # use grcov from the newer nixpkgs version to get some important bugfixes
-        python311Packages.autopep8 pkg-config current.grcov
+        python311Packages.autopep8 pkg-config grcov
     ];
 
     # building M³Linux
@@ -44,7 +43,12 @@ in mkShellNoCC {
     packages = generalInputs ++ gem5Inputs ++ crossInputs ++ m3Inputs ++ m3lxInputs ++
         lib.optionals stdenv.isDarwin darwinInputs;
 
-    hardeningDisable = [ "format" ];  # breaks cross-gcc build
+    # "format" was required for the cross-gcc build. we now specify all, because otherwise we cannot
+    # disable _FORTIFY_SOURCE anymore (which we need when building in debug mode as _FORTIFY_SOURCE
+    # apparently requires at least -O1).
+    hardeningDisable = [ "all" ];
+
+    LD_LIBRARY_PATH = lib.makeLibraryPath [ stdenv.cc.cc flex ];
 
     shellHook = ''
         # having these set breaks some configure checks
