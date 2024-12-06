@@ -99,7 +99,7 @@ class BuildTask:
         else:
             date = datetime.today().strftime('%Y-%m-%d')
             logfile = '{}/logs/{}/{}-{}.log'.format(
-                    self.cache_dir, self.name, date, self.hash())
+                self.cache_dir, self.name, date, self.hash())
         mkdir(os.path.dirname(logfile))
         log = open(logfile, 'w+')
 
