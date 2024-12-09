@@ -9,18 +9,15 @@ from datetime import datetime
 from functools import cmp_to_key
 
 CACHE_CAP = 3
+NIX_DEPS = ['nix/flake.lock', 'nix/flake.nix', 'nix/shell.nix']
+TARGET_DEPS = NIX_DEPS + ['cross/buildroot']
 
 
-def get_hash(path: str):
-    # for the root of the repository (current directory), we don't find the hash via ls-tree, but
-    # have to use rev-parse instead.
-    if path == '.':
-        res = subprocess.check_output(['git', 'rev-parse', 'HEAD'])
-        return res.split()[0].decode()
-
-    # here we receive: <perm> <type> <hash> <name>
-    res = subprocess.check_output(['git', 'ls-tree', 'HEAD', path])
-    return res.split()[2].decode()
+def get_hash(paths: [str]):
+    # determine the hash of the last commit for any of the given paths
+    # git log gives us "commit <hash> ..."
+    res = subprocess.check_output(['git', 'log', '--max-count=1', '--'] + paths)
+    return res.split()[1].decode()
 
 
 def mkdir(path: str):
@@ -53,10 +50,10 @@ def gc_dir(dir: str, max: int):
 
 
 class BuildTask:
-    def __init__(self, name: str, in_path: str, out_path: str, cache_dir: str,
+    def __init__(self, name: str, deps: [str], out_path: str, cache_dir: str,
                  cmd, shell=False, werror=False):
         self.name = name
-        self.in_path = in_path
+        self.deps = deps.copy()
         self.out_path = out_path
         self.cache_dir = cache_dir
         self.cmd = cmd
@@ -64,7 +61,7 @@ class BuildTask:
         self.werror = werror
 
     def hash(self):
-        return get_hash(self.in_path)
+        return get_hash(self.deps)
 
     def cache_path(self):
         return '{}/{}/{}'.format(self.cache_dir, self.name, self.hash())
@@ -99,7 +96,7 @@ class BuildTask:
         else:
             date = datetime.today().strftime('%Y-%m-%d')
             logfile = '{}/logs/{}/{}-{}.log'.format(
-                    self.cache_dir, self.name, date, self.hash())
+                self.cache_dir, self.name, date, self.hash())
         mkdir(os.path.dirname(logfile))
         log = open(logfile, 'w+')
 
@@ -196,7 +193,7 @@ def prepare(targets: [str], isas: [str], cache_dir: str, incremental: bool):
     for m in mods:
         t = BuildTask(
             name="submodules/{}".format(os.path.basename(m)),
-            in_path=m,
+            deps=[m],
             out_path=m,
             cache_dir=cache_dir,
             cmd=['git', 'submodule', 'update', '--init', '--recursive', m],
@@ -216,7 +213,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
     tasks = []
     for isa in ccisas:
         t = BuildTask(name="build/buildroot-{}".format(isa),
-                      in_path='cross/buildroot',
+                      deps=NIX_DEPS + ['cross/buildroot'],
                       out_path='build/cross-{}'.format(isa),
                       cache_dir=cache_dir,
                       cmd='cd cross && ./build.sh {}'.format(isa),
@@ -232,7 +229,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
             gem5isas.append('X86')
         gem5isas = gem5isas[0] if len(gem5isas) == 1 else '{' + ','.join(gem5isas) + '}'
         t = BuildTask(name="build/gem5",
-                      in_path="platform/gem5",
+                      deps=NIX_DEPS + ["platform/gem5"],
                       out_path="platform/gem5/build",
                       cache_dir=cache_dir,
                       cmd='cd platform/gem5 && scons -j32 build/' + gem5isas + '/gem5.opt',
@@ -242,7 +239,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
     # ensure that we install the requested nightly version for M³
     # and have the target for M³Lx available.
     t = BuildTask(name='build/rustup',
-                  in_path='rust-toolchain.toml',
+                  deps=NIX_DEPS + ['rust-toolchain.toml'],
                   out_path='.rustup',
                   cache_dir=cache_dir,
                   cmd=['rustup', 'target', 'add', 'riscv64gc-unknown-linux-gnu'])
@@ -258,7 +255,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
                 if tgt != 'gem5' and isa != 'riscv64':
                     continue
                 t = BuildTask(name='build/m3-{}-{}-{}'.format(tgt, isa, build),
-                              in_path='.',
+                              deps=TARGET_DEPS + ['.'],
                               out_path='build/{}-{}-{}'.format(tgt, isa, build),
                               cache_dir=cache_dir,
                               cmd='M3_TARGET={} M3_ISA={} M3_BUILD={} ./b'.format(tgt, isa, build),
@@ -269,7 +266,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
     # build M³Linux for riscv64
     if 'riscv64' in isas:
         t = BuildTask(name='build/m3lx',
-                      in_path='.',
+                      deps=TARGET_DEPS + ['src/m3lx'],
                       out_path='build/linux',
                       cache_dir=cache_dir,
                       cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mklx -n',
@@ -288,7 +285,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
     # build bbl separately as it has a different out_path
     if 'riscv64' in isas:
         t = BuildTask(name='build/riscv-pk',
-                      in_path='.',
+                      deps=TARGET_DEPS + ['src/m3lx/riscv-pk'],
                       out_path='build/riscv-pk',
                       cache_dir=cache_dir,
                       cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mkbbl -n',

@@ -1,7 +1,8 @@
-import os, sys
+import os
+import sys
 
-sys.path.append(os.path.realpath('platform/gem5/configs'))
-sys.path.append(os.path.realpath('platform/gem5/configs/m3'))
+sys.path.append(os.path.realpath('platform/gem5/configs'))     # NOQA
+sys.path.append(os.path.realpath('platform/gem5/configs/m3'))  # NOQA
 from base import *
 
 options = getOptions()
@@ -107,13 +108,15 @@ for i in range(0, num_kecacc):
 # create ether tiles
 ether0 = createEtherTile(noc=root.noc,
                          options=options,
-                         id=TileId(0, num_tiles + num_copy + num_indir + 1 + num_sto + num_kecacc + 0),
+                         id=TileId(0, num_tiles + num_copy + num_indir +
+                                   1 + num_sto + num_kecacc + 0),
                          memTile=None)
 tiles.append(ether0)
 
 ether1 = createEtherTile(noc=root.noc,
                          options=options,
-                         id=TileId(0, num_tiles + num_copy + num_indir + 1 + num_sto + num_kecacc + 1),
+                         id=TileId(0, num_tiles + num_copy + num_indir +
+                                   1 + num_sto + num_kecacc + 1),
                          memTile=None)
 tiles.append(ether1)
 

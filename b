@@ -748,11 +748,11 @@ case "$cmd" in
                         || errors=$((errors + 1))
                     ;;
             esac
-        done < <(find src tools boot -mindepth 1 \( -name Cargo.toml -or \
-                                                    -name "*.py" -or \
-                                                    -name "*.cc" -or \
-                                                    -name "*.h" -or \
-                                                    -name "*.xml" \) -print0)
+        done < <(find ci src tools boot -mindepth 1 \( -name Cargo.toml -or \
+                                                       -name "*.py" -or \
+                                                       -name "*.cc" -or \
+                                                       -name "*.h" -or \
+                                                       -name "*.xml" \) -print0)
         [ $errors -eq 0 ] || exit 1
         ;;
 

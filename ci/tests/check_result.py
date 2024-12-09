@@ -4,6 +4,7 @@ import math
 import re
 import sys
 
+
 def convert_unit(number, dst_unit, src_unit):
     unit_conv = {
         'ns': 1_000_000_000.0,
@@ -13,6 +14,7 @@ def convert_unit(number, dst_unit, src_unit):
         'cycles': 1.0,
     }
     return number * (unit_conv[dst_unit] / unit_conv[src_unit])
+
 
 class PerfResult:
     def __init__(self, name, time, unit, variance, runs):
@@ -25,6 +27,7 @@ class PerfResult:
     def __repr__(self):
         return "PERF[{}] = {} {} ({} with {} runs)\n".format(self.name, self.time, self.unit, self.variance, self.runs)
 
+
 class TestResult:
     def __init__(self, name, desc):
         self.name = name
@@ -34,6 +37,7 @@ class TestResult:
         if self.name == "":
             return self.desc
         return self.name + ": " + self.desc
+
 
 class Result:
     def __init__(self):
@@ -67,13 +71,16 @@ class Result:
                 str += "  " + repr(self.perfs[p])
         return str
 
-re_test   = re.compile('^Testing "(.*?)" in (.*?):$')
-re_failed = re.compile('^!\s+([^:]+):(\d+)\s+(.*?) FAILED$')
-re_perf   = re.compile('^.*!\s+([^:]+):(\d+)\s+PERF\s+"(.*?)": ([\d\.]+) (\S+?) \(\+/\- ([0-9\-\.]+)( \S+)? with (\d+) runs\)$')
-re_shdn   = re.compile('^.*\[(PE0:\S+\s*@\s*\d+|\S+\s*@.*?)\].*Shutting down$')
-re_fsck   = re.compile('^.*(m3fsck:.*)$')
-re_exit   = re.compile('^.*Child .*? exited with exitcode')
-re_panic  = re.compile('^.*PANIC at(.*)$')
+
+re_test = re.compile(r'^Testing "(.*?)" in (.*?):$')
+re_failed = re.compile(r'^!\s+([^:]+):(\d+)\s+(.*?) FAILED$')
+re_perf = re.compile(
+    r'^.*!\s+([^:]+):(\d+)\s+PERF\s+"(.*?)": ([\d\.]+) (\S+?) \(\+/\- ([0-9\-\.]+)( \S+)? with (\d+) runs\)$')
+re_shdn = re.compile(r'^.*\[(PE0:\S+\s*@\s*\d+|\S+\s*@.*?)\].*Shutting down$')
+re_fsck = re.compile(r'^.*(m3fsck:.*)$')
+re_exit = re.compile(r'^.*Child .*? exited with exitcode')
+re_panic = re.compile(r'^.*PANIC at(.*)$')
+
 
 def parse_output(file):
     failed_asserts = 0
@@ -86,7 +93,7 @@ def parse_output(file):
         while line != '':
             line = line.strip()
             # remove escape codes from line; otherwise the regular expressions don't work
-            line = re.sub("\033\[.*?m", '', line)
+            line = re.sub(r"\033\[.*?m", '', line)
             # special handling for the TCU abort test
             if line.startswith("info: "):
                 line = line[6:]
@@ -130,6 +137,7 @@ def parse_output(file):
         res.failed_tests += 1
         res.add_failed_test("", seen_fsck)
     return res
+
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:

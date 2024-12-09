@@ -8,7 +8,7 @@ import shutil
 import sys
 from pathlib import Path
 
-sys.path.append(os.path.realpath('ci/tests'))
+sys.path.append(os.path.realpath('ci/tests'))  # NOQA
 import check_result
 
 pp = pprint.PrettyPrinter()
@@ -215,7 +215,7 @@ with open(args.output + '/index.html', 'w') as report:
             except:
                 pass
             report.write("    <td align=\"center\" class=\"{}\"><a href=\"{}/tests/{}.html\">{} / {}</a></td>\n"
-                .format("success" if fail == 0 else "failed", key, test, succ, fail + succ))
+                         .format("success" if fail == 0 else "failed", key, test, succ, fail + succ))
 
         # collect relative performance changes
         base = {}
