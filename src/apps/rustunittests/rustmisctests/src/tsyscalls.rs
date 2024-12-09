@@ -800,25 +800,21 @@ fn derive_kmem(t: &mut dyn WvTester) {
         Code::InvArgs
     );
 
-    // do that test twice, because we might cause pagefaults during the first test, changing the
-    // kernel memory quota (our pager shares the kmem with us).
-    for i in 0..=1 {
-        let before = wv_require_ok!(Activity::own().kmem().quota()).remaining();
-        // transfer memory
-        {
-            let kmem2 = wv_require_ok!(Activity::own().kmem().derive(before / 2));
-            let quota2 = wv_require_ok!(kmem2.quota()).remaining();
-            let nquota = wv_require_ok!(Activity::own().kmem().quota()).remaining();
-            wv_assert_eq!(t, quota2, before / 2);
-            // we don't know exactly, because we have paid for the new cap and kobject too
-            wv_assert!(t, nquota <= before / 2);
-        }
-        // only do the check in the second test where no pagefaults should occur
-        if i == 1 {
-            let nquota = wv_require_ok!(Activity::own().kmem().quota()).remaining();
-            wv_assert_eq!(t, nquota, before);
-        }
+    // check kmem derivation accounting
+    let available = wv_require_ok!(Activity::own().kmem().quota()).remaining();
+    let parent = wv_require_ok!(Activity::own().kmem().derive(available / 2));
+    let parent_before = wv_require_ok!(parent.quota()).remaining();
+    {
+        let parent_half = parent_before / 2;
+        let child = wv_require_ok!(parent.derive(parent_half));
+        let child_quota = wv_require_ok!(child.quota()).remaining();
+        let nquota = wv_require_ok!(parent.quota()).remaining();
+        wv_assert_eq!(t, child_quota, parent_half);
+        // we don't know exactly, because we have paid for the new cap and kobject too
+        wv_assert_eq!(t, nquota, parent_before - parent_half);
     }
+    let parent_after = wv_require_ok!(parent.quota()).remaining();
+    wv_assert_eq!(t, parent_after, parent_before);
 }
 
 fn derive_tile(t: &mut dyn WvTester) {
