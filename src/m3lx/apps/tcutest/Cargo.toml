@@ -9,4 +9,4 @@ path = "src/tcutest.rs"
 
 [dependencies]
 base = { path = "../../../libs/rust/base", features = ["linux"] }
-m3impl = { path = "../../../libs/rust/m3impl", features = ["linux"] }
+m3core = { path = "../../../libs/rust/m3core", features = ["linux"] }

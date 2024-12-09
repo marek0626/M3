@@ -17,7 +17,6 @@
  */
 
 use m3::cell::StaticRefCell;
-use m3::client::Pipes;
 use m3::com::MemGate;
 use m3::errors::Code;
 use m3::io::{self, stdin, stdout, Read, Write};
@@ -26,8 +25,8 @@ use m3::mem::AlignedBuf;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{ActivityArgs, ChildActivity, RunningActivity, Tile};
 use m3::time::{CycleInstant, Profiler};
-use m3::vfs::IndirectPipe;
 use m3::{format, wv_assert_eq, wv_assert_ok, wv_perf, wv_require_ok, wv_run_test};
+use pipecli::{IndirectPipe, Pipes};
 
 const DATA_SIZE: usize = 2 * 1024 * 1024;
 const BUF_SIZE: usize = 8 * 1024;

@@ -12,7 +12,7 @@ use m3::{
     tcu::{self, EpId},
     tiles::Activity,
     time::{CycleDuration, CycleInstant, Duration, Profiler, Results, Runner},
-    vfs::{FileMode, FileRef, GenericFile, OpenFlags, VFS},
+    vfs::{File, FileMode, FileRef, OpenFlags, VFS},
 };
 
 fn wait_for_rpl(rep: EpId, rcv_buf: VirtAddr) -> Result<(), Error> {
@@ -88,7 +88,7 @@ fn bench_m3fs_read(profiler: &Profiler) -> Results<CycleDuration> {
 }
 
 struct WriteBenchmark {
-    file: FileRef<GenericFile>,
+    file: FileRef<dyn File>,
     content: String,
 }
 
@@ -155,7 +155,7 @@ fn print_summary<T: Duration + Clone>(name: &str, res: &Results<T>) {
 
 #[no_mangle]
 pub fn main() -> Result<(), Error> {
-    VFS::mount("/", "m3fs", "m3fs").unwrap();
+    VFS::mount("/", m3::client::M3FS_MAGIC, "m3fs").unwrap();
     let profiler = Profiler::default().warmup(10).repeats(100);
 
     let meta = bench_m3fs_meta(&profiler);

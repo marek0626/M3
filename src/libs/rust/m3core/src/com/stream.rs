@@ -257,9 +257,9 @@ macro_rules! send_recv {
 macro_rules! send_recv_res {
     ( $sg:expr, $rg:expr, $( $args:expr ),* ) => ({
         send_recv!($sg, $rg, $( $args ),* ).and_then(|mut reply| {
-            let res = base::errors::Code::try_from(reply.pop::<u32>()?)?;
+            let res = $crate::errors::Code::try_from(reply.pop::<u32>()?)?;
             match res {
-                base::errors::Code::Success => Ok(reply),
+                $crate::errors::Code::Success => Ok(reply),
                 e => Err(Error::new(e)),
             }
         })

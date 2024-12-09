@@ -71,7 +71,8 @@ fn udp_receiver(net: Rc<Network>, port: Port) {
 
 fn tcp_sender(net: Rc<Network>, ip: IpAddr, port: Port, wl: &str, repeats: u32) {
     // Mount fs to load binary data
-    m3::vfs::VFS::mount("/", "m3fs", "m3fs").expect("Failed to mount root filesystem on server");
+    m3::vfs::VFS::mount("/", m3::client::M3FS_MAGIC, "m3fs")
+        .expect("Failed to mount root filesystem on server");
 
     // Connect to server
     let mut socket = TcpSocket::new(
@@ -144,7 +145,8 @@ fn tcp_sender(net: Rc<Network>, ip: IpAddr, port: Port, wl: &str, repeats: u32) 
 
 fn tcu_sender(sgate: &SendGate, wl: &str, repeats: u32) {
     // Mount fs to load binary data
-    m3::vfs::VFS::mount("/", "m3fs", "m3fs").expect("Failed to mount root filesystem on server");
+    m3::vfs::VFS::mount("/", m3::client::M3FS_MAGIC, "m3fs")
+        .expect("Failed to mount root filesystem on server");
 
     let reply_gate = RecvGate::new_with(
         RGateArgs::default()

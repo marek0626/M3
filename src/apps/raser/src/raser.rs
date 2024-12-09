@@ -30,7 +30,7 @@ mod rotc;
 #[no_mangle]
 pub fn main() -> Result<(), Error> {
     log!(LogFlags::Info, "Hello World!");
-    if let Err(e) = VFS::mount("/", "m3fs", "m3fs") {
+    if let Err(e) = VFS::mount("/", m3::client::M3FS_MAGIC, "m3fs") {
         log!(LogFlags::Error, "Cannot mount file system: {}", e);
     }
 

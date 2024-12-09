@@ -11,3 +11,4 @@ crate-type = ["staticlib"]
 m3 = { path = "../../libs/rust/m3" }
 cshake = { path = "../../libs/crypto/cshake" }
 hex-literal = "0.3.4"
+pipecli = { path = "../../libs/rust/pipecli" }

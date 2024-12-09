@@ -5,11 +5,14 @@ dirs = [
     'isr',
     'lang',
     'm3',
-    'm3impl',
+    'm3core',
+    'm3files',
     'paging',
     'pci',
     'resmng',
     'thread',
+    'vtermcli',
+    'pipecli',
 ]
 
 

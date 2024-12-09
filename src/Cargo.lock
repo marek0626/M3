@@ -257,6 +257,7 @@ dependencies = [
  "cshake",
  "hex-literal",
  "m3",
+ "pipecli",
 ]
 
 [[package]]
@@ -382,7 +383,26 @@ version = "0.1.0"
 dependencies = [
  "heap",
  "lang",
- "m3impl",
+ "m3core",
+ "m3files",
+]
+
+[[package]]
+name = "m3core"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "bitflags 2.5.0",
+ "num_enum",
+ "serde",
+ "serde_repr",
+]
+
+[[package]]
+name = "m3files"
+version = "0.1.0"
+dependencies = [
+ "m3core",
 ]
 
 [[package]]
@@ -393,17 +413,6 @@ dependencies = [
  "bitflags 2.5.0",
  "m3",
  "thread",
-]
-
-[[package]]
-name = "m3impl"
-version = "0.1.0"
-dependencies = [
- "base",
- "bitflags 2.5.0",
- "num_enum",
- "serde",
- "serde_repr",
 ]
 
 [[package]]
@@ -538,6 +547,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "pipecli"
+version = "0.1.0"
+dependencies = [
+ "m3core",
+ "m3files",
+]
+
+[[package]]
 name = "pipes"
 version = "0.1.0"
 dependencies = [
@@ -631,9 +648,10 @@ dependencies = [
 name = "rots"
 version = "0.1.0"
 dependencies = [
- "base",
+ "heap",
  "kecacc",
- "m3",
+ "lang",
+ "m3core",
  "rot",
 ]
 
@@ -644,6 +662,7 @@ dependencies = [
  "cshake",
  "hex-literal",
  "m3",
+ "pipecli",
 ]
 
 [[package]]
@@ -709,13 +728,15 @@ name = "rustnettests"
 version = "0.1.0"
 dependencies = [
  "m3",
+ "pipecli",
 ]
 
 [[package]]
 name = "ruststdtest"
 version = "0.1.0"
 dependencies = [
- "m3impl",
+ "m3core",
+ "m3files",
 ]
 
 [[package]]
@@ -723,6 +744,7 @@ name = "rustvfsbenchs"
 version = "0.1.0"
 dependencies = [
  "m3",
+ "pipecli",
 ]
 
 [[package]]
@@ -730,6 +752,7 @@ name = "rustvfstests"
 version = "0.1.0"
 dependencies = [
  "m3",
+ "pipecli",
 ]
 
 [[package]]

@@ -297,7 +297,8 @@ pub fn main() -> anyhow::Result<()> {
     // mount root FS if we haven't done that yet
     let mut starter = PagedChildStarter::default();
     if vfs::VFS::stat("/").is_err() {
-        vfs::VFS::mount("/", "m3fs", "m3fs").expect("Unable to mount root filesystem");
+        vfs::VFS::mount("/", m3::client::M3FS_MAGIC, "m3fs")
+            .expect("Unable to mount root filesystem");
     }
     starter.mounts.push(("m3fs".to_string(), "/".to_string()));
 

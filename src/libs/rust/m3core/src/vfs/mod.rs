@@ -20,9 +20,9 @@
 //!
 //! The VFS provides access to file systems and files. All file systems implement the [`FileSystem`]
 //! trait, whereas files implement the [`File`] trait. The former is currently only implemented by
-//! [`M3FS`](`crate::client::M3FS`) as this is the only available file system on M³. The latter is
+//! M3FS in the m3files crate as this is the only available file system on M³. The latter is
 //! implemented by multiple types:
-//! - files that implement the *file protocol*: [`GenericFile`]
+//! - files that implement the *file protocol*: m3files::GenericFile
 //! - sockets: [`UdpSocket`](`crate::net::UdpSocket`), [`TcpSocket`](`crate::net::TcpSocket`), and
 //!   [`RawSocket`](`crate::net::RawSocket`)
 //! - file references: [`FileRef`]
@@ -81,8 +81,6 @@ mod file;
 mod fileref;
 mod filesystem;
 mod filetable;
-mod genericfile;
-mod indirpipe;
 mod mounttable;
 #[allow(clippy::module_inception)]
 mod vfs;
@@ -100,12 +98,13 @@ pub use self::dir::{DirEntry, ReadDir};
 pub use self::file::{File, FileEvent, FileInfo, FileMode, Map, OpenFlags, Seek, SeekMode, TMode};
 pub use self::fileref::FileRef;
 pub use self::filesystem::FileSystem;
-pub(crate) use self::filetable::INV_FD;
+pub use self::filetable::INV_FD;
 pub use self::filetable::{Fd, FileTable};
-pub use self::genericfile::GenericFile;
-pub use self::indirpipe::IndirectPipe;
 pub use self::mounttable::{FSHandle, MountTable};
 pub use self::waiter::FileWaiter;
+
+pub use self::filetable::register_file_type;
+pub use self::mounttable::register_fs_type;
 
 /// The VFS module provides the application-facing API for files and file systems
 ///

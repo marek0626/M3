@@ -14,33 +14,41 @@
 
 #![no_std]
 
-use base::const_assert;
+#[allow(unused_extern_crates)]
+extern crate lang;
+
+#[allow(unused_extern_crates)]
+extern crate heap;
 
 use core::cmp::min;
-
 use core::ops::Deref;
-use m3::build_vmsg;
-use m3::cell::{LazyReadOnlyCell, LazyStaticRefCell, StaticCell, StaticRefCell};
-use m3::col::{Vec, VecDeque};
-use m3::com::{opcodes, EpMng, GateIStream, MemCap, Perm, RecvGate, EP};
-use m3::crypto::{HashAlgorithm, HashType};
-use m3::errors::{Code, Error};
-use m3::io::LogFlags;
-use m3::kif::{CapRngDesc, CapType};
-use m3::mem::{size_of, AlignedBuf, GlobOff, MsgBuf, MsgBufRef, VirtAddr};
-use m3::serialize::bytes::Bytes;
-use m3::server::{
+use kecacc::{KecAcc, KecAccState};
+use m3core::cell::{LazyReadOnlyCell, LazyStaticRefCell, StaticCell, StaticRefCell};
+use m3core::col::{Vec, VecDeque};
+use m3core::com::{opcodes, EpMng, GateIStream, MemCap, Perm, RecvGate, EP};
+use m3core::crypto::{HashAlgorithm, HashType};
+use m3core::errors::{Code, Error};
+use m3core::io::LogFlags;
+use m3core::kif::{CapRngDesc, CapType};
+use m3core::mem::{size_of, AlignedBuf, GlobOff, MsgBuf, MsgBufRef, VirtAddr};
+use m3core::serialize::bytes::Bytes;
+use m3core::server::{
     server_loop, CapExchange, ClientManager, ExcType, RequestHandler, RequestSession, Server,
     ServerSession, SessId,
 };
-use m3::tcu::{EpId, Message, TCU};
-use m3::tiles::Activity;
-use m3::time::{TimeDuration, TimeInstant};
-use m3::{log, mem, reply_vmsg};
+use m3core::tcu::{EpId, Message, TCU};
+use m3core::tiles::Activity;
+use m3core::time::{TimeDuration, TimeInstant};
+use m3core::{build_vmsg, const_assert, log, mem, reply_vmsg};
 use rot::ed25519::Signer;
 use rot::{ed25519, Hex, OpaqueKMacKey, Secret};
 
-use kecacc::{KecAcc, KecAccState};
+#[no_mangle]
+pub extern "C" fn env_run() -> ! {
+    m3core::env::init();
+
+    m3core::env::run();
+}
 
 const MAX_MSG_SIZE: usize = 256;
 
@@ -159,7 +167,7 @@ impl ClientSecretArea {
 
     fn clear(&mut self) {
         unsafe {
-            m3::util::clear_volatile(self as *mut Self);
+            m3core::util::clear_volatile(self as *mut Self);
         }
     }
 }

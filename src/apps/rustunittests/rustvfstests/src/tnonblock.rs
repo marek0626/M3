@@ -13,7 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use m3::client::Pipes;
 use m3::com::MemGate;
 use m3::errors::Code;
 use m3::io::{Read, Write};
@@ -21,8 +20,9 @@ use m3::kif;
 use m3::mem::GlobOff;
 use m3::test::WvTester;
 use m3::tiles::OwnActivity;
-use m3::vfs::{File, IndirectPipe, OpenFlags, VFS};
+use m3::vfs::{File, OpenFlags, VFS};
 use m3::{wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_require_some, wv_run_test};
+use pipecli::{IndirectPipe, Pipes};
 
 const PIPE_SIZE: usize = 16;
 const DATA_SIZE: usize = PIPE_SIZE / 4;

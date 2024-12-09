@@ -62,4 +62,33 @@ extern crate heap;
 #[allow(unused_extern_crates)]
 extern crate lang;
 
-pub use m3impl::*;
+use core::ptr;
+
+pub use m3core::*;
+pub use m3files::*;
+
+pub mod vfs {
+    pub use m3core::vfs::*;
+    pub use m3files::*;
+}
+
+pub mod client {
+    pub use m3core::client::*;
+    pub use m3files::client::*;
+}
+
+extern "C" {
+    fn __m3_init_libc(argc: i32, argv: *const *const u8, envp: *const *const u8, tls: bool);
+}
+
+#[no_mangle]
+pub extern "C" fn env_run() -> ! {
+    unsafe {
+        __m3_init_libc(0, ptr::null(), ptr::null(), false);
+    }
+
+    m3files::vfs_init().expect("Couldn't init vfs subsystem.");
+    m3core::env::init();
+
+    m3core::env::run();
+}

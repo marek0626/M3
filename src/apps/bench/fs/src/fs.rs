@@ -27,7 +27,8 @@ use m3::{println, wv_run_suite};
 #[no_mangle]
 pub fn main() -> Result<(), Error> {
     // Mount fs to load binary data
-    m3::vfs::VFS::mount("/", "m3fs", "m3fs").expect("Failed to mount root filesystem on server");
+    m3::vfs::VFS::mount("/", m3::client::M3FS_MAGIC, "m3fs")
+        .expect("Failed to mount root filesystem on server");
 
     let mut tester = DefaultWvTester::default();
     wv_run_suite!(tester, brdwr::run);

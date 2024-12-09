@@ -15,7 +15,7 @@
 use cshake::kmac;
 use hex_literal::hex;
 
-use m3::client::{HashInput, HashOutput, Pipes, RoTSession};
+use m3::client::{HashInput, HashOutput, RoTSession};
 use m3::col::Vec;
 use m3::com::{MemCap, MemGate, Perm};
 use m3::crypto::{HashAlgorithm, HashType};
@@ -25,11 +25,12 @@ use m3::io::{Read, Write};
 use m3::mem::{GlobOff, VirtAddr};
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ChildActivity, RunningActivity, RunningProgramActivity, Tile};
-use m3::vfs::{File, FileRef, IndirectPipe, OpenFlags, Seek, SeekMode, VFS};
+use m3::vfs::{File, FileRef, OpenFlags, Seek, SeekMode, VFS};
 use m3::{
     format, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_require_some, wv_run_test,
 };
 use m3::{println, tmif, util, vec};
+use pipecli::{IndirectPipe, Pipes};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, hash_empty);

@@ -19,19 +19,25 @@
 use core::any::Any;
 use core::fmt;
 
-use crate::boxed::Box;
-use crate::cap::{SelSpace, Selector};
-use crate::cell::RefCell;
-use crate::client::ClientSession;
-use crate::col::Vec;
-use crate::com::{opcodes, recv_result, EpMng, RecvGate, SendGate, EP};
-use crate::errors::Error;
-use crate::kif;
-use crate::mem::GlobOff;
-use crate::rc::Rc;
-use crate::serialize::{M3Deserializer, M3Serializer, VecSink};
-use crate::tiles::{Activity, ChildActivity};
-use crate::vfs::{FSHandle, File, FileInfo, FileMode, FileSystem, GenericFile, OpenFlags};
+use m3core::boxed::Box;
+use m3core::cap::{SelSpace, Selector};
+use m3core::cell::RefCell;
+use m3core::client::ClientSession;
+use m3core::col::Vec;
+use m3core::com::{opcodes, recv_result, EpMng, RecvGate, SendGate, EP};
+use m3core::errors::Error;
+use m3core::kif;
+use m3core::mem::GlobOff;
+use m3core::rc::Rc;
+use m3core::serialize::{M3Deserializer, M3Serializer, VecSink};
+use m3core::tiles::{Activity, ChildActivity};
+use m3core::vfs::{FSHandle, File, FileInfo, FileMode, FileSystem, OpenFlags};
+use m3core::{send_recv, send_recv_res, send_vmsg};
+
+use crate::GenericFile;
+
+pub const M3FS_MAGIC: u8 = b'M';
+pub const M3FS_ID: &str = "m3fs";
 
 struct CachedEP {
     id: usize,

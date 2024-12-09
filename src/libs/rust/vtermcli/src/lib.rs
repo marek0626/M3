@@ -13,12 +13,15 @@
  * General Public License version 2 for more details.
  */
 
-use crate::boxed::Box;
-use crate::client::ClientSession;
-use crate::com::opcodes;
-use crate::errors::Error;
-use crate::tiles::Activity;
-use crate::vfs::{FileRef, GenericFile, OpenFlags};
+#![no_std]
+
+use m3core::boxed::Box;
+use m3core::client::ClientSession;
+use m3core::com::opcodes;
+use m3core::errors::Error;
+use m3core::tiles::Activity;
+use m3core::vfs::{FileRef, OpenFlags};
+use m3files::GenericFile;
 
 /// Represents a session at the virtual terminal server
 pub struct VTerm {

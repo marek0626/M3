@@ -16,13 +16,18 @@
  * General Public License version 2 for more details.
  */
 
-use crate::boxed::Box;
-use crate::cap::Selector;
-use crate::client::ClientSession;
-use crate::com::{opcodes, MemGate};
-use crate::errors::Error;
-use crate::kif::{CapRngDesc, CapType};
-use crate::vfs::{File, GenericFile, OpenFlags};
+#![no_std]
+
+use m3core::boxed::Box;
+use m3core::cap::Selector;
+use m3core::client::ClientSession;
+use m3core::com::{opcodes, MemGate};
+use m3core::errors::Error;
+use m3core::kif::{CapRngDesc, CapType};
+use m3core::rc::Rc;
+use m3core::tiles::Activity;
+use m3core::vfs::{Fd, File, FileRef, OpenFlags};
+use m3files::GenericFile;
 
 /// Represents a session at the pipes server
 ///
@@ -30,7 +35,7 @@ use crate::vfs::{File, GenericFile, OpenFlags};
 /// multiple readers and writes and therefore provides the same semantics as anonymous pipes on
 /// UNIX.
 ///
-/// Note that [`IndirectPipe`](`crate::vfs::IndirectPipe`) provides a convenience layer on top of
+/// Note that [`IndirectPipe`](`crate::IndirectPipe`) provides a convenience layer on top of
 /// this API.
 pub struct Pipes {
     sess: ClientSession,
@@ -108,5 +113,65 @@ impl Pipe {
             OpenFlags::W | OpenFlags::NEW_SESS
         };
         Ok(Box::new(GenericFile::new(flags, crd.start(), None)))
+    }
+}
+
+/// A uni-directional communication channel
+///
+/// The `IndirectPipe` provides a uni-directional first-in-first-out communication channel with
+/// multiple readers and writes and therefore provides the same semantics as anonymous pipes on
+/// UNIX. It is called indirect, because the communication between writer and reader happens
+/// indirectly via the pipe server.
+pub struct IndirectPipe {
+    _pipe: Rc<Pipe>,
+    rd_fd: Fd,
+    wr_fd: Fd,
+}
+
+impl IndirectPipe {
+    /// Creates a new pipe at the service with given name
+    ///
+    /// The argument `mem` specifies the memory region that should be used to exchange the data.
+    /// Besides creating the pipe itself, two channels are created, one for reading and one for
+    /// writing. The methods [`IndirectPipe::reader`] and [`IndirectPipe::writer`] provide access to
+    /// these channels. In case one or both channels are delegated to another activity, the channel
+    /// can be closed via [`IndirectPipe::close_reader`] or [`IndirectPipe::close_writer`].
+    pub fn new(pipes: &Pipes, mem: MemGate) -> Result<Self, Error> {
+        let pipe = Rc::new(pipes.create_pipe(mem)?);
+        let mut files = Activity::own().files();
+        let rd_fd = files.add(pipe.create_chan(true)?)?;
+        let wr_fd = files.add(pipe.create_chan(false)?)?;
+        Ok(IndirectPipe {
+            rd_fd,
+            wr_fd,
+            _pipe: pipe,
+        })
+    }
+
+    /// Returns the file for the reading side
+    pub fn reader(&self) -> Option<FileRef<dyn File>> {
+        Activity::own().files().get_as(self.rd_fd)
+    }
+
+    /// Closes the reading side
+    pub fn close_reader(&self) {
+        Activity::own().files().remove(self.rd_fd);
+    }
+
+    /// Returns the file for the writing side
+    pub fn writer(&self) -> Option<FileRef<dyn File>> {
+        Activity::own().files().get_as(self.wr_fd)
+    }
+
+    /// Closes the writing side
+    pub fn close_writer(&self) {
+        Activity::own().files().remove(self.wr_fd);
+    }
+}
+
+impl Drop for IndirectPipe {
+    fn drop(&mut self) {
+        self.close_reader();
+        self.close_writer();
     }
 }

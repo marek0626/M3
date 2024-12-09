@@ -8,4 +8,5 @@ path = "src/ruststdtest.rs"
 crate-type = ["staticlib"]
 
 [dependencies]
-m3impl = { path = "../../libs/rust/m3impl" }
+m3core = { path = "../../libs/rust/m3core" }
+m3files = { path = "../../libs/rust/m3files" }

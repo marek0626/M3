@@ -24,27 +24,21 @@
 //! exchanged to establish further communication channels.
 //!
 //! The [`ClientSession`] is therefore used to provide service-specific APIs on top. For example,
-//! [`Pipes`] builds upon a [`ClientSession`] and uses it to perform capability exchanges in order
-//! to create pipes and channels to such pipes.
+//! [`EvidenceSession`] builds upon a [`ClientSession`] and uses it to perform capability exchanges in order
+//! to exchange TEE evidence for attestation purposes.
 
 mod disk;
 mod evidence;
-mod m3fs;
 mod network;
 mod pager;
-mod pipe;
 pub mod resmng;
 mod rot;
 mod session;
-mod vterm;
 
 pub use self::disk::{Disk, DiskBlockNo, DiskBlockRange};
 pub use self::evidence::EvidenceSession;
-pub use self::m3fs::M3FS;
 pub use self::network::Network;
 pub use self::pager::{MapFlags, Pager};
-pub use self::pipe::{Pipe, Pipes};
 pub use self::resmng::{ResMng, ResMngChild};
 pub use self::rot::{HashInput, HashOutput, RoTSession};
 pub use self::session::ClientSession;
-pub use self::vterm::VTerm;
