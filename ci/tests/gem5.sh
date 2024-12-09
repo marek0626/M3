@@ -26,6 +26,9 @@ usage() {
     exit 1
 }
 
+# Cleanup some loop files if we crash out.
+trap 'rm -f .count .countlock' EXIT ERR INT TERM
+
 isas="riscv32 riscv64 x86_64"
 types="a b sh"
 tests=""
@@ -107,6 +110,83 @@ declare -a normal_tests=(
     "parchksum" "shell-nested" "chantests" "evidence-test"
 )
 declare -a rots_tests=("rots-raser" "rots-hello" "rots-evidence-test")
+
+running_count=0
+function get_print_count() {
+    (
+	flock -w 3 42
+	running_count=$(<./.count)
+	running_count=$((running_count - 1))
+	echo $running_count > ./.count
+	# NMG: Intentional no newline here so it can be conveniently used with other printout messages
+	echo -n "[remaining: $running_count/$count] "
+    ) 42>./.countlock
+}
+
+count=0
+function count_tests() {
+    count=$((count + 1))
+    echo $count > ./.count
+}
+
+# Defines what tests should be skipped. Add your case here with return 1 to skip a particular configuration.
+function should_run() {
+    # riscv32 does not support VM
+    if [ "$isa" == "riscv32" ] && [ "$type" != "a" ]; then
+        return 1;
+    fi
+
+    # standalone works only with SPM
+    if [ "$test" = "standalone" ] && [ "$type" != "a" ]; then
+        return 1;
+    fi
+
+    # Don't run ROT tests on x86_64, they aren't supported there.
+    if $(array_contains "$test" "${rots_tests[@]}") && [ "$isa" = "x86_64" ]; then
+	return 1;
+    fi
+
+    # Additionally, rots-raser *only* works on riscv64
+    if [ "$test" = "rots-raser" ] && [ "$isa" != "riscv64" ]; then
+	return 1;
+    fi
+
+    # rust-sndrcv and vmtest don't run with SPM
+    if { [ "$test" = "rust-sndrcv" ] || [ "$test" = "vmtest" ]; } && [ "$type" = "a" ]; then
+        return 1;
+    fi
+    # m3lx runs only on riscv64 and has no shared version
+    if [[ "$test" == lx* ]] && { [ "$isa" != "riscv64" ] || [ "$type" != "b" ]; }; then
+	return 1;
+    fi
+
+    return 0;
+}
+
+# Does what it looks like -- iterates over the collected tests running a function with the arguments.
+function iterate_over_tests() {
+    fn=$1
+    for test in $tests; do
+	for isa in $isas; do
+            for bpe in $bpes; do
+		for type in $types; do
+		    if should_run $test $isa $bpe $type; then
+			$fn $test $isa $bpe $type
+		    fi
+		done
+            done
+	done
+    done
+}
+
+function run_test() {
+    test=$1
+    isa=$2
+    bpe=$3
+    type=$4
+
+    jobs_submit run_bench "$result" "$test" "$type" "$isa" "$bpe"
+}
 
 run_bench() {
     export M3_ISA=$4
@@ -198,10 +278,12 @@ run_bench() {
     fi
 
     if nice ./b run "$M3_OUT/boot.gen.xml" -n < /dev/null > /dev/null 2>&1 \
-        && "$root/check_result.py" "$M3_OUT/log.txt" 2>/dev/null; then
+            && "$root/check_result.py" "$M3_OUT/log.txt" 2>/dev/null; then
+	get_print_count
         /bin/echo -e "\e[1mFinished $dirname:\e[0m \e[1;32mSUCCESS\e[0m"
         rm -f "$M3_OUT/.failed"
     else
+	get_print_count
         /bin/echo -e "\e[1mFinished $dirname:\e[0m \e[1;31mFAILED\e[0m"
         echo > "$M3_OUT/.failed"
     fi
@@ -257,44 +339,8 @@ if [ "$tests" = "" ]; then
     tests="$all"
 fi
 
-for test in $tests; do
-    for isa in $isas; do
-        for bpe in $bpes; do
-            for type in $types; do
-                # riscv32 does not support VM
-                if [ "$isa" == "riscv32" ] && [ "$type" != "a" ]; then
-                    continue;
-                fi
-
-                # standalone works only with SPM
-                if [ "$test" = "standalone" ] && [ "$type" != "a" ]; then
-                    continue;
-                fi
-
-		# Don't run ROT tests on x86_64, they aren't supported there.
-		if $(array_contains "$test" "${rots_tests[@]}") && [ "$isa" = "x86_64" ]; then
-		    continue;
-		fi
-
-		# Additionally, rots-raser *only* works on riscv64
-                if [ "$test" = "rots-raser" ] && [ "$isa" != "riscv64" ]; then
-                    continue;
-                fi
-
-                # rust-sndrcv and vmtest don't run with SPM
-                if { [ "$test" = "rust-sndrcv" ] || [ "$test" = "vmtest" ]; } && [ "$type" = "a" ]; then
-                    continue;
-                fi
-                # m3lx runs only on riscv64 and has no shared version
-                if [[ "$test" == lx* ]] && { [ "$isa" != "riscv64" ] || [ "$type" != "b" ]; }; then
-                    continue;
-                fi
-
-                jobs_submit run_bench "$result" "$test" "$type" "$isa" "$bpe"
-            done
-        done
-    done
-done
+iterate_over_tests count_tests
+iterate_over_tests run_test
 
 jobs_wait
 
