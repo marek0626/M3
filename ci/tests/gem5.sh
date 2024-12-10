@@ -105,7 +105,7 @@ function array_contains() {
 declare -a normal_tests=(
     "unittests" "rust-algo-tests" "rust-misc-tests" "rust-vfs-tests"
     "rust-destr-tests" "hello" "rust-net-tests" "cpp-net-tests" "facever"
-    "hashmux-tests" "msgchan" "resmngtest" "standalone" "vmtest"
+    "hashmux-tests" "msgchan" "tee-msgchan" "resmngtest" "standalone" "vmtest"
     "rust-sndrcv" "libctest" "rust-std-test" "filterchain"
     "parchksum" "shell-nested" "chantests" "evidence-test"
 )
@@ -325,7 +325,7 @@ all+=" facever rots-raser rots-hello"
 all+=" find tar untar sqlite leveldb sha256sum sort"
 all+=" cat_awk cat_wc grep_awk grep_wc"
 all+=" disk-test abort-test"
-all+=" standalone libctest rust-std-test msgchan rust-sndrcv vmtest"
+all+=" standalone libctest rust-std-test msgchan tee-msgchan rust-sndrcv vmtest"
 all+=" ycsb-bench-udp ycsb-bench-tcp"
 all+=" voiceassist-udp voiceassist-tcp"
 all+=" bench-shell shell-nested parchksum filterchain"
