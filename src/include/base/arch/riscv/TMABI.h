@@ -27,6 +27,14 @@ public:
         return call2(op, arg1, 0);
     }
 
+    static Errors::Code call1_result(Operation op, word_t arg1, word_t *res) {
+        register word_t a0 asm("a0") = op;
+        register word_t a1 asm("a1") = arg1;
+        asm volatile("ecall" : "+r"(a0), "+r"(a1) : : "memory");
+        *res = a1;
+        return static_cast<Errors::Code>(a0);
+    }
+
     static Errors::Code call2(Operation op, word_t arg1, word_t arg2) {
         register word_t a0 asm("a0") = op;
         register word_t a1 asm("a1") = arg1;

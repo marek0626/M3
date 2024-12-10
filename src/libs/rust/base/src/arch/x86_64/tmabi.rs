@@ -24,6 +24,18 @@ impl TMABIOps for X86TMABI {
         Self::call2(op, arg1, 0)
     }
 
+    fn call1_result(op: Operation, mut arg1: usize) -> Result<usize, Error> {
+        let mut res = op.into();
+        unsafe {
+            core::arch::asm!(
+                "int $63",
+                inout("rax") res,
+                inout("rcx") arg1,
+            );
+        }
+        crate::tmif::get_result(res).map(|_| arg1)
+    }
+
     fn call2(op: Operation, arg1: usize, arg2: usize) -> Result<(), Error> {
         let mut res = op.into();
         unsafe {

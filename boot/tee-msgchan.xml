@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<config>
+    <kernel args="kernel"/>
+    <dom>
+        <app args="root">
+            <dom tee="1">
+                <app args="msgchanrcv" daemon="1">
+                    <rgate name="chan" msgsize="64" slots="2"/>
+                    <sgate name="reply1" label="1"/>
+                    <sgate name="reply2" label="2"/>
+                </app>
+            </dom>
+            <dom tee="1">
+                <app args="msgchansnd reply1">
+                    <sgate name="chan" label="1"/>
+                    <rgate name="reply1" msgsize="64" slots="1"/>
+                </app>
+            </dom>
+            <dom>
+                <app args="msgchansnd reply2">
+                    <sgate name="chan" label="2"/>
+                    <rgate name="reply2" msgsize="64" slots="1"/>
+                </app>
+            </dom>
+        </app>
+    </dom>
+</config>

@@ -70,6 +70,10 @@ pub trait TMABIOps {
     #[allow(unused)]
     fn call1(op: Operation, arg1: usize) -> Result<(), Error>;
 
+    /// A TileMux call with a single argument and a result
+    #[allow(unused)]
+    fn call1_result(op: Operation, arg1: usize) -> Result<usize, Error>;
+
     /// A TileMux call with a two arguments
     #[allow(unused)]
     fn call2(op: Operation, arg1: usize, arg2: usize) -> Result<(), Error>;

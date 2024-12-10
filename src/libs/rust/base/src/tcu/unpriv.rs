@@ -31,7 +31,7 @@ use crate::cfg;
 use crate::env;
 use crate::errors::{Code, Error};
 use crate::kif::Perm;
-use crate::mem::{self, GlobOff, MaybeUninit, VirtAddr};
+use crate::mem::{self, GlobOff, MaybeUninit, PhysAddrRaw, VirtAddr};
 use crate::tmif;
 use crate::util::math;
 
@@ -58,6 +58,8 @@ pub enum CmdOpCode {
     FetchMsg,
     /// Acknowledges a message
     AckMsg,
+    /// Unfreezes an endpoint
+    Unfreeze,
     /// Puts the CU to sleep
     Sleep,
 }
@@ -392,6 +394,26 @@ impl TCU {
         Some((tileid, regs[1], regs[2], perm))
     }
 
+    /// Retrieves information on the given receive endpoint
+    ///
+    /// Returns `Some((<address>, <slot-size>, <slots>, <reply-EPs>))` if the EP is a receive EP or
+    /// `None` otherwise.
+    pub fn recv_info(ep: EpId) -> Option<(PhysAddrRaw, u32, u32, EpId)> {
+        let r0 = Self::read_ep_reg(ep, 0);
+        let r1 = Self::read_ep_reg(ep, 1);
+
+        if (r0 & 0x7) != EpType::Receive.into() {
+            return None;
+        }
+
+        Some((
+            r1 as PhysAddrRaw,
+            ((r0 >> 42) & 0x3F) as u32,
+            ((r0 >> 35) & 0x7F) as u32,
+            ((r0 >> 19) & 0xFFFF) as EpId,
+        ))
+    }
+
     /// Marks the given message for receive endpoint `ep` as read
     #[inline(always)]
     pub fn ack_msg(ep: EpId, msg_off: usize) -> Result<(), Error> {
@@ -400,6 +422,23 @@ impl TCU {
         Self::write_unpriv_reg(
             UnprivReg::Command,
             Self::build_cmd(ep, CmdOpCode::AckMsg, msg_off as Reg),
+        );
+        Self::get_error()
+    }
+
+    /// Returns true if the given EP is frozen
+    #[inline(always)]
+    pub fn is_frozen(ep: EpId) -> bool {
+        let r0 = Self::read_ep_reg(ep, 0);
+        (r0 >> 63) != 0
+    }
+
+    /// Unfreezes an endpoint that has been changed by the kernel and was therefore frozen.
+    #[inline(always)]
+    pub fn unfreeze(ep: EpId) -> Result<(), Error> {
+        Self::write_unpriv_reg(
+            UnprivReg::Command,
+            Self::build_cmd(ep, CmdOpCode::Unfreeze, 0),
         );
         Self::get_error()
     }

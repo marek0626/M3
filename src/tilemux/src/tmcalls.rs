@@ -15,7 +15,7 @@
 
 use base::errors::{Code, Error};
 use base::io::LogFlags;
-use base::kif;
+use base::kif::{self, PageFlags};
 use base::log;
 use base::mem::{GlobAddr, GlobAddrRaw, VirtAddr};
 use base::tcu::{EpId, INVALID_EP, IRQ};
@@ -126,6 +126,21 @@ fn tmcall_reg_irq(state: &mut arch::State) -> Result<(), Error> {
     Ok(())
 }
 
+fn tmcall_translate(state: &mut arch::State) -> Result<(), Error> {
+    let virt = VirtAddr::from(state.r[isr::TMC_ARG1]);
+
+    log!(LogFlags::MuxCalls, "tmcall::translate(virt={})", virt);
+
+    let act = activities::cur();
+    let (phys, flags) = act.translate(virt, PageFlags::R);
+    if !flags.contains(PageFlags::R) {
+        return Err(Error::new(Code::NoPerm));
+    }
+
+    state.r[isr::TMC_ARG1] = phys.as_raw() as usize;
+    Ok(())
+}
+
 fn tmcall_transl_fault(state: &mut arch::State) -> Result<(), Error> {
     let virt = VirtAddr::from(state.r[isr::TMC_ARG1]);
     let access = kif::Perm::from_bits_truncate(state.r[isr::TMC_ARG2] as u32);
@@ -177,6 +192,7 @@ pub fn handle_call(state: &mut arch::State) {
         o if o == tmif::Operation::Map.into() => tmcall_map(state),
         o if o == tmif::Operation::RegIRQ.into() => tmcall_reg_irq(state),
         o if o == tmif::Operation::TranslFault.into() => tmcall_transl_fault(state),
+        o if o == tmif::Operation::Translate.into() => tmcall_translate(state),
         o if o == tmif::Operation::InitTLS.into() => tmcall_init_tls(state),
         o if o == tmif::Operation::FlushInv.into() => tmcall_flush_inv(state),
         o if o == tmif::Operation::Noop.into() => tmcall_noop(state),
