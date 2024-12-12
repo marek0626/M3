@@ -46,10 +46,10 @@ use m3::vfs::{self, File, SeekMode};
 use addrspace::AddrSpace;
 
 use resmng::childs::{self, Child, ChildManager, OwnChild};
+use resmng::config;
 use resmng::resources::{tiles, Resources};
 use resmng::sendqueue;
 use resmng::subsys;
-use resmng::{config, rerrno};
 use resmng::{requests, rerror};
 
 use hex::Hex;
@@ -172,7 +172,13 @@ impl subsys::ChildStarter for PagedChildStarter {
             // start activity
             let file = vfs::VFS::open(child.name(), vfs::OpenFlags::RX | vfs::OpenFlags::NEW_SESS)
                 .map_err(|e| rerror(e).context(format!("open {}", child.name())))?;
-            let mut mapper = mapper::ChildMapper::new(aspace, act.tile_desc().has_virtmem());
+            let mut mapper = mapper::ChildMapper::new(
+                aspace,
+                act.tile_desc().has_virtmem(),
+                act.sel(),
+                child.tee(),
+                child.mem().pool().clone(),
+            );
 
             // if we don't run the evidence service, nobody can ask for the hashes and therefore we
             // don't need to compute them.
@@ -208,9 +214,8 @@ impl subsys::ChildStarter for PagedChildStarter {
         &mut self,
         _res: &mut Resources,
         tile: &mut tiles::TileUsage,
-        domain: &config::Domain,
+        _domain: &config::Domain,
     ) -> anyhow::Result<()> {
-        assert!(!domain.tee(), "TEEs are currently unsupported by the pager");
         let fs_mod =
             MemCap::new_bind_bootmod("fs").map_err(|e| rerror(e).context("bind bootmod 'fs'"))?;
         let fs_mod_size = fs_mod.region().map_err(rerror)?.1 as usize;
@@ -259,9 +264,9 @@ fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_, '_, '_>) {
                 EVREQHDL
                     .borrow_mut()
                     .fetch_and_handle_msg_with(|_handler, opcode, sess, is| match opcode {
-                        o if o == opcodes::Pager::Quote.into() => sess
-                            .quote(is, childmng, ROT.borrow_mut().deref_mut())
-                            .map_err(|e| e.downcast::<Error>().unwrap()),
+                        o if o == opcodes::Pager::Quote.into() => {
+                            sess.quote(is, childmng, ROT.borrow_mut().deref_mut())
+                        },
                         _ => Err(Error::new(Code::InvArgs)),
                     });
             }
@@ -280,6 +285,62 @@ fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_, '_, '_>) {
         *starter,
     )
     .expect("Unable to run workloop");
+}
+
+// Needed for Capability retention
+struct EvidenceSession {
+    _serv: ServerSession,
+}
+
+impl RequestSession for EvidenceSession {
+    fn new(inserv: ServerSession, _arg: &str) -> Result<Self, Error> {
+        let sess = Self { _serv: inserv };
+        Ok(sess)
+    }
+}
+
+type Signature = [u8; 64];
+
+struct SigWrap(Signature);
+
+impl fmt::LowerHex for SigWrap {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for byte in self.0 {
+            write!(f, "{:02x}", byte)?;
+        }
+        Ok(())
+    }
+}
+
+impl EvidenceSession {
+    pub fn quote(
+        &mut self,
+        is: &mut GateIStream<'_>,
+        childmgr: &ChildManager,
+        rot: &RoTSession,
+    ) -> Result<(), Error> {
+        let nonce: usize = is.pop()?;
+        let att_id: u32 = is.pop()?;
+
+        let child = childmgr
+            .child_by_attestation_id(att_id)
+            .ok_or_else(|| Error::new(Code::NotFound))?;
+
+        let app_hash = child.hash().ok_or_else(|| Error::new(Code::InvArgs))?;
+        let xml = child.cfg().to_string();
+        let hash: String = format!("Hash:{}:{}:{}", nonce, app_hash, xml);
+        log!(
+            LogFlags::Info,
+            "Child Name/ID: {}/{} Raw quote: {}",
+            child.name(),
+            att_id,
+            hash
+        );
+        let quote: [u8; 64] = rot.sign(hash.as_bytes())?;
+        let quote_str = format!("{:x}", SigWrap(quote));
+
+        reply_vmsg!(is, Code::Success, quote_str)
+    }
 }
 
 #[no_mangle]
@@ -375,58 +436,4 @@ pub fn main() -> anyhow::Result<()> {
     workloop_async(&mut wargs);
 
     Ok(())
-}
-
-// Needed for Capability retention
-struct EvidenceSession {
-    _serv: ServerSession,
-}
-
-impl RequestSession for EvidenceSession {
-    fn new(inserv: ServerSession, _arg: &str) -> Result<Self, Error> {
-        let sess = Self { _serv: inserv };
-        Ok(sess)
-    }
-}
-
-type Signature = [u8; 64];
-
-struct SigWrap(Signature);
-
-impl fmt::LowerHex for SigWrap {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for byte in self.0 {
-            write!(f, "{:02x}", byte)?;
-        }
-        Ok(())
-    }
-}
-
-impl EvidenceSession {
-    pub fn quote(
-        &mut self,
-        is: &mut GateIStream<'_>,
-        childmgr: &ChildManager,
-        rot: &RoTSession,
-    ) -> anyhow::Result<()> {
-        let nonce: usize = is.pop().map_err(rerror)?;
-        let att_id: u32 = is.pop().map_err(rerror)?;
-
-        let child = childmgr.child_by_attestation_id(att_id).ok_or_else(|| {
-            rerrno(Code::NotFound).context(format!("child with attestation id {}", att_id))
-        })?;
-
-        let app_hash = child
-            .hash()
-            .ok_or_else(|| rerrno(Code::InvArgs).context("child hash"))?;
-        let xml = child.cfg().to_string();
-        let hash: String = format!("Hash:{}:{}:{}", nonce, app_hash, xml);
-        log!(LogFlags::Debug, "Raw quote: {}", hash);
-        let quote: [u8; 64] = rot
-            .sign(hash.as_bytes())
-            .map_err(|e| rerror(e).context("hash signature"))?;
-        let quote_str = format!("{:x}", SigWrap(quote));
-
-        reply_vmsg!(is, Code::Success, quote_str).map_err(|e| rerror(e).context("reply to quote"))
-    }
 }
