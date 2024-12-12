@@ -13,7 +13,7 @@
  * General Public License version 2 for more details.
  */
 
-extern crate m3impl as m3;
+extern crate m3core as m3;
 
 use m3::com::{recv_msg, MemGate, RecvGate, SendGate};
 use m3::errors::Code;

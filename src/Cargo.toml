@@ -54,6 +54,7 @@ exclude = [
     "apps/straccmux",
     "rot",
     "tilemux",
+    "libs/rust/vtermcli",
 ]
 resolver = "2"
 

@@ -1,10 +1,10 @@
 [package]
-name = "m3impl"
+name = "m3core"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "m3impl"
+name = "m3core"
 crate-type = ["rlib"]
 
 [dependencies]

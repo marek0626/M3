@@ -35,8 +35,8 @@ use crate::tiles::{Activity, OwnActivity};
 use crate::time::{TimeDuration, TimeInstant};
 use crate::util;
 use crate::vfs::{
-    BufReader, File, FileEvent, FileInfo, FileMode, FileRef, FileWaiter, GenericFile, INodeId,
-    OpenFlags, Seek, SeekMode, VFS,
+    BufReader, File, FileEvent, FileInfo, FileMode, FileRef, FileWaiter, INodeId, OpenFlags, Seek,
+    SeekMode, VFS,
 };
 
 macro_rules! try_res {
@@ -57,7 +57,7 @@ fn get_file(fd: i32) -> Result<FileRef<dyn File>, Error> {
         .ok_or_else(|| Error::new(Code::BadFd))
 }
 
-fn get_file_as<T>(fd: i32) -> Result<FileRef<T>, Error> {
+fn get_file_as<T: ?Sized>(fd: i32) -> Result<FileRef<T>, Error> {
     Activity::own()
         .files()
         .get_as(fd as usize)
@@ -144,7 +144,7 @@ pub unsafe extern "C" fn __m3c_unlink(pathname: *const i8) -> Code {
 #[no_mangle]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn __m3c_opendir(fd: i32, dir: *mut *mut libc::c_void) -> Code {
-    let file = try_res!(get_file_as::<GenericFile>(fd));
+    let file = try_res!(crate::compat::get_file_as::<dyn File>(fd));
     *dir = Box::into_raw(Box::new(BufReader::new(file))) as *mut libc::c_void;
     Code::Success
 }
@@ -168,7 +168,7 @@ struct M3FSDirEntry {
 #[no_mangle]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn __m3c_readdir(dir: *mut libc::c_void, entry: *mut CompatDirEntry) -> Code {
-    let dir = dir as *mut BufReader<FileRef<GenericFile>>;
+    let dir = dir as *mut BufReader<FileRef<dyn File>>;
 
     // read header
     let head: M3FSDirEntry = match read_object(&mut *dir) {
@@ -194,7 +194,7 @@ pub unsafe extern "C" fn __m3c_readdir(dir: *mut libc::c_void, entry: *mut Compa
 #[no_mangle]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn __m3c_closedir(dir: *mut libc::c_void) -> Code {
-    drop(Box::from_raw(dir as *mut BufReader<FileRef<GenericFile>>));
+    drop(Box::from_raw(dir as *mut BufReader<FileRef<dyn File>>));
     Code::Success
 }
 

@@ -17,14 +17,14 @@
  */
 
 use core::cmp;
-use m3::client::Pipes;
 use m3::com::MemGate;
 use m3::io::{Read, Write};
 use m3::kif;
 use m3::mem::GlobOff;
 use m3::test::WvTester;
-use m3::vfs::{BufReader, FileRef, GenericFile, IndirectPipe, OpenFlags, VFS};
+use m3::vfs::{BufReader, File, FileRef, OpenFlags, VFS};
 use m3::{vec, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
+use pipecli::{IndirectPipe, Pipes};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, genfile_mux);
@@ -65,8 +65,8 @@ fn pipe_mux(t: &mut dyn WvTester) {
 
     struct Pipe {
         _pipe: IndirectPipe,
-        reader: FileRef<GenericFile>,
-        writer: FileRef<GenericFile>,
+        reader: FileRef<dyn File>,
+        writer: FileRef<dyn File>,
     }
 
     let pipeserv = wv_require_ok!(Pipes::new("pipes"));

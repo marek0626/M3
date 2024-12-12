@@ -187,7 +187,7 @@ fn link_unlink(t: &mut dyn WvTester) {
     wv_assert_err!(t, VFS::unlink("/example/foo"), Code::NoSuchFile);
 
     // test cross-fs link
-    wv_assert_ok!(t, VFS::mount("/fs/", "m3fs", "m3fs-clone"));
+    wv_assert_ok!(t, VFS::mount("/fs/", m3::client::M3FS_MAGIC, "m3fs-clone"));
     wv_assert_err!(t, VFS::link("/example/myfile", "/fs/foo"), Code::XfsLink);
     wv_assert_ok!(t, VFS::unmount("/fs/"));
 

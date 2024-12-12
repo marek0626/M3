@@ -20,13 +20,16 @@ use core::fmt;
 
 use crate::boxed::Box;
 use crate::cap::Selector;
-use crate::cell::RefMut;
+use crate::cell::{RefMut, StaticRefCell};
 use crate::col::Vec;
-use crate::errors::Error;
-use crate::io::Serial;
+use crate::errors::{Code, Error};
 use crate::serialize::{M3Deserializer, M3Serializer, VecSink};
 use crate::tiles::{Activity, ChildActivity};
-use crate::vfs::{File, FileRef, GenericFile};
+use crate::vfs::{File, FileRef};
+
+type FileDeserializerFn = fn(&mut M3Deserializer<'_>) -> Box<dyn File>;
+static FILE_TYPES: StaticRefCell<Vec<(u8, FileDeserializerFn)>> =
+    StaticRefCell::new(Vec::<(u8, FileDeserializerFn)>::new());
 
 /// A file descriptor
 pub type Fd = usize;
@@ -151,15 +154,31 @@ impl FileTable {
         for _ in 0..count {
             let fd: Fd = s.pop().unwrap();
             let file_type: u8 = s.pop().unwrap();
-            ft.set_raw(fd, match file_type {
-                b'F' => GenericFile::unserialize(s),
-                b'S' => Box::new(Serial::new()),
-                _ => panic!("Unexpected file type {}", file_type),
-            });
+            // NMG Linear search... Could become a bottleneck with many files, filetypes, activity creation velocity.
+            let mut found = false;
+            for (file_magic, handler) in &*FILE_TYPES.borrow() {
+                if *file_magic == file_type {
+                    ft.set_raw(fd, handler(s));
+                    found = true;
+                }
+            }
+            if !found {
+                panic!("Unexpected file type {}", file_type)
+            }
         }
 
         ft
     }
+}
+
+pub fn register_file_type(file_type: u8, handler: FileDeserializerFn) -> Result<(), Error> {
+    for (file_magic, _handler) in &*FILE_TYPES.borrow() {
+        if *file_magic == file_type {
+            return Err(Error::new(Code::Exists));
+        }
+    }
+    FILE_TYPES.borrow_mut().push((file_type, handler));
+    Ok(())
 }
 
 impl fmt::Debug for FileTable {

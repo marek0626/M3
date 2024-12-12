@@ -20,11 +20,15 @@ use core::any::Any;
 
 use crate::cap::Selector;
 
+use crate::boxed::Box;
 use crate::client::{HashInput, HashOutput};
 use crate::errors::Error;
 use crate::io;
+use crate::serialize::M3Deserializer;
 use crate::tiles::ChildActivity;
 use crate::vfs;
+
+pub const SERIAL_FILE_MAGIC: u8 = b'S';
 
 impl vfs::File for io::Serial {
     fn as_any(&self) -> &dyn Any {
@@ -43,13 +47,17 @@ impl vfs::File for io::Serial {
     }
 
     fn file_type(&self) -> u8 {
-        b'S'
+        SERIAL_FILE_MAGIC
     }
 
     fn delegate(&self, _act: &ChildActivity) -> Result<Selector, Error> {
         // nothing to do
         Ok(0)
     }
+}
+
+pub fn serial_file_deserialize(_s: &mut M3Deserializer<'_>) -> Box<dyn vfs::File> {
+    Box::new(io::Serial::new())
 }
 
 impl vfs::Seek for io::Serial {

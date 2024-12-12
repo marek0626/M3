@@ -24,7 +24,7 @@ use m3::mem::{VirtAddr, VirtAddrRaw};
 use m3::tcu::EpId;
 use m3::tiles::ChildActivity;
 use m3::util::math::next_log2;
-use m3::vfs::{File, FileRef, GenericFile};
+use m3::vfs::{File, FileRef};
 
 const MSG_SIZE: usize = 64;
 const RB_SIZE: usize = MSG_SIZE * 4;
@@ -62,14 +62,14 @@ impl StreamAccel {
         })
     }
 
-    pub fn attach_input(&mut self, file: &mut FileRef<GenericFile>) -> Result<(), Error> {
+    pub fn attach_input(&mut self, file: &mut FileRef<dyn File>) -> Result<(), Error> {
         file.attach(
             self.in_sep.take().ok_or_else(|| Error::new(Code::Exists))?,
             &self.in_mep,
         )
     }
 
-    pub fn attach_output(&mut self, file: &mut FileRef<GenericFile>) -> Result<(), Error> {
+    pub fn attach_output(&mut self, file: &mut FileRef<dyn File>) -> Result<(), Error> {
         file.attach(
             self.out_sep
                 .take()

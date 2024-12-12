@@ -16,11 +16,11 @@
 use m3::col::{ToString, Vec};
 use m3::io::{Read, Write};
 use m3::test::WvTester;
-use m3::vfs::{FileRef, GenericFile, OpenFlags, VFS};
+use m3::vfs::{File, FileRef, OpenFlags, VFS};
 use m3::{vec, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
-    wv_assert_ok!(t, VFS::mount("/", "m3fs", "m3fs"));
+    wv_assert_ok!(t, VFS::mount("/", m3::client::M3FS_MAGIC, "m3fs"));
 
     wv_run_test!(t, text_files);
     wv_run_test!(t, pat_file);
@@ -87,7 +87,7 @@ fn list_dir(t: &mut dyn WvTester) {
 
 fn _validate_pattern_content(
     t: &mut dyn WvTester,
-    mut file: FileRef<GenericFile>,
+    mut file: FileRef<dyn File>,
     buf: &mut [u8],
 ) -> usize {
     let mut pos: usize = 0;

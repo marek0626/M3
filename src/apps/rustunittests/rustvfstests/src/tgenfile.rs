@@ -20,7 +20,7 @@ use m3::col::Vec;
 use m3::errors::Code;
 use m3::io::{Read, Write};
 use m3::test::WvTester;
-use m3::vfs::{File, FileRef, GenericFile, OpenFlags, Seek, SeekMode, VFS};
+use m3::vfs::{File, FileRef, OpenFlags, Seek, SeekMode, VFS};
 use m3::{vec, wv_assert_eq, wv_assert_err, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
@@ -299,7 +299,7 @@ fn _validate_pattern_file(t: &mut dyn WvTester, filename: &str, size: usize) {
 
 fn _validate_pattern_content(
     t: &mut dyn WvTester,
-    file: &mut FileRef<GenericFile>,
+    file: &mut FileRef<dyn File>,
     buf: &mut [u8],
 ) -> usize {
     let mut pos: usize = 0;

@@ -20,28 +20,31 @@ use core::any::Any;
 use core::cmp;
 use core::fmt;
 
-use crate::boxed::Box;
-use crate::cap::Selector;
-use crate::cell::RefCell;
-use crate::client::{ClientSession, HashInput, HashOutput, MapFlags, Pager, RoTSession};
-use crate::col::{String, ToString};
-use crate::com::recv_result;
-use crate::com::GateIStream;
-use crate::com::{opcodes, EpMng, RecvGate, SendCap, SendGate, EP};
-use crate::errors::{Code, Error};
-use crate::io::{LogFlags, Read, Write};
-use crate::kif::{CapRngDesc, CapType, Perm, INVALID_SEL};
-use crate::log;
-use crate::mem::{GlobOff, VirtAddr};
-use crate::rc::Rc;
-use crate::serialize::{M3Deserializer, M3Serializer, VecSink};
-use crate::tcu::EpId;
-use crate::tcu::TCU;
-use crate::tiles::{Activity, ChildActivity};
-use crate::util::math;
-use crate::vfs::{filetable, Fd, File, FileEvent, FileInfo, Map, OpenFlags, Seek, SeekMode, TMode};
+use m3core::boxed::Box;
+use m3core::cap::Selector;
+use m3core::cell::RefCell;
+use m3core::client::{ClientSession, HashInput, HashOutput, MapFlags, Pager, RoTSession};
+use m3core::col::{String, ToString};
+use m3core::com::recv_result;
+use m3core::com::GateIStream;
+use m3core::com::{opcodes, EpMng, RecvGate, SendCap, SendGate, EP};
+use m3core::errors::{Code, Error};
+use m3core::io::{LogFlags, Read, Write};
+use m3core::kif::{CapRngDesc, CapType, Perm, INVALID_SEL};
+use m3core::log;
+use m3core::mem::{GlobOff, VirtAddr};
+use m3core::rc::Rc;
+use m3core::serialize::{M3Deserializer, M3Serializer, VecSink};
+use m3core::tcu::EpId;
+use m3core::tcu::TCU;
+use m3core::tiles::{Activity, ChildActivity};
+use m3core::util::math;
+use m3core::vfs::{Fd, File, FileEvent, FileInfo, Map, OpenFlags, Seek, SeekMode, TMode};
+use m3core::{send_recv, send_recv_res, send_vmsg};
 
 const NOTIFY_MSG_SIZE: usize = 64;
+
+pub const GENERIC_FILE_MAGIC: u8 = b'F';
 
 struct NonBlocking {
     notify_rgate: Box<RecvGate>,
@@ -157,11 +160,11 @@ pub struct GenericFile {
 }
 
 impl GenericFile {
-    pub(crate) fn new(flags: OpenFlags, sel: Selector, fs_id: Option<usize>) -> Self {
+    pub fn new(flags: OpenFlags, sel: Selector, fs_id: Option<usize>) -> Self {
         GenericFile {
             id: None,
             fs_id,
-            fd: filetable::INV_FD,
+            fd: m3core::vfs::INV_FD,
             flags,
             sess: ClientSession::new_owned_bind(sel),
             sgate: RefCell::new(LazySGate::Own(sel + 1)),
@@ -177,7 +180,7 @@ impl GenericFile {
         }
     }
 
-    pub(crate) fn new_without_sess(
+    pub fn new_without_sess(
         flags: OpenFlags,
         sel: Selector,
         id: usize,
@@ -188,7 +191,7 @@ impl GenericFile {
         Ok(GenericFile {
             id: Some(id),
             fs_id: Some(fs_id),
-            fd: filetable::INV_FD,
+            fd: m3core::vfs::INV_FD,
             flags,
             sess: ClientSession::new_bind(sel),
             sgate: RefCell::new(LazySGate::Session(sgate)),
@@ -546,7 +549,7 @@ impl File for GenericFile {
     }
 
     fn file_type(&self) -> u8 {
-        b'F'
+        GENERIC_FILE_MAGIC
     }
 
     fn delegate(&self, act: &ChildActivity) -> Result<Selector, Error> {

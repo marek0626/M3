@@ -26,7 +26,7 @@ use m3::{
     test::{DefaultWvTester, WvTester},
     tiles::Activity,
     time::{CycleInstant, Profiler, Runner},
-    vfs::{FileMode, FileRef, GenericFile, OpenFlags, VFS},
+    vfs::{File, FileMode, FileRef, OpenFlags, VFS},
     wv_assert_ok, wv_perf, wv_require_ok, wv_run_test,
 };
 
@@ -143,7 +143,7 @@ fn bench_m3fs_read(t: &mut dyn WvTester) {
 
 struct WriteBenchmark {
     tester: DefaultWvTester,
-    file: FileRef<GenericFile>,
+    file: FileRef<dyn File>,
     content: String,
 }
 

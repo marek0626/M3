@@ -48,6 +48,14 @@ pub(crate) fn init() {
         crate::env::args().next().unwrap_or("Unknown"),
     );
     std::init();
+
+    // Insert the serial file handler into the file table.
+    // This allows the file table to be agnostic of the supported handlers.
+    crate::vfs::register_file_type(
+        self::serial::SERIAL_FILE_MAGIC,
+        self::serial::serial_file_deserialize,
+    )
+    .expect("Couldn't install serial file handler.");
 }
 
 pub(crate) fn deinit() {

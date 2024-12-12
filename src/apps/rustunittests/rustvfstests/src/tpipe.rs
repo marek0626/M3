@@ -16,7 +16,6 @@
  * General Public License version 2 for more details.
  */
 
-use m3::client::Pipes;
 use m3::col::String;
 use m3::com::MemGate;
 use m3::errors::Code;
@@ -24,8 +23,9 @@ use m3::io::{self, Read, Write};
 use m3::kif;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{ActivityArgs, ChildActivity, RunningActivity, Tile};
-use m3::vfs::{BufReader, IndirectPipe};
+use m3::vfs::BufReader;
 use m3::{println, wv_assert_eq, wv_require_ok, wv_run_test};
+use pipecli::{IndirectPipe, Pipes};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, child_to_parent);

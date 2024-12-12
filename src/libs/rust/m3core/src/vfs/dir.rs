@@ -21,7 +21,7 @@ use core::iter;
 use crate::col::String;
 use crate::io::{read_object, Read};
 use crate::mem;
-use crate::vfs::{BufReader, FileRef, GenericFile, INodeId, Seek, SeekMode};
+use crate::vfs::{BufReader, File, FileRef, INodeId, Seek, SeekMode};
 
 /// Represents a directory entry
 #[derive(Debug)]
@@ -48,11 +48,11 @@ impl DirEntry {
 
 /// An iterator to walk over a directory
 pub struct ReadDir {
-    reader: BufReader<FileRef<GenericFile>>,
+    reader: BufReader<FileRef<dyn File>>,
 }
 
 impl ReadDir {
-    pub(crate) fn new(file: FileRef<GenericFile>) -> Self {
+    pub(crate) fn new(file: FileRef<dyn File>) -> Self {
         Self {
             reader: BufReader::new(file),
         }

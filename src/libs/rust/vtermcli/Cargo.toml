@@ -1,14 +1,13 @@
 [package]
-name = "m3"
+name = "vtermcli"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "m3"
+name = "vtermcli"
 crate-type = ["rlib"]
 
 [dependencies]
-heap = { path = "../heap" }
-lang = { path = "../lang" }
 m3core = { path = "../m3core" }
 m3files = { path = "../m3files" }
+

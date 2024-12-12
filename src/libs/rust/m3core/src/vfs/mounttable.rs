@@ -20,14 +20,25 @@ use core::fmt;
 
 use crate::borrow::Cow;
 use crate::cap::Selector;
-use crate::cell::RefCell;
-use crate::client::M3FS;
+use crate::cell::{Ref, RefCell, StaticRefCell};
 use crate::col::{String, ToString, Vec};
 use crate::errors::{Code, Error};
 use crate::rc::Rc;
 use crate::serialize::{M3Deserializer, M3Serializer, VecSink};
 use crate::tiles::ChildActivity;
 use crate::vfs::{FileSystem, VFS};
+
+pub type FilesystemHandlerFn = fn(usize, &str) -> Result<FSHandle, Error>;
+pub type FilesystemDeserializerFn = fn(&mut M3Deserializer<'_>) -> FSHandle;
+
+#[derive(Copy, Clone)]
+pub(crate) struct FilesystemContext {
+    pub(crate) handler: FilesystemHandlerFn,
+    pub(crate) deserializer: FilesystemDeserializerFn,
+}
+
+static FILESYSTEM_TYPES: StaticRefCell<Vec<(u8, FilesystemContext)>> =
+    StaticRefCell::new(Vec::<(u8, FilesystemContext)>::new());
 
 /// A reference to a file system
 pub type FSHandle = Rc<RefCell<dyn FileSystem>>;
@@ -57,6 +68,37 @@ impl MountPoint {
 pub struct MountTable {
     mounts: Vec<MountPoint>,
     next_id: usize,
+}
+
+pub fn register_fs_type(
+    fs_type: u8,
+    handler: FilesystemHandlerFn,
+    deserializer: FilesystemDeserializerFn,
+) -> Result<(), Error> {
+    if find_filesystem(fs_type).is_some() {
+        return Err(Error::new(Code::Exists));
+    }
+    else {
+        FILESYSTEM_TYPES
+            .borrow_mut()
+            .push((fs_type, FilesystemContext {
+                handler,
+                deserializer,
+            }));
+    }
+    Ok(())
+}
+
+pub(crate) fn find_filesystem(fs_type: u8) -> Option<Ref<'static, FilesystemContext>> {
+    Ref::filter_map(FILESYSTEM_TYPES.borrow(), |ref_vec| {
+        for (fs_magic, ctx) in ref_vec {
+            if *fs_magic == fs_type {
+                return Some(ctx);
+            }
+        }
+        None
+    })
+    .ok()
 }
 
 impl MountTable {
@@ -163,11 +205,13 @@ impl MountTable {
         for _ in 0..count {
             let path: String = s.pop().unwrap();
             let fs_type: u8 = s.pop().unwrap();
-            mt.add(&path, match fs_type {
-                b'M' => M3FS::unserialize(s),
-                _ => panic!("Unexpected fs type {}", fs_type),
-            })
-            .unwrap();
+            if let Some(fs_ctx) = find_filesystem(fs_type) {
+                mt.add(&path, (fs_ctx.deserializer)(s))
+                    .expect("Couldn't add to mounttable");
+            }
+            else {
+                panic!("Unexpected fs type {}", fs_type);
+            }
         }
 
         mt
