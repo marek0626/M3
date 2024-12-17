@@ -22,7 +22,7 @@ mod physmem;
 mod regions;
 
 use core::fmt;
-use core::ops::{Deref, DerefMut};
+use core::ops::DerefMut;
 
 use m3::boxed::Box;
 use m3::cell::LazyStaticRefCell;
@@ -88,8 +88,9 @@ impl PagedChildStarter {
 
 // Extremely simple Karp-Rabin type hash.
 pub fn get_hash(file: &mut dyn File, file_size: usize) -> anyhow::Result<String> {
-    let binder = ROT.borrow();
-    let rot = binder.deref();
+    let mut binder = ROT.borrow_mut();
+    let rot = binder.deref_mut();
+    rot.reset(&HashAlgorithm::SHA3_256).ok();
     file.hash_input(rot, file_size)
         .map_err(|e| rerror(e).context("hash file"))?;
     let mut buf = [0u8; HashAlgorithm::SHA3_256.output_bytes];

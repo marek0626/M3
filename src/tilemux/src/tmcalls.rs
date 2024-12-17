@@ -25,10 +25,11 @@ use base::tmif;
 use isr::{ISRArch, ISR};
 
 use crate::activities;
+use crate::arch;
 use crate::irqs;
 use crate::timer;
 use crate::vma;
-use crate::{arch, helper};
+use mux::helper;
 
 fn tmcall_wait(state: &mut arch::State) -> Result<(), Error> {
     let rep = state.r[isr::TMC_ARG1] as EpId;

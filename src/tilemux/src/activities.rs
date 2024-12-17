@@ -33,13 +33,12 @@ use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
 
 use crate::arch;
-use crate::helper;
 use crate::irqs;
 use crate::pex_env;
 use crate::quota::{self, PTQuota, Quota, TimeQuota};
-use crate::sendqueue;
 use crate::timer;
 use crate::vma::PfState;
+use mux::{helper, sendqueue};
 
 use isr::{ISRArch, ISR};
 

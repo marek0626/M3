@@ -128,8 +128,10 @@ BEGIN_FUNC(isr_common)
     csrr    s1, sstatus
     smw     s1, WS*33(a0)
 
+#ifndef NO_STACK_SWITCH
     # start with a new stack
     la      sp, isr_stack
+#endif
 
     # call isr_handler (state address is already in a0)
     call    isr_handler

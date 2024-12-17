@@ -15,6 +15,9 @@
 #![no_std]
 
 #[allow(unused_extern_crates)]
+extern crate unimux;
+
+#[allow(unused_extern_crates)]
 extern crate lang;
 
 #[allow(unused_extern_crates)]
@@ -22,6 +25,7 @@ extern crate heap;
 
 use core::cmp::min;
 use core::ops::Deref;
+
 use kecacc::{KecAcc, KecAccState};
 use m3core::cell::{LazyReadOnlyCell, LazyStaticRefCell, StaticCell, StaticRefCell};
 use m3core::col::{Vec, VecDeque};
@@ -444,7 +448,7 @@ impl RoTSession {
     ) -> Result<(), Error> {
         log!(LogFlags::RoTReqs, "[{}] rot::get_secret_mem()", sid);
         if !CTX.is_some() {
-            return Err(Error::new(Code::InvArgs));
+            return Err(Error::new(Code::NotSup));
         }
         let sess = cli.get(sid).ok_or_else(|| Error::new(Code::InvArgs))?;
         xchg.out_caps(CapRngDesc::new_single(
@@ -718,6 +722,14 @@ impl RoTSession {
         }
     }
 
+    fn features(&mut self, is: &mut GateIStream<'_>) -> Result<(), Error> {
+        let mut features: m3core::client::Features = m3core::client::Features::HashMux;
+        if CTX.is_some() {
+            features |= m3core::client::Features::RoT;
+        }
+        reply_vmsg!(is, Code::Success, features)
+    }
+
     fn reset(&mut self, is: &mut GateIStream<'_>) -> Result<(), Error> {
         let ty: HashType = is.pop()?;
         let algo = HashAlgorithm::from_type(ty).ok_or_else(|| Error::new(Code::InvArgs))?;
@@ -954,6 +966,7 @@ fn init_rot() -> Result<(MemCap, u64, MemCap), Error> {
     };
     Ok((rot_cert_cap, rot_cert_size, secret_cap))
 }
+
 #[no_mangle]
 pub fn main() -> Result<(), Error> {
     log!(LogFlags::RoTBoot, "Hello World!");
@@ -1007,6 +1020,7 @@ pub fn main() -> Result<(), Error> {
     hdl.reg_msg_handler(RoT::Reset, RoTSession::reset);
     hdl.reg_msg_handler(RoT::Input, RoTSession::input);
     hdl.reg_msg_handler(RoT::Output, RoTSession::output);
+    hdl.reg_msg_handler(RoT::Features, RoTSession::features);
 
     // Hash Acceleration functionality
 

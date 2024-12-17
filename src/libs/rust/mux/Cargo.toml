@@ -1,0 +1,15 @@
+[package]
+name = "mux"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/mux.rs"
+crate-type = ["rlib"]
+
+[dependencies]
+base = { path = "../base" }
+heap = { path = "../heap" }
+
+[features]
+default = []

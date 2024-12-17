@@ -10,6 +10,8 @@ crate-type = ["staticlib"]
 [dependencies]
 lang = { path = "../../../libs/rust/lang" }
 heap = { path = "../../../libs/rust/heap" }
+base = { path = "../../../libs/rust/base" }
 m3core = { path = "../../../libs/rust/m3core" }
 rot = { path = "../../../libs/crypto/rot" }
 kecacc = { path = "../../../libs/crypto/kecacc" }
+unimux = { path = "../../../unimux" }

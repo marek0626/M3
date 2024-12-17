@@ -188,4 +188,5 @@ pub enum RoT {
     Reset,
     Input,
     Output,
+    Features,
 }

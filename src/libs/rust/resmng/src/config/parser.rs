@@ -316,6 +316,7 @@ fn parse_domain(p: &mut ConfigParser) -> Option<config::Domain> {
                 "initrd" => dom.initrd = Some(v),
                 "dtb" => dom.dtb = Some(v),
                 "tee" => dom.tee = parse::int(&v)? == 1,
+                "unimux" => dom.unimux = parse::int(&v)? == 1,
                 _ => return None,
             },
         }

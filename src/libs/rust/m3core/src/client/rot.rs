@@ -19,6 +19,8 @@ use crate::errors::{Code, Error};
 use crate::mem::GlobOff;
 use crate::serialize::bytes::{ByteBuf, Bytes};
 use crate::vec::Vec;
+use base::serialize::{Deserialize, Serialize};
+use bitflags::bitflags;
 
 pub struct RoTSession {
     sess: ClientSession,
@@ -28,29 +30,49 @@ pub struct RoTSession {
     algo: &'static HashAlgorithm,
 }
 
+// NMG Rustfmt misbehaves (???) and forces this formatting, so we have to skip
+// it. Check again in the future if this is still true
+#[rustfmt::skip]
+bitflags! {
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    pub struct Features : u8 {
+	const RoT     = 0x1;
+	const HashMux = 0x2;
+    }
+}
+
 impl RoTSession {
     pub fn new(name: &str, algo: &'static HashAlgorithm) -> Result<Self, Error> {
         let sess = ClientSession::new(name)?;
         let sgate = sess.connect()?;
-        let secret_mem = sess
-            .obtain(1, |is| is.push(opcodes::RoT::GetSecretMem), |_| Ok(()))
-            .ok();
         let ep = sess.obtain(1, |is| is.push(opcodes::RoT::GetMem), |_| Ok(()))?;
-
-        let mut sess = RoTSession {
+        let mut rot_sess = RoTSession {
             sess,
             sgate,
-            secret_mem: if let Some(smem) = secret_mem {
-                Some(MemGate::new_bind(smem.start())?)
+            secret_mem: None,
+            ep: EP::new_bind(0, ep.start()),
+            algo,
+        };
+
+        let features = rot_sess.features();
+        rot_sess.secret_mem = if features.unwrap().contains(Features::RoT) {
+            let smem_opt = rot_sess
+                .sess
+                .obtain(1, |is| is.push(opcodes::RoT::GetSecretMem), |_| Ok(()))
+                .ok();
+            if smem_opt.is_some() {
+                Some(MemGate::new_bind(smem_opt.unwrap().start())?)
             }
             else {
                 None
-            },
-            algo,
-            ep: EP::new_bind(0, ep.start()),
+            }
+        }
+        else {
+            None
         };
-        sess.reset(algo)?;
-        Ok(sess)
+
+        rot_sess.reset(algo)?;
+        Ok(rot_sess)
     }
 
     /// Returns the hash algorithm that is currently used for this hash session.
@@ -62,6 +84,10 @@ impl RoTSession {
     /// input() and output() operation.
     pub fn ep(&self) -> &EP {
         &self.ep
+    }
+
+    pub fn features(&self) -> Result<Features, Error> {
+        send_recv_res!(&self.sgate, RecvGate::def(), opcodes::RoT::Features)?.pop()
     }
 
     /// Reset the state of the hash session (discarding all previous input and output data) and

@@ -5,6 +5,7 @@ dirs = [
     "apps",
     "rot",
     "tilemux",
+    "unimux",
     "server",
     "fs",         # generate the file systems last
 ]

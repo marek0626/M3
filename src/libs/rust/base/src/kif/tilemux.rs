@@ -49,7 +49,9 @@ pub enum Sidecalls {
     ReqEP,
     RemMsgs,
     EPInval,
+    // Acquire a new quota from an existing one (split off)
     DeriveQuota,
+    // Report quota statistics: totals and remaining free.
     GetQuota,
     SetQuota,
     RemoveQuotas,

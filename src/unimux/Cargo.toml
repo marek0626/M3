@@ -1,11 +1,11 @@
 [package]
-name = "tilemux"
+name = "unimux"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-path = "src/tilemux.rs"
-crate-type = ["staticlib"]
+path = "src/unimux.rs"
+crate-type = ["rlib"]
 
 [dependencies]
 base = { path = "../libs/rust/base" }
@@ -17,14 +17,11 @@ mux = { path = "../libs/rust/mux" }
 
 [features]
 default = []
+gem5 = ["base/gem5"]
+hw = ["base/hw"]
+hw22 = ["base/hw22"]
+hw23 = ["base/hw23"]
 
 [dependencies.num-traits]
 version = "0.2.15"
 default-features = false
-
-[profile.release]
-lto = true
-panic = 'abort'
-
-[profile.dev]
-panic = 'abort'

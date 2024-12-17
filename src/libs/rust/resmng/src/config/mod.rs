@@ -399,6 +399,7 @@ pub struct Domain {
     pub(crate) apps: Vec<Rc<AppConfig>>,
     pub(crate) shmems: Vec<ShMemDesc>,
     pub(crate) tee: bool,
+    pub(crate) unimux: bool,
 }
 
 impl Domain {
@@ -408,6 +409,10 @@ impl Domain {
 
     pub fn tee(&self) -> bool {
         self.tee
+    }
+
+    pub fn unimux(&self) -> bool {
+        self.unimux
     }
 
     pub fn apps(&self) -> &Vec<Rc<AppConfig>> {
@@ -784,7 +789,12 @@ impl AppConfig {
                     "{:0w$}Domain on {} with mux=({}, {}M, {:?}, {:?}), TEE={} [",
                     "",
                     d.tile.0,
-                    d.mux().unwrap_or("tilemux"),
+                    if d.unimux() {
+                        "unimux"
+                    }
+                    else {
+                        d.mux().unwrap_or("tilemux")
+                    },
                     d.mux_mem.unwrap_or(cfg::FIXED_TILEMUX_MEM) / (1024 * 1024),
                     d.initrd(),
                     d.dtb(),
