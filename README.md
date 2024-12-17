@@ -108,10 +108,10 @@ If you want a ROT-enabled XML, note the following:
 
 - You must specify some ROT layers, as in `boot/rots-raser.xml`:
   `<rot layers="brom,blau.bin,rosa.bin" />`
-- To run successfully under CI, you must modify `ci/tests/gem5.sh` and add
+- To run successfully under CI, you must modify `ci/tests/gem5.py` and add
   your test case to the rots_tests array. Otherwise the gem5 configuration
   will not be correct and you will get unusual errors.
-  
+
 References:
 -----------
 
