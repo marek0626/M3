@@ -228,7 +228,7 @@ help() {
 
 # parse arguments
 case "$1" in
-    -h|-\?|--help)
+    -h | -\? | --help)
         help "$0"
         ;;
 esac
@@ -261,7 +261,7 @@ fi
 if [ "$(cat "$build/.verbose" 2>/dev/null)" != "M3_VERBOSE=$M3_VERBOSE" ]; then
     ninjapieargs=(build -f)
 fi
-echo "M3_VERBOSE=$M3_VERBOSE" > "$build/.verbose"
+echo "M3_VERBOSE=$M3_VERBOSE" >"$build/.verbose"
 
 case "$cmd" in
     clean)
@@ -281,7 +281,7 @@ case "$cmd" in
         ;;
 
     # these commands require on hw that the M3_HW_FPGA_* vars are defined
-    run|dbg=*|loadfpga=*)
+    run | dbg=* | loadfpga=*)
         if [ "$M3_TARGET" = "hw" ] || [ "$M3_TARGET" = "hw22" ] || [ "$M3_TARGET" = "hw23" ]; then
             if [ -z "$M3_HW_FPGA_HOST" ] || [ -z "$M3_HW_FPGA_DIR" ]; then
                 echo "Please define M3_HW_FPGA_HOST and M3_HW_FPGA_DIR." >&2 && exit 1
@@ -298,21 +298,21 @@ if [ $skipbuild -eq 0 ]; then
         echo "Building for $M3_TARGET-$M3_ISA-$M3_BUILD remotely at $M3_REM_HOST:$M3_REM_DIR..." >&2
         # sync all sources to the remote host and check whether anything was transferred
         if [ "$(rsync -az --delete . --stats \
-                    "--exclude=/.ninja*" --exclude=/platform --exclude=/build --exclude=/cross \
-                    --exclude=/run --exclude=/.git \
-                    "$M3_REM_HOST:$M3_REM_DIR" |
-                grep "Number of regular files transferred: 0")" = "" ] ||
-           # if we switched the build directory, rebuild in any case
-           [ "$(cat .remote-build 2>/dev/null)" != "$M3_TARGET-$M3_ISA-$M3_BUILD" ]; then
+            "--exclude=/.ninja*" --exclude=/platform --exclude=/build --exclude=/cross \
+            --exclude=/run --exclude=/.git \
+            "$M3_REM_HOST:$M3_REM_DIR" |
+            grep "Number of regular files transferred: 0")" = "" ] ||
+            # if we switched the build directory, rebuild in any case
+            [ "$(cat .remote-build 2>/dev/null)" != "$M3_TARGET-$M3_ISA-$M3_BUILD" ]; then
             # remember the last build directory
-            echo -n "$M3_TARGET-$M3_ISA-$M3_BUILD" > .remote-build
+            echo -n "$M3_TARGET-$M3_ISA-$M3_BUILD" >.remote-build
             # build it on the remote host. source the .profile to set environment variables (e.g.
             # PATH to include ~/.cargo/bin).
             if ssh "$M3_REM_HOST" \
-                   'source .profile && ' \
-                   'cd '"$M3_REM_DIR"' && ' \
-                   'M3_VERBOSE='"$M3_VERBOSE"' ' \
-                   'M3_BUILD='"$M3_BUILD"' M3_TARGET='"$M3_TARGET"' M3_ISA='"$M3_ISA"' ./b'; then
+                'source .profile && ' \
+                'cd '"$M3_REM_DIR"' && ' \
+                'M3_VERBOSE='"$M3_VERBOSE"' ' \
+                'M3_BUILD='"$M3_BUILD"' M3_TARGET='"$M3_TARGET"' M3_ISA='"$M3_ISA"' ./b'; then
                 # and transfer build files back
                 rsync -az \
                     "$M3_REM_HOST:$M3_REM_DIR/build/$M3_TARGET-$M3_ISA-$M3_BUILD/" \
@@ -320,7 +320,7 @@ if [ $skipbuild -eq 0 ]; then
             else
                 # store the current date to some file to ensure that we transfer something next time
                 # we try to build, regardless of whether something changed.
-                date --rfc-3339=ns > .remote-build-failed
+                date --rfc-3339=ns >.remote-build-failed
                 exit 1
             fi
         fi
@@ -355,23 +355,23 @@ run_clippy() {
         target=("${rust_host_args[@]}")
     elif [[ "$1" = src/m3lx/* ]]; then
         target=(--target riscv64gc-unknown-linux-gnu
-                --target-dir "$rustbuild"
-                -Z "build-std=core,alloc,std,panic_abort")
+            --target-dir "$rustbuild"
+            -Z "build-std=core,alloc,std,panic_abort")
     elif [[ "$1" == src/rot/* ]]; then
         target=(--target riscv64imc-unknown-none-elf
-                --target-dir "$rustbuild"
-                -Z "build-std=core,alloc")
+            --target-dir "$rustbuild"
+            -Z "build-std=core,alloc")
     else
         target=("${rust_target_args[@]}")
     fi
     echo "Running clippy for $(dirname "$1")..."
-    ( cd "$(dirname "$1")" && cargo clippy "${target[@]}" -- \
+    (cd "$(dirname "$1")" && cargo clippy "${target[@]}" -- \
         -D warnings \
         -A clippy::identity_op \
         -A clippy::manual_range_contains \
         -A clippy::assertions_on_constants \
         -A clippy::upper_case_acronyms \
-        -A clippy::empty_loop )
+        -A clippy::empty_loop)
 }
 
 # run the specified command, if any
@@ -459,7 +459,7 @@ case "$cmd" in
                 echo "target remote localhost:$port"
                 echo "display/i \$pc"
                 echo "b main"
-            } > "$gdbcmd"
+            } >"$gdbcmd"
             gdb=$(get_cross_prefix "$bindir/${cmd#dbg=}")gdb
             RUST_GDB=$gdb rust-gdb --tui "$bindir/${cmd#dbg=}" "--command=$gdbcmd"
 
@@ -492,16 +492,16 @@ case "$cmd" in
             gdbcmd=$(mktemp)
             {
                 echo "target remote localhost:30000"
-                echo "set \$t0 = 0"                  # ensure that we set the default stack pointer
-                echo "set \$pc = 0x10000000"         # go to entry point
-            } > "$gdbcmd"
+                echo "set \$t0 = 0"          # ensure that we set the default stack pointer
+                echo "set \$pc = 0x10000000" # go to entry point
+            } >"$gdbcmd"
 
             # differentiate between baremetal components and others
             rdelf=$(get_cross_prefix "$bindir/${cmd#dbg=}")
-            entry=$($rdelf -h "$bindir/${cmd#dbg=}" | \
+            entry=$($rdelf -h "$bindir/${cmd#dbg=}" |
                 grep "Entry point" | awk '{ print($4) }')
             if [ "$entry" = "0x10000000" ]; then
-                echo "b env_run" >> "$gdbcmd"
+                echo "b env_run" >>"$gdbcmd"
                 symbols=$bindir/${cmd#dbg=}
             else
                 {
@@ -509,10 +509,10 @@ case "$cmd" in
                     echo "c"
                     echo "symbol-file $bindir/${cmd#dbg=}"
                     echo "b main"
-                } >> "$gdbcmd"
+                } >>"$gdbcmd"
                 symbols=$bindir/tilemux
             fi
-            echo "display/i \$pc" >> "$gdbcmd"
+            echo "display/i \$pc" >>"$gdbcmd"
 
             gdb=$(get_cross_prefix "$symbols")gdb
             RUST_GDB=$gdb rust-gdb --tui "$symbols" "--command=$gdbcmd"
@@ -575,7 +575,7 @@ case "$cmd" in
         file=$bindir/${cmd#ctors=}
         isa=$(get_isa "$file")
         crossprefix=$(get_cross_prefix "$file")
-        section=$("${crossprefix}readelf" -SW "$file" | \
+        section=$("${crossprefix}readelf" -SW "$file" |
             grep "\.ctors\|\.init_array" | sed -e 's/\[.*\]//g' | xargs)
         off=0x$(echo "$section" | cut -d ' ' -f 4)
         len=0x$(echo "$section" | cut -d ' ' -f 5)
@@ -598,14 +598,14 @@ case "$cmd" in
         ;;
 
     elf=*)
-        "$(get_cross_prefix "$bindir/${cmd#elf=}")readelf" -aW "$bindir/${cmd#elf=}" \
-            | c++filt | less
+        "$(get_cross_prefix "$bindir/${cmd#elf=}")readelf" -aW "$bindir/${cmd#elf=}" |
+            c++filt | less
         ;;
 
     list)
         echo "Start of section .text:"
         while IFS= read -r -d '' l; do
-            "$(get_cross_prefix "$build/bin/$l")readelf" -S "$build/bin/$l" | \
+            "$(get_cross_prefix "$build/bin/$l")readelf" -S "$build/bin/$l" |
                 grep " \.text " | awk "{ printf(\"%20s: %s\n\",\"$l\",\$5) }"
         done < <(
             find "$build/bin" -maxdepth 1 -type f \! \( -name "*.o" -o -name "*.a" \) -printf "%f\0"
@@ -613,9 +613,9 @@ case "$cmd" in
         ;;
 
     macros=*)
-        ( cd "${cmd#macros=}" && \
+        (cd "${cmd#macros=}" &&
             cargo rustc "${rust_target_args[@]}" \
-                --profile=check -- -Zunpretty=expanded 2>/dev/null | less )
+                --profile=check -- -Zunpretty=expanded 2>/dev/null | less)
         ;;
 
     nma=*)
@@ -632,14 +632,14 @@ case "$cmd" in
         str=$script
         echo "Strings containing '$str' in $binary:"
         # find base address of .rodata
-        base=$("${crossprefix}readelf" -S "$binary" | grep .rodata | \
+        base=$("${crossprefix}readelf" -S "$binary" | grep .rodata |
             xargs | cut -d ' ' -f 5)
         # find section number of .rodata
-        section=$("${crossprefix}readelf" -S "$binary" | grep .rodata | \
+        section=$("${crossprefix}readelf" -S "$binary" | grep .rodata |
             sed -e 's/.*\[\s*\([[:digit:]]*\)\].*/\1/g')
         # grep for matching lines, prepare for better use of awk and finally add offset to base
-        "${crossprefix}readelf" -p "$section" "$binary" | grep "$str" | \
-            sed 's/^ *\[ *\([[:xdigit:]]*\)\] *\(.*\)$/0x\1 \2/' | \
+        "${crossprefix}readelf" -p "$section" "$binary" | grep "$str" |
+            sed 's/^ *\[ *\([[:xdigit:]]*\)\] *\(.*\)$/0x\1 \2/' |
             awk '{ printf("0x%x: %s %s %s %s %s %s\n",0x'"$base"' + strtonum($1),$2,$3,$4,$5,$6,$7) }'
         ;;
 
@@ -666,7 +666,7 @@ case "$cmd" in
     checkboot)
         errors=0
         while IFS= read -r -d '' f; do
-            xmllint --schema misc/boot.xsd --noout "$f" > /dev/null || errors=$((errors + 1))
+            xmllint --schema misc/boot.xsd --noout "$f" >/dev/null || errors=$((errors + 1))
         done < <(find boot -type f -print0)
         [ $errors -eq 0 ] || exit 1
         ;;
@@ -695,13 +695,13 @@ case "$cmd" in
         export RUSTDOCFLAGS="-D warnings"
         for lib in src/libs/rust/*; do
             if [ -d "$lib" ]; then
-                ( cd "$lib" && cargo doc "${rust_target_args[@]}" )
+                (cd "$lib" && cargo doc "${rust_target_args[@]}")
             fi
         done
         echo "Documentation generated at file://$root/$build/rust/$RUST_TARGET/doc/m3/index.html"
         ;;
 
-    fmt|fmt-check)
+    fmt | fmt-check)
         shargs=(--indent 4 --case-indent)
         if [ "$cmd" = "fmt-check" ]; then
             clangargs=(--dry-run --Werror)
@@ -723,7 +723,7 @@ case "$cmd" in
             -name "*.h" -or
             -name "*.xml" -or
             -name "*.sh"
-            )
+        )
         files=(b)
         errors=0
         while IFS= read -r -d '' f; do
@@ -742,34 +742,34 @@ case "$cmd" in
 
             echo "Formatting $f..."
             case "$f" in
-                *.cc|*.h)
+                *.cc | *.h)
                     clang-format "${clangargs[@]}" "$f" || errors=$((errors + 1))
                     ;;
                 */Cargo.toml)
                     if [ -d "$(dirname "$f")/src" ]; then
-                        find "$(dirname "$f")/src" -name "*.rs" -print0 | \
-                            xargs -0 rustfmt "${cargoargs[@]}" \
-                            || errors=$((errors + 1))
+                        find "$(dirname "$f")/src" -name "*.rs" -print0 |
+                            xargs -0 rustfmt "${cargoargs[@]}" ||
+                            errors=$((errors + 1))
                     fi
                     ;;
                 *.py)
-                    autopep8 --global-config .python-format "${pythonargs[@]}" "$f" \
-                        || errors=$((errors + 1))
+                    autopep8 --global-config .python-format "${pythonargs[@]}" "$f" ||
+                        errors=$((errors + 1))
                     ;;
                 *.xml)
                     XMLLINT_INDENT="    " \
-                        "$root/tools/wrapfmt.py" "${xmlargs[@]}" "xmllint --format" "$f" \
-                        || errors=$((errors + 1))
+                        "$root/tools/wrapfmt.py" "${xmlargs[@]}" "xmllint --format" "$f" ||
+                        errors=$((errors + 1))
                     ;;
-                *.sh|b)
+                *.sh | b)
                     shfmt "${shargs[@]}" "$f" || errors=$((errors + 1))
                     ;;
             esac
-        done < <(find ci src tools boot cross -mindepth 1 \( "${filter[@]}" \) -print0 && printf '%s\0' "${files[@]}" )
+        done < <(find ci src tools boot cross -mindepth 1 \( "${filter[@]}" \) -print0 && printf '%s\0' "${files[@]}")
         [ $errors -eq 0 ] || exit 1
         ;;
 
-    test|testcov)
+    test | testcov)
         errors=0
         dirs="src/libs/rust/thread src/libs/rust/base"
         out="$rustgeneric"
@@ -804,14 +804,14 @@ case "$cmd" in
     lint)
         (
             export CARGO_TARGET_DIR="$rustgeneric" &&
-            cd "$root" &&
-            ./tools/linter.py src/kernel src/libs/rust/resmng src/server/root src/server/pager
+                cd "$root" &&
+                ./tools/linter.py src/kernel src/libs/rust/resmng src/server/root src/server/pager
         )
         ;;
 
     # -- M³Linux --
 
-    mklx|mkbbl|genlxcc)
+    mklx | mkbbl | genlxcc)
         ./src/m3lx/build.sh "$crossname" "$crossdir" "$cmd" "$script" "$@"
         ;;
 esac

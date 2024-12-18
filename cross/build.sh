@@ -35,8 +35,8 @@ if [ -f "$DIST/.config" ] && [ "$(cmp "$DIST/.config-origin" "config-$ARCH" 2>/d
 fi
 
 if [ ! -f "$DIST/.config" ]; then
-    ( cd buildroot && make O="$DIST" "$MAKE_ARGS" defconfig "BR2_DEFCONFIG=$ROOT/config-$ARCH" )
+    (cd buildroot && make O="$DIST" "$MAKE_ARGS" defconfig "BR2_DEFCONFIG=$ROOT/config-$ARCH")
     cp "config-$ARCH" "$DIST/.config-origin"
 fi
 
-( cd buildroot && make O="$DIST" "$MAKE_ARGS" "$@" )
+(cd buildroot && make O="$DIST" "$MAKE_ARGS" "$@")
