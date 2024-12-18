@@ -45,6 +45,8 @@ pub enum Operation {
     RegIRQ,
     /// For TCU TLB misses
     TranslFault,
+    /// Translates a virtual address to the physical address
+    Translate,
     /// Flush and invalidate cache
     FlushInv,
     /// Initializes thread-local storage (x86 only)
@@ -84,6 +86,10 @@ cfg_if! {
         pub fn xlate_fault(virt: VirtAddr, perm: kif::Perm) -> Result<(), Error> {
             crate::arch::linux::ioctl::tlb_insert_addr(virt, perm.bits() as u8);
             Ok(())
+        }
+
+        pub fn translate(_virt: VirtAddr) -> Result<PhysAddr, Error> {
+            Err(Error::new(Code::NotSup))
         }
 
         pub fn map(_virt: VirtAddr, _phys: PhysAddr, _pages: usize,
@@ -140,6 +146,11 @@ cfg_if! {
 
         pub fn xlate_fault(virt: VirtAddr, perm: kif::Perm) -> Result<(), Error> {
             TMABI::call2(Operation::TranslFault, virt.as_local(), perm.bits() as usize)
+        }
+
+        pub fn translate(virt: VirtAddr) -> Result<PhysAddr, Error> {
+            let phys = TMABI::call1_result(Operation::Translate, virt.as_local())?;
+            Ok(PhysAddr::new_raw(crate::env::boot().tile_desc(), phys as crate::mem::PhysAddrRaw))
         }
 
         pub fn map(virt: VirtAddr, phys: PhysAddr, pages: usize, access: kif::Perm) -> Result<(), Error> {

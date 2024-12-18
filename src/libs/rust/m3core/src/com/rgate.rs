@@ -194,7 +194,15 @@ impl RecvCap {
             },
         };
 
-        let gate = Gate::new_rgate(self.sel(), self.cap.flags(), mem, off, ep)?;
+        let gate = Gate::new_rgate(
+            self.sel(),
+            self.cap.flags(),
+            mem,
+            addr,
+            off,
+            self.size()?,
+            ep,
+        )?;
 
         // prevent that we revoke the cap
         self.cap.set_flags(CapFlags::KEEP_CAP);
@@ -224,7 +232,15 @@ impl GateCap for RecvCap {
         let (order, msg_order) = (self.order.get().unwrap(), self.msg_order.get().unwrap());
         let replies = 1 << (order - msg_order);
         let ep = EpMng::get().acquire(replies)?;
-        let gate = Gate::new_rgate(self.sel(), self.cap.flags(), buf.mem(), buf.off(), ep)?;
+        let gate = Gate::new_rgate(
+            self.sel(),
+            self.cap.flags(),
+            buf.mem(),
+            buf.addr(),
+            buf.off(),
+            self.size()?,
+            ep,
+        )?;
 
         // prevent that we revoke the cap
         self.cap.set_flags(CapFlags::KEEP_CAP);

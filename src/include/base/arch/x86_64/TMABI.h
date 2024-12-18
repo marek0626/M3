@@ -27,21 +27,27 @@ public:
         return call2(op, arg1, 0);
     }
 
-    static Errors::Code call2(Operation op, UNUSED word_t arg1, UNUSED word_t arg2) {
+    static Errors::Code call1_result(Operation op, word_t arg1, word_t *res) {
+        word_t err = op;
+        word_t arg = arg1;
+        asm volatile("int $63" : "+a"(err), "+c"(arg) : : "memory");
+        *res = arg;
+        return static_cast<Errors::Code>(err);
+    }
+
+    static Errors::Code call2(Operation op, word_t arg1, word_t arg2) {
         word_t res = op;
         asm volatile("int $63" : "+a"(res) : "c"(arg1), "d"(arg2) : "memory");
         return static_cast<Errors::Code>(res);
     }
 
-    static Errors::Code call3(Operation op, UNUSED word_t arg1, UNUSED word_t arg2,
-                              UNUSED word_t arg3) {
+    static Errors::Code call3(Operation op, word_t arg1, word_t arg2, word_t arg3) {
         word_t res = op;
         asm volatile("int $63" : "+a"(res) : "c"(arg1), "d"(arg2), "D"(arg3) : "memory");
         return static_cast<Errors::Code>(res);
     }
 
-    static Errors::Code call4(Operation op, UNUSED word_t arg1, UNUSED word_t arg2,
-                              UNUSED word_t arg3, UNUSED word_t arg4) {
+    static Errors::Code call4(Operation op, word_t arg1, word_t arg2, word_t arg3, word_t arg4) {
         word_t res = op;
         asm volatile("int $63" : "+a"(res) : "c"(arg1), "d"(arg2), "D"(arg3), "S"(arg4) : "memory");
         return static_cast<Errors::Code>(res);

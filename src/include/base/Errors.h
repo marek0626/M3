@@ -63,6 +63,8 @@ struct Errors {
         EXREG_EXISTS,
         TILE_LOCKED,
         WRONG_GEN,
+        EP_FROZEN,
+        EP_NOT_FROZEN,
         // SW errors
         INV_ARGS,
         OBJECT_GONE,
@@ -95,6 +97,7 @@ struct Errors {
         DESER_FAILED,
         LAST_CAP_OVERFLOW,
         CAP_COUNT_TOO_LARGE,
+        KERNEL_BROKEN,
         // networking
         INV_STATE,
         WOULD_BLOCK,

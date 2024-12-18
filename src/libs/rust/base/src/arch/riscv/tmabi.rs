@@ -26,6 +26,18 @@ impl TMABIOps for RISCVTMABI {
         Self::call2(op, arg1, 0)
     }
 
+    fn call1_result(op: Operation, mut arg1: usize) -> Result<usize, Error> {
+        let mut res = op.into();
+        unsafe {
+            asm!(
+                "ecall",
+                inout("x10") res,
+                inout("x11") arg1,
+            );
+        }
+        crate::tmif::get_result(res).map(|_| arg1)
+    }
+
     fn call2(op: Operation, arg1: usize, arg2: usize) -> Result<(), Error> {
         let mut res = op.into();
         unsafe {

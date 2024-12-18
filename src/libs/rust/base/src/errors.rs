@@ -66,6 +66,8 @@ pub enum Code {
     ExRegExists,
     TileLocked,
     WrongGen,
+    EPFrozen,
+    EPNotFrozen,
     // SW Errors
     InvArgs,
     ObjectGone,
@@ -101,6 +103,7 @@ pub enum Code {
     LastCapOverflow,
     /// The provided count does not fit in the [`crate::kif::CapRngDesc`]
     CapCountTooLarge,
+    KernelBroken,
     // networking
     InvState,
     WouldBlock,

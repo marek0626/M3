@@ -18,13 +18,18 @@
 
 use core::ops;
 
+use base::errors::Code;
+use base::mem::{PhysAddr, VirtAddr};
+use base::tcu::TCU;
+use base::tmif;
+
 use crate::cap::{CapFlags, Capability, Selector};
 use crate::com::{EpMng, EP};
 use crate::errors::Error;
-use crate::kif;
 use crate::mem::GlobOff;
 use crate::syscalls;
 use crate::tcu::INVALID_EP;
+use crate::{env, kif};
 
 /// Represents a gate capability that can be turned into a usable gate (e.g., `SendCap` to
 /// `SendGate`).
@@ -110,6 +115,10 @@ impl Gate {
         else {
             syscalls::activate_sgate(ep.sel(), sel)?;
         }
+        if TCU::is_frozen(ep.id()) {
+            // nothing to check here as our integrity/confidentiality is not in danger
+            TCU::unfreeze(ep.id())?;
+        }
         Ok(Self::new_with_ep(sel, flags, ep))
     }
 
@@ -119,10 +128,31 @@ impl Gate {
         sel: Selector,
         flags: CapFlags,
         mem: Option<Selector>,
-        addr: GlobOff,
+        virt: VirtAddr,
+        off: GlobOff,
+        size: usize,
         ep: EP,
     ) -> Result<Self, Error> {
-        syscalls::activate_rgate(ep.sel(), sel, mem.unwrap_or(kif::INVALID_SEL), addr)?;
+        syscalls::activate_rgate(ep.sel(), sel, mem.unwrap_or(kif::INVALID_SEL), off)?;
+        if TCU::is_frozen(ep.id()) {
+            let phys = tmif::translate(virt)?;
+            let rinfo = TCU::recv_info(ep.id()).ok_or_else(|| Error::new(Code::KernelBroken))?;
+            // check if the physical address and the buffer size is as expected (otherwise the
+            // kernel could send us messages to overwrite specific areas of memory).
+            if PhysAddr::new_raw(env::boot().tile_desc(), rinfo.0) != phys {
+                return Err(Error::new(Code::KernelBroken));
+            }
+            if (1 << (rinfo.1 + rinfo.2)) as usize != size {
+                return Err(Error::new(Code::KernelBroken));
+            }
+            // check that the reply EPs are at the expected position (otherwise the kernel could
+            // let the TCU overwrite other send EPs and thereby trick us to send to unexpected
+            // receivers).
+            if rinfo.3 != ep.id() + 1 {
+                return Err(Error::new(Code::KernelBroken));
+            }
+            TCU::unfreeze(ep.id())?;
+        }
         Ok(Self::new_with_ep(sel, flags, ep))
     }
 

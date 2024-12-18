@@ -166,6 +166,7 @@ private:
 class TCU {
     friend class kernel::TCU;
     friend class Machine;
+    friend class Gate;
     friend class MemGate;
     friend class SendGate;
     friend class RecvGate;
@@ -284,7 +285,8 @@ private:
         WRITE = 4,
         FETCH_MSG = 5,
         ACK_MSG = 6,
-        SLEEP = 7,
+        UNFREEZE = 7,
+        SLEEP = 8,
     };
 
     enum class PrivCmdOpCode {
@@ -464,6 +466,29 @@ private:
     }
     void wait_for_msg(epid_t rep, epid_t iep) {
         write_reg(UnprivRegs::COMMAND, build_command(0, CmdOpCode::SLEEP, (iep << 16) | rep));
+        get_error();
+    }
+
+    Option<std::tuple<word_t, uint, uint, epid_t>> recv_info(epid_t ep) {
+        reg_t r0 = read_reg(ep, 0);
+        reg_t r1 = read_reg(ep, 1);
+
+        if(static_cast<EpType>(r0 & 0x7) != EpType::RECEIVE) {
+            return None;
+        }
+
+        return Some(std::make_tuple(static_cast<word_t>(r1), static_cast<uint>((r0 >> 42) & 0x3F),
+                                    static_cast<uint>((r0 >> 35) & 0x7F),
+                                    static_cast<epid_t>(((r0 >> 19) & 0xFFFF))));
+    }
+
+    bool is_frozen(epid_t ep) const {
+        reg_t r0 = read_reg(ep, 0);
+        return (r0 >> 63) != 0;
+    }
+
+    void unfreeze(epid_t ep) {
+        write_reg(UnprivRegs::COMMAND, build_command(ep, CmdOpCode::UNFREEZE, 0));
         get_error();
     }
 

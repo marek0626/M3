@@ -48,7 +48,7 @@ in mkShellNoCC {
     # apparently requires at least -O1).
     hardeningDisable = [ "all" ];
 
-    LD_LIBRARY_PATH = lib.makeLibraryPath [ stdenv.cc.cc flex ];
+    LD_LIBRARY_PATH = lib.makeLibraryPath [ stdenv.cc.cc flex ncurses python311Full ];
 
     shellHook = ''
         # having these set breaks some configure checks

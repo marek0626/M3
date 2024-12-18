@@ -34,6 +34,7 @@ enum Operation : word_t {
     MAP,
     REG_IRQ,
     TRANSL_FAULT,
+    TRANSLATE,
     FLUSH_INV,
     INIT_TLS,
     NOOP,
@@ -75,6 +76,10 @@ struct TMIF {
         return Errors::SUCCESS;
     }
 
+    static Errors::Code translate(uintptr_t, word_t *) {
+        return Errors::NOT_SUP;
+    }
+
     static Errors::Code map(uintptr_t, goff_t, size_t, uint) {
         return Errors::NOT_SUP;
     }
@@ -105,6 +110,10 @@ struct TMIF {
 
     static Errors::Code xlate_fault(uintptr_t virt, uint perm) {
         return TMABI::call2(Operation::TRANSL_FAULT, virt, perm);
+    }
+
+    static Errors::Code translate(uintptr_t virt, word_t *phys) {
+        return TMABI::call1_result(Operation::TRANSLATE, virt, phys);
     }
 
     static Errors::Code map(uintptr_t virt, goff_t phys, size_t pages, uint perm) {
