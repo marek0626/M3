@@ -708,12 +708,14 @@ case "$cmd" in
 
     fmt | fmt-check)
         shargs=(--indent 4 --case-indent)
+        yamlargs=(-conf "$root/.yamlfmt.yaml")
         if [ "$cmd" = "fmt-check" ]; then
             clangargs=(--dry-run --Werror)
             cargoargs=(--check)
             pythonargs=(--diff --exit-code)
             xmlargs=()
             shargs+=(--diff)
+            yamlargs+=(-lint)
         else
             clangargs=(-i)
             cargoargs=()
@@ -727,7 +729,9 @@ case "$cmd" in
             -name "*.cc" -or
             -name "*.h" -or
             -name "*.xml" -or
-            -name "*.sh"
+            -name "*.sh" -or
+            -name "*.yaml" -or
+            -name "*.yml"
         )
         files=(b)
         errors=0
@@ -769,8 +773,11 @@ case "$cmd" in
                 *.sh | b)
                     shfmt "${shargs[@]}" "$f" || errors=$((errors + 1))
                     ;;
+                *.yaml | *.yml)
+                    yamlfmt "${yamlargs[@]}" "$f" || errors=$((errors + 1))
+                    ;;
             esac
-        done < <(find ci src tools boot cross -mindepth 1 \( "${filter[@]}" \) -print0 && printf '%s\0' "${files[@]}")
+        done < <(find ci src tools boot cross .gitlab -mindepth 1 \( "${filter[@]}" \) -print0 && printf '%s\0' "${files[@]}")
         [ $errors -eq 0 ] || exit 1
         ;;
 
