@@ -736,7 +736,8 @@ case "$cmd" in
         files=(b)
         errors=0
         while IFS= read -r -d '' f; do
-            if [[ "$f" =~ "src/m3lx" ]] || [[ "$f" =~ "cross/buildroot" ]]; then
+            if [[ "$f" =~ "src/m3lx" ]] || [[ "$f" =~ "cross/buildroot" ]] ||
+                [[ "$f" =~ "tools/ninjapie" ]] || [[ "$f" =~ "tools/lints" ]]; then
                 continue
             fi
             if [ "$(basename "$f")" != "build.py" ]; then
