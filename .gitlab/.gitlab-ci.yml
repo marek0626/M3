@@ -47,11 +47,7 @@ check:
     - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b checkboot -n'
     - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b fmt-check -n'
     - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b clippy -n'
-    - kubectl exec -n os -t m3-ci -- sh -c '
-        cd M3 &&
-          nix develop path:nix -c ./tools/linter.py
-            src/kernel src/libs/rust/resmng src/server/root src/server/pager
-        '
+    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b lint -n'
     - kubectl exec -n os -t m3-ci -- sh -c '
         cd M3
           && nix develop path:nix -c ./b doc -n 2>&1 | tee log.txt
