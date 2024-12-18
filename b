@@ -297,11 +297,14 @@ if [ $skipbuild -eq 0 ]; then
     if [ "$M3_REM_HOST" != "" ]; then
         echo "Building for $M3_TARGET-$M3_ISA-$M3_BUILD remotely at $M3_REM_HOST:$M3_REM_DIR..." >&2
         # sync all sources to the remote host and check whether anything was transferred
-        if [ "$(rsync -az --delete . --stats \
-            "--exclude=/.ninja*" --exclude=/platform --exclude=/build --exclude=/cross \
-            --exclude=/run --exclude=/.git \
-            "$M3_REM_HOST:$M3_REM_DIR" |
-            grep "Number of regular files transferred: 0")" = "" ] ||
+        output="$(
+            rsync -az --delete . --stats \
+                "--exclude=/.ninja*" --exclude=/platform --exclude=/build --exclude=/cross \
+                --exclude=/run --exclude=/.git \
+                "$M3_REM_HOST:$M3_REM_DIR" |
+                grep "Number of regular files transferred: 0"
+        )"
+        if [ "$output" = "" ] ||
             # if we switched the build directory, rebuild in any case
             [ "$(cat .remote-build 2>/dev/null)" != "$M3_TARGET-$M3_ISA-$M3_BUILD" ]; then
             # remember the last build directory
@@ -358,9 +361,11 @@ run_clippy() {
             --target-dir "$rustbuild"
             -Z "build-std=core,alloc,std,panic_abort")
     elif [[ "$1" == src/rot/* ]]; then
-        target=(--target riscv64imc-unknown-none-elf
+        target=(
+            --target riscv64imc-unknown-none-elf
             --target-dir "$rustbuild"
-            -Z "build-std=core,alloc")
+            -Z "build-std=core,alloc"
+        )
     else
         target=("${rust_target_args[@]}")
     fi
