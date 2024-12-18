@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import sys
 
-from datetime import datetime
+from datetime import datetime, UTC
 from functools import cmp_to_key
 
 CACHE_CAP = 3
@@ -40,7 +40,7 @@ def gc_dir(dir: str, max: int):
                                   key=cmp_to_key(lambda f1, f2: f2[0] - f1[0]))
             for i in range(max, len(files)):
                 fpath = os.path.join(dir, sorted_files[i][1])
-                mdate = datetime.utcfromtimestamp(sorted_files[i][0])
+                mdate = datetime.fromtimestamp(sorted_files[i][0], UTC)
                 hdate = mdate.strftime('%Y-%m-%d %H:%M:%S')
                 print('{}: evicting (modified on {})...'.format(fpath, hdate))
                 if os.path.isfile(fpath):
