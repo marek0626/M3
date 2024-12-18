@@ -702,20 +702,32 @@ case "$cmd" in
         ;;
 
     fmt|fmt-check)
+        shargs=(--indent 4 --case-indent)
         if [ "$cmd" = "fmt-check" ]; then
             clangargs=(--dry-run --Werror)
             cargoargs=(--check)
             pythonargs=(--diff --exit-code)
             xmlargs=()
+            shargs+=(--diff)
         else
             clangargs=(-i)
             cargoargs=()
             pythonargs=(-i)
             xmlargs=(-i)
+            shargs+=(--write)
         fi
+        filter=(
+            -name Cargo.toml -or
+            -name "*.py" -or
+            -name "*.cc" -or
+            -name "*.h" -or
+            -name "*.xml" -or
+            -name "*.sh"
+            )
+        files=(b)
         errors=0
         while IFS= read -r -d '' f; do
-            if [[ "$f" =~ "src/m3lx" ]]; then
+            if [[ "$f" =~ "src/m3lx" ]] || [[ "$f" =~ "cross/buildroot" ]]; then
                 continue
             fi
             if [ "$(basename "$f")" != "build.py" ]; then
@@ -749,12 +761,11 @@ case "$cmd" in
                         "$root/tools/wrapfmt.py" "${xmlargs[@]}" "xmllint --format" "$f" \
                         || errors=$((errors + 1))
                     ;;
+                *.sh|b)
+                    shfmt "${shargs[@]}" "$f" || errors=$((errors + 1))
+                    ;;
             esac
-        done < <(find ci src tools boot -mindepth 1 \( -name Cargo.toml -or \
-                                                       -name "*.py" -or \
-                                                       -name "*.cc" -or \
-                                                       -name "*.h" -or \
-                                                       -name "*.xml" \) -print0)
+        done < <(find ci src tools boot cross -mindepth 1 \( "${filter[@]}" \) -print0 && printf '%s\0' "${files[@]}" )
         [ $errors -eq 0 ] || exit 1
         ;;
 
