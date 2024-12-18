@@ -58,9 +58,11 @@ in mkShellNoCC {
         if [[ "$PWD" = */nix ]]; then
             export RUSTUP_HOME=$PWD/../.rustup
             export CARGO_HOME=$PWD/../.cargo
+            export DYLINT_DRIVER_PATH=$PWD/../.dylint_drivers
         else
             export RUSTUP_HOME=$PWD/.rustup
             export CARGO_HOME=$PWD/.cargo
+            export DYLINT_DRIVER_PATH=$PWD/.dylint_drivers
         fi
         export M3_TARGET=''${M3_TARGET:-gem5}
         export M3_ISA=''${M3_ISA:-riscv64}

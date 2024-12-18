@@ -24,6 +24,11 @@ def main():
         ("cargo", "install", "--locked", "cargo-dylint@3.1.2", "dylint-link@3.1.2"), check=True
     )
 
+    # Dylint fails if the driver path is overridden but nonexistent.
+    driver_path = os.environ.get("DYLINT_DRIVER_PATH")
+    if driver_path is not None:
+        os.makedirs(driver_path, exist_ok=True)
+
     for crate in args.crates:
         subprocess.run(
             (

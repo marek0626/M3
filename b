@@ -53,6 +53,7 @@ tooldir=$build/toolsbin
 # rust env vars
 rusttoolchain="$root/src/toolchain/rust"
 rustbuild="$root/$build/rust"
+rustgeneric="$root/build/rust"
 rustisa="$M3_ISA"
 export RUST_TARGET=$rustisa-linux-m3-$rustabi
 export RUST_TARGET_PATH=$rusttoolchain
@@ -154,6 +155,7 @@ help() {
     echo "    fmt-check:               run formatters, but in check mode."
     echo "    test:                    run Rust tests on host with miri."
     echo "    testcov:                 run Rust tests on host and generate code coverage."
+    echo "    lint:                    run custom linter on selected packages."
     echo ""
     echo "  M³Linux (RISC-V only):"
     echo "    mklx ...:                (re)build Linux including bbl via buildroot. The"
@@ -759,7 +761,7 @@ case "$cmd" in
     test|testcov)
         errors=0
         dirs="src/libs/rust/thread src/libs/rust/base"
-        out="$root/build/rust"
+        out="$rustgeneric"
         tgt=$(rustup show 2>/dev/null | grep 'Default host:' | gawk '{ print($3) }')
         export RUST_BACKTRACE=1
         if [ "$cmd" = "testcov" ]; then
@@ -786,6 +788,14 @@ case "$cmd" in
             )
             echo "The coverage results are now available in $out/coverage."
         fi
+        ;;
+
+    lint)
+        (
+            export CARGO_TARGET_DIR="$rustgeneric" &&
+            cd "$root" &&
+            ./tools/linter.py src/kernel src/libs/rust/resmng src/server/root src/server/pager
+        )
         ;;
 
     # -- M³Linux --
