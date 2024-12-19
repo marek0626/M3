@@ -18,4 +18,4 @@ git checkout "$commit"
     ./ci/builder.py prepare
 nix develop path:nix -c \
     /usr/bin/env python3 \
-        ./ci/builder.py build --build debug bench
+    ./ci/builder.py build --build debug bench

@@ -44,7 +44,7 @@ generate_config() {
     fi
 
     # validate config
-    xmllint --schema misc/boot.xsd --noout "$1" > /dev/null || exit 1
+    xmllint --schema misc/boot.xsd --noout "$1" >/dev/null || exit 1
 
     # extract env variables and set them
     env=$(xmllint --xpath "/config/env/text()" "$1" 2>/dev/null)
@@ -68,7 +68,7 @@ generate_config() {
     fi
 
     # extract runtime part; this can fail if there is no app element (e.g., standalone.xml)
-    xmllint --xpath /config/dom/app "$1" 2>/dev/null > "$2/boot.xml" || true
+    xmllint --xpath /config/dom/app "$1" 2>/dev/null >"$2/boot.xml" || true
 }
 
 generate_m3lx_deps() {
@@ -107,8 +107,8 @@ generate_m3lx_deps() {
         done
         cp -a src/m3lx/rootfs/* "$targetdir"
         # now generate image
-        ( cd cross/buildroot && PATH="$crossroot/host/sbin:$PATH" FAKEROOTDONTTRYCHOWN=1 \
-            "$crossroot/host/bin/fakeroot" -- "$crossroot/build/buildroot-fs/cpio/fakeroot" ) >/dev/null
+        (cd cross/buildroot && PATH="$crossroot/host/sbin:$PATH" FAKEROOTDONTTRYCHOWN=1 \
+            "$crossroot/host/bin/fakeroot" -- "$crossroot/build/buildroot-fs/cpio/fakeroot") >/dev/null
         rm -rf "$targetdir"
 
         # determine initrd size
@@ -164,7 +164,7 @@ generate_m3lx_deps() {
         sed -e "s/linux,initrd-start = <.*>;/linux,initrd-start = <$initrd_start>;/g" \
             -e "s/linux,initrd-end = <.*>;/linux,initrd-end = <$initrd_end>;/g" \
             -e "s/reg = <MEM_REGION>;/reg = <0x00000000 $mem_off 0x00000000 $(printf "%#x" "$mem_size")>;/g" \
-            "src/m3lx/configs/$M3_TARGET.dts" > "$M3_OUT/$dtb.dts" || exit 1
+            "src/m3lx/configs/$M3_TARGET.dts" >"$M3_OUT/$dtb.dts" || exit 1
         if [ "$M3_HW_UARTNOBUF" = "1" ]; then
             sed --in-place -e 's/compatible = "sifive,uart0";/compatible = "sifive,uart0"; nobuf = "1";/g' \
                 "$M3_OUT/$dtb.dts" || exit 1
@@ -179,8 +179,8 @@ get_kernel() {
     # extract kernel arguments
     kernels=$(gawk 'match($0, /<kernel\s.*args="(.*?)"/, m) {
         printf("%s/%s,", "'"$bindir"'", m[1])
-    }' < "$1")
-    count="${kernels//[^,]}"
+    }' <"$1")
+    count="${kernels//[^,]/}"
 
     # if there is just one kernel, pass root arguments to it
     if [ "${#count}" = "1" ]; then
@@ -229,8 +229,7 @@ get_mods() {
         match($0, /<mod\s+name="(.*?)"\s+file="(.*?)"/, m) {
             printf("%s=%s\n", m[1], m[2])
         }
-    ')
-    do
+    '); do
         name=${mod%%=*}
         path=${mod#*=}
         if [ ! -f "$M3_MOD_PATH/$path" ]; then
@@ -243,7 +242,7 @@ get_mods() {
 get_rot_layers() {
     local IFS=','
     layers=$(xmllint --xpath 'string(/config/rot/@layers)' "$1" 2>/dev/null)
-    read -ra layerArray <<< "$layers"
+    read -ra layerArray <<<"$layers"
     for i in "${!layerArray[@]}"; do
         path="$build/rotbin/${layerArray[i]}"
         if [ ! -f "$path" ]; then
@@ -255,15 +254,15 @@ get_rot_layers() {
 }
 
 print_module_hashes() {
-    if ! command -v openssl &> /dev/null; then
+    if ! command -v openssl &>/dev/null; then
         echo "NOTE: openssl is not installed. Cannot print SHA3-256 hashes of boot modules."
         return
     fi
 
-    IFS=',' read -ra modules <<< "$1"
+    IFS=',' read -ra modules <<<"$1"
     for module in "${modules[@]}"; do
         if [[ "$module" == *"="* ]]; then
-            IFS='=' read -r module_name module_path <<< "$module"
+            IFS='=' read -r module_name module_path <<<"$module"
         else
             module_name="RoT layer"
             module_path="$module"
@@ -363,7 +362,7 @@ build_params_gem5() {
             echo "b main"
             echo -n "run" "${params[@]}"
             echo
-        } > "$tmp"
+        } >"$tmp"
         gdb --tui platform/gem5/build/$gem5build/gem5.debug "--command=$tmp"
     else
         if [ "$debug" != "" ]; then
@@ -452,7 +451,7 @@ build_params_hw() {
         else
             echo "python3 ./fpga/main.py $fpga $args 2>&1 | tee -i log.txt"
         fi
-    } > "$M3_OUT/run.sh"
+    } >"$M3_OUT/run.sh"
 
     rsync -rz \
         tools/fpga platform/hw/fpga_tools/python "${files[@]}" "$M3_OUT/run.sh" \

@@ -19,16 +19,16 @@ create_image() {
     pw="$3"
 
     # create tmp files for gitlab user/pw
-    echo "$user" > "$root/out/user"
-    echo "$pw" > "$root/out/pw"
+    echo "$user" >"$root/out/user"
+    echo "$pw" >"$root/out/pw"
     trap 'rm -f "$root/out/user" "$root/out/pw" 2>/dev/null' EXIT ERR INT TERM
 
     # create image
-    ( cd "$root" && podman build \
+    (cd "$root" && podman build \
         --build-arg "KUBECFG=out/kubecfg" \
         --build-arg "GITLAB_USER=out/user" \
         --build-arg "GITLAB_PW=out/pw" \
-        -t "$name" . )
+        -t "$name" .)
 
     # tag and push to repo
     podman image tag "$name:latest" "registry.hpc.barkhauseninstitut.org/$ns/$name:latest"
@@ -88,4 +88,5 @@ case "$1" in
         ;;
     *)
         usage "$0"
+        ;;
 esac
