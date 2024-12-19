@@ -169,7 +169,9 @@ class Test:
         vars["M3_GEM5_LOG"] = "Tcu,TcuRegWrite,TcuCmd,TcuConnector"
         vars["M3_GEM5_CPUFREQ"] = "3GHz"
         vars["M3_GEM5_MEMFREQ"] = "1GHz"
-        vars["M3_GEM5_CORES"] = "12"
+
+        if self.name != "standalone":
+            vars["M3_GEM5_CORES"] = "12"
 
         if self.name in rots_tests:
             fspath = self.build_dir() / "fsimgs-{}".format(self.bpe) / "default.img"
