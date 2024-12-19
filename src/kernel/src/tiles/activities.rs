@@ -551,6 +551,20 @@ impl Activity {
                 act.id()
             );
 
+            // don't send stop to accelerators if it exited by itself (which they do via
+            // activity_ctrl(STOP))
+            let act = if act.tile_desc().is_programmable()
+                || (old_state == State::RUNNING && revoker != act.id())
+            {
+                let act_weak = act.clone().downgrade_asyn();
+                // ignore failures here
+                let _ = ActivityMng::stop_activity_async(act);
+                act_weak.upgrade().unwrap()
+            }
+            else {
+                act
+            };
+
             let mut tilemux = tilemng::tilemux(act.tile_id());
             // force-invalidate standard EPs
             for ep in act.eps_start..act.eps_start + STD_EPS_COUNT as EpId {
@@ -575,20 +589,6 @@ impl Activity {
             let act = if !act.is_root() {
                 let act_weak = act.clone().downgrade_asyn();
                 Self::revoke_caps_async(act, revoker);
-                act_weak.upgrade().unwrap()
-            }
-            else {
-                act
-            };
-
-            // don't send stop to accelerators if it exited by itself (which they do via
-            // activity_ctrl(STOP))
-            let act = if act.tile_desc().is_programmable()
-                || (act.state() == State::RUNNING && revoker != act.id())
-            {
-                let act_weak = act.clone().downgrade_asyn();
-                // ignore failures here
-                let _ = ActivityMng::stop_activity_async(act);
                 act_weak.upgrade().unwrap()
             }
             else {

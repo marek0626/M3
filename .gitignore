@@ -12,6 +12,7 @@
 /.remote-build-failed
 /.cargo
 /.rustup
+/.dylint_drivers
 /build
 /run
 /ci/out
