@@ -300,14 +300,14 @@ impl Capability {
 
     pub fn new<T>(sel: CapSel, obj: StrongRc<T>) -> Self
     where
-        StrongRc<T>: IntoKObject<T>,
+        StrongRc<T>: IntoKObject,
     {
         Self::new_range(SelRange::new(sel), obj)
     }
 
     pub fn new_range<T>(sels: SelRange, obj: StrongRc<T>) -> Self
     where
-        StrongRc<T>: IntoKObject<T>,
+        StrongRc<T>: IntoKObject,
     {
         // ensure that there are no other references to the kobject when inserting it
         assert_eq!(StrongRc::strong_count(&obj), 1);
@@ -318,7 +318,7 @@ impl Capability {
 
     pub unsafe fn new_range_unchecked<T>(sels: SelRange, obj: StrongRc<T>) -> Self
     where
-        StrongRc<T>: IntoKObject<T>,
+        StrongRc<T>: IntoKObject,
     {
         Capability {
             sels,
