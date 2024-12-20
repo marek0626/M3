@@ -73,7 +73,7 @@ impl KObject {
     }
 }
 
-pub trait IntoKObject<T> {
+pub trait IntoKObject {
     unsafe fn into_kobj(self) -> KObject;
 }
 
@@ -92,7 +92,7 @@ macro_rules! impl_from_kobj {
             }
         }
 
-        impl IntoKObject<$ty> for StrongRc<$ty> {
+        impl IntoKObject for StrongRc<$ty> {
             unsafe fn into_kobj(self) -> KObject {
                 KObject::$name(self)
             }
