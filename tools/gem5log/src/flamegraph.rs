@@ -83,6 +83,8 @@ struct Call<'n> {
     addr: usize,
     org_time: u64,
     time: u64,
+    /// Time spent in the called subroutines
+    child_duration: u64,
 }
 
 impl<'n> ThreadId<'n> {
@@ -271,10 +273,11 @@ impl<'n> Thread<'n> {
             addr: sym.addr,
             org_time: time,
             time,
+            child_duration: 0,
         });
     }
 
-    fn ret(&mut self, sym: &symbols::Symbol, time: u64, tid: &ThreadId<'_>) -> Option<Call<'_>> {
+    fn ret(&mut self, sym: &symbols::Symbol, time: u64, tid: &ThreadId<'_>) -> Option<Call<'n>> {
         if !self.stack.iter().any(|s| s.func == sym.name) {
             trace!(
                 "{}: {} return to {} w/o preceeding call",
@@ -286,7 +289,7 @@ impl<'n> Thread<'n> {
         }
 
         // unwind the stack until we find the function on the stack that matches the current symbol
-        let mut last = self.stack.pop().unwrap();
+        let mut last = self.stack_pop(time).unwrap();
         loop {
             match self.stack.last() {
                 Some(f) if f.func == sym.name => {
@@ -294,9 +297,19 @@ impl<'n> Thread<'n> {
                     trace!("{}: {} {:w$} RET  -> {}", time, tid, "", sym.name, w = w);
                     return Some(last);
                 },
-                _ => last = self.stack.pop().unwrap(),
+                _ => last = self.stack_pop(time).unwrap(),
             }
         }
+    }
+
+    /// Remove last call from stack and calculate [`Call::child_duration`] for parent
+    fn stack_pop(&mut self, time: u64) -> Option<Call<'n>> {
+        let last = self.stack.pop();
+        if let Some((last, parent)) = last.as_ref().zip(self.stack.last_mut()) {
+            let duration = time - last.time;
+            parent.child_duration += duration;
+        }
+        last
     }
 }
 
@@ -358,14 +371,15 @@ fn handle_return(
             thread.ret(sym, time, tid)
         }
         else {
-            thread.stack.pop().unwrap();
-            thread.stack.pop()
+            thread.stack_pop(time).unwrap();
+            thread.stack_pop(time)
         };
 
         if let Some(stack) = stack {
             // print flamegraph line
             if let Some(l) = last {
-                writeln!(wr, "{} {}", stack, (time - l.time) / 1000)?;
+                let duration = time - l.time;
+                writeln!(wr, "{} {}", stack, (duration - l.child_duration) / 1000)?;
             }
         }
     }
