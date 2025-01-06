@@ -58,7 +58,6 @@ impl<K: Copy + Ord, V> Node<K, V> {
 ///
 /// The idea and parts of the implementation are taken from the [MMIX](http://mmix.cs.hm.edu/)
 /// simulator, written by Donald Knuth
-#[derive(Default)]
 pub struct Treap<K: Copy + Ord, V> {
     root: Option<NonNull<Node<K, V>>>,
     prio: Wrapping<u32>,
@@ -307,6 +306,12 @@ impl<K: Copy + Ord, V> Treap<K, V> {
                 },
             }
         }
+    }
+}
+
+impl<K: Copy + Ord, V> Default for Treap<K, V> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
