@@ -352,19 +352,19 @@ fn handle_return(
 ) -> Result<(), Error> {
     if !thread.stack.is_empty() {
         // generate stack
-        let stack = if mode == crate::Mode::FlameGraph {
-            use std::fmt::Write;
-            let mut stack: String = format!("{}", tile);
-            stack.push(';');
-            write!(stack, "{}", tid).unwrap();
-            for f in thread.stack.iter() {
+        let stack = match mode {
+            crate::Mode::FlameGraph { start, .. } if time >= start => {
+                use std::fmt::Write;
+                let mut stack: String = format!("{}", tile);
                 stack.push(';');
-                stack.push_str(f.func);
-            }
-            Some(stack)
-        }
-        else {
-            None
+                write!(stack, "{}", tid).unwrap();
+                for f in thread.stack.iter() {
+                    stack.push(';');
+                    stack.push_str(f.func);
+                }
+                Some(stack)
+            },
+            _ => None,
         };
 
         let last = if unwind {
@@ -388,7 +388,6 @@ fn handle_return(
 
 pub fn generate(
     mode: crate::Mode,
-    snapshot_time: u64,
     isa: crate::ISA,
     syms: &BTreeMap<usize, symbols::Symbol>,
 ) -> Result<(), Error> {
@@ -404,14 +403,24 @@ pub fn generate(
     let mut line = String::new();
     while reader.read_line(&mut line)? != 0 {
         if let Some((time, tile, maybe_addr)) = get_func_addr(&line) {
-            if mode == crate::Mode::Snapshot && time >= snapshot_time {
-                println!("Snapshot at timestamp {}:", time);
-                for t in tiles.keys() {
-                    if let Some(tile) = tiles.get(t) {
-                        tile.snapshot();
+            match mode {
+                crate::Mode::FlameGraph { end: Some(end), .. } if (time >= end) => {
+                    break;
+                },
+                crate::Mode::Snapshot {
+                    time: snapshot_time,
+                } => {
+                    if time >= snapshot_time {
+                        println!("Snapshot at timestamp {}:", time);
+                        for t in tiles.keys() {
+                            if let Some(tile) = tiles.get(t) {
+                                tile.snapshot();
+                            }
+                        }
+                        break;
                     }
-                }
-                break;
+                },
+                _ => {},
             }
 
             let time = if time >= last_time { time } else { last_time };
