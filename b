@@ -49,6 +49,7 @@ fi
 build=build/$M3_TARGET-$M3_ISA-$M3_BUILD
 bindir=$build/bin/
 tooldir=$build/toolsbin
+gem5dir=build/gem5
 
 # rust env vars
 rusttoolchain="$root/src/toolchain/rust"
@@ -156,6 +157,12 @@ help() {
     echo "    test:                    run Rust tests on host with miri."
     echo "    testcov:                 run Rust tests on host and generate code coverage."
     echo "    lint:                    run custom linter on selected packages."
+    echo ""
+    echo "  gem5:"
+    echo "    mkgem5 [<isas>]:         (re)build the gem5 simulator for the given ISA(s)."
+    echo "                             The ISAs are given as a comma-separated list of"
+    echo "                             'RISCV' and 'X86'. By default all are built."
+    echo "    mkgem5dbg [<isas>]:      (re)build the debug version of the gem5 simulator."
     echo ""
     echo "  M³Linux (RISC-V only):"
     echo "    mklx ...:                (re)build Linux including bbl via buildroot. The"
@@ -820,6 +827,26 @@ case "$cmd" in
                 cd "$root" &&
                 ./tools/linter.py src/kernel src/libs/rust/resmng src/server/root src/server/pager
         )
+        ;;
+
+    # -- gem5 --
+    mkgem5 | mkgem5dbg)
+        if [ "$cmd" = "mkgem5" ]; then
+            suffix="opt"
+        else
+            suffix="debug"
+        fi
+        if [ "$script" = "" ]; then
+            script="RISCV,X86"
+        fi
+        IFS=',' read -ra isa <<<"$script"
+        args=()
+        for isa in "${isa[@]}"; do
+            args=("${args[@]}" "build/$isa/gem5.$suffix")
+        done
+        mkdir -p "$gem5dir" &&
+            cd "$gem5dir" &&
+            scons "-j$(nproc)" -C "$root/platform/gem5" "${args[@]}"
         ;;
 
     # -- M³Linux --

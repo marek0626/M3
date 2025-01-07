@@ -227,12 +227,13 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
             gem5isas.append('RISCV')
         if 'x86_64' in isas:
             gem5isas.append('X86')
-        gem5isas = gem5isas[0] if len(gem5isas) == 1 else '{' + ','.join(gem5isas) + '}'
+        gem5isas = ','.join(gem5isas)
         t = BuildTask(name="build/gem5",
                       deps=NIX_DEPS + ["platform/gem5"],
-                      out_path="platform/gem5/build",
+                      out_path="build/gem5/build",
                       cache_dir=cache_dir,
-                      cmd='cd platform/gem5 && scons -j32 build/' + gem5isas + '/gem5.opt',
+                      # don't build M³ at this point as we cannot do that yet
+                      cmd='./b mkgem5 ' + gem5isas + ' -n',
                       shell=True)
         tasks.append(t)
 
