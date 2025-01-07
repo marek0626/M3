@@ -27,7 +27,7 @@ let
     # we want to have clang 15 for clang-format (the clang package is still at 11.1.0)
     m3Inputs = [
         rustup ninja llvmPackages_15.clang-unwrapped libxml2
-        python311Packages.autopep8 pkg-config grcov
+        python311Packages.autopep8 python311Packages.gitpython pkg-config grcov
     ];
 
     # building M³Linux

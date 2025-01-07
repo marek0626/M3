@@ -16,6 +16,8 @@ git checkout "$commit"
 
 /usr/bin/env python3 \
     ./ci/builder.py prepare
-nix develop path:nix -c \
-    /usr/bin/env python3 \
-    ./ci/builder.py build --build debug bench
+if [ "$2" != "--no-build" ]; then
+    nix develop path:nix -c \
+        /usr/bin/env python3 \
+        ./ci/builder.py build --build debug bench
+fi
