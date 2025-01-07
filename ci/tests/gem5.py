@@ -345,23 +345,16 @@ if args.publish:
                 shutil.rmtree(pubdir / filename)
 
         # copy all log files to result directory (don't keep gem5 logs etc.)
-        now = datetime.today().strftime('%Y-%m-%d')
-        head = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
-        resdst = pubdir / "{}-{}".format(now, head)
-        resdst.mkdir(exist_ok=True)
-        subprocess.call(["rsync",
-                         "-am",
-                         "--include='log.txt'",
-                         "--include='*/'",
-                         "--exclude='*'",
-                         args.results,
-                         resdst])
+        subprocess.call("rsync -am --include='log.txt' --include='*/' --exclude='*' {} {}"
+                        .format(args.results, pubdir),
+                        shell=True)
 
         # copy coverage results from host tests
+        dirname = Path(args.results).name
         subprocess.call(["rsync",
                          "-am",
                          "{}/coverage/".format(args.results),
-                         "{}/".format(resdst / "coverage")])
+                         "{}/".format(pubdir / dirname / "coverage")])
 
         # generate website
         if args.web:
