@@ -450,8 +450,8 @@ case "$cmd" in
                 fi
                 port=$(grep --text "$tile.remote_gdb" "$M3_OUT/log.txt" | cut -d ' ' -f 7)
                 if [ "$port" = "" ]; then
-                    if [ $attemps -gt 5 ]; then
-                        echo "Unable to find port for tile '$tile' after 5 attempts."
+                    if [ $attemps -gt 20 ]; then
+                        echo "Unable to find port for tile '$tile' after 20 attempts."
                         exit 1
                     fi
                     sleep 1
