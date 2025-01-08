@@ -83,6 +83,8 @@ struct Call<'n> {
     addr: usize,
     org_time: u64,
     time: u64,
+    /// Time spent in the called subroutines
+    child_duration: u64,
 }
 
 impl<'n> ThreadId<'n> {
@@ -271,10 +273,11 @@ impl<'n> Thread<'n> {
             addr: sym.addr,
             org_time: time,
             time,
+            child_duration: 0,
         });
     }
 
-    fn ret(&mut self, sym: &symbols::Symbol, time: u64, tid: &ThreadId<'_>) -> Option<Call<'_>> {
+    fn ret(&mut self, sym: &symbols::Symbol, time: u64, tid: &ThreadId<'_>) -> Option<Call<'n>> {
         if !self.stack.iter().any(|s| s.func == sym.name) {
             trace!(
                 "{}: {} return to {} w/o preceeding call",
@@ -286,7 +289,7 @@ impl<'n> Thread<'n> {
         }
 
         // unwind the stack until we find the function on the stack that matches the current symbol
-        let mut last = self.stack.pop().unwrap();
+        let mut last = self.stack_pop(time).unwrap();
         loop {
             match self.stack.last() {
                 Some(f) if f.func == sym.name => {
@@ -294,9 +297,19 @@ impl<'n> Thread<'n> {
                     trace!("{}: {} {:w$} RET  -> {}", time, tid, "", sym.name, w = w);
                     return Some(last);
                 },
-                _ => last = self.stack.pop().unwrap(),
+                _ => last = self.stack_pop(time).unwrap(),
             }
         }
+    }
+
+    /// Remove last call from stack and calculate [`Call::child_duration`] for parent
+    fn stack_pop(&mut self, time: u64) -> Option<Call<'n>> {
+        let last = self.stack.pop();
+        if let Some((last, parent)) = last.as_ref().zip(self.stack.last_mut()) {
+            let duration = time - last.time;
+            parent.child_duration += duration;
+        }
+        last
     }
 }
 
@@ -339,33 +352,34 @@ fn handle_return(
 ) -> Result<(), Error> {
     if !thread.stack.is_empty() {
         // generate stack
-        let stack = if mode == crate::Mode::FlameGraph {
-            use std::fmt::Write;
-            let mut stack: String = format!("{}", tile);
-            stack.push(';');
-            write!(stack, "{}", tid).unwrap();
-            for f in thread.stack.iter() {
+        let stack = match mode {
+            crate::Mode::FlameGraph { start, .. } if time >= start => {
+                use std::fmt::Write;
+                let mut stack: String = format!("{}", tile);
                 stack.push(';');
-                stack.push_str(f.func);
-            }
-            Some(stack)
-        }
-        else {
-            None
+                write!(stack, "{}", tid).unwrap();
+                for f in thread.stack.iter() {
+                    stack.push(';');
+                    stack.push_str(f.func);
+                }
+                Some(stack)
+            },
+            _ => None,
         };
 
         let last = if unwind {
             thread.ret(sym, time, tid)
         }
         else {
-            thread.stack.pop().unwrap();
-            thread.stack.pop()
+            thread.stack_pop(time).unwrap();
+            thread.stack_pop(time)
         };
 
         if let Some(stack) = stack {
             // print flamegraph line
             if let Some(l) = last {
-                writeln!(wr, "{} {}", stack, (time - l.time) / 1000)?;
+                let duration = time - l.time;
+                writeln!(wr, "{} {}", stack, (duration - l.child_duration) / 1000)?;
             }
         }
     }
@@ -374,7 +388,6 @@ fn handle_return(
 
 pub fn generate(
     mode: crate::Mode,
-    snapshot_time: u64,
     isa: crate::ISA,
     syms: &BTreeMap<usize, symbols::Symbol>,
 ) -> Result<(), Error> {
@@ -390,14 +403,24 @@ pub fn generate(
     let mut line = String::new();
     while reader.read_line(&mut line)? != 0 {
         if let Some((time, tile, maybe_addr)) = get_func_addr(&line) {
-            if mode == crate::Mode::Snapshot && time >= snapshot_time {
-                println!("Snapshot at timestamp {}:", time);
-                for t in tiles.keys() {
-                    if let Some(tile) = tiles.get(t) {
-                        tile.snapshot();
+            match mode {
+                crate::Mode::FlameGraph { end: Some(end), .. } if (time >= end) => {
+                    break;
+                },
+                crate::Mode::Snapshot {
+                    time: snapshot_time,
+                } => {
+                    if time >= snapshot_time {
+                        println!("Snapshot at timestamp {}:", time);
+                        for t in tiles.keys() {
+                            if let Some(tile) = tiles.get(t) {
+                                tile.snapshot();
+                            }
+                        }
+                        break;
                     }
-                }
-                break;
+                },
+                _ => {},
             }
 
             let time = if time >= last_time { time } else { last_time };

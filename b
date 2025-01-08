@@ -124,8 +124,8 @@ help() {
     echo "                             Optionally, each binary can end with '+<offset>' in"
     echo "                             case of ASLR. stdin expects the gem5.log with Exec"
     echo "                             enabled."
-    echo "    flamegraph=<progs>:      produces a flamegraph with stdin to stdout. <progs>"
-    echo "                             are the binary names for the symbols. stdin expects"
+    echo "    flamegraph=<progs>       produces a flamegraph with stdin to stdout. <progs>"
+    echo "      [start] [end]          are the binary names for the symbols. stdin expects"
     echo "                             the gem5.log with Exec,TcuConnector enabled."
     echo "    snapshot=<progs> <time>: prints the stacktrace of all programs at timestamp"
     echo "                             <time>. <progs> are the binary names for the symbols."
@@ -569,7 +569,7 @@ case "$cmd" in
             paths=("${paths[@]}" "$build/bin/$f")
         done
         # inferno-flamegraph is available at https://github.com/jonhoo/inferno
-        "$tooldir/gem5log" flamegraph "${paths[@]}" | inferno-flamegraph --countname ns
+        "$tooldir/gem5log" flamegraph "${script:-0}" "${1:-0}" "${paths[@]}" | inferno-flamegraph --countname ns
         ;;
 
     snapshot=*)

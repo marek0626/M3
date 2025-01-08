@@ -4,7 +4,7 @@ with import nixpkgs { inherit system; };
 let
     # general dependencies
     generalInputs = [
-        bashInteractive less git gawk openssh which rsync wget cpio openssl shfmt yamlfmt
+        bashInteractive less git gawk openssh which rsync wget cpio openssl shfmt yamlfmt inferno
     ];
 
     # building gem5

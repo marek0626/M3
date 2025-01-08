@@ -52,11 +52,11 @@ impl Log for Logger {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug)]
 pub enum Mode {
     Trace,
-    FlameGraph,
-    Snapshot,
+    FlameGraph { start: u64, end: Option<u64> },
+    Snapshot { time: u64 },
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -105,22 +105,28 @@ fn main() -> Result<(), error::Error> {
 
     let args: Vec<String> = env::args().collect();
 
-    let mode = match args.get(1) {
-        Some(mode) if mode == "trace" => Mode::Trace,
-        Some(mode) if mode == "flamegraph" => Mode::FlameGraph,
-        Some(mode) if mode == "snapshot" => Mode::Snapshot,
+    let (mode, bin_start) = match args.get(1) {
+        Some(mode) if mode == "trace" => (Mode::Trace, 2),
+        Some(mode) if mode == "flamegraph" => {
+            if args.len() < 5 {
+                usage(&args[0]);
+            }
+            let start = args.get(2).expect("Invalid arguments");
+            let start = start.parse::<u64>().expect("Invalid start time");
+            let end = args.get(3).expect("Invalid arguments");
+            let end = end.parse::<u64>().expect("Invalid end time");
+            let end = if end == 0 { None } else { Some(end) };
+            (Mode::FlameGraph { start, end }, 4)
+        },
+        Some(mode) if mode == "snapshot" => {
+            if args.len() < 4 {
+                usage(&args[0]);
+            }
+            let time = args.get(2).expect("Invalid arguments");
+            let time = time.parse::<u64>().expect("Invalid time");
+            (Mode::Snapshot { time }, 3)
+        },
         _ => usage(&args[0]),
-    };
-
-    let (snapshot_time, bin_start) = if mode == Mode::Snapshot {
-        if args.len() < 4 {
-            usage(&args[0]);
-        }
-        let time = args.get(2).expect("Invalid arguments");
-        (time.parse::<u64>().expect("Invalid time"), 3)
-    }
-    else {
-        (0, 2)
     };
 
     let mut isa = None;
@@ -128,7 +134,7 @@ fn main() -> Result<(), error::Error> {
     for f in &args[bin_start..] {
         let bin_isa = determine_isa(f)?;
         if let Some(isa) = isa {
-            if mode != Mode::Trace && bin_isa != isa {
+            if !matches!(mode, Mode::Trace) && bin_isa != isa {
                 panic!(
                     "Binaries with different ISAs are not supported for mode {:?}",
                     mode
@@ -142,8 +148,8 @@ fn main() -> Result<(), error::Error> {
 
     match mode {
         Mode::Trace => trace::generate(&syms),
-        Mode::FlameGraph | Mode::Snapshot => {
-            flamegraph::generate(mode, snapshot_time, isa.unwrap(), &syms)
+        Mode::FlameGraph { .. } | Mode::Snapshot { .. } => {
+            flamegraph::generate(mode, isa.unwrap(), &syms)
         },
     }
 }
