@@ -355,6 +355,7 @@ build_params_gem5() {
     rm -rf "$M3_OUT"/coverage-*-*.profraw
 
     export M5_PATH=$build
+    builddir=build/gem5
     if [ "$DBG_GEM5" != "" ]; then
         tmp=$(mktemp)
         trap 'rm -f $tmp' EXIT ERR INT TERM
@@ -363,12 +364,12 @@ build_params_gem5() {
             echo -n "run" "${params[@]}"
             echo
         } >"$tmp"
-        gdb --tui platform/gem5/build/$gem5build/gem5.debug "--command=$tmp"
+        gdb --tui "$builddir/build/$gem5build/gem5.debug" "--command=$tmp"
     else
         if [ "$debug" != "" ]; then
-            "$build/toolsbin/ignoreint" platform/gem5/build/$gem5build/gem5.opt "${params[@]}"
+            "$build/toolsbin/ignoreint" "$builddir/build/$gem5build/gem5.opt" "${params[@]}"
         else
-            platform/gem5/build/$gem5build/gem5.opt "${params[@]}"
+            "$builddir/build/$gem5build/gem5.opt" "${params[@]}"
         fi
     fi
 }
