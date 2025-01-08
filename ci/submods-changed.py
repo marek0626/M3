@@ -7,14 +7,8 @@ import sys
 RETRIES = 10
 
 branches = {
-    'cross/buildroot': 'm3-2024.08.02',
-    'linux': 'virteps',
     'ninjapie': 'master',
     'platform/hw': 'master',
-    'riscv-pk': 'virteps',
-    'src/libs/crypto/kecacc-xkcp': 'main',
-    'src/libs/flac': 'master',
-    'src/libs/musl': 'virteps',
     'tools/lints': 'main',
 }
 
