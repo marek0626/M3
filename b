@@ -714,79 +714,12 @@ case "$cmd" in
         ;;
 
     fmt | fmt-check)
-        shargs=(--indent 4 --case-indent)
-        yamlargs=(-conf "$root/.yamlfmt.yaml")
         if [ "$cmd" = "fmt-check" ]; then
-            clangargs=(--dry-run --Werror)
-            cargoargs=(--check)
-            pythonargs=(--diff --exit-code)
-            xmlargs=()
-            shargs+=(--diff)
-            yamlargs+=(-lint)
+            args=()
         else
-            clangargs=(-i)
-            cargoargs=()
-            pythonargs=(-i)
-            xmlargs=(-i)
-            shargs+=(--write)
+            args=(--inplace)
         fi
-        filter=(
-            -name Cargo.toml -or
-            -name "*.py" -or
-            -name "*.cc" -or
-            -name "*.h" -or
-            -name "*.xml" -or
-            -name "*.sh" -or
-            -name "*.yaml" -or
-            -name "*.yml"
-        )
-        files=(b)
-        errors=0
-        while IFS= read -r -d '' f; do
-            if [[ "$f" =~ "src/m3lx" ]] || [[ "$f" =~ "cross/buildroot" ]] ||
-                [[ "$f" =~ "tools/ninjapie" ]] || [[ "$f" =~ "tools/lints" ]]; then
-                continue
-            fi
-            if [ "$(basename "$f")" != "build.py" ]; then
-                if [[ "$f" =~ "src/libs/musl" ]] && [[ ! "$f" =~ "src/libs/musl/m3" ]]; then
-                    continue
-                fi
-                if [[ "$f" =~ "src/libs/flac" ]] || [[ "$f" =~ "src/apps/bsdutils" ]] ||
-                    [[ "$f" =~ "src/libs/leveldb" ]] || [[ "$f" =~ "src/libs/axieth" ]]; then
-                    continue
-                fi
-            fi
-
-            echo "Formatting $f..."
-            case "$f" in
-                *.cc | *.h)
-                    clang-format "${clangargs[@]}" "$f" || errors=$((errors + 1))
-                    ;;
-                */Cargo.toml)
-                    if [ -d "$(dirname "$f")/src" ]; then
-                        find "$(dirname "$f")/src" -name "*.rs" -print0 |
-                            xargs -0 rustfmt "${cargoargs[@]}" ||
-                            errors=$((errors + 1))
-                    fi
-                    ;;
-                *.py)
-                    autopep8 --global-config .python-format "${pythonargs[@]}" "$f" ||
-                        errors=$((errors + 1))
-                    ;;
-                *.xml)
-                    XMLLINT_INDENT="    " \
-                        "$root/tools/wrapfmt.py" "${xmlargs[@]}" "xmllint --format" "$f" ||
-                        errors=$((errors + 1))
-                    ;;
-                *.sh | b)
-                    shfmt "${shargs[@]}" "$f" || errors=$((errors + 1))
-                    ;;
-                *.yaml | *.yml)
-                    yamlfmt "${yamlargs[@]}" "$f" || errors=$((errors + 1))
-                    ;;
-            esac
-        done < <(find ci src tools boot cross .gitlab -mindepth 1 \( "${filter[@]}" \) -print0 && printf '%s\0' "${files[@]}")
-        [ $errors -eq 0 ] || exit 1
+        (cd "$root" && "./tools/fmt.py" "${args[@]}")
         ;;
 
     test | testcov)
