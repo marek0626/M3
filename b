@@ -256,6 +256,13 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+if [ "$script" = "" ]; then
+    cargs=()
+else
+    cargs=("$script")
+fi
+cargs+=("$@")
+
 mkdir -p "$build" "$M3_OUT"
 export NPBUILD="$build"
 
@@ -714,10 +721,9 @@ case "$cmd" in
         ;;
 
     fmt | fmt-check)
-        if [ "$cmd" = "fmt-check" ]; then
-            args=()
-        else
-            args=(--inplace)
+        args=("${cargs[@]}")
+        if [ "$cmd" != "fmt-check" ]; then
+            args+=(--inplace)
         fi
         (cd "$root" && "./tools/fmt.py" "${args[@]}")
         ;;
