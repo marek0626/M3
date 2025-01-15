@@ -78,9 +78,11 @@ use crate::vfs::{BufReader, Fd, File, FileRef, OpenFlags, VFS};
 /// act.wait().unwrap();
 /// ```
 pub struct ChildActivity {
+    // Declare rmng first so that it is dropped before base.
+    // The resource manager expect the child to still live when remove is called during drop.
+    rmng: ResMngChild,
     base: Activity,
     child_sel: Cell<Selector>,
-    rmng: ResMngChild,
     files: Vec<(Fd, Fd)>,
     mounts: Vec<(String, String)>,
 }
