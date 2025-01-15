@@ -8,9 +8,20 @@ import os
 import asyncio
 from asyncio.subprocess import PIPE, STDOUT
 import argparse
+import sys
+
+verbose = None
+prefix = ""
+suffix = ""
 
 
 async def main():
+    global verbose, prefix, suffix
+
+    if sys.stdout.isatty():
+        prefix = "\x1b[1m"
+        suffix = "\x1b[22m"
+
     parser = argparse.ArgumentParser(description="M³'s asynchronous formatter")
     parser.add_argument(
         "-i",
@@ -18,8 +29,15 @@ async def main():
         action="store_true",
         help="replace files with formatted version",
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="print every formatted file",
+    )
     args = parser.parse_args()
 
+    verbose = args.verbose
     inplace = args.inplace
     routines = []
 
@@ -144,8 +162,9 @@ async def exec(path, args, **kwargs):
     async with limiter:
         proc = await asyncio.create_subprocess_exec(*args, **kwargs, stdout=PIPE, stderr=STDOUT)
         stdout, _ = await proc.communicate()
-        print(f"Formatting {path}...")
-        print(stdout.decode(), end="")
+        if verbose or proc.returncode != 0 or stdout:
+            print(f"{prefix}Formatting {path}...{suffix}")
+            print(stdout.decode(), end="")
         return proc.returncode == 0
 
 
