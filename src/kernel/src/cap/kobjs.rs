@@ -79,7 +79,7 @@ pub trait IntoKObject {
 
 #[macro_export]
 macro_rules! impl_from_kobj {
-    ($ty:ty, $name:ident) => {
+    ($ty:ty, $name:ident, $slab:expr) => {
         impl TryFrom<&KObject> for TempRc<$ty> {
             type Error = anyhow::Error;
 
@@ -94,9 +94,16 @@ macro_rules! impl_from_kobj {
 
         impl IntoKObject for StrongRc<$ty> {
             unsafe fn into_kobj(self) -> KObject {
+                base::const_assert!($crate::slab::fits_slab(
+                    StrongRc::<$ty>::alloc_size(),
+                    $slab
+                ));
                 KObject::$name(self)
             }
         }
+    };
+    ($ty:ty, $name:ident) => {
+        $crate::impl_from_kobj!($ty, $name, 0);
     };
 }
 
@@ -1080,7 +1087,7 @@ impl TileObject {
     }
 }
 
-impl_from_kobj!(TileObject, Tile);
+impl_from_kobj!(TileObject, Tile, 1);
 
 impl fmt::Debug for TileObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1236,7 +1243,7 @@ impl EPObject {
     }
 }
 
-impl_from_kobj!(EPObject, EP);
+impl_from_kobj!(EPObject, EP, 1);
 
 impl Drop for EPObject {
     fn drop(&mut self) {
