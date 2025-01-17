@@ -233,6 +233,25 @@ extern "C" fn __rdl_alloc_zeroed(size: usize, _align: usize, _err: *mut u8) -> *
     res
 }
 
+/// Check that an allocation of `size` would fit the slab allocator in [`SLABS`] at index `slab`
+#[allow(dead_code)]
+pub const fn fits_slab(size: usize, slab: usize) -> bool {
+    assert!(slab <= SLAB_SIZES.len());
+    let min = if slab > 0 {
+        SLAB_SIZES[slab - 1] + 1
+    }
+    else {
+        0
+    };
+    let max = if slab < SLAB_SIZES.len() {
+        SLAB_SIZES[slab]
+    }
+    else {
+        usize::MAX
+    };
+    min <= size && size <= max
+}
+
 /// Check that s is strictly increasing during compilation.
 #[allow(dead_code)]
 const fn strictly_increasing(s: &[usize]) -> bool {

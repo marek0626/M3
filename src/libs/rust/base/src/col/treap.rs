@@ -18,6 +18,7 @@
 
 use core::cmp::Ordering;
 use core::fmt;
+use core::mem::size_of;
 use core::num::Wrapping;
 use core::ptr::{read_volatile, NonNull};
 
@@ -307,6 +308,11 @@ impl<K: Copy + Ord, V> Treap<K, V> {
             }
         }
     }
+
+    /// The size of an allocation that a treap of this type performs
+    pub const fn alloc_size() -> usize {
+        size_of::<Node<K, V>>()
+    }
 }
 
 impl<K: Copy + Ord, V> Default for Treap<K, V> {
@@ -479,5 +485,10 @@ mod tests {
         assert!(treap.remove_root().is_some());
         assert!(treap.remove_root().is_some());
         assert!(treap.is_empty());
+    }
+
+    #[test]
+    fn test_alloc_size() {
+        assert!(Treap::<(), ()>::alloc_size() > 0);
     }
 }

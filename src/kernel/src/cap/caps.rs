@@ -19,7 +19,7 @@ use base::errors::Code;
 use base::io::LogFlags;
 use base::kif::{CapRngDesc, CapSel};
 use base::log;
-use base::mem::{size_of, GlobOff, VirtAddr};
+use base::mem::{GlobOff, VirtAddr};
 use base::tcu::ActId;
 use base::{cfg, format};
 use core::cmp;
@@ -31,6 +31,7 @@ use thread::{NonWeak, StrongRc, TempRc};
 use crate::cap::{EPObject, GateEP, KMemObject, KObject, MapObject, TileObject};
 use crate::kerrno;
 use crate::ktcu;
+use crate::slab::fits_slab;
 use crate::tiles::{tilemng, Activity, INVAL_ID};
 
 use super::IntoKObject;
@@ -77,8 +78,10 @@ impl cmp::Ord for SelRange {
     }
 }
 
+type Caps = Treap<SelRange, Capability>;
+
 pub struct CapTable {
-    caps: Treap<SelRange, Capability>,
+    caps: Caps,
     act: Option<NonNull<Activity>>,
 }
 
@@ -88,6 +91,7 @@ unsafe fn as_shared<T>(obj: &mut T) -> NonNull<T> {
 
 impl Default for CapTable {
     fn default() -> Self {
+        base::const_assert!(fits_slab(Caps::alloc_size(), 1));
         Self {
             caps: Treap::new(),
             act: None,
@@ -294,7 +298,6 @@ pub struct Capability {
 
 impl Capability {
     const fn size() -> usize {
-        base::const_assert!(size_of::<Capability>() <= 128);
         128 + crate::slab::HEADER_SIZE
     }
 
