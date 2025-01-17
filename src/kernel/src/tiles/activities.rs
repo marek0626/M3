@@ -635,7 +635,7 @@ impl Activity {
     }
 }
 
-impl_from_kobj!(Activity, Activity, 2);
+impl_from_kobj!(Activity, Activity, 2, 2);
 
 impl Drop for Activity {
     fn drop(&mut self) {
