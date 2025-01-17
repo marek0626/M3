@@ -27,7 +27,7 @@ impl From<SerdeError> for Error {
 }
 
 impl Display for SerdeError {
-    fn fmt(&self, f: &mut _core::fmt::Formatter<'_>) -> _core::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "(de)serialization failed")
     }
 }
