@@ -109,7 +109,9 @@ async def clang_fmt(path, inplace):
 async def cargo_fmt(path, inplace):
     if not path.endswith("/Cargo.toml"):
         return True
-    args = [] if inplace else ["--check"]
+    args = ["--unstable-features", "--skip-children"]
+    if not inplace:
+        args += ["--check"]
 
     routines = []
     dirname = os.path.dirname(path)
