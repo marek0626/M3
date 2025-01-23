@@ -478,7 +478,7 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
                 }
 
                 // detect thread switches
-                if sym.name == "thread_switch" && instr_is_sp_init(isa, &line) {
+                if sym.name == "thread_switch_async" && instr_is_sp_init(isa, &line) {
                     if let Some(pos) = line.find("D=") {
                         let tid = u64::from_str_radix(&line[(pos + 4)..(pos + 20)], 16)?;
                         cur_bin.thread_switch(tid, time);
@@ -495,7 +495,7 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
                         cur_thread.call(sym, time, cur_tid);
                     }
                     // otherwise it's a return
-                    else if sym.name != "thread_switch" && cur_thread.stack.is_empty() {
+                    else if sym.name != "thread_switch_async" && cur_thread.stack.is_empty() {
                         warn!("{}: return with empty stack", time);
                     }
                     else {
