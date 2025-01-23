@@ -13,7 +13,7 @@
  * General Public License version 2 for more details.
  */
 
-use log::{debug, trace, warn};
+use log::{debug, error, trace, warn};
 use std::collections::{btree_map, BTreeMap, HashMap};
 use std::fmt;
 use std::io::{self, BufRead, StdoutLock, Write};
@@ -279,11 +279,9 @@ impl<'n> Thread<'n> {
 
     fn ret(&mut self, sym: &symbols::Symbol, time: u64, tid: &ThreadId<'_>) -> Option<Call<'n>> {
         if !self.stack.iter().any(|s| s.func == sym.name) {
-            trace!(
+            error!(
                 "{}: {} return to {} w/o preceeding call",
-                time,
-                tid,
-                sym.name
+                time, tid, sym.name
             );
             return None;
         }
@@ -496,7 +494,7 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
                     }
                     // otherwise it's a return
                     else if sym.name != "thread_switch_async" && cur_thread.stack.is_empty() {
-                        warn!("{}: return with empty stack", time);
+                        error!("{}: return with empty stack", time);
                     }
                     else {
                         handle_return(mode, &mut wr, time, tile, sym, cur_thread, cur_tid, true)?;
