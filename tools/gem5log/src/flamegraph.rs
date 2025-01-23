@@ -24,7 +24,7 @@ use crate::symbols;
 const STACK_SIZE: u64 = 0x20000;
 
 #[derive(Copy, Clone, Default, Debug, Hash, PartialEq, Eq)]
-struct TileId {
+pub struct TileId {
     id: u16,
 }
 
@@ -386,11 +386,7 @@ fn handle_return(
     Ok(())
 }
 
-pub fn generate(
-    mode: crate::Mode,
-    isa: crate::ISA,
-    syms: &BTreeMap<usize, symbols::Symbol>,
-) -> Result<(), Error> {
+pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> Result<(), Error> {
     let mut last_time = 0;
     let mut tiles: HashMap<TileId, Tile<'_>> = HashMap::new();
 
@@ -441,7 +437,7 @@ pub fn generate(
             }
 
             let addr = maybe_addr.unwrap();
-            if let Some(sym) = symbols::resolve(syms, addr) {
+            if let Some(sym) = symbols::resolve(tile, syms, addr) {
                 // detect tiles
                 tiles
                     .entry(tile)

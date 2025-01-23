@@ -18,8 +18,8 @@ mod flamegraph;
 mod symbols;
 mod trace;
 
+use flamegraph::TileId;
 use log::{Level, Log, Metadata, Record};
-use std::collections::BTreeMap;
 use std::env;
 use std::io::Read;
 use std::process::{exit, Command, Stdio};
@@ -130,7 +130,7 @@ fn main() -> Result<(), error::Error> {
     };
 
     let mut isa = None;
-    let mut syms = BTreeMap::new();
+    let mut syms = symbols::Symbols::default();
     for f in &args[bin_start..] {
         let bin_isa = determine_isa(f)?;
         if let Some(isa) = isa {
@@ -143,7 +143,14 @@ fn main() -> Result<(), error::Error> {
         }
         isa = Some(bin_isa);
 
-        symbols::parse_symbols(&mut syms, f)?;
+        let fsyms = symbols::parse_symbols(f)?;
+        // TODO replace this simple heuristic with a more general and robust approach
+        if f.ends_with("kernel") {
+            syms.tiles.entry(TileId::new(0, 0)).or_default().push(fsyms);
+        }
+        else {
+            syms.all.push(fsyms);
+        }
     }
 
     match mode {
