@@ -75,6 +75,7 @@ struct Thread<'n> {
     stack: Vec<Call<'n>>,
     switched: u64,
     last_func: usize,
+    last_addr: usize,
 }
 
 #[derive(Debug)]
@@ -486,7 +487,13 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
                 let cur_thread = cur_bin.stacks.get_mut(&cur_bin.cur_tid).unwrap();
 
                 // function changed?
-                if !isr_exit && sym.addr != cur_thread.last_func {
+                if !isr_exit
+                    && (sym.addr != cur_thread.last_func
+                        // we also want to handle cases like ISRs where the last instruction of the
+                        // handler leads to a binary switch and we enter the handler from the top
+                        // again next time.
+                        || (addr == sym.addr && addr != cur_thread.last_addr))
+                {
                     let cur_tid = &cur_bin.cur_tid;
                     // it's a call when we jumped to the beginning of a function
                     if addr == sym.addr {
@@ -503,6 +510,7 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
 
                 cur_tile.last_isr_exit = is_isr_exit(isa, &line);
                 cur_thread.last_func = sym.addr;
+                cur_thread.last_addr = addr;
             }
             else {
                 warn!("{}: No symbol for address {:#x}", time, addr);
