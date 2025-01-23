@@ -18,6 +18,7 @@ use base::io::LogFlags;
 use base::libc;
 use base::log;
 use base::mem;
+use core::array;
 use core::ptr::{self, NonNull};
 
 extern "C" {
@@ -123,7 +124,8 @@ impl Slab {
         match self.size {
             Some(_) => {
                 let nptr = malloc(new_size + HEADER_SIZE);
-                let narea = SLAB_ALL.borrow_mut().heap_to_area(nptr);
+                // The last slab is always the unsized one and thus cannot be self.
+                let narea = SLABS.borrow_mut().last_mut().unwrap().heap_to_area(nptr);
                 let res = Self::user_addr(narea);
                 libc::memcpy(res, Self::user_addr(area), old_size);
                 self.free(area);
@@ -136,16 +138,26 @@ impl Slab {
             },
         }
     }
+
+    /// Would an allocation of this size fit into this allocator?
+    fn fits(&self, req_size: usize) -> bool {
+        match self.size {
+            Some(self_size) => req_size <= self_size,
+            None => true,
+        }
+    }
 }
 
-static SLAB_64: LazyStaticRefCell<Slab> = LazyStaticRefCell::default();
-static SLAB_128: LazyStaticRefCell<Slab> = LazyStaticRefCell::default();
-static SLAB_ALL: LazyStaticRefCell<Slab> = LazyStaticRefCell::default();
+/// Available slab sizes
+///
+/// This excludes the last slab that is unsized. This list must be strictly increasing.
+const SLAB_SIZES: &[usize] = &[64, 128];
+static SLABS: LazyStaticRefCell<[Slab; SLAB_SIZES.len() + 1]> = LazyStaticRefCell::default();
 
 pub fn init() {
-    SLAB_64.set(Slab::new(Some(64)));
-    SLAB_128.set(Slab::new(Some(128)));
-    SLAB_ALL.set(Slab::new(None));
+    base::const_assert!(strictly_increasing(SLAB_SIZES));
+    let slabs = array::from_fn(|i| Slab::new(SLAB_SIZES.get(i).cloned()));
+    SLABS.set(slabs);
 }
 
 unsafe fn get_area(ptr: *mut libc::c_void) -> *mut Area {
@@ -154,15 +166,10 @@ unsafe fn get_area(ptr: *mut libc::c_void) -> *mut Area {
 
 #[no_mangle]
 extern "C" fn __rdl_alloc(size: usize, _align: usize, _err: *mut u8) -> *mut libc::c_void {
-    let mut slab = if size <= 64 {
-        SLAB_64.borrow_mut()
-    }
-    else if size <= 128 {
-        SLAB_128.borrow_mut()
-    }
-    else {
-        SLAB_ALL.borrow_mut()
-    };
+    let mut slabs = SLABS.borrow_mut();
+    // It is guaranteed that the last slab fits all sizes.
+    let slab = slabs.iter_mut().find(|slab| slab.fits(size)).unwrap();
+
     let res = unsafe { slab.alloc(size) };
     log!(
         LogFlags::KernSlab,
@@ -212,13 +219,48 @@ unsafe extern "C" fn __rdl_realloc(
 
 #[no_mangle]
 extern "C" fn __rdl_alloc_zeroed(size: usize, _align: usize, _err: *mut u8) -> *mut libc::c_void {
-    let res = unsafe { SLAB_ALL.borrow_mut().calloc(size) };
+    // The last slab is always the unsized one.
+    let mut slabs = SLABS.borrow_mut();
+    let slab_all = slabs.last_mut().unwrap();
+    let res = unsafe { slab_all.calloc(size) };
     log!(
         LogFlags::KernSlab,
         "calloc(sz={}, s={:?}) -> {:#x}",
         size,
-        SLAB_ALL.borrow().size,
+        slab_all.size,
         res as usize
     );
     res
+}
+
+/// Check that an allocation of `size` would fit the slab allocator in [`SLABS`] at index `slab`
+#[allow(dead_code)]
+pub const fn fits_slab(size: usize, slab: usize) -> bool {
+    assert!(slab <= SLAB_SIZES.len());
+    let min = if slab > 0 {
+        SLAB_SIZES[slab - 1] + 1
+    }
+    else {
+        0
+    };
+    let max = if slab < SLAB_SIZES.len() {
+        SLAB_SIZES[slab]
+    }
+    else {
+        usize::MAX
+    };
+    min <= size && size <= max
+}
+
+/// Check that s is strictly increasing during compilation.
+#[allow(dead_code)]
+const fn strictly_increasing(s: &[usize]) -> bool {
+    let mut i = 1;
+    while i < s.len() {
+        if s[i - 1] >= s[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
 }

@@ -34,7 +34,7 @@
 use core::cell::Cell;
 use core::fmt;
 use core::marker::PhantomData;
-use core::mem::ManuallyDrop;
+use core::mem::{size_of, ManuallyDrop};
 use core::ops::Deref;
 use core::ptr::{self, NonNull};
 use core::{hint, mem};
@@ -535,6 +535,13 @@ impl<T> StrongRc<T> {
         // destroy RcBox
         drop(Box::from_raw(self.ptr.as_ptr()));
     }
+
+    /// The size of the actual object allocation
+    ///
+    /// This does not account for the separate, internal weak link allocation.
+    pub const fn alloc_size() -> usize {
+        size_of::<RcBox<T>>()
+    }
 }
 
 impl<T> Downgradable<T> for StrongRc<T> {
@@ -954,5 +961,10 @@ mod tests {
         assert_eq!(new_weak1.can_upgrade(), false);
         assert_eq!(new_weak2.can_upgrade(), false);
         assert_eq!(dropped.get(), false);
+    }
+
+    #[test]
+    fn alloc_size() {
+        assert!(StrongRc::<()>::alloc_size() > 0)
     }
 }
