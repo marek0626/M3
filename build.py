@@ -209,7 +209,7 @@ class M3Env(Env):
         if varAddr:
             global link_addr
             env['LINKFLAGS'] += ['-Wl,--section-start=.text=' + ('0x%x' % link_addr)]
-            link_addr += 0x30000
+            link_addr += 0x80000
 
         # we provide our own start files, unless no start files are desired by the app
         if '-nostartfiles' not in env['LINKFLAGS']:
