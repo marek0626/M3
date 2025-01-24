@@ -229,7 +229,7 @@ impl<'n> Binary<'n> {
     fn new(name: &'n str) -> Self {
         let cur_tid = ThreadId::new(name);
         let mut stacks = BTreeMap::new();
-        stacks.insert(cur_tid.clone(), Thread::default());
+        stacks.insert(cur_tid, Thread::default());
         Binary {
             name,
             stacks,
@@ -244,7 +244,7 @@ impl<'n> Binary<'n> {
     fn found_stack(&mut self, tid: u64, time: u64) {
         let old = self.stacks.remove(&self.cur_tid).unwrap();
         self.cur_tid = ThreadId::new_with_stack(self.name, tid - STACK_SIZE);
-        self.stacks.insert(self.cur_tid.clone(), old);
+        self.stacks.insert(self.cur_tid, old);
         debug!("{}: found stack of {}", time, self.cur_tid);
     }
 
@@ -256,14 +256,14 @@ impl<'n> Binary<'n> {
         match self.stacks.range(..=&new_tid).nth_back(0) {
             Some((tid, _)) if stack >= tid.stack && stack < tid.stack + STACK_SIZE => {
                 // we know the stack, switch to it
-                self.cur_tid = tid.clone();
+                self.cur_tid = *tid;
                 debug!("{}: switched back to {}", time, self.cur_tid);
             },
             _ => {
                 // create new stack
                 new_tid.stack -= STACK_SIZE;
-                self.cur_tid = new_tid.clone();
-                self.stacks.insert(self.cur_tid.clone(), Thread::default());
+                self.cur_tid = new_tid;
+                self.stacks.insert(self.cur_tid, Thread::default());
                 debug!("{}: new thread {}", time, self.cur_tid);
             },
         }
@@ -500,26 +500,23 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
                 let cur_thread = cur_bin.cur_thread();
 
                 // function changed?
-                if !(cur_tile.last_isr_exit && !bin_switch && sym.addr != cur_thread.last_func) {
-                    if sym.addr != cur_thread.last_func
+                if (bin_switch || !cur_tile.last_isr_exit)
+                    && sym.addr != cur_thread.last_func
                         // we also want to handle cases like ISRs where the last instruction of the
                         // handler leads to a binary switch and we enter the handler from the top
                         // again next time.
                         || (addr == sym.addr && addr != cur_thread.last_addr)
-                    {
-                        // it's a call when we jumped to the beginning of a function
-                        if addr == sym.addr {
-                            cur_thread.call(sym, time, cur_tid);
-                        }
-                        // otherwise it's a return
-                        else if sym.name != "thread_switch_async" && cur_thread.stack.is_empty() {
-                            error!("{}: return with empty stack", time);
-                        }
-                        else {
-                            handle_return(
-                                mode, &mut wr, time, tile, sym, cur_thread, cur_tid, true,
-                            )?;
-                        }
+                {
+                    // it's a call when we jumped to the beginning of a function
+                    if addr == sym.addr {
+                        cur_thread.call(sym, time, cur_tid);
+                    }
+                    // otherwise it's a return
+                    else if sym.name != "thread_switch_async" && cur_thread.stack.is_empty() {
+                        error!("{}: return with empty stack", time);
+                    }
+                    else {
+                        handle_return(mode, &mut wr, time, tile, sym, cur_thread, cur_tid, true)?;
                     }
                 }
 
