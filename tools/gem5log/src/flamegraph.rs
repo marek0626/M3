@@ -122,7 +122,13 @@ fn get_func_addr(line: &str) -> Option<(u64, TileId, Option<usize>)> {
     let addr_int = if cpu.ends_with(".cpu:") {
         let addr = parts.nth(2)?;
         let mut addr_parts = addr.splitn(2, '.');
-        usize::from_str_radix(&addr_parts.next()?[2..], 16).ok()
+        let addr = addr_parts.next()?;
+        if let Some(addr) = addr.strip_prefix("0x") {
+            usize::from_str_radix(addr, 16).ok()
+        }
+        else {
+            usize::from_str_radix(addr, 16).ok()
+        }
     }
     else {
         None
