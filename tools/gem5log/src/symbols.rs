@@ -20,7 +20,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 
-use log::warn;
+use log::error;
 
 use crate::error::Error;
 use crate::flamegraph::TileId;
@@ -136,7 +136,7 @@ pub fn resolve(tile_id: TileId, syms: &Symbols, addr: usize) -> Option<&Symbol> 
 }
 
 fn resolve_in(syms: &Vec<Arc<BTreeMap<usize, Symbol>>>, addr: usize) -> Option<&Symbol> {
-    let mut res = None;
+    let mut res: Option<&Symbol> = None;
     for v in syms {
         let sym = v.range(..=addr).nth_back(0).and_then(|(_, sym)| {
             if addr >= sym.binoff + sym.addr && addr < sym.binoff + sym.addr + sym.size {
@@ -148,7 +148,12 @@ fn resolve_in(syms: &Vec<Arc<BTreeMap<usize, Symbol>>>, addr: usize) -> Option<&
         });
         if sym.is_some() {
             if res.is_some() {
-                warn!("Found multiple symbols for address {}", addr);
+                error!(
+                    "Found multiple symbols for address {:#x} (in {} and {})",
+                    addr,
+                    res.unwrap().bin,
+                    sym.unwrap().bin
+                );
             }
             else {
                 res = sym;
