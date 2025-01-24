@@ -370,7 +370,6 @@ fn handle_return(
             thread.ret(sym, time, tid)
         }
         else {
-            thread.stack_pop(time).unwrap();
             thread.stack_pop(time)
         };
 
@@ -443,26 +442,24 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
                     .or_insert_with(|| Tile::new(Binary::new(&sym.name), tile));
                 let cur_tile = tiles.get_mut(&tile).unwrap();
 
+                // detect ISR exits
+                if cur_tile.last_isr_exit {
+                    let obin = cur_tile.bins.get_mut::<str>(cur_tile.last_bin).unwrap();
+                    let othread = obin.stacks.get_mut(&obin.cur_tid).unwrap();
+                    handle_return(
+                        mode,
+                        &mut wr,
+                        time,
+                        tile,
+                        sym,
+                        othread,
+                        &obin.cur_tid,
+                        false,
+                    )?;
+                }
                 // detect binary changes (e.g., tilemux to app)
                 let bin_switch = sym.bin != cur_tile.last_bin;
-                let mut isr_exit = false;
                 if bin_switch {
-                    // detect ISR exits
-                    if cur_tile.last_isr_exit {
-                        let obin = cur_tile.bins.get_mut::<str>(cur_tile.last_bin).unwrap();
-                        let othread = obin.stacks.get_mut(&obin.cur_tid).unwrap();
-                        handle_return(
-                            mode,
-                            &mut wr,
-                            time,
-                            tile,
-                            sym,
-                            othread,
-                            &obin.cur_tid,
-                            false,
-                        )?;
-                        isr_exit = true;
-                    }
                     cur_tile.binary_switch(sym, time);
                 }
 
@@ -487,24 +484,27 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
                 let cur_thread = cur_bin.stacks.get_mut(&cur_bin.cur_tid).unwrap();
 
                 // function changed?
-                if !isr_exit
-                    && (sym.addr != cur_thread.last_func
+                if !(cur_tile.last_isr_exit && !bin_switch && sym.addr != cur_thread.last_func) {
+                    if sym.addr != cur_thread.last_func
                         // we also want to handle cases like ISRs where the last instruction of the
                         // handler leads to a binary switch and we enter the handler from the top
                         // again next time.
-                        || (addr == sym.addr && addr != cur_thread.last_addr))
-                {
-                    let cur_tid = &cur_bin.cur_tid;
-                    // it's a call when we jumped to the beginning of a function
-                    if addr == sym.addr {
-                        cur_thread.call(sym, time, cur_tid);
-                    }
-                    // otherwise it's a return
-                    else if sym.name != "thread_switch_async" && cur_thread.stack.is_empty() {
-                        error!("{}: return with empty stack", time);
-                    }
-                    else {
-                        handle_return(mode, &mut wr, time, tile, sym, cur_thread, cur_tid, true)?;
+                        || (addr == sym.addr && addr != cur_thread.last_addr)
+                    {
+                        let cur_tid = &cur_bin.cur_tid;
+                        // it's a call when we jumped to the beginning of a function
+                        if addr == sym.addr {
+                            cur_thread.call(sym, time, cur_tid);
+                        }
+                        // otherwise it's a return
+                        else if sym.name != "thread_switch_async" && cur_thread.stack.is_empty() {
+                            error!("{}: return with empty stack", time);
+                        }
+                        else {
+                            handle_return(
+                                mode, &mut wr, time, tile, sym, cur_thread, cur_tid, true,
+                            )?;
+                        }
                     }
                 }
 
