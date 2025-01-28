@@ -13,7 +13,7 @@
  * General Public License version 2 for more details.
  */
 
-use log::{debug, trace, warn};
+use log::{debug, error, trace, warn};
 use std::collections::{btree_map, BTreeMap, HashMap};
 use std::fmt;
 use std::io::{self, BufRead, StdoutLock, Write};
@@ -24,7 +24,7 @@ use crate::symbols;
 const STACK_SIZE: u64 = 0x20000;
 
 #[derive(Copy, Clone, Default, Debug, Hash, PartialEq, Eq)]
-struct TileId {
+pub struct TileId {
     id: u16,
 }
 
@@ -64,7 +64,7 @@ struct Binary<'n> {
     cur_tid: ThreadId<'n>,
 }
 
-#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 struct ThreadId<'n> {
     bin: &'n str,
     stack: u64,
@@ -75,6 +75,7 @@ struct Thread<'n> {
     stack: Vec<Call<'n>>,
     switched: u64,
     last_func: usize,
+    last_addr: usize,
 }
 
 #[derive(Debug)]
@@ -121,7 +122,13 @@ fn get_func_addr(line: &str) -> Option<(u64, TileId, Option<usize>)> {
     let addr_int = if cpu.ends_with(".cpu:") {
         let addr = parts.nth(2)?;
         let mut addr_parts = addr.splitn(2, '.');
-        usize::from_str_radix(&addr_parts.next()?[2..], 16).ok()
+        let addr = addr_parts.next()?;
+        if let Some(addr) = addr.strip_prefix("0x") {
+            usize::from_str_radix(addr, 16).ok()
+        }
+        else {
+            usize::from_str_radix(addr, 16).ok()
+        }
     }
     else {
         None
@@ -145,6 +152,10 @@ impl<'n> Tile<'n> {
     }
 
     fn binary_switch(&mut self, sym: &'n symbols::Symbol, time: u64) {
+        if let Some(prev) = self.bins.get_mut(self.last_bin) {
+            prev.cur_thread().suspend(time);
+        }
+
         match self.bins.entry(&*sym.bin) {
             btree_map::Entry::Vacant(entry) => {
                 debug!("{}: new binary {}", time, sym.bin);
@@ -154,7 +165,11 @@ impl<'n> Tile<'n> {
                 debug!("{}: switched to {}", time, sym.bin);
             },
         }
+
         self.last_bin = &sym.bin;
+        if let Some(next) = self.bins.get_mut(self.last_bin) {
+            next.cur_thread().resume(time);
+        }
     }
 
     fn suspend(&mut self, now: u64) {
@@ -214,7 +229,7 @@ impl<'n> Binary<'n> {
     fn new(name: &'n str) -> Self {
         let cur_tid = ThreadId::new(name);
         let mut stacks = BTreeMap::new();
-        stacks.insert(cur_tid.clone(), Thread::default());
+        stacks.insert(cur_tid, Thread::default());
         Binary {
             name,
             stacks,
@@ -222,41 +237,38 @@ impl<'n> Binary<'n> {
         }
     }
 
+    fn cur_thread(&mut self) -> &mut Thread<'n> {
+        self.stacks.get_mut(&self.cur_tid).unwrap()
+    }
+
     fn found_stack(&mut self, tid: u64, time: u64) {
         let old = self.stacks.remove(&self.cur_tid).unwrap();
         self.cur_tid = ThreadId::new_with_stack(self.name, tid - STACK_SIZE);
-        self.stacks.insert(self.cur_tid.clone(), old);
+        self.stacks.insert(self.cur_tid, old);
         debug!("{}: found stack of {}", time, self.cur_tid);
     }
 
     fn thread_switch(&mut self, stack: u64, time: u64) {
-        // remember switch time (see below)
-        self.stacks.get_mut(&self.cur_tid).unwrap().switched = time;
+        self.cur_thread().suspend(time);
 
         // try to find the thread with new stack
         let mut new_tid = ThreadId::new_with_stack(self.name, stack);
         match self.stacks.range(..=&new_tid).nth_back(0) {
             Some((tid, _)) if stack >= tid.stack && stack < tid.stack + STACK_SIZE => {
                 // we know the stack, switch to it
-                self.cur_tid = tid.clone();
+                self.cur_tid = *tid;
                 debug!("{}: switched back to {}", time, self.cur_tid);
             },
             _ => {
                 // create new stack
                 new_tid.stack -= STACK_SIZE;
-                self.cur_tid = new_tid.clone();
-                self.stacks.insert(self.cur_tid.clone(), Thread::default());
+                self.cur_tid = new_tid;
+                self.stacks.insert(self.cur_tid, Thread::default());
                 debug!("{}: new thread {}", time, self.cur_tid);
             },
         }
 
-        // shift the start time of all calls by the time other threads ran
-        let cur_thread = self.stacks.get_mut(&self.cur_tid).unwrap();
-        let duration = time - cur_thread.switched;
-        for f in &mut cur_thread.stack {
-            f.time += duration;
-        }
-        cur_thread.switched = 0;
+        self.cur_thread().resume(time);
     }
 }
 
@@ -265,7 +277,20 @@ impl<'n> Thread<'n> {
         self.stack.len() * 2
     }
 
-    fn call(&mut self, sym: &'n symbols::Symbol, time: u64, tid: &ThreadId<'_>) {
+    fn suspend(&mut self, time: u64) {
+        self.switched = time;
+    }
+
+    fn resume(&mut self, time: u64) {
+        // shift the start time of all calls by the time other threads ran
+        let duration = time - self.switched;
+        for f in &mut self.stack {
+            f.time += duration;
+        }
+        self.switched = 0;
+    }
+
+    fn call(&mut self, sym: &'n symbols::Symbol, time: u64, tid: ThreadId<'_>) {
         let w = self.depth();
         trace!("{}: {} {:w$} CALL -> {}", time, tid, "", sym.name, w = w);
         self.stack.push(Call {
@@ -277,13 +302,11 @@ impl<'n> Thread<'n> {
         });
     }
 
-    fn ret(&mut self, sym: &symbols::Symbol, time: u64, tid: &ThreadId<'_>) -> Option<Call<'n>> {
+    fn ret(&mut self, sym: &symbols::Symbol, time: u64, tid: ThreadId<'_>) -> Option<Call<'n>> {
         if !self.stack.iter().any(|s| s.func == sym.name) {
-            trace!(
+            error!(
                 "{}: {} return to {} w/o preceeding call",
-                time,
-                tid,
-                sym.name
+                time, tid, sym.name
             );
             return None;
         }
@@ -347,7 +370,7 @@ fn handle_return(
     tile: TileId,
     sym: &symbols::Symbol,
     thread: &mut Thread<'_>,
-    tid: &ThreadId<'_>,
+    tid: ThreadId<'_>,
     unwind: bool,
 ) -> Result<(), Error> {
     if !thread.stack.is_empty() {
@@ -371,7 +394,6 @@ fn handle_return(
             thread.ret(sym, time, tid)
         }
         else {
-            thread.stack_pop(time).unwrap();
             thread.stack_pop(time)
         };
 
@@ -386,11 +408,7 @@ fn handle_return(
     Ok(())
 }
 
-pub fn generate(
-    mode: crate::Mode,
-    isa: crate::ISA,
-    syms: &BTreeMap<usize, symbols::Symbol>,
-) -> Result<(), Error> {
+pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> Result<(), Error> {
     let mut last_time = 0;
     let mut tiles: HashMap<TileId, Tile<'_>> = HashMap::new();
 
@@ -441,33 +459,22 @@ pub fn generate(
             }
 
             let addr = maybe_addr.unwrap();
-            if let Some(sym) = symbols::resolve(syms, addr) {
+            if let Some(sym) = symbols::resolve(tile, syms, addr) {
                 // detect tiles
                 tiles
                     .entry(tile)
                     .or_insert_with(|| Tile::new(Binary::new(&sym.name), tile));
                 let cur_tile = tiles.get_mut(&tile).unwrap();
 
+                // detect ISR exits
+                if cur_tile.last_isr_exit {
+                    let obin = cur_tile.bins.get_mut::<str>(cur_tile.last_bin).unwrap();
+                    let othread = obin.stacks.get_mut(&obin.cur_tid).unwrap();
+                    handle_return(mode, &mut wr, time, tile, sym, othread, obin.cur_tid, false)?;
+                }
                 // detect binary changes (e.g., tilemux to app)
                 let bin_switch = sym.bin != cur_tile.last_bin;
-                let mut isr_exit = false;
                 if bin_switch {
-                    // detect ISR exits
-                    if cur_tile.last_isr_exit {
-                        let obin = cur_tile.bins.get_mut::<str>(cur_tile.last_bin).unwrap();
-                        let othread = obin.stacks.get_mut(&obin.cur_tid).unwrap();
-                        handle_return(
-                            mode,
-                            &mut wr,
-                            time,
-                            tile,
-                            sym,
-                            othread,
-                            &obin.cur_tid,
-                            false,
-                        )?;
-                        isr_exit = true;
-                    }
                     cur_tile.binary_switch(sym, time);
                 }
 
@@ -482,25 +489,31 @@ pub fn generate(
                 }
 
                 // detect thread switches
-                if sym.name == "thread_switch" && instr_is_sp_init(isa, &line) {
+                if sym.name == "thread_switch_async" && instr_is_sp_init(isa, &line) {
                     if let Some(pos) = line.find("D=") {
                         let tid = u64::from_str_radix(&line[(pos + 4)..(pos + 20)], 16)?;
                         cur_bin.thread_switch(tid, time);
                     }
                 }
 
-                let cur_thread = cur_bin.stacks.get_mut(&cur_bin.cur_tid).unwrap();
+                let cur_tid = cur_bin.cur_tid;
+                let cur_thread = cur_bin.cur_thread();
 
                 // function changed?
-                if !isr_exit && sym.addr != cur_thread.last_func {
-                    let cur_tid = &cur_bin.cur_tid;
+                if (bin_switch || !cur_tile.last_isr_exit)
+                    && sym.addr != cur_thread.last_func
+                        // we also want to handle cases like ISRs where the last instruction of the
+                        // handler leads to a binary switch and we enter the handler from the top
+                        // again next time.
+                        || (addr == sym.addr && addr != cur_thread.last_addr)
+                {
                     // it's a call when we jumped to the beginning of a function
                     if addr == sym.addr {
                         cur_thread.call(sym, time, cur_tid);
                     }
                     // otherwise it's a return
-                    else if sym.name != "thread_switch" && cur_thread.stack.is_empty() {
-                        warn!("{}: return with empty stack", time);
+                    else if sym.name != "thread_switch_async" && cur_thread.stack.is_empty() {
+                        error!("{}: return with empty stack", time);
                     }
                     else {
                         handle_return(mode, &mut wr, time, tile, sym, cur_thread, cur_tid, true)?;
@@ -509,6 +522,7 @@ pub fn generate(
 
                 cur_tile.last_isr_exit = is_isr_exit(isa, &line);
                 cur_thread.last_func = sym.addr;
+                cur_thread.last_addr = addr;
             }
             else {
                 warn!("{}: No symbol for address {:#x}", time, addr);

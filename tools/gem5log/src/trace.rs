@@ -13,16 +13,15 @@
  * General Public License version 2 for more details.
  */
 
-use std::collections::BTreeMap;
-
 use std::io::Write;
 use std::io::{self, BufRead};
 
 use crate::error::Error;
+use crate::flamegraph::TileId;
 use crate::symbols;
 
 fn repl_instr_line(
-    syms: &BTreeMap<usize, symbols::Symbol>,
+    syms: &symbols::Symbols,
     writer: &mut io::StdoutLock<'_>,
     line: &str,
 ) -> Option<()> {
@@ -35,6 +34,9 @@ fn repl_instr_line(
     if !cpu.ends_with(".cpu:") {
         return None;
     }
+    let chip_int = cpu[1..2].parse::<u8>().ok()?;
+    let tile_int = cpu[3..5].parse::<u8>().ok()?;
+    let tile_int = TileId::new(chip_int, tile_int);
     let addr = parts.nth(2)?;
     let mut addr_parts = addr.splitn(2, '.');
     let hex_begin = addr_parts.next()?;
@@ -58,7 +60,7 @@ fn repl_instr_line(
         Some(&rem.trim_start()[2..])
     }?;
 
-    if let Some(sym) = symbols::resolve(syms, addr_int) {
+    if let Some(sym) = symbols::resolve(tile_int, syms, addr_int) {
         write!(
             writer,
             "{} {} \x1b[1m{}\x1b[0m @ {:#x} : {}+{:#x} : {}",
@@ -83,7 +85,7 @@ fn repl_instr_line(
     Some(())
 }
 
-pub fn generate(syms: &BTreeMap<usize, symbols::Symbol>) -> Result<(), Error> {
+pub fn generate(syms: &symbols::Symbols) -> Result<(), Error> {
     let stdin = io::stdin();
     let mut reader = io::BufReader::new(stdin.lock());
 

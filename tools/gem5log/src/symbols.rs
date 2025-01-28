@@ -13,13 +13,23 @@
  * General Public License version 2 for more details.
  */
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::Arc;
+
+use log::error;
 
 use crate::error::Error;
+use crate::flamegraph::TileId;
+
+#[derive(Debug, Default)]
+pub struct Symbols {
+    pub tiles: HashMap<TileId, Vec<Arc<BTreeMap<usize, Symbol>>>>,
+    pub all: Vec<Arc<BTreeMap<usize, Symbol>>>,
+}
 
 #[derive(Debug)]
 pub struct Symbol {
@@ -40,7 +50,7 @@ impl fmt::Display for Symbol {
     }
 }
 
-pub fn parse_symbols<P>(syms: &mut BTreeMap<usize, Symbol>, file: P) -> Result<(), Error>
+pub fn parse_symbols<P>(file: P) -> Result<Arc<BTreeMap<usize, Symbol>>, Error>
 where
     P: AsRef<Path>,
 {
@@ -70,6 +80,7 @@ where
     let stdout = cmd.stdout.as_mut().unwrap();
     let mut reader = BufReader::new(stdout);
 
+    let mut syms = BTreeMap::new();
     let mut line = String::new();
     while reader.read_line(&mut line)? != 0 {
         // 0021a300 00000030 T kernel::CapTable::act() const
@@ -108,18 +119,46 @@ where
 
     match cmd.wait() {
         Ok(status) if !status.success() => Err(Error::Nm(status.code().unwrap())),
-        Ok(_) => Ok(()),
+        Ok(_) => Ok(Arc::new(syms)),
         Err(e) => Err(Error::from(e)),
     }
 }
 
-pub fn resolve(syms: &BTreeMap<usize, Symbol>, addr: usize) -> Option<&Symbol> {
-    syms.range(..=addr).nth_back(0).and_then(|(_, sym)| {
-        if addr >= sym.binoff + sym.addr && addr < sym.binoff + sym.addr + sym.size {
-            Some(sym)
+pub fn resolve(tile_id: TileId, syms: &Symbols, addr: usize) -> Option<&Symbol> {
+    match syms
+        .tiles
+        .get(&tile_id)
+        .and_then(|syms| resolve_in(syms, addr))
+    {
+        Some(sym) => Some(sym),
+        None => resolve_in(&syms.all, addr),
+    }
+}
+
+fn resolve_in(syms: &Vec<Arc<BTreeMap<usize, Symbol>>>, addr: usize) -> Option<&Symbol> {
+    let mut res: Option<&Symbol> = None;
+    for v in syms {
+        let sym = v.range(..=addr).nth_back(0).and_then(|(_, sym)| {
+            if addr >= sym.binoff + sym.addr && addr < sym.binoff + sym.addr + sym.size {
+                Some(sym)
+            }
+            else {
+                None
+            }
+        });
+        if sym.is_some() {
+            if res.is_some() {
+                error!(
+                    "Found multiple symbols for address {:#x} (in {} and {})",
+                    addr,
+                    res.unwrap().bin,
+                    sym.unwrap().bin
+                );
+            }
+            else {
+                res = sym;
+            }
         }
-        else {
-            None
-        }
-    })
+    }
+    res
 }

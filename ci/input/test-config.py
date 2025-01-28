@@ -24,10 +24,11 @@ hard_disk0 = os.environ.get('M3_GEM5_IDE_DRIVE')
 if not os.path.isfile(hard_disk0):
     num_sto = 0
 
+kecaccspmsize = '128MB'
 if tiletype == 'a':
     l1size = None
     l2size = None
-    spmsize = '64MB'
+    spmsize = '128MB'
 else:
     l1size = '32kB'
     l2size = '256kB'
@@ -102,7 +103,7 @@ for i in range(0, num_kecacc):
                             id=TileId(0, num_tiles + num_copy + num_indir + 1 + num_sto + i),
                             cmdline=cmd_list[1],  # FIXME
                             memTile=None,
-                            spmsize='64MB')
+                            spmsize=kecaccspmsize)
     tiles.append(tile)
 
 # create ether tiles
