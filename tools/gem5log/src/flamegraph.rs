@@ -14,14 +14,25 @@
  */
 
 use log::{debug, error, trace, warn};
+use once_cell::sync::Lazy;
 use std::collections::{btree_map, BTreeMap, HashMap};
 use std::fmt;
 use std::io::{self, BufRead, StdoutLock, Write};
+use std::sync::Mutex;
 
 use crate::error::Error;
 use crate::symbols;
 
 const STACK_SIZE: u64 = 0x20000;
+const UNKNOWN_STACK: StackId = 0;
+
+static NEXT_TID: Lazy<Mutex<u8>> = Lazy::new(|| Mutex::new(0));
+
+fn next_tid() -> u8 {
+    let mut next_tid = NEXT_TID.lock().unwrap();
+    *next_tid += 1;
+    *next_tid - 1
+}
 
 #[derive(Copy, Clone, Default, Debug, Hash, PartialEq, Eq)]
 pub struct TileId {
@@ -58,16 +69,19 @@ struct Tile<'n> {
     susp_start: u64,
 }
 
-struct Binary<'n> {
-    name: &'n str,
-    stacks: BTreeMap<ThreadId<'n>, Thread<'n>>,
-    cur_tid: ThreadId<'n>,
-}
+type StackId = u64;
 
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 struct ThreadId<'n> {
     bin: &'n str,
-    stack: u64,
+    tid: u8,
+}
+
+struct Binary<'n> {
+    name: &'n str,
+    tids: BTreeMap<StackId, ThreadId<'n>>,
+    stacks: BTreeMap<ThreadId<'n>, Thread<'n>>,
+    cur_stack: StackId,
 }
 
 #[derive(Default)]
@@ -88,19 +102,9 @@ struct Call<'n> {
     child_duration: u64,
 }
 
-impl<'n> ThreadId<'n> {
-    fn new(bin: &'n str) -> Self {
-        Self::new_with_stack(bin, 0)
-    }
-
-    fn new_with_stack(bin: &'n str, stack: u64) -> Self {
-        ThreadId { bin, stack }
-    }
-}
-
 impl fmt::Display for ThreadId<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(fmt, "{} [tid={:#x}]", self.bin, self.stack)
+        write!(fmt, "{} [tid={}]", self.bin, self.tid)
     }
 }
 
@@ -199,13 +203,14 @@ impl<'n> Tile<'n> {
     fn snapshot(&self) {
         println!("{}:", self.id);
         for bin in self.bins.values() {
+            let cur_tid = bin.cur_tid();
             for (tid, thread) in &bin.stacks {
                 // ignore empty threads
                 if thread.stack.is_empty() {
                     continue;
                 }
 
-                if self.last_bin == bin.name && *tid == bin.cur_tid {
+                if self.last_bin == bin.name && *tid == cur_tid {
                     println!("  \x1B[1mThread {}:\x1B[0m", tid);
                 }
                 else {
@@ -227,44 +232,61 @@ impl<'n> Tile<'n> {
 
 impl<'n> Binary<'n> {
     fn new(name: &'n str) -> Self {
-        let cur_tid = ThreadId::new(name);
+        let cur_tid = ThreadId {
+            bin: name,
+            tid: next_tid(),
+        };
+        let cur_stack = UNKNOWN_STACK;
         let mut stacks = BTreeMap::new();
         stacks.insert(cur_tid, Thread::default());
+        let mut tids = BTreeMap::new();
+        tids.insert(cur_stack, cur_tid);
         Binary {
             name,
             stacks,
-            cur_tid,
+            cur_stack,
+            tids,
         }
     }
 
+    fn cur_tid(&self) -> ThreadId<'n> {
+        *self.tids.get(&self.cur_stack).unwrap()
+    }
+
     fn cur_thread(&mut self) -> &mut Thread<'n> {
-        self.stacks.get_mut(&self.cur_tid).unwrap()
+        self.stacks.get_mut(&self.cur_tid()).unwrap()
     }
 
-    fn found_stack(&mut self, tid: u64, time: u64) {
-        let old = self.stacks.remove(&self.cur_tid).unwrap();
-        self.cur_tid = ThreadId::new_with_stack(self.name, tid - STACK_SIZE);
-        self.stacks.insert(self.cur_tid, old);
-        debug!("{}: found stack of {}", time, self.cur_tid);
+    fn found_stack(&mut self, stack: u64, time: u64) {
+        assert_eq!(self.cur_stack, UNKNOWN_STACK);
+        let nid = stack - STACK_SIZE;
+        let tid = self.tids.remove(&self.cur_stack).unwrap();
+        self.tids.insert(nid, tid);
+        self.cur_stack = nid;
+        debug!("{}: found stack of {} -> {}", time, self.cur_stack, tid);
     }
 
-    fn thread_switch(&mut self, stack: u64, time: u64) {
+    fn thread_switch(&mut self, mut stack: u64, time: u64) {
         self.cur_thread().suspend(time);
 
         // try to find the thread with new stack
-        let mut new_tid = ThreadId::new_with_stack(self.name, stack);
-        match self.stacks.range(..=&new_tid).nth_back(0) {
-            Some((tid, _)) if stack >= tid.stack && stack < tid.stack + STACK_SIZE => {
+        match self.tids.range(..=&stack).nth_back(0) {
+            Some((sid, tid)) if stack >= *sid && stack < *sid + STACK_SIZE => {
                 // we know the stack, switch to it
-                self.cur_tid = *tid;
-                debug!("{}: switched back to {}", time, self.cur_tid);
+                self.cur_stack = *sid;
+                debug!("{}: switched back to {}", time, tid);
             },
             _ => {
                 // create new stack
-                new_tid.stack -= STACK_SIZE;
-                self.cur_tid = new_tid;
-                self.stacks.insert(self.cur_tid, Thread::default());
-                debug!("{}: new thread {}", time, self.cur_tid);
+                stack -= STACK_SIZE;
+                self.cur_stack = stack;
+                let tid = ThreadId {
+                    bin: self.name,
+                    tid: next_tid(),
+                };
+                self.tids.insert(self.cur_stack, tid);
+                self.stacks.insert(tid, Thread::default());
+                debug!("{}: new thread {}", time, tid);
             },
         }
 
@@ -290,7 +312,7 @@ impl<'n> Thread<'n> {
         self.switched = 0;
     }
 
-    fn call(&mut self, sym: &'n symbols::Symbol, time: u64, tid: ThreadId<'_>) {
+    fn call(&mut self, sym: &'n symbols::Symbol, time: u64, tid: ThreadId<'n>) {
         let w = self.depth();
         trace!("{}: {} {:w$} CALL -> {}", time, tid, "", sym.name, w = w);
         self.stack.push(Call {
@@ -302,7 +324,7 @@ impl<'n> Thread<'n> {
         });
     }
 
-    fn ret(&mut self, sym: &symbols::Symbol, time: u64, tid: ThreadId<'_>) -> Option<Call<'n>> {
+    fn ret(&mut self, sym: &symbols::Symbol, time: u64, tid: ThreadId<'n>) -> Option<Call<'n>> {
         if !self.stack.iter().any(|s| s.func == sym.name) {
             error!(
                 "{}: {} return to {} w/o preceeding call",
@@ -363,14 +385,14 @@ fn is_isr_exit(isa: crate::ISA, line: &str) -> bool {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn handle_return(
+fn handle_return<'t, 'i: 't>(
     mode: crate::Mode,
     wr: &mut StdoutLock<'_>,
     time: u64,
     tile: TileId,
     sym: &symbols::Symbol,
-    thread: &mut Thread<'_>,
-    tid: ThreadId<'_>,
+    thread: &mut Thread<'t>,
+    tid: ThreadId<'i>,
     unwind: bool,
 ) -> Result<(), Error> {
     if !thread.stack.is_empty() {
@@ -469,8 +491,9 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
                 // detect ISR exits
                 if cur_tile.last_isr_exit {
                     let obin = cur_tile.bins.get_mut::<str>(cur_tile.last_bin).unwrap();
-                    let othread = obin.stacks.get_mut(&obin.cur_tid).unwrap();
-                    handle_return(mode, &mut wr, time, tile, sym, othread, obin.cur_tid, false)?;
+                    let tid = obin.cur_tid();
+                    let othread = obin.stacks.get_mut(&tid).unwrap();
+                    handle_return(mode, &mut wr, time, tile, sym, othread, tid, false)?;
                 }
                 // detect binary changes (e.g., tilemux to app)
                 let bin_switch = sym.bin != cur_tile.last_bin;
@@ -481,7 +504,7 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
                 let cur_bin = cur_tile.bins.get_mut::<str>(&sym.bin).unwrap();
 
                 // detect the stack pointer
-                if cur_bin.cur_tid.stack == 0 && instr_is_sp_assign(isa, &line) {
+                if cur_bin.cur_stack == UNKNOWN_STACK && instr_is_sp_assign(isa, &line) {
                     if let Some(pos) = line.find("D=") {
                         let tid = u64::from_str_radix(&line[(pos + 4)..(pos + 20)], 16)?;
                         cur_bin.found_stack(tid, time);
@@ -496,7 +519,7 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
                     }
                 }
 
-                let cur_tid = cur_bin.cur_tid;
+                let cur_tid = cur_bin.cur_tid();
                 let cur_thread = cur_bin.cur_thread();
 
                 // function changed?
