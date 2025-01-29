@@ -56,6 +56,7 @@ impl Log for Logger {
 pub enum Mode {
     Trace,
     FlameGraph { start: u64, end: Option<u64> },
+    FTrace { start: u64, end: Option<u64> },
     Snapshot { time: u64 },
 }
 
@@ -107,7 +108,7 @@ fn main() -> Result<(), error::Error> {
 
     let (mode, bin_start) = match args.get(1) {
         Some(mode) if mode == "trace" => (Mode::Trace, 2),
-        Some(mode) if mode == "flamegraph" => {
+        Some(mode) if mode == "flamegraph" || mode == "ftrace" => {
             if args.len() < 5 {
                 usage(&args[0]);
             }
@@ -116,7 +117,12 @@ fn main() -> Result<(), error::Error> {
             let end = args.get(3).expect("Invalid arguments");
             let end = end.parse::<u64>().expect("Invalid end time");
             let end = if end == 0 { None } else { Some(end) };
-            (Mode::FlameGraph { start, end }, 4)
+            if mode == "flamegraph" {
+                (Mode::FlameGraph { start, end }, 4)
+            }
+            else {
+                (Mode::FTrace { start, end }, 4)
+            }
         },
         Some(mode) if mode == "snapshot" => {
             if args.len() < 4 {
@@ -155,7 +161,7 @@ fn main() -> Result<(), error::Error> {
 
     match mode {
         Mode::Trace => trace::generate(&syms),
-        Mode::FlameGraph { .. } | Mode::Snapshot { .. } => {
+        Mode::FlameGraph { .. } | Mode::FTrace { .. } | Mode::Snapshot { .. } => {
             flamegraph::generate(mode, isa.unwrap(), &syms)
         },
     }
