@@ -127,6 +127,10 @@ help() {
     echo "    flamegraph=<progs>       produces a flamegraph with stdin to stdout. <progs>"
     echo "      [start] [end]          are the binary names for the symbols. stdin expects"
     echo "                             the gem5.log with Exec,TcuConnector enabled."
+    echo "    ftrace=<progs>           produces an ftrace with stdin to stdout, which be fed"
+    echo "      [start] [end]          into tools like Perfetto or Trace Compass. <progs>"
+    echo "                             are the binary names for the symbols. stdin expects"
+    echo "                             the gem5.log with Exec,TcuConnector enabled."
     echo "    snapshot=<progs> <time>: prints the stacktrace of all programs at timestamp"
     echo "                             <time>. <progs> are the binary names for the symbols."
     echo "                             stdin expects the gem5.log with Exec enabled."
@@ -589,6 +593,15 @@ case "$cmd" in
         done
         # inferno-flamegraph is available at https://github.com/jonhoo/inferno
         "$tooldir/gem5log" flamegraph "${script:-0}" "${1:-0}" "${paths[@]}" | inferno-flamegraph --countname ns
+        ;;
+
+    ftrace=*)
+        paths=()
+        names=${cmd#ftrace=}
+        for f in ${names//,/ }; do
+            paths=("${paths[@]}" "$build/bin/$f")
+        done
+        "$tooldir/gem5log" ftrace "${script:-0}" "${1:-0}" "${paths[@]}"
         ;;
 
     snapshot=*)

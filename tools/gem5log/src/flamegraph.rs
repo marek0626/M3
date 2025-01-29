@@ -14,14 +14,27 @@
  */
 
 use log::{debug, error, trace, warn};
+use once_cell::sync::Lazy;
 use std::collections::{btree_map, BTreeMap, HashMap};
-use std::fmt;
+use std::fmt::{self, Display};
 use std::io::{self, BufRead, StdoutLock, Write};
+use std::sync::Mutex;
 
 use crate::error::Error;
 use crate::symbols;
 
 const STACK_SIZE: u64 = 0x20000;
+const UNKNOWN_STACK: StackId = 0;
+const DEF_ACT_ID: u16 = 0xFFFF;
+const IDLE_ACT_ID: u16 = 0xFFFE;
+
+static NEXT_TID: Lazy<Mutex<u8>> = Lazy::new(|| Mutex::new(0));
+
+fn next_tid() -> u8 {
+    let mut next_tid = NEXT_TID.lock().unwrap();
+    *next_tid += 1;
+    *next_tid - 1
+}
 
 #[derive(Copy, Clone, Default, Debug, Hash, PartialEq, Eq)]
 pub struct TileId {
@@ -56,18 +69,25 @@ struct Tile<'n> {
     last_bin: &'n str,
     last_isr_exit: bool,
     susp_start: u64,
+    old_act: Option<u16>,
+    new_act: Option<u16>,
 }
 
-struct Binary<'n> {
-    name: &'n str,
-    stacks: BTreeMap<ThreadId<'n>, Thread<'n>>,
-    cur_tid: ThreadId<'n>,
-}
+type StackId = u64;
 
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 struct ThreadId<'n> {
     bin: &'n str,
-    stack: u64,
+    tid: u8,
+    // the first thread of every binary should have the tile id as pid, which we remember here
+    pid: Option<u32>,
+}
+
+struct Binary<'n> {
+    name: &'n str,
+    tids: BTreeMap<StackId, ThreadId<'n>>,
+    stacks: BTreeMap<ThreadId<'n>, Thread<'n>>,
+    cur_stack: StackId,
 }
 
 #[derive(Default)]
@@ -88,19 +108,9 @@ struct Call<'n> {
     child_duration: u64,
 }
 
-impl<'n> ThreadId<'n> {
-    fn new(bin: &'n str) -> Self {
-        Self::new_with_stack(bin, 0)
-    }
-
-    fn new_with_stack(bin: &'n str, stack: u64) -> Self {
-        ThreadId { bin, stack }
-    }
-}
-
 impl fmt::Display for ThreadId<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(fmt, "{} [tid={:#x}]", self.bin, self.stack)
+        write!(fmt, "{} [tid={}]", self.bin, self.tid)
     }
 }
 
@@ -138,9 +148,22 @@ fn get_func_addr(line: &str) -> Option<(u64, TileId, Option<usize>)> {
 }
 
 impl<'n> Tile<'n> {
-    fn new(bin: Binary<'n>, id: TileId) -> Self {
-        let mut bins = BTreeMap::new();
+    fn new(mode: crate::Mode, time: u64, id: TileId, bin: Binary<'n>) -> Self {
         let name = bin.name;
+
+        if matches!(mode, crate::Mode::FTrace { .. }) {
+            let tid = bin.cur_tid();
+            ftrace::print(
+                time,
+                id,
+                Some(DEF_ACT_ID),
+                tid,
+                name,
+                ftrace::tswitch(id, (DEF_ACT_ID, tid), (DEF_ACT_ID, tid)),
+            );
+        }
+
+        let mut bins = BTreeMap::new();
         bins.insert(bin.name, bin);
         Tile {
             id,
@@ -148,18 +171,39 @@ impl<'n> Tile<'n> {
             last_bin: name,
             last_isr_exit: false,
             susp_start: 0,
+            old_act: None,
+            new_act: None,
         }
     }
 
+    fn finish(&mut self, mode: crate::Mode, time: u64) {
+        if matches!(mode, crate::Mode::FTrace { .. }) {
+            let act = self.new_act.unwrap_or(DEF_ACT_ID);
+            let tid = self.cur_bin().unwrap().cur_tid();
+            ftrace::print(
+                time,
+                self.id,
+                self.new_act,
+                tid,
+                self.last_bin,
+                ftrace::tswitch(self.id, (act, tid), (act, tid)),
+            );
+        }
+    }
+
+    fn cur_bin(&mut self) -> Option<&mut Binary<'n>> {
+        self.bins.get_mut(self.last_bin)
+    }
+
     fn binary_switch(&mut self, sym: &'n symbols::Symbol, time: u64) {
-        if let Some(prev) = self.bins.get_mut(self.last_bin) {
+        if let Some(prev) = self.cur_bin() {
             prev.cur_thread().suspend(time);
         }
 
         match self.bins.entry(&*sym.bin) {
             btree_map::Entry::Vacant(entry) => {
                 debug!("{}: new binary {}", time, sym.bin);
-                entry.insert(Binary::new(&sym.bin));
+                entry.insert(Binary::new(&sym.bin, None));
             },
             btree_map::Entry::Occupied(_) => {
                 debug!("{}: switched to {}", time, sym.bin);
@@ -167,7 +211,7 @@ impl<'n> Tile<'n> {
         }
 
         self.last_bin = &sym.bin;
-        if let Some(next) = self.bins.get_mut(self.last_bin) {
+        if let Some(next) = self.cur_bin() {
             next.cur_thread().resume(time);
         }
     }
@@ -199,13 +243,14 @@ impl<'n> Tile<'n> {
     fn snapshot(&self) {
         println!("{}:", self.id);
         for bin in self.bins.values() {
+            let cur_tid = bin.cur_tid();
             for (tid, thread) in &bin.stacks {
                 // ignore empty threads
                 if thread.stack.is_empty() {
                     continue;
                 }
 
-                if self.last_bin == bin.name && *tid == bin.cur_tid {
+                if self.last_bin == bin.name && *tid == cur_tid {
                     println!("  \x1B[1mThread {}:\x1B[0m", tid);
                 }
                 else {
@@ -226,46 +271,86 @@ impl<'n> Tile<'n> {
 }
 
 impl<'n> Binary<'n> {
-    fn new(name: &'n str) -> Self {
-        let cur_tid = ThreadId::new(name);
+    fn new(name: &'n str, pid: Option<u32>) -> Self {
+        let cur_tid = ThreadId {
+            bin: name,
+            tid: next_tid(),
+            pid,
+        };
+        let cur_stack = UNKNOWN_STACK;
         let mut stacks = BTreeMap::new();
         stacks.insert(cur_tid, Thread::default());
+        let mut tids = BTreeMap::new();
+        tids.insert(cur_stack, cur_tid);
         Binary {
             name,
             stacks,
-            cur_tid,
+            cur_stack,
+            tids,
         }
     }
 
+    fn cur_tid(&self) -> ThreadId<'n> {
+        *self.tids.get(&self.cur_stack).unwrap()
+    }
+
     fn cur_thread(&mut self) -> &mut Thread<'n> {
-        self.stacks.get_mut(&self.cur_tid).unwrap()
+        self.stacks.get_mut(&self.cur_tid()).unwrap()
     }
 
-    fn found_stack(&mut self, tid: u64, time: u64) {
-        let old = self.stacks.remove(&self.cur_tid).unwrap();
-        self.cur_tid = ThreadId::new_with_stack(self.name, tid - STACK_SIZE);
-        self.stacks.insert(self.cur_tid, old);
-        debug!("{}: found stack of {}", time, self.cur_tid);
+    fn found_stack(&mut self, stack: u64, time: u64) {
+        assert_eq!(self.cur_stack, UNKNOWN_STACK);
+        let nid = stack - STACK_SIZE;
+        let tid = self.tids.remove(&self.cur_stack).unwrap();
+        self.tids.insert(nid, tid);
+        self.cur_stack = nid;
+        debug!("{}: found stack of {} -> {}", time, self.cur_stack, tid);
     }
 
-    fn thread_switch(&mut self, stack: u64, time: u64) {
+    fn thread_switch(
+        &mut self,
+        mode: crate::Mode,
+        tile: TileId,
+        act: Option<u16>,
+        mut stack: u64,
+        time: u64,
+    ) {
+        let old_tid = self.cur_tid();
         self.cur_thread().suspend(time);
 
         // try to find the thread with new stack
-        let mut new_tid = ThreadId::new_with_stack(self.name, stack);
-        match self.stacks.range(..=&new_tid).nth_back(0) {
-            Some((tid, _)) if stack >= tid.stack && stack < tid.stack + STACK_SIZE => {
+        match self.tids.range(..=&stack).nth_back(0) {
+            Some((sid, tid)) if stack >= *sid && stack < *sid + STACK_SIZE => {
                 // we know the stack, switch to it
-                self.cur_tid = *tid;
-                debug!("{}: switched back to {}", time, self.cur_tid);
+                self.cur_stack = *sid;
+                debug!("{}: switched back to {}", time, tid);
             },
             _ => {
                 // create new stack
-                new_tid.stack -= STACK_SIZE;
-                self.cur_tid = new_tid;
-                self.stacks.insert(self.cur_tid, Thread::default());
-                debug!("{}: new thread {}", time, self.cur_tid);
+                stack -= STACK_SIZE;
+                self.cur_stack = stack;
+                let tid = ThreadId {
+                    bin: self.name,
+                    tid: next_tid(),
+                    pid: None,
+                };
+                self.tids.insert(self.cur_stack, tid);
+                self.stacks.insert(tid, Thread::default());
+                debug!("{}: new thread {}", time, tid);
             },
+        }
+
+        if matches!(mode, crate::Mode::FTrace { .. }) {
+            let new_tid = self.cur_tid();
+            let sw_act = act.unwrap_or(DEF_ACT_ID);
+            ftrace::print(
+                time,
+                tile,
+                act,
+                old_tid,
+                self.name,
+                ftrace::tswitch(tile, (sw_act, old_tid), (sw_act, new_tid)),
+            );
         }
 
         self.cur_thread().resume(time);
@@ -290,9 +375,20 @@ impl<'n> Thread<'n> {
         self.switched = 0;
     }
 
-    fn call(&mut self, sym: &'n symbols::Symbol, time: u64, tid: ThreadId<'_>) {
+    fn call(
+        &mut self,
+        mode: crate::Mode,
+        tile: TileId,
+        act: Option<u16>,
+        sym: &'n symbols::Symbol,
+        time: u64,
+        tid: ThreadId<'_>,
+    ) {
         let w = self.depth();
         trace!("{}: {} {:w$} CALL -> {}", time, tid, "", sym.name, w = w);
+        if matches!(mode, crate::Mode::FTrace { .. }) {
+            ftrace::mark(tile, act, time, tid, &sym.bin, &sym.name, true);
+        }
         self.stack.push(Call {
             func: &sym.name,
             addr: sym.addr,
@@ -302,7 +398,15 @@ impl<'n> Thread<'n> {
         });
     }
 
-    fn ret(&mut self, sym: &symbols::Symbol, time: u64, tid: ThreadId<'_>) -> Option<Call<'n>> {
+    fn ret(
+        &mut self,
+        mode: crate::Mode,
+        tile: TileId,
+        act: Option<u16>,
+        sym: &symbols::Symbol,
+        time: u64,
+        tid: ThreadId<'_>,
+    ) -> Option<Call<'n>> {
         if !self.stack.iter().any(|s| s.func == sym.name) {
             error!(
                 "{}: {} return to {} w/o preceeding call",
@@ -314,6 +418,9 @@ impl<'n> Thread<'n> {
         // unwind the stack until we find the function on the stack that matches the current symbol
         let mut last = self.stack_pop(time).unwrap();
         loop {
+            if matches!(mode, crate::Mode::FTrace { .. }) {
+                ftrace::mark(tile, act, time, tid, &sym.bin, last.func, false);
+            }
             match self.stack.last() {
                 Some(f) if f.func == sym.name => {
                     let w = self.depth();
@@ -363,14 +470,15 @@ fn is_isr_exit(isa: crate::ISA, line: &str) -> bool {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn handle_return(
+fn handle_return<'t, 'i: 't>(
     mode: crate::Mode,
     wr: &mut StdoutLock<'_>,
     time: u64,
     tile: TileId,
+    act: Option<u16>,
     sym: &symbols::Symbol,
-    thread: &mut Thread<'_>,
-    tid: ThreadId<'_>,
+    thread: &mut Thread<'t>,
+    tid: ThreadId<'i>,
     unwind: bool,
 ) -> Result<(), Error> {
     if !thread.stack.is_empty() {
@@ -391,10 +499,16 @@ fn handle_return(
         };
 
         let last = if unwind {
-            thread.ret(sym, time, tid)
+            thread.ret(mode, tile, act, sym, time, tid)
         }
         else {
-            thread.stack_pop(time)
+            let call = thread.stack_pop(time);
+            if let Some(ref call) = call {
+                if matches!(mode, crate::Mode::FTrace { .. }) {
+                    ftrace::mark(tile, act, time, tid, &sym.bin, call.func, false);
+                }
+            }
+            call
         };
 
         if let Some(stack) = stack {
@@ -425,6 +539,9 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
                 crate::Mode::FlameGraph { end: Some(end), .. } if (time >= end) => {
                     break;
                 },
+                crate::Mode::FTrace { end: Some(end), .. } if (time >= end) => {
+                    break;
+                },
                 crate::Mode::Snapshot {
                     time: snapshot_time,
                 } => {
@@ -446,12 +563,7 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
 
             if maybe_addr.is_none() {
                 if let Some(cur_tile) = tiles.get_mut(&tile) {
-                    if line.contains("tcu.connector: Suspending core") {
-                        cur_tile.suspend(time);
-                    }
-                    else if line.contains("tcu.connector: Waking up core") {
-                        cur_tile.resume(time);
-                    }
+                    ftrace::parse_misc_line(mode, cur_tile, &line, time);
                 }
 
                 line.clear();
@@ -461,16 +573,32 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
             let addr = maybe_addr.unwrap();
             if let Some(sym) = symbols::resolve(tile, syms, addr) {
                 // detect tiles
-                tiles
-                    .entry(tile)
-                    .or_insert_with(|| Tile::new(Binary::new(&sym.name), tile));
+                tiles.entry(tile).or_insert_with(|| {
+                    Tile::new(
+                        mode,
+                        time,
+                        tile,
+                        Binary::new(&sym.bin, Some(ftrace::group(tile))),
+                    )
+                });
                 let cur_tile = tiles.get_mut(&tile).unwrap();
 
                 // detect ISR exits
                 if cur_tile.last_isr_exit {
                     let obin = cur_tile.bins.get_mut::<str>(cur_tile.last_bin).unwrap();
-                    let othread = obin.stacks.get_mut(&obin.cur_tid).unwrap();
-                    handle_return(mode, &mut wr, time, tile, sym, othread, obin.cur_tid, false)?;
+                    let tid = obin.cur_tid();
+                    let othread = obin.stacks.get_mut(&tid).unwrap();
+                    handle_return(
+                        mode,
+                        &mut wr,
+                        time,
+                        tile,
+                        cur_tile.new_act,
+                        sym,
+                        othread,
+                        tid,
+                        false,
+                    )?;
                 }
                 // detect binary changes (e.g., tilemux to app)
                 let bin_switch = sym.bin != cur_tile.last_bin;
@@ -481,7 +609,7 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
                 let cur_bin = cur_tile.bins.get_mut::<str>(&sym.bin).unwrap();
 
                 // detect the stack pointer
-                if cur_bin.cur_tid.stack == 0 && instr_is_sp_assign(isa, &line) {
+                if cur_bin.cur_stack == UNKNOWN_STACK && instr_is_sp_assign(isa, &line) {
                     if let Some(pos) = line.find("D=") {
                         let tid = u64::from_str_radix(&line[(pos + 4)..(pos + 20)], 16)?;
                         cur_bin.found_stack(tid, time);
@@ -492,11 +620,11 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
                 if sym.name == "thread_switch_async" && instr_is_sp_init(isa, &line) {
                     if let Some(pos) = line.find("D=") {
                         let tid = u64::from_str_radix(&line[(pos + 4)..(pos + 20)], 16)?;
-                        cur_bin.thread_switch(tid, time);
+                        cur_bin.thread_switch(mode, cur_tile.id, cur_tile.new_act, tid, time);
                     }
                 }
 
-                let cur_tid = cur_bin.cur_tid;
+                let cur_tid = cur_bin.cur_tid();
                 let cur_thread = cur_bin.cur_thread();
 
                 // function changed?
@@ -509,14 +637,24 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
                 {
                     // it's a call when we jumped to the beginning of a function
                     if addr == sym.addr {
-                        cur_thread.call(sym, time, cur_tid);
+                        cur_thread.call(mode, cur_tile.id, cur_tile.new_act, sym, time, cur_tid);
                     }
                     // otherwise it's a return
                     else if sym.name != "thread_switch_async" && cur_thread.stack.is_empty() {
                         error!("{}: return with empty stack", time);
                     }
                     else {
-                        handle_return(mode, &mut wr, time, tile, sym, cur_thread, cur_tid, true)?;
+                        handle_return(
+                            mode,
+                            &mut wr,
+                            time,
+                            tile,
+                            cur_tile.new_act,
+                            sym,
+                            cur_thread,
+                            cur_tid,
+                            true,
+                        )?;
                     }
                 }
 
@@ -532,5 +670,154 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
         line.clear();
     }
 
+    for tile in tiles.values_mut() {
+        tile.finish(mode, last_time);
+    }
+
     Ok(())
+}
+
+mod ftrace {
+    use super::*;
+
+    pub fn print<S: Display>(
+        time: u64,
+        tile_id: TileId,
+        act: Option<u16>,
+        thread: ThreadId,
+        binary: &str,
+        payload: S,
+    ) {
+        let nsecs = time / 1000;
+        let tile = tile_id.tile(); // TODO support chip id
+        let pid = pid(tile_id, act.unwrap_or(DEF_ACT_ID), thread);
+        println!(
+            " {0:>30}  ({1:>5}) [{2:03}] .... {3}.{4:09}: {5}",
+            format!("{}-{}", binary, pid),
+            ftrace::group(tile_id),
+            tile,
+            nsecs / 1_000_000_000,
+            nsecs % 1_000_000_000,
+            payload,
+        );
+    }
+
+    pub fn mark(
+        tile: TileId,
+        act: Option<u16>,
+        time: u64,
+        tid: ThreadId<'_>,
+        bin: &str,
+        func: &str,
+        enter: bool,
+    ) {
+        print(
+            time,
+            tile,
+            act,
+            tid,
+            bin,
+            format!(
+                "tracing_mark_write:{}|{}|{}",
+                if enter { 'B' } else { 'E' },
+                ftrace::group(tile),
+                clean_name(func)
+            ),
+        );
+    }
+
+    pub fn tswitch(tile: TileId, old: (u16, ThreadId<'_>), new: (u16, ThreadId<'_>)) -> String {
+        format!(
+            "sched_switch: prev_comm={} prev_pid={} prev_prio=0 prev_state=S ==> next_comm={} next_pid={} next_prio=0",
+            name(old.0, tile),
+            pid(tile, old.0, old.1),
+            name(new.0, tile),
+            pid(tile, new.0, new.1),
+        )
+    }
+
+    pub fn group(tile: TileId) -> u32 {
+        // pid 0 and 1 are special, so start with 1000
+        1000 + tile.tile() as u32
+    }
+
+    pub fn parse_misc_line(mode: crate::Mode, cur_tile: &mut Tile<'_>, line: &str, time: u64) {
+        let mut seen_susres = 0;
+        if line.contains("tcu.connector: Suspending core") {
+            cur_tile.suspend(time);
+            seen_susres = 1;
+        }
+        else if line.contains("tcu.connector: Waking up core") {
+            cur_tile.resume(time);
+            seen_susres = 2;
+        }
+        else if line.contains("tcu.regFile: TCU-> PRI[CUR_ACT") {
+            let value = line.split("0x").nth(1).unwrap();
+            // extract the last 16 bit from the value
+            cur_tile.new_act = Some(u16::from_str_radix(&value[12..16], 16).unwrap());
+        }
+        else if line.contains("tcu.regFile: TCU-> PRI[PRIV_CMD_ARG") {
+            let value = line.split("0x").nth(1).unwrap();
+            cur_tile.old_act = Some(u16::from_str_radix(&value[12..16], 16).unwrap());
+        }
+        else if line.contains("Finished privileged command XCHG_ACT") {
+            if let (Some(old), Some(new)) = (cur_tile.old_act, cur_tile.new_act) {
+                let tid = cur_tile.cur_bin().unwrap().cur_tid();
+                let switch_tid = ThreadId {
+                    bin: tid.bin,
+                    tid: tid.tid,
+                    pid: None,
+                };
+                print(
+                    time,
+                    cur_tile.id,
+                    cur_tile.new_act,
+                    tid,
+                    cur_tile.last_bin,
+                    tswitch(cur_tile.id, (old, switch_tid), (new, switch_tid)),
+                );
+            }
+        }
+
+        if seen_susres > 0 && matches!(mode, crate::Mode::FTrace { .. }) {
+            // we use the frequency only to distinguish between 'suspended' and 'active'
+            let state = if seen_susres == 1 { 0 } else { 1000000 };
+            print(
+                time,
+                cur_tile.id,
+                cur_tile.new_act,
+                cur_tile.cur_bin().unwrap().cur_tid(),
+                cur_tile.last_bin,
+                format!(
+                    "cpu_frequency: state={} cpu_id={}",
+                    state,
+                    cur_tile.id.tile()
+                ),
+            );
+        }
+    }
+
+    fn clean_name(name: &str) -> String {
+        name.replace(
+            |c| !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_'),
+            "_",
+        )
+    }
+
+    fn name(act_id: u16, tile: TileId) -> String {
+        match (tile.tile(), act_id) {
+            (0, _) => String::from("kernel"),
+            (_, DEF_ACT_ID) => String::from("tilemux"),
+            (_, IDLE_ACT_ID) => String::from("idle"),
+            (_, id) => format!("activity-{}", id),
+        }
+    }
+
+    fn pid(tile: TileId, act_id: u16, tid: ThreadId<'_>) -> u32 {
+        if let Some(pid) = tid.pid {
+            return pid;
+        }
+
+        ((tile.tile() as u32) << 24) + ((act_id as u32) << 8) + (tid.tid as u32)
+    }
 }

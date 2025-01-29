@@ -13,6 +13,7 @@ name = "gem5log"
 version = "0.1.0"
 dependencies = [
  "log",
+ "once_cell",
 ]
 
 [[package]]
@@ -23,3 +24,9 @@ checksum = "abb12e687cfb44aa40f41fc3978ef76448f9b6038cad6aef4259d3c095a2382e"
 dependencies = [
  "cfg-if",
 ]
+
+[[package]]
+name = "once_cell"
+version = "1.20.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1261fe7e33c73b354eab43b1273a57c8f967d0391e80353e51f764ac02cf6775"
