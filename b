@@ -277,6 +277,18 @@ if [ "$(cat "$build/.verbose" 2>/dev/null)" != "M3_VERBOSE=$M3_VERBOSE" ]; then
 fi
 echo "M3_VERBOSE=$M3_VERBOSE" >"$build/.verbose"
 
+# crate pagination function that only pipes to less when on a terminal
+if [ -t 1 ]; then
+    paginate() {
+        "$@" | less
+    }
+else
+    paginate() {
+        # this is way faster than going through less
+        "$@"
+    }
+fi
+
 case "$cmd" in
     clean)
         rm -rf "$build"
@@ -548,7 +560,7 @@ case "$cmd" in
         for f in ${names//,/ }; do
             paths=("${paths[@]}" "$build/bin/$f")
         done
-        "$tooldir/hwitrace" "$(get_cross_prefix "${paths[@]}")" "${paths[@]}" | less
+        paginate "$tooldir/hwitrace" "$(get_cross_prefix "${paths[@]}")" "${paths[@]}"
         ;;
 
     trace=*)
@@ -557,7 +569,7 @@ case "$cmd" in
         for f in ${names//,/ }; do
             paths=("${paths[@]}" "$build/bin/$f")
         done
-        "$tooldir/gem5log" trace "${paths[@]}" | less
+        paginate "$tooldir/gem5log" trace "${paths[@]}"
         ;;
 
     tracelx=*)
@@ -566,7 +578,7 @@ case "$cmd" in
         for f in ${names//,/ }; do
             paths=("${paths[@]}" "$build/lxbin/$f+0x2AAAAAA000")
         done
-        "$tooldir/gem5log" trace "${paths[@]}" | less
+        paginate "$tooldir/gem5log" trace "${paths[@]}"
         ;;
 
     flamegraph=*)
@@ -613,12 +625,12 @@ case "$cmd" in
         ;;
 
     dis=*)
-        "$(get_cross_prefix "$bindir/${cmd#dis=}")objdump" -dC "$bindir/${cmd#dis=}" | less
+        paginate "$(get_cross_prefix "$bindir/${cmd#dis=}")objdump" -dC "$bindir/${cmd#dis=}"
         ;;
 
     elf=*)
         "$(get_cross_prefix "$bindir/${cmd#elf=}")readelf" -aW "$bindir/${cmd#elf=}" |
-            c++filt | less
+            paginate c++filt
         ;;
 
     list)
@@ -633,16 +645,16 @@ case "$cmd" in
 
     macros=*)
         (cd "${cmd#macros=}" &&
-            cargo rustc "${rust_target_args[@]}" \
-                --profile=check -- -Zunpretty=expanded 2>/dev/null | less)
+            paginate cargo rustc "${rust_target_args[@]}" \
+                --profile=check -- -Zunpretty=expanded 2>/dev/null)
         ;;
 
     nma=*)
-        "$(get_cross_prefix "$bindir/${cmd#nma=}")nm" -SCn "$bindir/${cmd#nma=}" | less
+        paginate "$(get_cross_prefix "$bindir/${cmd#nma=}")nm" -SCn "$bindir/${cmd#nma=}"
         ;;
 
     nms=*)
-        "$(get_cross_prefix "$bindir/${cmd#nms=}")nm" -SC --size-sort "$bindir/${cmd#nms=}" | less
+        paginate "$(get_cross_prefix "$bindir/${cmd#nms=}")nm" -SC --size-sort "$bindir/${cmd#nms=}"
         ;;
 
     straddr=*)
