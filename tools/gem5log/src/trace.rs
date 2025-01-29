@@ -20,11 +20,7 @@ use crate::error::Error;
 use crate::flamegraph::TileId;
 use crate::symbols;
 
-fn repl_instr_line(
-    syms: &symbols::Symbols,
-    writer: &mut io::StdoutLock<'_>,
-    line: &str,
-) -> Option<()> {
+fn repl_instr_line(syms: &symbols::Symbols, mut writer: impl Write, line: &str) -> Option<()> {
     // get the first parts:
     // 7802000: C1T00.cpu: T0 : 0x226f3a @ heap_init+26    : mov rcx, DS:[rip + 0x295a7]
     // ^------^ ^--------^ ^^ ^ ^------^ ^---------------------------------------------^
@@ -90,7 +86,7 @@ pub fn generate(syms: &symbols::Symbols) -> Result<(), Error> {
     let mut reader = io::BufReader::new(stdin.lock());
 
     let stdout = io::stdout();
-    let mut writer = stdout.lock();
+    let mut writer = io::BufWriter::new(stdout.lock());
 
     let mut line = String::new();
     while reader.read_line(&mut line)? != 0 {
