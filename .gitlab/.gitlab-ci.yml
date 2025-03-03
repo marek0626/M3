@@ -1,4 +1,4 @@
-image: "registry.hpc.barkhauseninstitut.org/os/m3-ci:latest"
+image: "registry.adbi.barkhauseninstitut.org/os/code/m3/m3/m3-ci:latest"
 
 # run the pipeline only for merge requests into dev or master
 workflow:
