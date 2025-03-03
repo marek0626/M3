@@ -11,10 +11,13 @@ cat <<EOF
   },
   "spec": {
     "restartPolicy": "Never",
+    "imagePullSecrets": [{
+      "name": "m3-ci-pull"
+    }],
     "containers": [
       {
         "name": "$name",
-        "image": "registry.hpc.barkhauseninstitut.org/os/$image:latest",
+        "image": "registry.adbi.barkhauseninstitut.org/os/code/m3/m3/$image:latest",
         "command": ["/usr/bin/sleep", "Infinity"],
         "resources": {
           "requests": {

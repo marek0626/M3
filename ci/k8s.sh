@@ -31,8 +31,8 @@ create_image() {
         -t "$name" .)
 
     # tag and push to repo
-    podman image tag "$name:latest" "registry.hpc.barkhauseninstitut.org/$ns/$name:latest"
-    podman image push "registry.hpc.barkhauseninstitut.org/$ns/$name:latest"
+    podman image tag "$name:latest" "registry.adbi.barkhauseninstitut.org/os/code/m3/m3/$name:latest"
+    podman image push "registry.adbi.barkhauseninstitut.org/os/code/m3/m3/$name:latest"
 }
 
 create_pod() {
