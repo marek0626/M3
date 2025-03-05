@@ -47,7 +47,7 @@ public:
     virtual ~Executor() {
     }
     virtual size_t execute(Package &pkg) = 0;
-    virtual void reset_stats() = 0;
+    virtual void reset() = 0;
     virtual void print_stats(size_t num_ops) = 0;
 };
 
@@ -57,10 +57,13 @@ public:
     ~LevelDBExecutor();
 
     virtual size_t execute(Package &pkg) override;
-    virtual void reset_stats() override;
+    virtual void reset() override;
     virtual void print_stats(size_t num_ops) override;
 
 private:
+    void open();
+    void close();
+
     void exec_insert(Package &pkg);
     std::vector<std::pair<std::string, std::string>> exec_read(Package &pkg);
     std::vector<std::pair<std::string, std::string>> exec_scan(Package &pkg);
@@ -76,4 +79,5 @@ private:
     uint64_t _n_update;
 
     leveldb::DB *_db;
+    const char *_db_name;
 };
