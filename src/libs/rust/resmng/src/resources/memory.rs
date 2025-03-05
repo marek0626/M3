@@ -13,7 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use core::cmp;
 use core::fmt;
 
 use m3::cap::Selector;
@@ -80,41 +79,36 @@ impl fmt::Debug for MemMod {
 
 #[derive(Default)]
 pub struct MemoryManager {
-    mods: Vec<Rc<MemMod>>,
-    available: GlobOff,
-    cur_mod: usize,
-    cur_off: GlobOff,
+    mods: Vec<(Rc<MemMod>, MemMap<GlobOff>)>,
 }
 
 impl MemoryManager {
-    pub fn mods(&self) -> &[Rc<MemMod>] {
-        &self.mods
+    pub fn mods(&self) -> impl Iterator<Item = &Rc<MemMod>> {
+        self.mods.iter().map(|(m, _map)| m)
     }
 
     pub fn add(&mut self, m: Rc<MemMod>) {
-        if !m.reserved {
-            self.available += m.capacity();
-        }
-        self.mods.push(m);
+        let off = m.addr().offset();
+        let cap = m.capacity();
+        self.mods.push((m, MemMap::new(off, cap)));
     }
 
     pub fn capacity(&self) -> GlobOff {
-        self.mods.iter().fold(0, |total, m| {
-            if !m.reserved {
-                total + m.capacity()
-            }
-            else {
-                total
-            }
-        })
+        self.mods
+            .iter()
+            .filter(|(m, _map)| !m.reserved)
+            .fold(0, |total, (m, _map)| total + m.capacity())
     }
 
     pub fn available(&self) -> GlobOff {
-        self.available
+        self.mods
+            .iter()
+            .filter(|(m, _map)| !m.reserved)
+            .fold(0, |total, (_m, map)| total + map.size().0)
     }
 
     pub fn find_mem(&self, addr: GlobAddr, size: GlobOff, perm: Perm) -> anyhow::Result<MemSlice> {
-        for m in &self.mods {
+        for (m, _map) in &self.mods {
             if addr.tile() == m.addr.tile()
                 && addr.offset() >= m.addr.offset()
                 && addr.offset() + size <= m.addr.offset() + m.capacity()
@@ -132,11 +126,17 @@ impl MemoryManager {
 
     pub fn alloc_mem(&mut self, mut size: GlobOff) -> anyhow::Result<MemSlice> {
         size = math::round_up(size, cfg::PAGE_SIZE as GlobOff);
-        while self.cur_mod < self.mods.len() {
-            if let Some(sl) = self.get_slice(size, true, false) {
-                self.cur_off += sl.size;
-                self.available -= sl.size;
-                return Ok(sl);
+        for (m, map) in &mut self.mods {
+            if m.reserved {
+                continue;
+            }
+            if let Some(addr) = map.allocate(size, 1) {
+                return Ok(MemSlice::new(
+                    m.clone(),
+                    addr - m.addr().offset(),
+                    size,
+                    Perm::RWX,
+                ));
             }
         }
         Err(rerrno(Code::NoSpace).context(format!("allocate {}", size)))
@@ -144,14 +144,30 @@ impl MemoryManager {
 
     pub fn alloc_pool(&mut self, mut size: GlobOff, size_aligned: bool) -> anyhow::Result<MemPool> {
         assert!(!size_aligned || size.is_power_of_two());
+
         let mut res = MemPool::default();
         size = math::round_up(size, cfg::PAGE_SIZE as GlobOff);
-        while size > 0 && res.slices().len() <= 2 && self.cur_mod < self.mods.len() {
-            if let Some(sl) = self.get_slice(size, false, size_aligned) {
-                size -= sl.size;
-                self.cur_off += sl.size;
-                self.available -= sl.size;
+
+        for (m, map) in &mut self.mods {
+            if m.reserved {
+                continue;
+            }
+
+            let align = if size_aligned { size } else { 1 };
+            if let Some(addr) = map.allocate(size, align) {
+                let sl = MemSlice::new(m.clone(), addr - m.addr().offset(), size, Perm::RWX);
                 res.add(sl);
+                return Ok(res);
+            }
+
+            if let Some(max_cont) = map.largest_contiguous() {
+                let align = if size_aligned { max_cont } else { 1 };
+                if let Some(addr) = map.allocate(max_cont, align) {
+                    let sl =
+                        MemSlice::new(m.clone(), addr - m.addr().offset(), max_cont, Perm::RWX);
+                    res.add(sl);
+                    size -= max_cont;
+                }
             }
         }
 
@@ -161,34 +177,6 @@ impl MemoryManager {
         else {
             Err(rerrno(Code::NoSpace).context(format!("allocate pool {}, {}", size, size_aligned)))
         }
-    }
-
-    fn get_slice(&mut self, size: GlobOff, all: bool, size_aligned: bool) -> Option<MemSlice> {
-        let m = &self.mods[self.cur_mod];
-        let avail = m.capacity() - self.cur_off;
-        if m.reserved || self.cur_off == m.capacity() || (all && avail < size) {
-            self.cur_mod += 1;
-            self.cur_off = 0;
-            if !m.reserved {
-                self.available -= avail;
-            }
-            return None;
-        }
-
-        let mut amount = cmp::min(avail, size);
-        if size_aligned {
-            if !amount.is_power_of_two() {
-                amount = 1 << (math::next_log2(amount as usize) - 1);
-            }
-            let aligned_addr = math::round_up(m.addr().offset() + self.cur_off, amount);
-            let off = aligned_addr - m.addr().offset();
-            if off > self.cur_off + m.capacity() {
-                self.cur_off = m.capacity();
-                return None;
-            }
-            self.cur_off = off;
-        }
-        Some(MemSlice::new(m.clone(), self.cur_off, amount, Perm::RWX))
     }
 }
 

@@ -121,7 +121,7 @@ fn mng_multi(t: &mut dyn WvTester) {
     }
 
     wv_assert_eq!(t, mng.capacity(), 0x40000 + 0x100000);
-    wv_assert_eq!(t, mng.available(), 0x80000);
+    wv_assert_eq!(t, mng.available(), 0x30000 + 0x80000);
 
     {
         let slice = wv_require_ok!(mng.alloc_mem(0x80000));
@@ -130,9 +130,9 @@ fn mng_multi(t: &mut dyn WvTester) {
     }
 
     wv_assert_eq!(t, mng.capacity(), 0x40000 + 0x100000);
-    wv_assert_eq!(t, mng.available(), 0);
+    wv_assert_eq!(t, mng.available(), 0x30000 + 0);
 
-    wv_assert_anyhow_err!(t, mng.alloc_mem(0x1000), Code::NoSpace);
+    wv_assert_anyhow_err!(t, mng.alloc_mem(0x40000), Code::NoSpace);
 }
 
 fn mng_pool(t: &mut dyn WvTester) {
