@@ -186,6 +186,21 @@ impl Slab {
     fn ceil_size(size: usize) -> usize {
         core::cmp::max(size, size_of::<Area>())
     }
+
+    /// Reallocate to `new_size` inside this allocator
+    ///
+    /// # Safety
+    ///
+    /// The `ptr` must originate from this allocator and the `new_size` must fit this allocator.
+    unsafe fn realloc(&self, ptr: *mut u8, new_size: usize) -> *mut u8 {
+        match self.size {
+            Some(_) => {
+                // SAFETY: the caller guarantees that the new_size fits.
+                ptr
+            },
+            None => realloc(ptr.cast(), new_size).cast(),
+        }
+    }
 }
 
 /// An allocator combining multiple fixed-sized slab allocators
@@ -243,6 +258,50 @@ impl SlabAllocator {
         );
         res
     }
+
+    /// Reallocate memory to a new size
+    ///
+    /// If the new size would use the same allocator, reallocate inside this allocator.
+    /// Else, reallocate inside the destined allocator.
+    unsafe fn real_realloc(&self, new_size: usize, layout: Layout, ptr: *mut u8) -> *mut u8 {
+        // SAFETY: the caller must ensure that the `new_size` does not overflow.
+        // `layout.align()` comes from a `Layout` and is thus guaranteed to be valid.
+        let new_layout = unsafe { Layout::from_size_align_unchecked(new_size, layout.align()) };
+
+        let mut new_ptr: *mut u8 = null_mut();
+        let mut slabs = self.slabs.borrow_mut();
+        for slab in slabs.iter_mut() {
+            let old_fits = slab.fits(layout);
+            let new_fits = slab.fits(new_layout);
+            if old_fits != new_fits {
+                break;
+            }
+            if old_fits && new_fits {
+                new_ptr = slab.realloc(ptr, new_size);
+                break;
+            }
+        }
+        if !new_ptr.is_null() {
+            return new_ptr;
+        }
+        drop(slabs);
+
+        // SAFETY: the caller must ensure that `new_layout` is greater than zero.
+        let new_ptr = unsafe { self.alloc(new_layout) };
+        if !new_ptr.is_null() {
+            // SAFETY: the previously allocated block cannot overlap the newly allocated block.
+            // The safety contract for `dealloc` must be upheld by the caller.
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    ptr,
+                    new_ptr,
+                    core::cmp::min(layout.size(), new_size),
+                );
+                self.dealloc(ptr, layout);
+            }
+        }
+        new_ptr
+    }
 }
 
 unsafe impl GlobalAlloc for SlabAllocator {
@@ -270,6 +329,19 @@ unsafe impl GlobalAlloc for SlabAllocator {
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
         self.real_alloc(layout, true)
+    }
+
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        let res = self.real_realloc(new_size, layout, ptr);
+        log!(
+            LogFlags::KernSlab,
+            "realloc(p={:#x}, oldsz={}, newsz={}) -> {:#x}",
+            ptr as usize,
+            layout.size(),
+            new_size,
+            res as usize
+        );
+        res
     }
 }
 
