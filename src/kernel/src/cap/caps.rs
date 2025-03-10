@@ -31,7 +31,7 @@ use thread::{NonWeak, StrongRc, TempRc};
 use crate::cap::{EPObject, GateEP, KMemObject, KObject, MapObject, TileObject};
 use crate::kerrno;
 use crate::ktcu;
-use crate::slab::fits_slab;
+use crate::slab::{area_size, fits_slab};
 use crate::tiles::{tilemng, Activity, INVAL_ID};
 
 use super::IntoKObject;
@@ -298,7 +298,7 @@ pub struct Capability {
 
 impl Capability {
     const fn size() -> usize {
-        128 + crate::slab::HEADER_SIZE
+        area_size(Caps::alloc_size())
     }
 
     pub fn new<T>(sel: CapSel, obj: StrongRc<T>) -> Self

@@ -38,6 +38,7 @@ use crate::kerrno;
 use crate::ktcu;
 use crate::mem;
 use crate::platform;
+use crate::slab::area_size;
 use crate::tiles::{tilemng, Activity, ActivityMng, TileMux};
 
 #[derive(Clone)]
@@ -118,18 +119,7 @@ macro_rules! impl_from_kobj {
 
 const fn kobj_size<T>() -> usize {
     let size = size_of::<T>();
-    if size <= 64 {
-        64 + crate::slab::HEADER_SIZE
-    }
-    else if size <= 128 {
-        128 + crate::slab::HEADER_SIZE
-    }
-    else {
-        // since we are using musl's heap, it's hard to say what the overhead per allocation is.
-        // that depends on whether we needed a new "group" or not, for example. as an estimate use
-        // 64 bytes.
-        size + 64
-    }
+    area_size(size)
 }
 
 static KOBJ_SIZES: [usize; 11] = [

@@ -34,3 +34,18 @@ extern "C" {
     pub fn memzero(dst: *mut c_void, len: usize);
     pub fn strlen(s: *const i8) -> usize;
 }
+
+/// Maximum scalar alignment requirement.
+///
+/// This should be compatible with the `max_align_t` struct of the libC.
+/// It is the alignment guaranteed for `malloc` allocations.
+///
+/// # Sources
+///
+/// - [_RISC-V_](https://github.com/riscv-non-isa/riscv-elf-psabi-doc/blob/2484f950a551c653f1823f1bd11926bf5a57fae3/riscv-cc.adoc?plain=1#L617)
+#[cfg(any(
+    target_arch = "riscv32",
+    target_arch = "riscv64",
+    target_arch = "x86_64",
+))]
+pub const MAX_ALIGN: usize = 16;
