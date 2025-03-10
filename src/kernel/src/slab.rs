@@ -104,11 +104,13 @@ impl Slab {
     /// Create an allocator for the given layout
     ///
     /// Returns `null` if the `layout` does not fit the allocator or the allocation failed.
+    /// If `zeroed` is true, the memory will be initialized to zero.
+    /// This uses `calloc` inside the fallback allocator.
     ///
     /// # Safety
     ///
     /// See [`GlobalAlloc::alloc`].
-    unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
+    unsafe fn alloc(&mut self, layout: Layout, zeroed: bool) -> *mut u8 {
         if !self.fits(layout) {
             return null_mut();
         }
@@ -122,12 +124,22 @@ impl Slab {
 
                 let res = self.free.expect("slab not extended");
                 self.free = (*res.as_ptr()).next;
-                res.as_ptr().cast()
+                let ptr = res.as_ptr().cast();
+                if zeroed {
+                    core::ptr::write_bytes(ptr, 0, layout.size());
+                }
+                ptr
             },
 
             None => {
                 let alloc_size = Self::ceil_size(layout.size());
-                malloc(alloc_size).cast()
+                if zeroed {
+                    calloc(1, alloc_size)
+                }
+                else {
+                    malloc(alloc_size)
+                }
+                .cast()
             },
         }
     }
@@ -210,26 +222,32 @@ impl SlabAllocator {
         assert!(i < SlabAllocator::SLABS.len());
         i
     }
-}
 
-unsafe impl GlobalAlloc for SlabAllocator {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+    /// Allocate memory with configurable zeroing
+    unsafe fn real_alloc(&self, layout: Layout, zeroed: bool) -> *mut u8 {
         let mut slabs = self.slabs.borrow_mut();
         // It is convention that the last slab fits all sizes.
         let (size, res) = slabs
             .iter_mut()
-            .map(|slab| (slab.size, unsafe { slab.alloc(layout) }))
+            .map(|slab| (slab.size, unsafe { slab.alloc(layout, zeroed) }))
             .find(|(_, res)| !res.is_null())
             .unwrap_or((None, null_mut()));
 
         log!(
             LogFlags::KernSlab,
-            "alloc(sz={}, s={:?}) -> {:#x}",
+            "alloc(sz={}, s={:?}, z={}) -> {:#x}",
             layout.size(),
             size,
+            zeroed,
             res as usize
         );
         res
+    }
+}
+
+unsafe impl GlobalAlloc for SlabAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        self.real_alloc(layout, false)
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
@@ -248,6 +266,10 @@ unsafe impl GlobalAlloc for SlabAllocator {
             layout.size(),
             size
         );
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        self.real_alloc(layout, true)
     }
 }
 
