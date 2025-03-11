@@ -23,12 +23,12 @@ use m3::kif::Perm;
 use m3::mem::{GlobOff, VirtAddr};
 use m3::rc::Rc;
 use m3::syscalls;
-use m3::tiles::{ChildActivity, DefaultMapper, Mapper};
+use m3::tiles::{ChildActivity, DefaultMapper, Mapper, Tile};
 use m3::util::math;
 use m3::vec;
 use m3::vec::Vec;
 use m3::vfs::{BufReader, File, FileRef};
-use resmng::resources::memory;
+use resmng::resources::{memory, Resources};
 
 use crate::AddrSpace;
 
@@ -38,7 +38,9 @@ pub(crate) struct ChildMapper<'a> {
     act_sel: Selector,
     def_mapper: DefaultMapper,
     tee: bool,
+    tile: Rc<Tile>,
     mem_pool: Rc<RefCell<memory::MemPool>>,
+    res: &'a mut Resources,
     allocs: Vec<memory::Allocation>,
     buf: Vec<u8>,
 }
@@ -49,7 +51,9 @@ impl<'a> ChildMapper<'a> {
         has_virtmem: bool,
         act_sel: Selector,
         tee: bool,
+        tile: Rc<Tile>,
         mem_pool: Rc<RefCell<memory::MemPool>>,
+        res: &'a mut Resources,
     ) -> Self {
         ChildMapper {
             aspace,
@@ -57,7 +61,9 @@ impl<'a> ChildMapper<'a> {
             act_sel,
             def_mapper: DefaultMapper::new(has_virtmem),
             tee,
+            tile,
             mem_pool,
+            res,
             allocs: Vec::new(),
             buf: vec![0u8; 4096],
         }
@@ -142,8 +148,21 @@ impl Mapper for ChildMapper<'_> {
         perm: Perm,
         flags: MapFlags,
     ) -> Result<(), Error> {
-        if self.has_virtmem {
-            let size = math::round_up(mem_size, PAGE_SIZE);
+        let size = math::round_up(mem_size, PAGE_SIZE);
+        if self.tee {
+            // This really should be an assert() because a mapper should have a pager only if it has virtmem
+            if !self.has_virtmem {
+                return Err(Error::new(Code::NotSup));
+            }
+            // Acquire a pointer/selector to a region inside the target activity's memory space
+            let (mgate, moff) = {
+                let (msel, moff) = self.map_mem(virt, size, perm)?;
+                (MemGate::new_bind(msel)?, moff)
+            };
+
+            self.clear(&mgate, moff, mem_size)
+        }
+        else if self.has_virtmem {
             self.aspace
                 .map_anon_with(virt, size as GlobOff, perm, flags)
                 .map(|_| ())
@@ -152,5 +171,17 @@ impl Mapper for ChildMapper<'_> {
             self.def_mapper
                 .map_anon(act, virt, file_size, mem_size, perm, flags)
         }
+    }
+
+    fn finished(&mut self) -> Result<(), Error> {
+        if self.tee {
+            self.mem_pool
+                .borrow_mut()
+                .make_exclusive(self.res, &self.tile)
+                .map_err(|e| e.downcast::<Error>().unwrap())?;
+
+            self.tile.lock()?;
+        }
+        Ok(())
     }
 }
