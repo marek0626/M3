@@ -278,9 +278,9 @@ impl BaseSocket {
                 break;
             }
 
-            log_net(NetLogEvent::StartedWaiting, self.sd, 0);
+            log_net(NetLogEvent::StartedCreditWait, self.sd, 0);
             self.channel.wait_for_credits();
-            log_net(NetLogEvent::StoppedWaiting, self.sd, 0);
+            log_net(NetLogEvent::StoppedCreditWait, self.sd, 0);
         }
     }
 
@@ -312,9 +312,9 @@ impl BaseSocket {
                 return Err(Error::new(Code::SocketClosed));
             }
 
-            log_net(NetLogEvent::StartedWaiting, self.sd, 0);
+            log_net(NetLogEvent::StartedEventWait, self.sd, 0);
             self.channel.wait_for_events();
-            log_net(NetLogEvent::StoppedWaiting, self.sd, 0);
+            log_net(NetLogEvent::StoppedEventWait, self.sd, 0);
         }
         Ok(())
     }
@@ -326,9 +326,9 @@ impl BaseSocket {
                 break;
             }
 
-            log_net(NetLogEvent::StartedWaiting, self.sd, 0);
+            log_net(NetLogEvent::StartedCreditWait, self.sd, 0);
             self.channel.wait_for_credits();
-            log_net(NetLogEvent::StoppedWaiting, self.sd, 0);
+            log_net(NetLogEvent::StoppedCreditWait, self.sd, 0);
         }
     }
 

@@ -53,9 +53,9 @@ void Socket::tear_down() noexcept {
             if(_channel.has_all_credits())
                 break;
 
-            log_net(NetLogEvent::StartedWaiting, _sd, 0);
+            log_net(NetLogEvent::StartedCreditWait, _sd, 0);
             _channel.wait_for_credits();
-            log_net(NetLogEvent::StoppedWaiting, _sd, 0);
+            log_net(NetLogEvent::StoppedCreditWait, _sd, 0);
         }
     }
     catch(...) {
@@ -179,9 +179,9 @@ void Socket::ack_data(size_t size) {
 
 void Socket::wait_for_events() {
     while(!process_events()) {
-        log_net(NetLogEvent::StartedWaiting, _sd, 0);
+        log_net(NetLogEvent::StartedEventWait, _sd, 0);
         _channel.wait_for_events();
-        log_net(NetLogEvent::StoppedWaiting, _sd, 0);
+        log_net(NetLogEvent::StoppedEventWait, _sd, 0);
     }
 }
 
@@ -191,9 +191,9 @@ void Socket::wait_for_credits() {
         if(can_send())
             break;
 
-        log_net(NetLogEvent::StartedWaiting, _sd, 0);
+        log_net(NetLogEvent::StartedCreditWait, _sd, 0);
         _channel.wait_for_credits();
-        log_net(NetLogEvent::StoppedWaiting, _sd, 0);
+        log_net(NetLogEvent::StoppedCreditWait, _sd, 0);
     }
 }
 

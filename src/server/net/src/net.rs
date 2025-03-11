@@ -403,10 +403,10 @@ pub fn main() -> Result<(), Error> {
             _ => sleep_nanos,
         };
 
-        log_net(NetLogEvent::StartedWaiting, 0, 0);
+        log_net(NetLogEvent::StartedWait, 0, 0);
         log!(LogFlags::NetPoll, "Sleeping for {:?}", sleep_nanos);
         OwnActivity::sleep_for(sleep_nanos).ok();
-        log_net(NetLogEvent::StoppedWaiting, 0, 0);
+        log_net(NetLogEvent::StoppedWait, 0, 0);
     }
 
     Ok(())
