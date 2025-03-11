@@ -173,6 +173,7 @@ class TCU {
     friend class TimeInstant;
     friend class OwnActivity;
     friend class GenericFile;
+    friend class EP;
 
     explicit TCU() {
     }
@@ -286,7 +287,8 @@ private:
         FETCH_MSG = 5,
         ACK_MSG = 6,
         UNFREEZE = 7,
-        SLEEP = 8,
+        MKDYN = 8,
+        SLEEP = 9,
     };
 
     enum class PrivCmdOpCode {
@@ -315,6 +317,11 @@ public:
     enum MemFlags : reg_t {
         R = 1 << 0,
         W = 1 << 1,
+    };
+
+    enum Features : reg_t {
+        FEAT_PRIV = 1 << 0,
+        FEAT_LOCKED = 1 << 3,
     };
 
     struct Header {
@@ -369,6 +376,11 @@ public:
 
     static TCU &get() {
         return inst;
+    }
+
+    bool is_locked() const {
+        reg_t features = read_reg(ExtRegs::FEATURES);
+        return (features & FEAT_LOCKED) != 0;
     }
 
     bool has_missing_credits(epid_t ep) const {
@@ -489,6 +501,11 @@ private:
 
     Errors::Code unfreeze(epid_t ep) {
         write_reg(UnprivRegs::COMMAND, build_command(ep, CmdOpCode::UNFREEZE, 0));
+        return get_error();
+    }
+
+    Errors::Code mkdyn(epid_t ep) {
+        write_reg(UnprivRegs::COMMAND, build_command(ep, CmdOpCode::MKDYN, 0));
         return get_error();
     }
 

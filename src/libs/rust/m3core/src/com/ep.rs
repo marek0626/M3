@@ -19,7 +19,7 @@ use crate::cap::{CapFlags, Capability, SelSpace, Selector};
 use crate::errors::Error;
 use crate::kif;
 use crate::syscalls;
-use crate::tcu::{EpId, INVALID_EP};
+use crate::tcu::{EpId, INVALID_EP, TCU};
 
 bitflags! {
     #[derive(Copy, Clone, Debug)]
@@ -171,6 +171,19 @@ impl EP {
 
     pub(crate) fn is_cacheable(&self) -> bool {
         self.flags.contains(EPFlags::CACHEABLE)
+    }
+
+    /// Makes this endpoint dynamic.
+    ///
+    /// Dynamic EPs are not frozen if the TCU is locked and can therefore be freely changed by the
+    /// kernel. Note that this is only done if the TCU is locked.
+    pub fn mkdyn(&self) -> Result<(), Error> {
+        if TCU::is_locked() {
+            TCU::mkdyn(self.id())
+        }
+        else {
+            Ok(())
+        }
     }
 
     /// Configures this endpoint for the given send gate for a different activity. Note that this

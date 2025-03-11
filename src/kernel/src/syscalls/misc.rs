@@ -113,6 +113,14 @@ pub fn alloc_ep_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     dst_act.tile().alloc_eps(ep_count);
     tilemux.alloc_eps(epid, ep_count);
 
+    if tilemux.is_locked() {
+        // make the EP invalid, but owned by the activity, so that it can make it dynamic if desired
+        ktcu::config_remote_ep(dst_act.tile_id(), epid, |regs, tgtep| {
+            ktcu::config_invalid(regs, tgtep, dst_act.id());
+        })
+        .unwrap();
+    }
+
     let mut kreply = MsgBuf::borrow_def();
     build_vmsg!(kreply, Code::Success, kif::syscalls::AllocEPReply {
         ep: epid
@@ -176,7 +184,7 @@ pub fn mgate_mkexcl(act: &TempRc<Activity>) -> anyhow::Result<()> {
     }
 
     let mut memmux = tilemng::memmux(mem_tile.tile());
-    memmux.add(mgate, mem_tile, user_tile)?;
+    memmux.add(mgate, mem_tile, &user_tile)?;
 
     reply_success(act);
     Ok(())

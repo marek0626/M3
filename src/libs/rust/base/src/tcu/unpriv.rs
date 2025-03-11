@@ -60,6 +60,8 @@ pub enum CmdOpCode {
     AckMsg,
     /// Unfreezes an endpoint
     Unfreeze,
+    /// Makes an endpoint dynamic
+    Mkdyn,
     /// Puts the CU to sleep
     Sleep,
 }
@@ -440,6 +442,16 @@ impl TCU {
             UnprivReg::Command,
             Self::build_cmd(ep, CmdOpCode::Unfreeze, 0),
         );
+        Self::get_error()
+    }
+
+    /// Makes an endpoint dynamic.
+    ///
+    /// Dynamic EPs are not frozen if the TCU is locked and can therefore be freely changed by the
+    /// kernel.
+    #[inline(always)]
+    pub fn mkdyn(ep: EpId) -> Result<(), Error> {
+        Self::write_unpriv_reg(UnprivReg::Command, Self::build_cmd(ep, CmdOpCode::Mkdyn, 0));
         Self::get_error()
     }
 

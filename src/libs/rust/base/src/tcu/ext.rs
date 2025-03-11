@@ -278,6 +278,16 @@ impl TCU {
         }
     }
 
+    pub fn config_invalid(regs: &mut [Reg], act: ActId) {
+        regs[0] = (EpType::Invalid as Reg) | ((act as Reg) << 3);
+        regs[1] = 0;
+        regs[2] = 0;
+        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
+        {
+            regs[3] = 0;
+        }
+    }
+
     /// Configures the given endpoint
     pub fn set_ep_regs(ep: EpId, regs: &[Reg]) {
         let off = EP_REGS * ep as usize;

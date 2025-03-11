@@ -83,6 +83,11 @@ public:
         return (_flags & EPFlags::STANDARD) != 0;
     }
 
+    void mkdyn() const {
+        if(TCU::get().is_locked())
+            TCU::get().mkdyn(_id);
+    }
+
 private:
     bool is_cacheable() const noexcept {
         return (_flags & EPFlags::CACHEABLE) != 0;

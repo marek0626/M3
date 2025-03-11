@@ -49,7 +49,7 @@ impl MemMux {
         &mut self,
         mgate: TempRc<MGateObject>,
         mem_tile: TempRc<TileObject>,
-        user_tile: TempRc<TileObject>,
+        user_tile: &TempRc<TileObject>,
     ) -> anyhow::Result<()> {
         assert!(mem_tile.tile() == self.tile);
 

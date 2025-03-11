@@ -169,6 +169,7 @@ pub struct TileMux {
     queue: base::boxed::Box<crate::com::SendQueue>,
     state: Option<TileState>,
     mux_type: kif::syscalls::MuxType,
+    locked: bool,
     shutdown: bool,
 }
 
@@ -191,11 +192,16 @@ impl TileMux {
             state: None,
             mux_type: kif::syscalls::MuxType::None,
             shutdown: false,
+            locked: false,
         }
     }
 
     pub fn is_initialized(&self) -> bool {
         self.state.is_some() && !self.shutdown
+    }
+
+    pub fn is_locked(&self) -> bool {
+        self.locked
     }
 
     pub fn has_activities(&self) -> bool {
@@ -274,6 +280,11 @@ impl TileMux {
 
         self.state = None;
         self.mux_type = kif::syscalls::MuxType::None;
+    }
+
+    pub fn lock(&mut self) {
+        assert!(!self.locked);
+        self.locked = true;
     }
 
     pub fn reset_async(
@@ -377,6 +388,8 @@ impl TileMux {
         ktcu::reset_tile(tile_id, start)?;
 
         let mut tilemux = tilemng::tilemux(tile_id);
+        tilemux.locked = false;
+
         if start {
             // for root, it has to be TileMux and we don't support async calls yet, because there
             // are no other threads yet to switch to.

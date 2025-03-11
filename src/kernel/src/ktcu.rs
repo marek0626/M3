@@ -149,6 +149,24 @@ pub fn config_mem(
     TCU::config_mem(regs, act, tile, gen, addr, size, perm);
 }
 
+pub fn config_invalid(regs: &mut [Reg], tgtep: (TileId, EpId), act: ActId) {
+    log!(
+        log_flag(tgtep.0),
+        "{}:{}EP{} = Inval[act={}]",
+        tgtep.0,
+        if tgtep.1 < PMEM_PROT_EPS as EpId {
+            "PMP"
+        }
+        else {
+            ""
+        },
+        tgtep.1,
+        act,
+    );
+
+    TCU::config_invalid(regs, act);
+}
+
 fn rbuf_addrs(virt: VirtAddr) -> (VirtAddr, PhysAddr) {
     let desc = platform::tile_desc(platform::kernel_tile());
     if desc.has_virtmem() {
