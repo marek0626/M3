@@ -487,9 +487,9 @@ private:
         return (r0 >> 63) != 0;
     }
 
-    void unfreeze(epid_t ep) {
+    Errors::Code unfreeze(epid_t ep) {
         write_reg(UnprivRegs::COMMAND, build_command(ep, CmdOpCode::UNFREEZE, 0));
-        get_error();
+        return get_error();
     }
 
     void drop_msgs(size_t buf_addr, epid_t ep, label_t label) {

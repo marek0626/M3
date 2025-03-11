@@ -29,8 +29,11 @@ Gate::~Gate() {
 EP *Gate::activate(capsel_t sel, bool mem) {
     auto ep = EPMng::get().acquire();
     activate_on(sel, *ep, mem);
-    if(TCU::get().is_frozen(ep->id()))
-        TCU::get().unfreeze(ep->id());
+    if(TCU::get().is_frozen(ep->id())) {
+        auto err = TCU::get().unfreeze(ep->id());
+        if(err != Errors::SUCCESS)
+            throw MessageException("Unfreezing EP failed", err);
+    }
     return ep;
 }
 
@@ -63,7 +66,9 @@ void Gate::activate_rgate_on(capsel_t sel, const EP &ep, uintptr_t rbuf_virt, ca
         if(std::get<3>(rinfo) != ep.id() + 1)
             throw MessageException("Unexpected reply-EP offset", Errors::KERNEL_BROKEN);
 
-        TCU::get().unfreeze(ep.id());
+        auto err = TCU::get().unfreeze(ep.id());
+        if(err != Errors::SUCCESS)
+            throw MessageException("Unfreezing EP failed", err);
     }
 }
 
