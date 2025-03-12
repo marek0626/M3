@@ -89,7 +89,8 @@ public:
      *
      * Note also that this <MemCap> needs be belong to <mem_tile>.
      */
-    void make_exclusive(class Tile &mem_tile, class Tile &user_tile);
+    void make_exclusive(const Reference<class Tile> &mem_tile,
+                        const Reference<class Tile> &user_tile);
 
     /**
      * Derives memory from this memory capability. That is, it creates a new memory capability that

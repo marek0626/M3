@@ -29,5 +29,5 @@ enum Mode {
 
 extern const m3::CycleDuration ACCEL_TIMES[];
 
-m3::CycleDuration chain_direct(const char *in, size_t num, Mode mode);
+m3::CycleDuration chain_direct(const char *in, size_t num, Mode mode, bool tee);
 m3::CycleDuration chain_indirect(const char *in, size_t num);

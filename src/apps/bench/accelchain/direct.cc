@@ -37,7 +37,7 @@ class Chain {
 
 public:
     explicit Chain(Pipes &pipesrv, FileRef<GenericFile> &in, FileRef<GenericFile> &out, size_t _num,
-                   CycleDuration comptime, Mode _mode)
+                   CycleDuration comptime, Mode _mode, bool tee)
         : num(_num),
           mode(_mode),
           acts(),
@@ -55,7 +55,7 @@ public:
             tiles[i] = Tile::get("copy");
             acts[i] = std::make_unique<ChildActivity>(tiles[i], name.str());
 
-            accels[i] = std::make_unique<StreamAccel>(acts[i], comptime);
+            accels[i] = std::make_unique<StreamAccel>(acts[i], comptime, tee);
 
             if(mode == Mode::DIR_SIMPLE && i + 1 < num) {
                 mems[i] =
@@ -87,6 +87,11 @@ public:
                 else
                     accels[i]->connect_output(accels[i + 1].get());
             }
+        }
+
+        if(tee) {
+            for(size_t i = 0; i < num; ++i)
+                tiles[i]->lock();
         }
     }
 
@@ -132,9 +137,9 @@ private:
 };
 
 void chain_direct(FileRef<GenericFile> &in, FileRef<GenericFile> &out, size_t num,
-                  CycleDuration comptime, Mode mode) {
+                  CycleDuration comptime, Mode mode, bool tee) {
     Pipes pipes("pipes");
-    Chain ch(pipes, in, out, num, comptime, mode);
+    Chain ch(pipes, in, out, num, comptime, mode, tee);
 
     if(VERBOSE)
         println("Starting chain..."_cf);
@@ -158,13 +163,13 @@ void chain_direct(FileRef<GenericFile> &in, FileRef<GenericFile> &out, size_t nu
 }
 
 void chain_direct_multi(FileRef<GenericFile> &in, FileRef<GenericFile> &out, size_t num,
-                        CycleDuration comptime, Mode mode) {
+                        CycleDuration comptime, Mode mode, bool tee) {
     Pipes pipes("pipes");
-    Chain ch1(pipes, in, out, num, comptime, mode);
+    Chain ch1(pipes, in, out, num, comptime, mode, tee);
 
     auto out2 = VFS::open("/tmp/out2.txt", FILE_W | FILE_TRUNC | FILE_CREATE | FILE_NEWSESS);
     auto in2 = FileRef<GenericFile>(in->clone());
-    Chain ch2(pipes, in2, out2, num, comptime, mode);
+    Chain ch2(pipes, in2, out2, num, comptime, mode, tee);
 
     if(VERBOSE)
         println("Starting chains..."_cf);
