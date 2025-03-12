@@ -30,7 +30,7 @@ use base::{
     log,
 };
 
-// An (empty) area on one of the slabs
+/// An (empty) area on one of the slabs
 #[repr(C)]
 struct Area {
     /// Next in the free list
@@ -227,15 +227,14 @@ impl SlabAllocator {
     /// Return the index of the slab allocator that will be used for an allocation of this size
     const fn get_slab(obj_size: usize) -> usize {
         let mut i = 0;
-        while i < SlabAllocator::SLABS.len() {
-            let size = SlabAllocator::SLABS[i].size;
+        while i < Self::SLABS.len() {
+            let size = Self::SLABS[i].size;
             if size.is_none() || size.unwrap() >= obj_size {
-                break;
+                return i;
             }
             i += 1;
         }
-        assert!(i < SlabAllocator::SLABS.len());
-        i
+        panic!("found no slab fitting this size")
     }
 
     /// Allocate memory with configurable zeroing
@@ -263,6 +262,10 @@ impl SlabAllocator {
     ///
     /// If the new size would use the same allocator, reallocate inside this allocator.
     /// Else, reallocate inside the destined allocator.
+    ///
+    /// # Safety
+    ///
+    /// See [`GlobalAlloc::realloc`].
     unsafe fn real_realloc(&self, new_size: usize, layout: Layout, ptr: *mut u8) -> *mut u8 {
         // SAFETY: the caller must ensure that the `new_size` does not overflow.
         // `layout.align()` comes from a `Layout` and is thus guaranteed to be valid.
@@ -345,7 +348,7 @@ unsafe impl GlobalAlloc for SlabAllocator {
     }
 }
 
-/// Set global allocator
+/// This variable is set as the global allocator
 #[global_allocator]
 static ALLOCATOR: SlabAllocator = SlabAllocator::new();
 
