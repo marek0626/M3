@@ -156,6 +156,10 @@ KIF::Syscall::MuxType Tile::mux_type() const {
     return mux_type;
 }
 
+void Tile::lock() const {
+    Syscalls::tile_lock(sel());
+}
+
 std::tuple<Quota<uint>, Quota<uint>, Quota<TimeDuration>, Quota<size_t>> Tile::quota() const {
     return Syscalls::tile_quota(sel());
 }

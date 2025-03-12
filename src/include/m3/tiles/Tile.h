@@ -123,6 +123,14 @@ public:
     }
 
     /**
+     * Locks this tile.
+     *
+     * This will, if present, mark the EP memory region as exclusive and thus prevent other tiles
+     * (e.g., the kernel tile) from accessing it.
+     */
+    void lock() const;
+
+    /**
      * @return a tuple with the current EP quota, exclusive regions, time quota, and page-table
      * quota
      */
