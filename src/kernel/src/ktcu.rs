@@ -492,7 +492,8 @@ pub fn set_excl_region(
 
     #[cfg(feature = "gem5")]
     {
-        let mut cfg = user_tile.raw() << 3 | 1;
+        let mut cfg =
+            (tilemng::tilegen(user_tile) as Reg) << 17 | (user_tile.raw() as Reg) << 3 | 1;
         if perm.contains(kif::Perm::R) {
             cfg |= 1 << 1;
         }
@@ -506,7 +507,7 @@ pub fn set_excl_region(
         let arg1 = TCU::ext_reg_addr(ExtReg::ExtArg1).as_goff();
         try_write_slice(mem_tile, arg1, &[addr_size])?;
 
-        let reg = ExtCmdOpCode::SetExcl as Reg | ((cfg as Reg) << 9) | ((idx as Reg) << 42);
+        let reg = ExtCmdOpCode::SetExcl as Reg | (cfg << 9) | ((idx as Reg) << 42);
         do_ext_cmd(mem_tile, reg).map(|_| ())
     }
 }
