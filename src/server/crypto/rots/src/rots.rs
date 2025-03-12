@@ -767,7 +767,7 @@ impl RoTSession {
             return Err(Error::new(Code::Exists));
         }
 
-        let ep = EpMng::get().acquire(0)?;
+        let ep = EpMng::get().acquire(0, false)?;
         let ep_sel = ep.sel();
         hash.mem = Some(ep);
         xchg.out_caps(CapRngDesc::new_single(CapType::Object, ep_sel));

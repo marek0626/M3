@@ -393,8 +393,7 @@ void GenericFile::do_clone(Activity &act, KIF::CapRngDesc &crd) const {
 
 void GenericFile::delegate_ep() {
     if(!_mep) {
-        _mep = EPMng::get().acquire();
-        _mep->mkdyn();
+        _mep = EPMng::get().acquire(TCU::INVALID_EP, 0, true);
         do_delegate_ep(*_mep);
     }
 }

@@ -258,13 +258,24 @@ pub fn create_sem(dst: Selector, value: u32) -> Result<(), Error> {
 
 /// Allocates a new endpoint for the given activity at selector `dst`. Optionally, it can have `replies`
 /// reply slots attached to it (for receive gate activations).
-pub fn alloc_ep(dst: Selector, act: Selector, epid: EpId, replies: usize) -> Result<EpId, Error> {
+///
+/// The `dynamic` argument indicates whether configurations of this EP need to be acknowledged by
+/// the application before the EP is usable (dynamic=false), or whether the EP can by reconfigured
+/// without ACK (dynamic=true).
+pub fn alloc_ep(
+    dst: Selector,
+    act: Selector,
+    epid: EpId,
+    replies: usize,
+    dynamic: bool,
+) -> Result<EpId, Error> {
     let mut buf = SYSC_BUF.borrow_mut();
     build_vmsg!(buf, syscalls::Operation::AllocEP, syscalls::AllocEP {
         dst,
         act,
         epid,
         replies,
+        dynamic,
     });
 
     let reply: Reply<syscalls::AllocEPReply> = send_receive(&buf)?;

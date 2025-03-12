@@ -40,11 +40,12 @@ pub fn alloc_ep_async(act: TempRc<Activity>) -> anyhow::Result<()> {
 
     sysc_log!(
         act,
-        "alloc_ep(dst={}, act={}, epid={}, replies={})",
+        "alloc_ep(dst={}, act={}, epid={}, replies={}, dyn={})",
         r.dst,
         r.act,
         r.epid,
-        r.replies
+        r.replies,
+        r.dynamic
     );
 
     if r.replies > cfg::MAX_RB_SIZE {
@@ -113,10 +114,11 @@ pub fn alloc_ep_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     dst_act.tile().alloc_eps(ep_count);
     tilemux.alloc_eps(epid, ep_count);
 
-    if tilemux.is_locked() {
-        // make the EP invalid, but owned by the activity, so that it can make it dynamic if desired
+    if r.dynamic {
+        // make the EP invalid, but owned by the activity, so that it can make it dynamic if desired.
+        // if the tile is not locked yet, we can also do it directly.
         ktcu::config_remote_ep(dst_act.tile_id(), epid, |regs, tgtep| {
-            ktcu::config_invalid(regs, tgtep, dst_act.id());
+            ktcu::config_invalid(regs, tgtep, dst_act.id(), true);
         })
         .unwrap();
     }

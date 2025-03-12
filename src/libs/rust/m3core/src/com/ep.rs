@@ -49,6 +49,7 @@ pub struct EPArgs {
     epid: EpId,
     act: Selector,
     replies: usize,
+    dynamic: bool,
 }
 
 impl Default for EPArgs {
@@ -58,6 +59,7 @@ impl Default for EPArgs {
             epid: INVALID_EP,
             act: kif::SEL_ACT,
             replies: 0,
+            dynamic: false,
         }
     }
 }
@@ -78,6 +80,12 @@ impl EPArgs {
     /// Sets the number of reply slots to `slots`.
     pub fn replies(mut self, slots: usize) -> Self {
         self.replies = slots;
+        self
+    }
+
+    /// Sets whether the EP is dynamic.
+    pub fn dynamic(mut self, dynamic: bool) -> Self {
+        self.dynamic = dynamic;
         self
     }
 }
@@ -112,7 +120,7 @@ impl EP {
             EPFlags::empty()
         };
 
-        let (sel, id) = Self::alloc_cap(args.epid, args.act, args.replies)?;
+        let (sel, id) = Self::alloc_cap(args.epid, args.act, args.replies, args.dynamic)?;
         Ok(Self::create(
             sel,
             id,
@@ -203,9 +211,14 @@ impl EP {
         syscalls::invalidate(self.sel())
     }
 
-    fn alloc_cap(epid: EpId, act: Selector, replies: usize) -> Result<(Selector, EpId), Error> {
+    fn alloc_cap(
+        epid: EpId,
+        act: Selector,
+        replies: usize,
+        dynamic: bool,
+    ) -> Result<(Selector, EpId), Error> {
         let sel = SelSpace::get().alloc_sel();
-        let id = syscalls::alloc_ep(sel, act, epid, replies)?;
+        let id = syscalls::alloc_ep(sel, act, epid, replies, dynamic)?;
         Ok((sel, id))
     }
 }

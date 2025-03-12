@@ -158,7 +158,7 @@ void Syscalls::create_sem(capsel_t dst, uint value) {
     send_receive_throw(req_buf);
 }
 
-epid_t Syscalls::alloc_ep(capsel_t dst, capsel_t act, epid_t ep, uint replies) {
+epid_t Syscalls::alloc_ep(capsel_t dst, capsel_t act, epid_t ep, uint replies, bool dynamic) {
     MsgBuf req_buf;
     auto &req = req_buf.cast<KIF::Syscall::AllocEP>();
     req.opcode = KIF::Syscall::ALLOC_EPS;
@@ -166,6 +166,7 @@ epid_t Syscalls::alloc_ep(capsel_t dst, capsel_t act, epid_t ep, uint replies) {
     req.act_sel = act;
     req.epid = ep;
     req.replies = replies;
+    req.dynamic = dynamic;
 
     auto reply = send_receive<KIF::Syscall::AllocEPReply>(req_buf);
 

@@ -73,7 +73,7 @@ fn destroy(t: &mut dyn WvTester) {
 fn destroy_ep(t: &mut dyn WvTester) {
     let rcap = wv_require_ok!(RecvCap::new_with(Default::default()));
     let scap = wv_require_ok!(SendCap::new(&rcap));
-    let ep = wv_require_ok!(EpMng::get().acquire(0));
+    let ep = wv_require_ok!(EpMng::get().acquire(0, false));
     let c2p_sem = wv_require_ok!(Semaphore::create(0));
 
     let tile = wv_require_ok!(Tile::get("compat|own"));

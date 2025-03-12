@@ -156,6 +156,7 @@ pub struct AllocEP {
     pub act: CapSel,
     pub epid: EpId,
     pub replies: usize,
+    pub dynamic: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

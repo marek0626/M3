@@ -286,6 +286,7 @@ struct KIF {
             xfer_t act_sel;
             xfer_t epid;
             xfer_t replies;
+            xfer_t dynamic;
         } PACKED;
 
         struct AllocEPReply : public DefaultReply {

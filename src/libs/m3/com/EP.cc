@@ -31,17 +31,20 @@ EP &EP::operator=(EP &&ep) noexcept {
     return *this;
 }
 
-EP EP::alloc(uint replies) {
-    return alloc_for(KIF::SEL_ACT, TCU::INVALID_EP, replies);
+EP EP::alloc(uint replies, bool dynamic) {
+    return alloc_for(KIF::SEL_ACT, TCU::INVALID_EP, replies, dynamic);
 }
 
-EP EP::alloc_for(capsel_t act, epid_t ep, uint replies) {
+EP EP::alloc_for(capsel_t act, epid_t ep, uint replies, bool dynamic) {
     capsel_t sel = SelSpace::get().alloc_sel();
-    epid_t id = Syscalls::alloc_ep(sel, act, ep, replies);
+    epid_t id = Syscalls::alloc_ep(sel, act, ep, replies, dynamic);
     uint flags = 0;
     if(ep == TCU::INVALID_EP && replies == 0)
         flags |= EPFlags::CACHEABLE;
-    return EP(sel, id, replies, 0, flags);
+    EP res(sel, id, replies, 0, flags);
+    if(dynamic)
+        res.mkdyn();
+    return res;
 }
 
 EP EP::bind(epid_t id) noexcept {

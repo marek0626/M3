@@ -263,8 +263,7 @@ impl GenericFile {
 
     fn delegate_own_ep(&mut self) -> Result<(), Error> {
         if self.memep.is_none() {
-            let ep = EpMng::get().acquire(0)?;
-            ep.mkdyn()?;
+            let ep = EpMng::get().acquire(0, true)?;
             self.memep = Some(ep);
         }
 

@@ -282,7 +282,7 @@ impl M3FS {
             }
         }
 
-        let ep = EpMng::get().acquire(0)?;
+        let ep = EpMng::get().acquire(0, true)?;
         let id = self.delegate_ep(ep.sel())?;
         self.eps.push(CachedEP { id, ep, file: None });
         Ok(self.eps.len() - 1)

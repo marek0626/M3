@@ -23,12 +23,12 @@ namespace m3 {
 
 INIT_PRIO_EPMNG EPMng EPMng::_inst;
 
-EP *EPMng::acquire(epid_t ep, uint replies) {
+EP *EPMng::acquire(epid_t ep, uint replies, bool dynamic) {
     EP *e = nullptr;
     if(ep == TCU::INVALID_EP && replies == 0)
         e = _eps.remove_first();
     if(!e)
-        e = new EP(EP::alloc_for(KIF::SEL_ACT, ep, replies));
+        e = new EP(EP::alloc_for(KIF::SEL_ACT, ep, replies, dynamic));
     return e;
 }
 

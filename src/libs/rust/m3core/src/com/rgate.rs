@@ -190,7 +190,7 @@ impl RecvCap {
             Some(ep) => ep,
             None => {
                 let replies = 1 << (order - msg_order);
-                EpMng::get().acquire(replies)?
+                EpMng::get().acquire(replies, false)?
             },
         };
 
@@ -231,7 +231,7 @@ impl GateCap for RecvCap {
 
         let (order, msg_order) = (self.order.get().unwrap(), self.msg_order.get().unwrap());
         let replies = 1 << (order - msg_order);
-        let ep = EpMng::get().acquire(replies)?;
+        let ep = EpMng::get().acquire(replies, false)?;
         let gate = Gate::new_rgate(
             self.sel(),
             self.cap.flags(),

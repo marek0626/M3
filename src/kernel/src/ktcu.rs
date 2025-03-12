@@ -149,10 +149,10 @@ pub fn config_mem(
     TCU::config_mem(regs, act, tile, gen, addr, size, perm);
 }
 
-pub fn config_invalid(regs: &mut [Reg], tgtep: (TileId, EpId), act: ActId) {
+pub fn config_invalid(regs: &mut [Reg], tgtep: (TileId, EpId), act: ActId, dynamic: bool) {
     log!(
         log_flag(tgtep.0),
-        "{}:{}EP{} = Inval[act={}]",
+        "{}:{}EP{} = Inval[act={}, dyn={}]",
         tgtep.0,
         if tgtep.1 < PMEM_PROT_EPS as EpId {
             "PMP"
@@ -162,9 +162,10 @@ pub fn config_invalid(regs: &mut [Reg], tgtep: (TileId, EpId), act: ActId) {
         },
         tgtep.1,
         act,
+        dynamic,
     );
 
-    TCU::config_invalid(regs, act);
+    TCU::config_invalid(regs, act, dynamic);
 }
 
 fn rbuf_addrs(virt: VirtAddr) -> (VirtAddr, PhysAddr) {

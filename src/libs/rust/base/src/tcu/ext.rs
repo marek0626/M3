@@ -278,8 +278,11 @@ impl TCU {
         }
     }
 
-    pub fn config_invalid(regs: &mut [Reg], act: ActId) {
+    pub fn config_invalid(regs: &mut [Reg], act: ActId, dynamic: bool) {
         regs[0] = (EpType::Invalid as Reg) | ((act as Reg) << 3);
+        if dynamic {
+            regs[0] |= 1 << 62;
+        }
         regs[1] = 0;
         regs[2] = 0;
         #[cfg(not(any(feature = "hw22", feature = "hw23")))]

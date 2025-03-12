@@ -65,7 +65,7 @@ fn noop(t: &mut dyn WvTester) {
 
 fn activate(t: &mut dyn WvTester) {
     let mcap = wv_require_ok!(MemCap::new(0x1000, Perm::RW));
-    let ep = wv_require_ok!(EpMng::get().acquire(0));
+    let ep = wv_require_ok!(EpMng::get().acquire(0, false));
 
     let prof = Profiler::default();
 

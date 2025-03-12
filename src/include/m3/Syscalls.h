@@ -66,7 +66,7 @@ public:
     static void create_map(capsel_t dst, capsel_t act, capsel_t mgate, capsel_t first,
                            capsel_t pages, int perms);
     static void create_sem(capsel_t dst, uint value);
-    static epid_t alloc_ep(capsel_t dst, capsel_t act, epid_t ep, uint replies);
+    static epid_t alloc_ep(capsel_t dst, capsel_t act, epid_t ep, uint replies, bool dynamic);
 
     static void activate_mgate(capsel_t ep, capsel_t gate);
     static void activate_sgate(capsel_t ep, capsel_t gate);
