@@ -461,7 +461,10 @@ impl TCU {
         loop {
             let cmd = Self::read_unpriv_reg(UnprivReg::Command);
             if (cmd & 0xF) == CmdOpCode::Idle.into() {
+                #[cfg(any(feature = "hw22", feature = "hw23"))]
                 let err = (cmd >> 20) & 0x1F;
+                #[cfg(not(any(feature = "hw22", feature = "hw23")))]
+                let err = (cmd >> 20) & 0x3F;
                 return Result::from(Code::try_from(err as u32).unwrap());
             }
         }
@@ -604,6 +607,9 @@ impl TCU {
     }
 
     fn build_cmd(ep: EpId, cmd: CmdOpCode, arg: Reg) -> Reg {
-        cmd as Reg | ((ep as Reg) << 4) | (arg << 25)
+        #[cfg(any(feature = "hw22", feature = "hw23"))]
+        return cmd as Reg | ((ep as Reg) << 4) | (arg << 25);
+        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
+        return cmd as Reg | ((ep as Reg) << 4) | (arg << 26);
     }
 }

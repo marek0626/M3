@@ -149,7 +149,11 @@ public:
     static m3::Errors::Code invalidate_ep_remote(m3::TileId tile, epid_t ep, bool force,
                                                  m3::TCU::rep_bitmask_t *unread = nullptr) {
         reg_t cmd = static_cast<reg_t>(m3::TCU::ExtCmdOpCode::INV_EP) |
+#if defined(__hw22__) || defined(__hw23__)
                     (static_cast<reg_t>(ep) << 9) | (static_cast<reg_t>(force) << 25);
+#else
+                    (static_cast<reg_t>(ep) << 10) | (static_cast<reg_t>(force) << 26);
+#endif
         return perform_ext_cmd(tile, cmd, unread);
     }
 
@@ -171,9 +175,15 @@ private:
         }
         while((res & 0xF) != 0);
 
+#if defined(__hw22__) || defined(__hw23__)
         if(unread)
             *unread = res >> 9;
         return static_cast<m3::Errors::Code>((res >> 4) & 0x1F);
+#else
+        if(unread)
+            *unread = res >> 10;
+        return static_cast<m3::Errors::Code>((res >> 4) & 0x3F);
+#endif
     }
 };
 

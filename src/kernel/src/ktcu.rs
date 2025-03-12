@@ -416,7 +416,7 @@ pub fn reset_tile(tile: TileId, start: bool) -> anyhow::Result<()> {
         try_write_slice(tile, MMIO_ADDR.as_goff() + 0x3030, &[val])
     }
     else {
-        let cmd = ExtCmdOpCode::Reset as Reg | (val << 9) as Reg;
+        let cmd = TCU::build_ext_cmd(ExtCmdOpCode::Reset, val);
         let addr = TCU::ext_reg_addr(ExtReg::ExtCmd).as_goff();
         try_write_slice(tile, addr, &[cmd])?;
         // on stop, increment tile generation before we read the result of the external command
@@ -507,7 +507,7 @@ pub fn set_excl_region(
         let arg1 = TCU::ext_reg_addr(ExtReg::ExtArg1).as_goff();
         try_write_slice(mem_tile, arg1, &[addr_size])?;
 
-        let reg = ExtCmdOpCode::SetExcl as Reg | (cfg << 9) | ((idx as Reg) << 42);
+        let reg = TCU::build_ext_cmd(ExtCmdOpCode::SetExcl, cfg | (idx as u64) << 33);
         do_ext_cmd(mem_tile, reg).map(|_| ())
     }
 }
@@ -519,7 +519,7 @@ pub fn invalidate_excl_region(mem_tile: TileId, idx: usize) -> anyhow::Result<()
 
     #[cfg(feature = "gem5")]
     {
-        let reg = ExtCmdOpCode::InvExcl as Reg | ((idx as Reg) << 9);
+        let reg = TCU::build_ext_cmd(ExtCmdOpCode::InvExcl, idx as u64);
         do_ext_cmd(mem_tile, reg).map(|_| ())
     }
 }
@@ -527,7 +527,7 @@ pub fn invalidate_excl_region(mem_tile: TileId, idx: usize) -> anyhow::Result<()
 pub fn invalidate_ep_remote(tile: TileId, ep: EpId, force: bool) -> anyhow::Result<u32> {
     log!(LogFlags::KernEPs, "{}:EP{} = invalid", tile, ep);
 
-    let reg = ExtCmdOpCode::InvEP as Reg | ((ep as Reg) << 9) as Reg | ((force as Reg) << 25);
+    let reg = TCU::build_ext_cmd(ExtCmdOpCode::InvEP, (ep as u64) | (force as u64) << 16);
     do_ext_cmd(tile, reg).map(|unread| unread as u32)
 }
 
@@ -590,8 +590,8 @@ fn wait_ext_cmd(tile: TileId) -> anyhow::Result<Reg> {
         }
     };
 
-    match Code::try_from(((res >> 4) & 0x1F) as u32).unwrap() {
-        Code::Success => Ok(res >> 9),
+    match Code::try_from(((res >> 4) & 0x3F) as u32).unwrap() {
+        Code::Success => Ok(res >> 10),
         e => Err(kerrno(e)),
     }
 }

@@ -304,6 +304,14 @@ impl TCU {
         CPU::memory_barrier();
     }
 
+    /// Returns the value for the `ExtCmd` register for given opcode and argument.
+    pub fn build_ext_cmd(cmd: ExtCmdOpCode, arg: u64) -> Reg {
+        #[cfg(any(feature = "hw22", feature = "hw23"))]
+        return (cmd as Reg) | (arg << 9);
+        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
+        return (cmd as Reg) | (arg << 10);
+    }
+
     /// Returns the MMIO address for the given external register
     pub fn ext_reg_addr(reg: ExtReg) -> VirtAddr {
         MMIO_ADDR + (reg as usize) * mem::size_of::<Reg>()

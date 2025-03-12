@@ -548,7 +548,11 @@ private:
         while(true) {
             reg_t cmd = read_reg(UnprivRegs::COMMAND);
             if(static_cast<CmdOpCode>(cmd & 0xF) == CmdOpCode::IDLE)
+#if defined(__hw22__) || defined(__hw23__)
                 return static_cast<Errors::Code>((cmd >> 20) & 0x1F);
+#else
+                return static_cast<Errors::Code>((cmd >> 20) & 0x3F);
+#endif
         }
         UNREACHED;
     }
@@ -613,7 +617,11 @@ private:
     }
 
     static reg_t build_command(epid_t ep, CmdOpCode c, reg_t arg = 0) {
+#if defined(__hw22__) || defined(__hw23__)
         return static_cast<reg_t>(c) | (static_cast<reg_t>(ep) << 4) | (arg << 25);
+#else
+        return static_cast<reg_t>(c) | (static_cast<reg_t>(ep) << 4) | (arg << 26);
+#endif
     }
 
     static void config_invalid(epid_t ep) {
