@@ -30,13 +30,13 @@ struct ExclRegion {
     mtile: WeakRc<TileObject>,
 }
 
-pub struct MemMux {
+pub struct ExRegs {
     tile: TileId,
     free: BitArray,
     exregs: Vec<ExclRegion>,
 }
 
-impl MemMux {
+impl ExRegs {
     pub fn new(tile: TileId) -> Self {
         Self {
             tile,

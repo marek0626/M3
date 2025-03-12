@@ -408,8 +408,8 @@ impl TileMux {
             drop(tilemux);
 
             // invalidate all exclusive regions for this user tile
-            for mtile in platform::mem_tiles() {
-                tilemng::memmux(mtile).invalidate(tile_id);
+            for mtile in platform::user_tiles() {
+                tilemng::exregs(mtile).invalidate(tile_id);
             }
         }
 

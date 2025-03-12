@@ -18,14 +18,14 @@
 
 mod activities;
 mod actmng;
+mod exregs;
 pub mod loader;
-mod memmux;
 pub mod tilemng;
 mod tilemux;
 
 pub use self::activities::{Activity, ActivityFlags, DeriveSrv, INVAL_ID, KERNEL_ID};
 pub use self::actmng::ActivityMng;
-pub use self::memmux::MemMux;
+pub use self::exregs::ExRegs;
 pub use self::tilemux::TileMux;
 
 pub fn init() {

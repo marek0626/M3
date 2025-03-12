@@ -175,10 +175,7 @@ impl TileDesc {
 
     /// Returns the number of exclusive regions in this tile
     pub fn exclusive_regions(self) -> usize {
-        match self.tile_type() {
-            TileType::Mem => tcu::EXREG_REGS,
-            _ => 0,
-        }
+        tcu::EXREG_REGS
     }
 
     /// Returns whether the tile executes software

@@ -185,8 +185,8 @@ pub fn mgate_mkexcl(act: &TempRc<Activity>) -> anyhow::Result<()> {
         return Err(kerrno(Code::InvArgs).context("Invalid address (need size-aligned)"));
     }
 
-    let mut memmux = tilemng::memmux(mem_tile.tile());
-    memmux.add(mgate, mem_tile, &user_tile)?;
+    let mut exregs = tilemng::exregs(mem_tile.tile());
+    exregs.add(mgate, mem_tile, &user_tile)?;
 
     reply_success(act);
     Ok(())
