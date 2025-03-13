@@ -80,7 +80,12 @@ pub struct Regs {
 
 #[cfg(target_arch = "x86_64")]
 fn thread_init(thread: &mut Thread, func_addr: VirtAddr, arg: usize) {
-    let top_idx = thread.stack.len() - 2;
+    // The x86-64 stack pointer is aligned to 16 byte before the call instruction.
+    // Because the call instruction pushes the return address, the stack pointer alignment is
+    // deliberately off afterwards.
+    // Hence, we need to push the return address to the top of the stack and have the stack pointer
+    // point to it.
+    let top_idx = thread.stack.len() - 1;
     // put argument in rdi and function to return to on the stack
     thread.regs.rdi = arg;
     thread.regs.rsp = &thread.stack[top_idx] as *const usize as usize;
@@ -91,8 +96,11 @@ fn thread_init(thread: &mut Thread, func_addr: VirtAddr, arg: usize) {
 
 #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
 fn thread_init(thread: &mut Thread, func_addr: VirtAddr, arg: usize) {
-    let top_idx = thread.stack.len() - 2;
+    // The stack pointer is 16-byte aligned on both architectures.
+    let top_idx = thread.stack.len();
     thread.regs.a0 = arg;
+    // The stack pointer is allowed to point outside of the stack because RISCV subtracts the stack
+    // pointer before writing to it.
     thread.regs.sp = &thread.stack[top_idx] as *const usize as usize;
     thread.regs.fp = 0;
     thread.regs.ra = func_addr.as_local();
@@ -139,6 +147,11 @@ impl Thread {
     }
 
     pub fn new(func_addr: VirtAddr, arg: usize) -> Box<Self> {
+        // The top of the stack needs to be properly aligned for the stack pointer if the stack
+        // grows downwards.
+        // Given that the base is properly aligned, this assert checks that the top is also aligned.
+        const_assert!(!libc::GROWS_DOWNWARDS || cfg::STACK_SIZE % libc::STACK_ALIGN == 0);
+
         let mut thread = Box::new(Thread {
             prev: None,
             next: None,

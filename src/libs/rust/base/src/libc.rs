@@ -49,3 +49,19 @@ extern "C" {
     target_arch = "x86_64",
 ))]
 pub const MAX_ALIGN: usize = 16;
+
+/// Alignment requirement of the stack pointer
+#[cfg(any(
+    target_arch = "riscv32",
+    target_arch = "riscv64",
+    target_arch = "x86_64",
+))]
+pub const STACK_ALIGN: usize = 16;
+
+/// Does the stack grow downwards?
+#[cfg(any(
+    target_arch = "riscv32",
+    target_arch = "riscv64",
+    target_arch = "x86_64",
+))]
+pub const GROWS_DOWNWARDS: bool = true;
