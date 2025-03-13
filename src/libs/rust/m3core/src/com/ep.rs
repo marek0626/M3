@@ -113,7 +113,7 @@ impl EP {
 
     /// Allocates a new endpoint with custom arguments
     pub(crate) fn new_with(args: EPArgs) -> Result<Self, Error> {
-        let flags = if args.epid == INVALID_EP && args.replies == 0 {
+        let flags = if args.epid == INVALID_EP && args.replies == 0 && !args.dynamic {
             EPFlags::CACHEABLE
         }
         else {

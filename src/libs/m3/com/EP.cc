@@ -39,7 +39,7 @@ EP EP::alloc_for(capsel_t act, epid_t ep, uint replies, bool dynamic) {
     capsel_t sel = SelSpace::get().alloc_sel();
     epid_t id = Syscalls::alloc_ep(sel, act, ep, replies, dynamic);
     uint flags = 0;
-    if(ep == TCU::INVALID_EP && replies == 0)
+    if(ep == TCU::INVALID_EP && replies == 0 && !dynamic)
         flags |= EPFlags::CACHEABLE;
     EP res(sel, id, replies, 0, flags);
     if(dynamic)
