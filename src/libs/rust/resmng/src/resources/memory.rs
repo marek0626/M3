@@ -309,12 +309,19 @@ impl fmt::Debug for Allocation {
     }
 }
 
-#[derive(Default)]
 pub struct MemPool {
+    exclusive: bool,
     slices: Vec<MemSlice>,
 }
 
 impl MemPool {
+    pub fn new(exclusive: bool) -> Self {
+        Self {
+            exclusive,
+            slices: Vec::new(),
+        }
+    }
+
     pub fn slices(&self) -> &Vec<MemSlice> {
         &self.slices
     }
@@ -331,25 +338,12 @@ impl MemPool {
         self.slices[idx].mem.mcap.sel()
     }
 
-    fn add(&mut self, s: MemSlice) {
-        self.slices.push(s)
-    }
-
-    pub fn make_exclusive(&mut self, res: &Resources, user_tile: &Tile) -> anyhow::Result<()> {
-        let mut slices = Vec::new();
-        for s in &mut self.slices {
+    fn add(&mut self, s: MemSlice) -> anyhow::Result<()> {
+        let slice = if self.exclusive {
+            // derive a new memory cap now for exactly that slice so that we can simply make that
+            // exclusive later without needing to change it.
             let mem = s.derive()?;
-            let mem_tile = res.tiles().find_by_id(
-                s.mem
-                    .mcap
-                    .region()
-                    .map_err(|e| rerror(e).context("exclusive MemGate region"))?
-                    .0
-                    .tile(),
-            )?;
-            mem.make_exclusive(&mem_tile, user_tile)
-                .map_err(|e| rerror(e).context("make MemGate exclusive"))?;
-            let slice = MemSlice::new(
+            MemSlice::new(
                 Rc::new(MemMod::new(
                     mem,
                     s.addr(),
@@ -359,10 +353,31 @@ impl MemPool {
                 0,
                 s.capacity(),
                 Perm::RW,
-            );
-            slices.push(slice);
+            )
         }
-        self.slices = slices;
+        else {
+            s
+        };
+        self.slices.push(slice);
+        Ok(())
+    }
+
+    pub fn make_exclusive(&mut self, res: &Resources, user_tile: &Tile) -> anyhow::Result<()> {
+        assert!(self.exclusive);
+        for s in &self.slices {
+            let mem_tile = res.tiles().find_by_id(
+                s.mem
+                    .mcap
+                    .region()
+                    .map_err(|e| rerror(e).context("exclusive MemGate region"))?
+                    .0
+                    .tile(),
+            )?;
+            s.mem
+                .mcap
+                .make_exclusive(&mem_tile, user_tile, true)
+                .map_err(|e| rerror(e).context("make MemGate exclusive"))?;
+        }
         Ok(())
     }
 
