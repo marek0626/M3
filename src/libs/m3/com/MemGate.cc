@@ -43,10 +43,12 @@ static bool destruct(capsel_t sel, uint flags, bool resmng) {
     return false;
 }
 
-MemCap MemCap::create_global(size_t size, int perms, capsel_t sel) {
+MemCap MemCap::create_global(size_t size, int perms, capsel_t sel, size_t align) {
     if(sel == INVALID)
         sel = SelSpace::get().alloc_sel();
-    Activity::own().resmng()->alloc_mem(sel, size, perms);
+    if(align == 0)
+        align = size >= LPAGE_SIZE ? LPAGE_SIZE : PAGE_SIZE;
+    Activity::own().resmng()->alloc_mem(sel, size, align, perms);
     return MemCap(0, sel, true);
 }
 

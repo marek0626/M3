@@ -142,10 +142,10 @@ impl MemoryManager {
         Err(rerrno(Code::NoSpace).context(format!("allocate {}", size)))
     }
 
-    pub fn alloc_pool(&mut self, mut size: GlobOff, size_aligned: bool) -> anyhow::Result<MemPool> {
-        assert!(!size_aligned || size.is_power_of_two());
+    pub fn alloc_pool(&mut self, mut size: GlobOff, exclusive: bool) -> anyhow::Result<MemPool> {
+        assert!(!exclusive || size.is_power_of_two());
 
-        let mut res = MemPool::default();
+        let mut res = MemPool::new(exclusive);
         size = math::round_up(size, cfg::PAGE_SIZE as GlobOff);
 
         for (m, map) in &mut self.mods {
@@ -153,19 +153,19 @@ impl MemoryManager {
                 continue;
             }
 
-            let align = if size_aligned { size } else { 1 };
+            let align = if exclusive { size } else { 1 };
             if let Some(addr) = map.allocate(size, align) {
                 let sl = MemSlice::new(m.clone(), addr - m.addr().offset(), size, Perm::RWX);
-                res.add(sl);
+                res.add(sl)?;
                 return Ok(res);
             }
 
             if let Some(max_cont) = map.largest_contiguous() {
-                let align = if size_aligned { max_cont } else { 1 };
+                let align = if exclusive { max_cont } else { 1 };
                 if let Some(addr) = map.allocate(max_cont, align) {
                     let sl =
                         MemSlice::new(m.clone(), addr - m.addr().offset(), max_cont, Perm::RWX);
-                    res.add(sl);
+                    res.add(sl)?;
                     size -= max_cont;
                 }
             }
@@ -175,7 +175,7 @@ impl MemoryManager {
             Ok(res)
         }
         else {
-            Err(rerrno(Code::NoSpace).context(format!("allocate pool {}, {}", size, size_aligned)))
+            Err(rerrno(Code::NoSpace).context(format!("allocate pool {}, {}", size, exclusive)))
         }
     }
 }
@@ -367,7 +367,7 @@ impl MemPool {
     }
 
     pub fn allocate_slice(&mut self, size: GlobOff) -> anyhow::Result<MemSlice> {
-        let alloc = self.allocate(size)?;
+        let alloc = self.allocate(size, None)?;
         let slice = &self.slices[alloc.slice_id];
         Ok(MemSlice::new(
             slice.mem.clone(),
@@ -377,13 +377,17 @@ impl MemPool {
         ))
     }
 
-    pub fn allocate(&mut self, size: GlobOff) -> anyhow::Result<Allocation> {
-        let align = if size >= cfg::LPAGE_SIZE as GlobOff {
+    pub fn allocate(
+        &mut self,
+        size: GlobOff,
+        align: Option<GlobOff>,
+    ) -> anyhow::Result<Allocation> {
+        let align = align.unwrap_or(if size >= cfg::LPAGE_SIZE as GlobOff {
             cfg::LPAGE_SIZE as GlobOff
         }
         else {
             cfg::PAGE_SIZE as GlobOff
-        };
+        });
 
         for (id, s) in self.slices.iter_mut().enumerate() {
             if s.mem.reserved {

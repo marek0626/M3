@@ -78,7 +78,7 @@ impl<'a> ChildMapper<'a> {
         let alloc = self
             .mem_pool
             .borrow_mut()
-            .allocate(size as GlobOff)
+            .allocate(size as GlobOff, None)
             .map_err(|e| e.downcast::<Error>().unwrap())?;
         let msel = self.mem_pool.borrow().mem_cap(alloc.slice_id());
 

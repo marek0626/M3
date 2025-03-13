@@ -50,9 +50,11 @@ public:
      * @param size the memory size
      * @param perms the permissions (see MemCap::RWX)
      * @param sel the selector to use (if != INVALID, the selector is NOT freed on destruction)
+     * @param align the alignment for the allocation. By default, it will be large-page aligned if
+     * the size is at least as large as a large page or page aligned otherwise.
      * @return the memory capability
      */
-    static MemCap create_global(size_t size, int perms, capsel_t sel = INVALID);
+    static MemCap create_global(size_t size, int perms, capsel_t sel = INVALID, size_t align = 0);
 
     /**
      * Binds a new memory capability to the boot module with given name.

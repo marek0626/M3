@@ -22,7 +22,7 @@ use m3::mem::GlobOff;
 use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, Tile};
 use m3::util::math;
-use m3::{wv_assert_eq, wv_assert_ok, wv_require_ok, wv_require_some, wv_run_test};
+use m3::{cfg, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_require_some, wv_run_test};
 
 use resmng::childs::Child;
 use resmng::resources::Resources;
@@ -119,8 +119,15 @@ fn memories(t: &mut dyn WvTester, child: &mut dyn Child, _res: &mut Resources) {
     wv_assert_eq!(t, child.res().memories().len(), 0);
     wv_assert_eq!(t, child.mem().quota(), QUOTA);
 
-    wv_assert_anyhow_err!(t, child.alloc_mem(123, QUOTA * 2, Perm::RW), Code::NoSpace);
-    wv_assert_ok!(t, child.alloc_mem(123, 4 * 1024, Perm::RW));
+    wv_assert_anyhow_err!(
+        t,
+        child.alloc_mem(123, QUOTA * 2, cfg::PAGE_SIZE as GlobOff, Perm::RW),
+        Code::NoSpace
+    );
+    wv_assert_ok!(
+        t,
+        child.alloc_mem(123, 4 * 1024, cfg::PAGE_SIZE as GlobOff, Perm::RW)
+    );
 
     wv_assert_eq!(t, child.res().memories().len(), 1);
     wv_assert_eq!(t, child.mem().quota(), QUOTA - (4 * 1024));

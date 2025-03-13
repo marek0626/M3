@@ -93,8 +93,9 @@ public:
         retrieve_result(opcodes::ResMng::CLOSE_SESS, reply);
     }
 
-    void alloc_mem(capsel_t sel, size_t size, int perm) {
-        GateIStream reply = send_receive_vmsg(_sgate, opcodes::ResMng::ALLOC_MEM, sel, size, perm);
+    void alloc_mem(capsel_t sel, size_t size, size_t align, int perm) {
+        GateIStream reply =
+            send_receive_vmsg(_sgate, opcodes::ResMng::ALLOC_MEM, sel, size, align, perm);
         retrieve_result(opcodes::ResMng::ALLOC_MEM, reply);
     }
 

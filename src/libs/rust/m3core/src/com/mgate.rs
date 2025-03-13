@@ -18,6 +18,7 @@
 
 use core::fmt;
 
+use base::cfg;
 use base::mem::GlobAddr;
 
 use crate::cap::{CapFlags, Capability, SelSpace, Selector};
@@ -65,7 +66,7 @@ impl MemCap {
         Activity::own()
             .resmng()
             .unwrap()
-            .alloc_mem(sel, args.size as GlobOff, args.perm)?;
+            .alloc_mem(sel, args.size, args.align, args.perm)?;
         Ok(Self {
             cap: Capability::new(sel, CapFlags::empty()),
             resmng: true,
@@ -266,6 +267,7 @@ pub struct MemGate {
 /// The arguments for [`MemGate`] creations.
 pub struct MGateArgs {
     size: GlobOff,
+    align: GlobOff,
     perm: Perm,
     sel: Selector,
 }
@@ -273,11 +275,28 @@ pub struct MGateArgs {
 impl MGateArgs {
     /// Creates a new `MGateArgs` object with default settings
     pub fn new(size: GlobOff, perm: Perm) -> MGateArgs {
+        let align = if size >= cfg::LPAGE_SIZE as GlobOff {
+            cfg::LPAGE_SIZE as GlobOff
+        }
+        else {
+            cfg::PAGE_SIZE as GlobOff
+        };
+
         MGateArgs {
             size,
+            align,
             perm,
             sel: INVALID_SEL,
         }
+    }
+
+    /// Sets the alignment for the allocation.
+    ///
+    /// By default, it will be large-page aligned if the size is at least as large as a large page
+    /// or page aligned otherwise.
+    pub fn align(mut self, align: GlobOff) -> Self {
+        self.align = align;
+        self
     }
 
     /// Sets the capability selector that should be used for this [`MemGate`]. Otherwise and by
