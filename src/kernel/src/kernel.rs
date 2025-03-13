@@ -17,6 +17,8 @@
  */
 
 #![feature(try_blocks)]
+#![feature(const_alloc_layout)]
+#![feature(const_option)]
 #![no_std]
 
 mod args;
@@ -163,7 +165,6 @@ fn extend_heap() {
 pub extern "C" fn env_run() {
     unsafe { __m3_init_libc(0, ptr::null(), ptr::null(), false) };
     create_heap();
-    crate::slab::init();
     let tile_id = env::boot().tile_id();
     io::init(tile_id, "kernel");
 
