@@ -195,7 +195,7 @@ impl Slab {
     unsafe fn realloc(&self, ptr: *mut u8, new_size: usize) -> *mut u8 {
         match self.size {
             Some(_) => {
-                // SAFETY: the caller guarantees that the new_size fits.
+                // SAFETY: The caller guarantees that the new_size fits.
                 ptr
             },
             None => realloc(ptr.cast(), new_size).cast(),
@@ -267,8 +267,8 @@ impl SlabAllocator {
     ///
     /// See [`GlobalAlloc::realloc`].
     unsafe fn real_realloc(&self, new_size: usize, layout: Layout, ptr: *mut u8) -> *mut u8 {
-        // SAFETY: the caller must ensure that the `new_size` does not overflow.
-        // `layout.align()` comes from a `Layout` and is thus guaranteed to be valid.
+        // SAFETY: The caller of `GlobalAlloc::realloc` ensures that the `new_size` does not
+        // overflow. `layout.align()` comes from a `Layout` and is thus guaranteed to be valid.
         let new_layout = unsafe { Layout::from_size_align_unchecked(new_size, layout.align()) };
 
         let mut new_ptr: *mut u8 = null_mut();
@@ -289,11 +289,13 @@ impl SlabAllocator {
         }
         drop(slabs);
 
-        // SAFETY: the caller must ensure that `new_layout` is greater than zero.
+        // SAFETY: The caller of `GlobalAlloc::realloc` ensures that `new_layout` is greater than
+        // zero.
         let new_ptr = unsafe { self.alloc(new_layout) };
         if !new_ptr.is_null() {
-            // SAFETY: the previously allocated block cannot overlap the newly allocated block.
-            // The safety contract for `dealloc` must be upheld by the caller.
+            // SAFETY: The previously allocated block cannot overlap the newly allocated block.
+            // The safety contract for `dealloc` must be upheld by the caller of
+            // `GlobalAlloc::realloc`.
             unsafe {
                 core::ptr::copy_nonoverlapping(
                     ptr,
