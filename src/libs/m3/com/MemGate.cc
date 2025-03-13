@@ -59,8 +59,8 @@ MemCap MemCap::bind_bootmod(const std::string_view &name) {
 }
 
 void MemCap::make_exclusive(const Reference<class Tile> &mem_tile,
-                            const Reference<class Tile> &user_tile) {
-    Syscalls::mgate_mkexcl(sel(), mem_tile->sel(), user_tile->sel());
+                            const Reference<class Tile> &user_tile, bool locked) {
+    Syscalls::mgate_mkexcl(sel(), mem_tile->sel(), user_tile->sel(), locked);
 }
 
 MemCap MemCap::derive(goff_t offset, size_t size, int perms) const {

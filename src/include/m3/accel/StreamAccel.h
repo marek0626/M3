@@ -105,7 +105,7 @@ public:
         _sgate_out->activate_on(_out_sep);
         _mgate_out = std::make_unique<MemCap>(next->_mem.derive(BUF_ADDR, BUF_SIZE));
         if(_tee)
-            _mgate_out->make_exclusive(next->_act->tile(), _act->tile());
+            _mgate_out->make_exclusive(next->_act->tile(), _act->tile(), true);
         _mgate_out->activate_on(_out_mep);
     }
 

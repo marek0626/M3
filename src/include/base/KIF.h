@@ -385,6 +385,7 @@ struct KIF {
             xfer_t mgate_sel;
             xfer_t mem_tile_sel;
             xfer_t user_tile_sel;
+            xfer_t locked;
         } PACKED;
 
         struct MGateRegionReply : public DefaultReply {

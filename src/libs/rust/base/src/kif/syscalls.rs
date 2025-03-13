@@ -268,6 +268,7 @@ pub struct MGateMkExcl {
     pub mgate: CapSel,
     pub mem_tile: CapSel,
     pub user_tile: CapSel,
+    pub locked: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -321,7 +321,7 @@ pub fn tile_lock(act: &TempRc<Activity>) -> anyhow::Result<()> {
     if let Some(eps_region) = eps_region {
         let epmtile = tilemng::ep_mem_tile();
         let mut exregs = tilemng::exregs(epmtile.tile());
-        exregs.add(eps_region, epmtile, &tile)?;
+        exregs.add(eps_region, epmtile, &tile, true)?;
     }
 
     let mut tilemux = tilemng::tilemux(tile.tile());

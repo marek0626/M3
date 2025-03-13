@@ -131,11 +131,19 @@ impl MemCap {
     /// whereas `user_tile` specifies the tile that should be allowed to use the region. The
     /// memory tile needs to have sufficient quota to install the exclusive region.
     ///
+    /// The `locked` argument specifies whether this region including all overlaps should be locked. If
+    /// so, additional overlaps with this regions are not possible.
+    ///
     /// This does only work if this memory region has a power-of-2 size and is size-aligned.
     ///
     /// Note also that this `MemCap` needs be belong to `mem_tile`.
-    pub fn make_exclusive(&self, mem_tile: &Tile, user_tile: &Tile) -> Result<(), Error> {
-        syscalls::mgate_mkexcl(self.sel(), mem_tile.sel(), user_tile.sel())
+    pub fn make_exclusive(
+        &self,
+        mem_tile: &Tile,
+        user_tile: &Tile,
+        locked: bool,
+    ) -> Result<(), Error> {
+        syscalls::mgate_mkexcl(self.sel(), mem_tile.sel(), user_tile.sel(), locked)
     }
 
     /// Derives a new `MemCap` from `self` that has access to a subset of `self`'s the memory

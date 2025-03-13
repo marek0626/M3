@@ -161,10 +161,11 @@ pub fn mgate_mkexcl(act: &TempRc<Activity>) -> anyhow::Result<()> {
 
     sysc_log!(
         act,
-        "mgate_mkexcl(mgate={}, mem_tile={}, user_tile={})",
+        "mgate_mkexcl(mgate={}, mem_tile={}, user_tile={}, locked={})",
         r.mgate,
         r.mem_tile,
-        r.user_tile
+        r.user_tile,
+        r.locked,
     );
 
     let act_caps = act.obj_caps().borrow();
@@ -186,7 +187,7 @@ pub fn mgate_mkexcl(act: &TempRc<Activity>) -> anyhow::Result<()> {
     }
 
     let mut exregs = tilemng::exregs(mem_tile.tile());
-    exregs.add(mgate, mem_tile, &user_tile)?;
+    exregs.add(mgate, mem_tile, &user_tile, r.locked)?;
 
     reply_success(act);
     Ok(())

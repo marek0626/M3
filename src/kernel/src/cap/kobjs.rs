@@ -399,7 +399,7 @@ pub struct MGateObject {
     base: BaseGate,
     mem: mem::Allocation,
     perms: kif::Perm,
-    exclusive: Cell<Option<TileId>>,
+    exclusive: Cell<bool>,
     derived: bool,
 }
 
@@ -409,7 +409,7 @@ impl MGateObject {
             base: BaseGate::default(),
             mem,
             perms,
-            exclusive: Cell::from(None),
+            exclusive: Cell::from(false),
             derived,
         })
     }
@@ -434,7 +434,7 @@ impl MGateObject {
         self.perms
     }
 
-    pub fn exclusive_tile(&self) -> Option<TileId> {
+    pub fn is_exclusive(&self) -> bool {
         self.exclusive.get()
     }
 
@@ -460,20 +460,12 @@ impl MGateObject {
         }))
     }
 
-    pub fn make_exclusive(&self, user_tile: &TempRc<TileObject>) -> anyhow::Result<()> {
-        if let Some(extile) = self.exclusive.get() {
-            if extile == user_tile.tile() {
-                return Ok(());
-            }
-            return Err(kerrno(Code::Exists).context("MGate is exclusive"));
-        }
-
-        self.exclusive.set(Some(user_tile.tile()));
-        Ok(())
+    pub fn make_exclusive(&self) {
+        self.exclusive.set(true);
     }
 
     pub fn inval_exclusive(&self) {
-        self.exclusive.take();
+        self.exclusive.set(false);
     }
 }
 

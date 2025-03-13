@@ -58,7 +58,6 @@ struct Errors {
         NO_PMP_EP,
         NO_IRQ,
         EXREG_NO_PERM,
-        EXREG_WRONG_TILE,
         EXREG_OVERLAPS,
         EXREG_EXISTS,
         TILE_LOCKED,

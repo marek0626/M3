@@ -341,13 +341,14 @@ std::pair<GlobAddr, size_t> Syscalls::mgate_region(capsel_t mgate) {
     return std::make_pair(GlobAddr(reply->global), reply->size);
 }
 
-void Syscalls::mgate_mkexcl(capsel_t mgate, capsel_t mem_tile, capsel_t user_tile) {
+void Syscalls::mgate_mkexcl(capsel_t mgate, capsel_t mem_tile, capsel_t user_tile, bool locked) {
     MsgBuf req_buf;
     auto &req = req_buf.cast<KIF::Syscall::MGateMkExcl>();
     req.opcode = KIF::Syscall::MGATE_MKEXCL;
     req.mgate_sel = mgate;
     req.mem_tile_sel = mem_tile;
     req.user_tile_sel = user_tile;
+    req.locked = locked;
     send_receive_throw(req_buf);
 }
 

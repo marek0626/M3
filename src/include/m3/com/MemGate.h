@@ -87,12 +87,15 @@ public:
      * whereas <user_tile> specifies the tile that should be allowed to use the region. The
      * memory tile needs to have sufficient quota to install the exclusive region.
      *
+     * The <locked> argument specifies whether this region including all overlaps should be locked.
+     * If so, additional overlaps with this regions are not possible.
+     *
      * This does only work if this memory region has a power-of-2 size and is size-aligned.
      *
      * Note also that this <MemCap> needs be belong to <mem_tile>.
      */
     void make_exclusive(const Reference<class Tile> &mem_tile,
-                        const Reference<class Tile> &user_tile);
+                        const Reference<class Tile> &user_tile, bool locked);
 
     /**
      * Derives memory from this memory capability. That is, it creates a new memory capability that
