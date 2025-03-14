@@ -22,6 +22,7 @@
 #![feature(hint_assert_unchecked)]
 #![feature(new_uninit)]
 
+use base::alloc::alloc;
 use base::boxed::Box;
 use base::cell::{LazyStaticRefCell, Ref, StaticCell};
 use base::col::{ArrayVec, BoxList};
@@ -32,6 +33,7 @@ use base::log;
 use base::mem::{self, VirtAddr};
 use base::tcu;
 use base::{cfg, const_assert};
+use core::alloc::Layout;
 use core::mem::MaybeUninit;
 use core::ptr::{null_mut, slice_from_raw_parts, NonNull};
 
@@ -132,12 +134,14 @@ fn alloc_id() -> u32 {
 
 const MAX_EVENTS: usize = 5;
 
+type Stack = [MaybeUninit<u8>; cfg::STACK_SIZE];
+
 pub struct Thread {
     prev: Option<NonNull<Thread>>,
     next: Option<NonNull<Thread>>,
     id: u32,
     regs: Regs,
-    stack: *mut [MaybeUninit<u8>; cfg::STACK_SIZE],
+    stack: *mut Stack,
     events: ArrayVec<Event, MAX_EVENTS>,
     has_msg: bool,
     msg: [mem::MaybeUninit<u64>; MAX_MSG_SIZE / 8],
@@ -165,15 +169,16 @@ impl Thread {
     }
 
     pub fn new(func_addr: VirtAddr, arg: usize) -> Box<Self> {
-        // The top of the stack needs to be properly aligned for the stack pointer if the stack
-        // grows downwards.
-        // Given that the base is properly aligned, this assert checks that the top is also aligned.
-        const_assert!(!libc::GROWS_DOWNWARDS || cfg::STACK_SIZE % libc::STACK_ALIGN == 0);
-
+        let stack_layout = get_stack_layout();
+        assert_ne!(stack_layout.size(), 0);
         // Create an uninitialized array on the heap without copying.
-        let stack = Box::<[MaybeUninit<u8>; cfg::STACK_SIZE]>::new_uninit();
-        // SAFETY: This is just an array on MaybeUninit and thus does not need initialization.
-        let stack = unsafe { (&mut *Box::into_raw(stack)).assume_init_mut() };
+        // SAFETY: The layout size is not zero.
+        let stack = unsafe { alloc::alloc(stack_layout) };
+        if stack.is_null() {
+            alloc::handle_alloc_error(stack_layout);
+        }
+        // SAFETY: We just allocated the stack with the proper size
+        let stack = stack.cast();
         let mut thread = Box::new(Thread {
             prev: None,
             next: None,
@@ -188,8 +193,7 @@ impl Thread {
 
         log!(LogFlags::LibThread, "Created thread {}", thread.id);
 
-        // SAFETY: We just allocated the stack from a valid Box.
-        // TODO: Assure stack alignment.
+        // SAFETY: We just sucessfully allocated the stack with proper alignment.
         unsafe {
             thread_init(&mut thread, func_addr, arg);
         }
@@ -256,12 +260,22 @@ impl Thread {
     }
 }
 
+/// Return the allocation layout of the properly-aligned stack
+fn get_stack_layout() -> Layout {
+    // The top of the stack needs to be properly aligned for the stack pointer if the stack
+    // grows downwards.
+    // Given that the base is properly aligned, this assert checks that the top is also aligned.
+    const_assert!(!libc::GROWS_DOWNWARDS || cfg::STACK_SIZE % libc::STACK_ALIGN == 0);
+
+    Layout::new::<Stack>().align_to(libc::STACK_ALIGN).unwrap()
+}
+
 impl Drop for Thread {
     fn drop(&mut self) {
         if !self.stack.is_null() {
-            // SAFETY: We just created the stack from a Box before.
+            // SAFETY: We created the stack with this layout.
             unsafe {
-                drop(Box::from_raw(self.stack));
+                alloc::dealloc(self.stack.cast(), get_stack_layout());
             }
         }
         log!(LogFlags::LibThread, "Thread {} destroyed", self.id);
