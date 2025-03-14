@@ -24,7 +24,7 @@
 #![default_lib_allocator]
 #![cfg_attr(not(feature = "linux"), no_std)]
 
-extern crate alloc;
+pub extern crate alloc;
 
 // Macros
 pub use alloc::{format, vec};
