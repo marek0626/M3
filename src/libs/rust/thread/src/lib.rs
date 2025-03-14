@@ -20,19 +20,20 @@
 #![allow(internal_features)]
 #![feature(core_intrinsics)]
 #![feature(hint_assert_unchecked)]
+#![feature(new_uninit)]
 
 use base::boxed::Box;
 use base::cell::{LazyStaticRefCell, Ref, StaticCell};
-use base::col::{ArrayVec, BoxList, Vec};
+use base::col::{ArrayVec, BoxList};
 use base::impl_boxitem;
 use base::io::LogFlags;
 use base::libc;
 use base::log;
 use base::mem::{self, VirtAddr};
 use base::tcu;
-use base::vec;
 use base::{cfg, const_assert};
-use core::ptr::{slice_from_raw_parts, NonNull};
+use core::mem::MaybeUninit;
+use core::ptr::{null_mut, slice_from_raw_parts, NonNull};
 
 pub type Event = u64;
 
@@ -78,30 +79,47 @@ pub struct Regs {
     s11: usize,
 }
 
+/// Initialize the thread
+///
+/// # SAFETY
+///
+/// The thread stack pointer must be valid and aligned.
 #[cfg(target_arch = "x86_64")]
-fn thread_init(thread: &mut Thread, func_addr: VirtAddr, arg: usize) {
+unsafe fn thread_init(thread: &mut Thread, func_addr: VirtAddr, arg: usize) {
     // The x86-64 stack pointer is aligned to 16 byte before the call instruction.
     // Because the call instruction pushes the return address, the stack pointer alignment is
     // deliberately off afterwards.
     // Hence, we need to push the return address to the top of the stack and have the stack pointer
     // point to it.
-    let top_idx = thread.stack.len() - 1;
+    // SAFETY: The caller assures that the pointer is valid.
+    let stack = &mut *thread.stack;
+    // SAFETY: The caller assures that the stack top is naturally aligned.
+    let top = stack.as_mut_ptr_range().end.cast::<usize>();
     // put argument in rdi and function to return to on the stack
     thread.regs.rdi = arg;
-    thread.regs.rsp = &thread.stack[top_idx] as *const usize as usize;
-    thread.stack[top_idx] = func_addr.as_local();
+    let top = top.sub(1);
+    top.write(func_addr.as_local());
+    thread.regs.rsp = top as usize;
     thread.regs.rbp = thread.regs.rsp;
     thread.regs.rflags = 0x200; // enable interrupts
 }
 
+/// Initialize the thread
+///
+/// # SAFETY
+///
+/// The thread stack pointer must be valid and aligned.
 #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-fn thread_init(thread: &mut Thread, func_addr: VirtAddr, arg: usize) {
+unsafe fn thread_init(thread: &mut Thread, func_addr: VirtAddr, arg: usize) {
     // The stack pointer is 16-byte aligned on both architectures.
-    let top_idx = thread.stack.len();
+    // SAFETY: The caller assures that the pointer is valid.
+    let stack = &mut *thread.stack;
+    // SAFETY: The caller assures that the stack top is naturally aligned.
+    let top = stack.as_mut_ptr_range().end.cast::<usize>();
     thread.regs.a0 = arg;
     // The stack pointer is allowed to point outside of the stack because RISCV subtracts the stack
     // pointer before writing to it.
-    thread.regs.sp = &thread.stack[top_idx] as *const usize as usize;
+    thread.regs.sp = top as usize;
     thread.regs.fp = 0;
     thread.regs.ra = func_addr.as_local();
 }
@@ -119,7 +137,7 @@ pub struct Thread {
     next: Option<NonNull<Thread>>,
     id: u32,
     regs: Regs,
-    stack: Vec<usize>,
+    stack: *mut [MaybeUninit<u8>; cfg::STACK_SIZE],
     events: ArrayVec<Event, MAX_EVENTS>,
     has_msg: bool,
     msg: [mem::MaybeUninit<u64>; MAX_MSG_SIZE / 8],
@@ -138,7 +156,7 @@ impl Thread {
             next: None,
             id: alloc_id(),
             regs: Regs::default(),
-            stack: Vec::new(),
+            stack: null_mut(),
             events: Default::default(),
             has_msg: false,
             // safety: will only be safe to access if `has_msg` is true
@@ -152,12 +170,16 @@ impl Thread {
         // Given that the base is properly aligned, this assert checks that the top is also aligned.
         const_assert!(!libc::GROWS_DOWNWARDS || cfg::STACK_SIZE % libc::STACK_ALIGN == 0);
 
+        // Create an uninitialized array on the heap without copying.
+        let stack = Box::<[MaybeUninit<u8>; cfg::STACK_SIZE]>::new_uninit();
+        // SAFETY: This is just an array on MaybeUninit and thus does not need initialization.
+        let stack = unsafe { (&mut *Box::into_raw(stack)).assume_init_mut() };
         let mut thread = Box::new(Thread {
             prev: None,
             next: None,
             id: alloc_id(),
             regs: Regs::default(),
-            stack: vec![0usize; cfg::STACK_SIZE / mem::size_of::<usize>()],
+            stack,
             events: Default::default(),
             has_msg: false,
             // safety: will only be safe to access if `has_msg` is true
@@ -166,13 +188,17 @@ impl Thread {
 
         log!(LogFlags::LibThread, "Created thread {}", thread.id);
 
-        thread_init(&mut thread, func_addr, arg);
+        // SAFETY: We just allocated the stack from a valid Box.
+        // TODO: Assure stack alignment.
+        unsafe {
+            thread_init(&mut thread, func_addr, arg);
+        }
 
         thread
     }
 
     pub fn is_main(&self) -> bool {
-        self.stack.is_empty()
+        self.stack.is_null()
     }
 
     pub fn id(&self) -> u32 {
@@ -232,6 +258,12 @@ impl Thread {
 
 impl Drop for Thread {
     fn drop(&mut self) {
+        if !self.stack.is_null() {
+            // SAFETY: We just created the stack from a Box before.
+            unsafe {
+                drop(Box::from_raw(self.stack));
+            }
+        }
         log!(LogFlags::LibThread, "Thread {} destroyed", self.id);
     }
 }
