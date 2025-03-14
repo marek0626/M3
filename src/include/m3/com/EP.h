@@ -48,8 +48,9 @@ class EP : public SListItem, public ObjCap {
     }
 
 public:
-    static EP alloc(uint replies = 0);
-    static EP alloc_for(capsel_t act, epid_t ep = TCU::INVALID_EP, uint replies = 0);
+    static EP alloc(uint replies = 0, bool dynamic = false);
+    static EP alloc_for(capsel_t act, epid_t ep = TCU::INVALID_EP, uint replies = 0,
+                        bool dynamic = false);
     static EP bind(epid_t id) noexcept;
 
     EP &operator=(EP &&ep) noexcept;
@@ -81,6 +82,11 @@ public:
      */
     bool is_standard() const noexcept {
         return (_flags & EPFlags::STANDARD) != 0;
+    }
+
+    void mkdyn() const {
+        if(TCU::get().is_locked())
+            TCU::get().mkdyn(_id);
     }
 
 private:

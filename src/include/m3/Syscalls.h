@@ -66,7 +66,7 @@ public:
     static void create_map(capsel_t dst, capsel_t act, capsel_t mgate, capsel_t first,
                            capsel_t pages, int perms);
     static void create_sem(capsel_t dst, uint value);
-    static epid_t alloc_ep(capsel_t dst, capsel_t act, epid_t ep, uint replies);
+    static epid_t alloc_ep(capsel_t dst, capsel_t act, epid_t ep, uint replies, bool dynamic);
 
     static void activate_mgate(capsel_t ep, capsel_t gate);
     static void activate_sgate(capsel_t ep, capsel_t gate);
@@ -85,7 +85,7 @@ public:
     static void derive_srv_fin(capsel_t srv, Errors::Code result, capsel_t sgate, size_t creator);
     static void get_sess(capsel_t srv, capsel_t act, capsel_t dst, word_t sid);
     static std::pair<GlobAddr, size_t> mgate_region(capsel_t mgate);
-    static void mgate_mkexcl(capsel_t mgate, capsel_t mem_tile, capsel_t user_tile);
+    static void mgate_mkexcl(capsel_t mgate, capsel_t mem_tile, capsel_t user_tile, bool locked);
     static std::pair<uint, uint> rgate_buffer(capsel_t rgate);
     static Quota<size_t> kmem_quota(capsel_t kmem);
     static std::tuple<Quota<uint>, Quota<uint>, Quota<TimeDuration>, Quota<size_t>> tile_quota(

@@ -165,7 +165,7 @@ pub fn main() -> ! {
     {
         log!(LogFlags::RoTBoot, "Resetting kernel tile");
         let ext_cmd_addr = (TCU::ext_reg_addr(tcu::ExtReg::ExtCmd) - tcu::MMIO_ADDR).as_goff();
-        let reset_val = tcu::ExtCmdOpCode::Reset as tcu::Reg | (1 << 9) as tcu::Reg;
+        let reset_val = tcu::TCU::build_ext_cmd(tcu::ExtCmdOpCode::Reset, 1);
         TCU::write_obj(crate::TILE_EP, &reset_val, ext_cmd_addr)
             .expect("Failed to write kernel reset");
 

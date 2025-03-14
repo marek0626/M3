@@ -716,7 +716,14 @@ impl Activity {
     }
 
     pub fn translate(&self, virt: VirtAddr, perm: kif::PageFlags) -> (PhysAddr, kif::PageFlags) {
-        self.aspace.as_ref().unwrap().translate(virt, perm.bits())
+        match self.aspace.as_ref() {
+            Some(aspace) => aspace.translate(virt, perm.bits()),
+            // in case we don't have virtual memory, we have a 1:1 mapping
+            None => (
+                PhysAddr::new_raw(crate::pex_env().tile_desc, virt.as_raw() as u32),
+                perm,
+            ),
+        }
     }
 
     pub fn id(&self) -> Id {

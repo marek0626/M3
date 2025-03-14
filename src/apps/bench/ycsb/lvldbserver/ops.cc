@@ -38,21 +38,27 @@ LevelDBExecutor::LevelDBExecutor(const char *db)
       _n_insert(),
       _n_read(),
       _n_scan(),
-      _n_update() {
+      _n_update(),
+      _db(),
+      _db_name(db) {
+    open();
+}
+
+LevelDBExecutor::~LevelDBExecutor() {
+    close();
+}
+
+void LevelDBExecutor::open() {
     leveldb::Options options;
     options.create_if_missing = true;
-    leveldb::Status status = leveldb::DB::Open(options, db, &_db);
+    leveldb::Status status = leveldb::DB::Open(options, _db_name, &_db);
     if(!status.ok()) {
-        vthrow(Errors::INV_ARGS, "Unable to open/create DB '{}': {}"_cf, db,
+        vthrow(Errors::INV_ARGS, "Unable to open/create DB '{}': {}"_cf, _db_name,
                status.ToString().c_str());
     }
 }
 
-LevelDBExecutor::~LevelDBExecutor() {
-    delete _db;
-}
-
-void LevelDBExecutor::reset_stats() {
+void LevelDBExecutor::close() {
     _n_insert = 0;
     _n_read = 0;
     _n_scan = 0;
@@ -61,6 +67,21 @@ void LevelDBExecutor::reset_stats() {
     _t_read = TimeDuration::ZERO;
     _t_scan = TimeDuration::ZERO;
     _t_update = TimeDuration::ZERO;
+    if(_db) {
+        delete _db;
+        leveldb::Options options;
+        leveldb::Status status = leveldb::DestroyDB(_db_name, options);
+        if(!status.ok()) {
+            vthrow(Errors::INV_ARGS, "Unable to destroy DB '{}': {}"_cf, _db_name,
+                   status.ToString().c_str());
+        }
+        _db = nullptr;
+    }
+}
+
+void LevelDBExecutor::reset() {
+    close();
+    open();
 }
 
 void LevelDBExecutor::print_stats(size_t num_ops) {

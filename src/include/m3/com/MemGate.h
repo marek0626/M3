@@ -50,9 +50,11 @@ public:
      * @param size the memory size
      * @param perms the permissions (see MemCap::RWX)
      * @param sel the selector to use (if != INVALID, the selector is NOT freed on destruction)
+     * @param align the alignment for the allocation. By default, it will be large-page aligned if
+     * the size is at least as large as a large page or page aligned otherwise.
      * @return the memory capability
      */
-    static MemCap create_global(size_t size, int perms, capsel_t sel = INVALID);
+    static MemCap create_global(size_t size, int perms, capsel_t sel = INVALID, size_t align = 0);
 
     /**
      * Binds a new memory capability to the boot module with given name.
@@ -85,11 +87,15 @@ public:
      * whereas <user_tile> specifies the tile that should be allowed to use the region. The
      * memory tile needs to have sufficient quota to install the exclusive region.
      *
+     * The <locked> argument specifies whether this region including all overlaps should be locked.
+     * If so, additional overlaps with this regions are not possible.
+     *
      * This does only work if this memory region has a power-of-2 size and is size-aligned.
      *
      * Note also that this <MemCap> needs be belong to <mem_tile>.
      */
-    void make_exclusive(class Tile &mem_tile, class Tile &user_tile);
+    void make_exclusive(const Reference<class Tile> &mem_tile,
+                        const Reference<class Tile> &user_tile, bool locked);
 
     /**
      * Derives memory from this memory capability. That is, it creates a new memory capability that

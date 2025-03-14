@@ -343,7 +343,7 @@ impl Subsystem {
         let total_tees = count_tees(root);
         let exregs_per_tee = if total_tees > 0 {
             // TODO for simplicity, we only take the regions in the first memory module into account
-            let mem_tile = res.memory().mods().first().unwrap().addr().tile();
+            let mem_tile = res.memory().mods().next().unwrap().addr().tile();
             let total_exregs = res
                 .tiles()
                 .find_by_id(mem_tile)

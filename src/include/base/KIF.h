@@ -286,6 +286,7 @@ struct KIF {
             xfer_t act_sel;
             xfer_t epid;
             xfer_t replies;
+            xfer_t dynamic;
         } PACKED;
 
         struct AllocEPReply : public DefaultReply {
@@ -384,6 +385,7 @@ struct KIF {
             xfer_t mgate_sel;
             xfer_t mem_tile_sel;
             xfer_t user_tile_sel;
+            xfer_t locked;
         } PACKED;
 
         struct MGateRegionReply : public DefaultReply {

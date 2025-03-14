@@ -43,10 +43,12 @@ static bool destruct(capsel_t sel, uint flags, bool resmng) {
     return false;
 }
 
-MemCap MemCap::create_global(size_t size, int perms, capsel_t sel) {
+MemCap MemCap::create_global(size_t size, int perms, capsel_t sel, size_t align) {
     if(sel == INVALID)
         sel = SelSpace::get().alloc_sel();
-    Activity::own().resmng()->alloc_mem(sel, size, perms);
+    if(align == 0)
+        align = size >= LPAGE_SIZE ? LPAGE_SIZE : PAGE_SIZE;
+    Activity::own().resmng()->alloc_mem(sel, size, align, perms);
     return MemCap(0, sel, true);
 }
 
@@ -56,8 +58,9 @@ MemCap MemCap::bind_bootmod(const std::string_view &name) {
     return MemCap(0, sel, false);
 }
 
-void MemCap::make_exclusive(class Tile &mem_tile, class Tile &user_tile) {
-    Syscalls::mgate_mkexcl(sel(), mem_tile.sel(), user_tile.sel());
+void MemCap::make_exclusive(const Reference<class Tile> &mem_tile,
+                            const Reference<class Tile> &user_tile, bool locked) {
+    Syscalls::mgate_mkexcl(sel(), mem_tile->sel(), user_tile->sel(), locked);
 }
 
 MemCap MemCap::derive(goff_t offset, size_t size, int perms) const {

@@ -149,6 +149,25 @@ pub fn config_mem(
     TCU::config_mem(regs, act, tile, gen, addr, size, perm);
 }
 
+pub fn config_invalid(regs: &mut [Reg], tgtep: (TileId, EpId), act: ActId, dynamic: bool) {
+    log!(
+        log_flag(tgtep.0),
+        "{}:{}EP{} = Inval[act={}, dyn={}]",
+        tgtep.0,
+        if tgtep.1 < PMEM_PROT_EPS as EpId {
+            "PMP"
+        }
+        else {
+            ""
+        },
+        tgtep.1,
+        act,
+        dynamic,
+    );
+
+    TCU::config_invalid(regs, act, dynamic);
+}
+
 fn rbuf_addrs(virt: VirtAddr) -> (VirtAddr, PhysAddr) {
     let desc = platform::tile_desc(platform::kernel_tile());
     if desc.has_virtmem() {
@@ -397,7 +416,7 @@ pub fn reset_tile(tile: TileId, start: bool) -> anyhow::Result<()> {
         try_write_slice(tile, MMIO_ADDR.as_goff() + 0x3030, &[val])
     }
     else {
-        let cmd = ExtCmdOpCode::Reset as Reg | (val << 9) as Reg;
+        let cmd = TCU::build_ext_cmd(ExtCmdOpCode::Reset, val);
         let addr = TCU::ext_reg_addr(ExtReg::ExtCmd).as_goff();
         try_write_slice(tile, addr, &[cmd])?;
         // on stop, increment tile generation before we read the result of the external command
@@ -467,18 +486,23 @@ pub fn set_excl_region(
     addr: GlobOff,
     size: GlobOff,
     perm: kif::Perm,
+    locked: bool,
 ) -> anyhow::Result<()> {
     #[cfg(not(feature = "gem5"))]
     return Ok(());
 
     #[cfg(feature = "gem5")]
     {
-        let mut cfg = user_tile.raw() << 3 | 1;
-        if perm.contains(kif::Perm::R) {
+        let mut cfg =
+            (tilemng::tilegen(user_tile) as Reg) << 18 | (user_tile.raw() as Reg) << 4 | 1;
+        if locked {
             cfg |= 1 << 1;
         }
-        if perm.contains(kif::Perm::W) {
+        if perm.contains(kif::Perm::R) {
             cfg |= 1 << 2;
+        }
+        if perm.contains(kif::Perm::W) {
+            cfg |= 1 << 3;
         }
 
         assert!(((addr >> 2) & ((size >> 3) - 1)) == 0);
@@ -487,7 +511,7 @@ pub fn set_excl_region(
         let arg1 = TCU::ext_reg_addr(ExtReg::ExtArg1).as_goff();
         try_write_slice(mem_tile, arg1, &[addr_size])?;
 
-        let reg = ExtCmdOpCode::SetExcl as Reg | ((cfg as Reg) << 9) | ((idx as Reg) << 42);
+        let reg = TCU::build_ext_cmd(ExtCmdOpCode::SetExcl, cfg | (idx as u64) << 34);
         do_ext_cmd(mem_tile, reg).map(|_| ())
     }
 }
@@ -499,7 +523,7 @@ pub fn invalidate_excl_region(mem_tile: TileId, idx: usize) -> anyhow::Result<()
 
     #[cfg(feature = "gem5")]
     {
-        let reg = ExtCmdOpCode::InvExcl as Reg | ((idx as Reg) << 9);
+        let reg = TCU::build_ext_cmd(ExtCmdOpCode::InvExcl, idx as u64);
         do_ext_cmd(mem_tile, reg).map(|_| ())
     }
 }
@@ -507,7 +531,7 @@ pub fn invalidate_excl_region(mem_tile: TileId, idx: usize) -> anyhow::Result<()
 pub fn invalidate_ep_remote(tile: TileId, ep: EpId, force: bool) -> anyhow::Result<u32> {
     log!(LogFlags::KernEPs, "{}:EP{} = invalid", tile, ep);
 
-    let reg = ExtCmdOpCode::InvEP as Reg | ((ep as Reg) << 9) as Reg | ((force as Reg) << 25);
+    let reg = TCU::build_ext_cmd(ExtCmdOpCode::InvEP, (ep as u64) | (force as u64) << 16);
     do_ext_cmd(tile, reg).map(|unread| unread as u32)
 }
 
@@ -570,8 +594,8 @@ fn wait_ext_cmd(tile: TileId) -> anyhow::Result<Reg> {
         }
     };
 
-    match Code::try_from(((res >> 4) & 0x1F) as u32).unwrap() {
-        Code::Success => Ok(res >> 9),
+    match Code::try_from(((res >> 4) & 0x3F) as u32).unwrap() {
+        Code::Success => Ok(res >> 10),
         e => Err(kerrno(e)),
     }
 }

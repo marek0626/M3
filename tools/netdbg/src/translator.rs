@@ -33,8 +33,12 @@ pub enum NetLogEvent {
     RecvConnected,
     RecvClosed,
     RecvRemoteClosed,
-    StartedWaiting,
-    StoppedWaiting,
+    StartedWait,
+    StoppedWait,
+    StartedCreditWait,
+    StoppedCreditWait,
+    StartedEventWait,
+    StoppedEventWait,
 }
 
 #[derive(Default)]
@@ -270,8 +274,12 @@ fn translate_app(
             Ok(NetLogEvent::RecvConnected) => format!("[{}] recv connected to port {}", sd, arg),
             Ok(NetLogEvent::RecvClosed) => format!("[{}] recv closed", sd),
             Ok(NetLogEvent::RecvRemoteClosed) => format!("[{}] recv remote closed", sd),
-            Ok(NetLogEvent::StartedWaiting) => format!("[{}] started waiting", sd),
-            Ok(NetLogEvent::StoppedWaiting) => format!("[{}] stopped waiting", sd),
+            Ok(NetLogEvent::StartedWait) => format!("[{}] started waiting", sd),
+            Ok(NetLogEvent::StoppedWait) => format!("[{}] stopped waiting", sd),
+            Ok(NetLogEvent::StartedCreditWait) => format!("[{}] started waiting for credits", sd),
+            Ok(NetLogEvent::StoppedCreditWait) => format!("[{}] stopped waiting for credits", sd),
+            Ok(NetLogEvent::StartedEventWait) => format!("[{}] started waiting for event", sd),
+            Ok(NetLogEvent::StoppedEventWait) => format!("[{}] stopped waiting for event", sd),
             _ => format!("unknown event {:#x}", event & 0xFF),
         };
 

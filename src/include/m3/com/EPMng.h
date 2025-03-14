@@ -46,9 +46,11 @@ public:
      *
      * @param ep the endpoint number (default = any)
      * @param replies the number of reply slots (default = 0)
+     * @param dynamic whether the EP should be dynamic (changable without ACK even if the TCU is
+     * locked)
      * @return the endpoint
      */
-    EP *acquire(epid_t ep = TCU::INVALID_EP, uint replies = 0);
+    EP *acquire(epid_t ep = TCU::INVALID_EP, uint replies = 0, bool dynamic = false);
 
     /**
      * Releases the given endpoint. If <invalidate> is true, the endpoint will be invalidate.

@@ -96,14 +96,6 @@ pub fn user_tiles() -> impl Iterator<Item = TileId> {
         .filter(|t| { t.id } != kernel_tile() && t.desc.tile_type() != TileType::Mem)
         .map(|t| t.id)
 }
-pub fn mem_tiles() -> impl Iterator<Item = TileId> {
-    get()
-        .tiles
-        .iter()
-        .flat_map(|chip| chip.iter())
-        .filter(|t| t.desc.tile_type() == TileType::Mem)
-        .map(|t| t.id)
-}
 
 pub fn tile_desc(id: TileId) -> TileDesc {
     get().tiles[id.chip() as usize][id.tile() as usize].desc

@@ -310,18 +310,22 @@ pub fn tile_lock(act: &TempRc<Activity>) -> anyhow::Result<()> {
     }
 
     let tilemux = tilemng::tilemux(tile.tile());
-    let Some(eps_region) = tilemux.eps_region()
-    else {
-        reply_success(act);
-        return Ok(());
-    };
+    if tilemux.is_locked() {
+        return Err(kerrno(Code::Exists).context("Tile already locked"));
+    }
+
+    let eps_region = tilemux.eps_region();
     drop(tilemux);
 
     let tile_id = tile.tile();
-    let epmtile = tilemng::ep_mem_tile();
-    let mut mmux = tilemng::memmux(epmtile.tile());
-    mmux.add(eps_region, epmtile, tile)?;
+    if let Some(eps_region) = eps_region {
+        let epmtile = tilemng::ep_mem_tile();
+        let mut exregs = tilemng::exregs(epmtile.tile());
+        exregs.add(eps_region, epmtile, &tile, true)?;
+    }
 
+    let mut tilemux = tilemng::tilemux(tile.tile());
+    tilemux.lock();
     ktcu::lock_tile(tile_id).unwrap();
 
     reply_success(act);

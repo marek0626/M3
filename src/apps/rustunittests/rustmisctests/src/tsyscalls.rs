@@ -463,7 +463,7 @@ fn alloc_ep(t: &mut dyn WvTester) {
         {
             let tile = wv_require_ok!(Tile::get("compat"));
             let act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
-            wv_assert_ok!(t, syscalls::alloc_ep(sel, act.sel(), INVALID_EP, 1));
+            wv_assert_ok!(t, syscalls::alloc_ep(sel, act.sel(), INVALID_EP, 1, false));
         }
 
         let mgate = wv_require_ok!(MemGate::new(0x1000, Perm::RW));
@@ -473,13 +473,13 @@ fn alloc_ep(t: &mut dyn WvTester) {
     // invalid dest selector
     wv_assert_err!(
         t,
-        syscalls::alloc_ep(SEL_ACT, Activity::own().tile().sel(), INVALID_EP, 1),
+        syscalls::alloc_ep(SEL_ACT, Activity::own().tile().sel(), INVALID_EP, 1, false),
         Code::InvArgs
     );
     // invalid activity selector
     wv_assert_err!(
         t,
-        syscalls::alloc_ep(sel, SEL_TILE, INVALID_EP, 1),
+        syscalls::alloc_ep(sel, SEL_TILE, INVALID_EP, 1, false),
         Code::InvArgs
     );
     // invalid reply count
@@ -489,7 +489,8 @@ fn alloc_ep(t: &mut dyn WvTester) {
             sel,
             Activity::own().sel(),
             ep_count - 2,
-            cfg::MAX_RB_SIZE + 1
+            cfg::MAX_RB_SIZE + 1,
+            false
         ),
         Code::InvArgs
     );
@@ -499,7 +500,8 @@ fn alloc_ep(t: &mut dyn WvTester) {
             sel,
             Activity::own().sel(),
             ep_count - 2,
-            INVALID_EP as usize
+            INVALID_EP as usize,
+            false
         ),
         Code::InvArgs
     );
@@ -509,7 +511,8 @@ fn alloc_ep(t: &mut dyn WvTester) {
         sel,
         Activity::own().sel(),
         INVALID_EP,
-        1
+        1,
+        false
     ));
     wv_assert!(t, ep >= FIRST_USER_EP);
     wv_assert!(t, ep < ep_count);
@@ -523,7 +526,8 @@ fn alloc_ep(t: &mut dyn WvTester) {
         sel,
         Activity::own().sel(),
         ep_count - 2,
-        1
+        1,
+        false
     ));
     wv_assert_eq!(t, ep, ep_count - 2);
     wv_assert_ok!(
@@ -534,19 +538,19 @@ fn alloc_ep(t: &mut dyn WvTester) {
     // specific, but invalid EP
     wv_assert_err!(
         t,
-        syscalls::alloc_ep(sel, Activity::own().sel(), ep_count + 1, 0),
+        syscalls::alloc_ep(sel, Activity::own().sel(), ep_count + 1, 0, false),
         Code::InvArgs
     );
     wv_assert_err!(
         t,
-        syscalls::alloc_ep(sel, Activity::own().sel(), ep_count - 5, 10),
+        syscalls::alloc_ep(sel, Activity::own().sel(), ep_count - 5, 10, false),
         Code::InvArgs
     );
 
     // EPs not free
     wv_assert_err!(
         t,
-        syscalls::alloc_ep(sel, Activity::own().sel(), FIRST_USER_EP, 2),
+        syscalls::alloc_ep(sel, Activity::own().sel(), FIRST_USER_EP, 2, false),
         Code::InvArgs
     );
 
@@ -558,14 +562,14 @@ fn alloc_ep(t: &mut dyn WvTester) {
     // not enough quota
     wv_assert_err!(
         t,
-        syscalls::alloc_ep(sel, act.sel(), INVALID_EP, 20),
+        syscalls::alloc_ep(sel, act.sel(), INVALID_EP, 20, false),
         Code::NoSpace
     );
 }
 
 fn activate_mgate(t: &mut dyn WvTester) {
-    let ep1 = wv_require_ok!(EpMng::get().acquire(0));
-    let ep2 = wv_require_ok!(EpMng::get().acquire(1));
+    let ep1 = wv_require_ok!(EpMng::get().acquire(0, false));
+    let ep2 = wv_require_ok!(EpMng::get().acquire(1, false));
     let sel = SelSpace::get().alloc_sel();
     let mgate = wv_require_ok!(MemCap::new(0x1000, Perm::RW));
 
@@ -601,8 +605,8 @@ fn activate_mgate(t: &mut dyn WvTester) {
 }
 
 fn activate_sgate(t: &mut dyn WvTester) {
-    let ep1 = wv_require_ok!(EpMng::get().acquire(0));
-    let ep2 = wv_require_ok!(EpMng::get().acquire(1));
+    let ep1 = wv_require_ok!(EpMng::get().acquire(0, false));
+    let ep2 = wv_require_ok!(EpMng::get().acquire(1, false));
     let sel = SelSpace::get().alloc_sel();
     let rgate = wv_require_ok!(RecvGate::new(5, 5));
     let sgate = wv_require_ok!(SendCap::new(&rgate));
@@ -639,9 +643,9 @@ fn activate_sgate(t: &mut dyn WvTester) {
 }
 
 fn activate_rgate(t: &mut dyn WvTester) {
-    let ep1 = wv_require_ok!(EpMng::get().acquire(0));
-    let ep2 = wv_require_ok!(EpMng::get().acquire(1));
-    let ep3 = wv_require_ok!(EpMng::get().acquire(2));
+    let ep1 = wv_require_ok!(EpMng::get().acquire(0, false));
+    let ep2 = wv_require_ok!(EpMng::get().acquire(1, false));
+    let ep3 = wv_require_ok!(EpMng::get().acquire(2, false));
     let sel = SelSpace::get().alloc_sel();
     let mgate = wv_require_ok!(MemCap::new(0x1000, Perm::RW));
     let rgate = wv_require_ok!(RecvCap::new(5, 5));
@@ -696,7 +700,7 @@ fn activate_rgate(t: &mut dyn WvTester) {
 }
 
 fn invalidate(t: &mut dyn WvTester) {
-    let ep = wv_require_ok!(EpMng::get().acquire(0));
+    let ep = wv_require_ok!(EpMng::get().acquire(0, false));
     let mcap = wv_require_ok!(MemCap::new(0x1000, Perm::RW));
 
     let mut buf = [0u8; 8];

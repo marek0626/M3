@@ -73,7 +73,7 @@ size_t M3FS::get_ep() {
             return i;
     }
 
-    auto ep = EPMng::get().acquire();
+    auto ep = EPMng::get().acquire(TCU::INVALID_EP, 0, true);
     size_t id = delegate_ep(ep->sel());
 
     _eps.push_back(CachedEP(id, ep));

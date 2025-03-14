@@ -121,7 +121,7 @@ fn mng_multi(t: &mut dyn WvTester) {
     }
 
     wv_assert_eq!(t, mng.capacity(), 0x40000 + 0x100000);
-    wv_assert_eq!(t, mng.available(), 0x80000);
+    wv_assert_eq!(t, mng.available(), 0x30000 + 0x80000);
 
     {
         let slice = wv_require_ok!(mng.alloc_mem(0x80000));
@@ -130,9 +130,9 @@ fn mng_multi(t: &mut dyn WvTester) {
     }
 
     wv_assert_eq!(t, mng.capacity(), 0x40000 + 0x100000);
-    wv_assert_eq!(t, mng.available(), 0);
+    wv_assert_eq!(t, mng.available(), 0x30000 + 0);
 
-    wv_assert_anyhow_err!(t, mng.alloc_mem(0x1000), Code::NoSpace);
+    wv_assert_anyhow_err!(t, mng.alloc_mem(0x40000), Code::NoSpace);
 }
 
 fn mng_pool(t: &mut dyn WvTester) {
@@ -154,19 +154,19 @@ fn mng_pool(t: &mut dyn WvTester) {
     wv_assert_eq!(t, pool.capacity(), 0x120000);
     wv_assert_eq!(t, pool.available(), 0x120000);
 
-    let alloc1 = wv_require_ok!(pool.allocate(0x10000));
+    let alloc1 = wv_require_ok!(pool.allocate(0x10000, None));
     wv_assert_eq!(t, alloc1.slice_id(), 0);
     wv_assert_eq!(t, alloc1.addr(), 0);
     wv_assert_eq!(t, alloc1.size(), 0x10000);
     wv_assert_eq!(t, pool.available(), 0x110000);
 
-    let alloc2 = wv_require_ok!(pool.allocate(0x20000));
+    let alloc2 = wv_require_ok!(pool.allocate(0x20000, None));
     wv_assert_eq!(t, alloc2.slice_id(), 0);
     wv_assert_eq!(t, alloc2.addr(), 0x10000);
     wv_assert_eq!(t, alloc2.size(), 0x20000);
     wv_assert_eq!(t, pool.available(), 0xF0000);
 
-    let alloc3 = wv_require_ok!(pool.allocate(0x80000));
+    let alloc3 = wv_require_ok!(pool.allocate(0x80000, None));
     wv_assert_eq!(t, alloc3.slice_id(), 1);
     wv_assert_eq!(t, alloc3.addr(), 0);
     wv_assert_eq!(t, alloc3.size(), 0x80000);

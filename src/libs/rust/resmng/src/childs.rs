@@ -335,7 +335,7 @@ pub trait Child {
             )));
         }
 
-        let alloc = self.mem().pool.borrow_mut().allocate(size)?;
+        let alloc = self.mem().pool.borrow_mut().allocate(size, None)?;
         let mem_sel = self.mem().pool.borrow().mem_cap(alloc.slice_id());
         let mcap = MemCap::new_bind(mem_sel)
             .derive(alloc.addr(), alloc.size(), perm)
@@ -344,13 +344,20 @@ pub trait Child {
         Ok((mcap, alloc))
     }
 
-    fn alloc_mem(&mut self, dst_sel: Selector, size: GlobOff, perm: Perm) -> anyhow::Result<()> {
+    fn alloc_mem(
+        &mut self,
+        dst_sel: Selector,
+        size: GlobOff,
+        align: GlobOff,
+        perm: Perm,
+    ) -> anyhow::Result<()> {
         log!(
             LogFlags::ResMngMem,
-            "{}: allocate(dst_sel={}, size={:#x}, perm={:?})",
+            "{}: allocate(dst_sel={}, size={:#x}, align={:#x}, perm={:?})",
             self.name(),
             dst_sel,
             size,
+            align,
             perm
         );
 
@@ -362,7 +369,7 @@ pub trait Child {
             )));
         }
 
-        let alloc = self.mem().pool.borrow_mut().allocate(size)?;
+        let alloc = self.mem().pool.borrow_mut().allocate(size, Some(align))?;
         let mem_sel = self.mem().pool.borrow().mem_cap(alloc.slice_id());
         self.add_child_mem(alloc, mem_sel, dst_sel, perm)
     }

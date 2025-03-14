@@ -25,8 +25,12 @@ pub enum NetLogEvent {
     RecvConnected,
     RecvClosed,
     RecvRemoteClosed,
-    StartedWaiting,
-    StoppedWaiting,
+    StartedWait,
+    StoppedWait,
+    StartedCreditWait,
+    StoppedCreditWait,
+    StartedEventWait,
+    StoppedEventWait,
 }
 
 #[doc(hidden)]

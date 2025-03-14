@@ -23,7 +23,7 @@ use thread::{StrongRc, TempRc};
 use crate::cap::{TileObject, TileQuota};
 use crate::mem::MemType;
 use crate::platform;
-use crate::tiles::{MemMux, TileMux};
+use crate::tiles::{ExRegs, TileMux};
 use crate::{ktcu, mem};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -33,15 +33,51 @@ pub enum State {
     SHUTDOWN,
 }
 
-enum TileState {
-    Compute(TileMux),
-    Mem(MemMux),
-}
-
 const KERNEL_EPREGS: usize = 4;
 
-static TILES: LazyStaticRefCell<Vec<Vec<Option<TileState>>>> = LazyStaticRefCell::default();
-static TILEGENS: LazyStaticRefCell<Vec<Vec<GenId>>> = LazyStaticRefCell::default();
+struct PerTile<T> {
+    objs: Vec<Vec<Option<T>>>,
+}
+
+impl<T> Default for PerTile<T> {
+    fn default() -> Self {
+        Self { objs: Vec::new() }
+    }
+}
+
+impl<T> PerTile<T> {
+    fn get(&self, tile: TileId) -> Option<&T> {
+        self.objs[tile.chip() as usize]
+            .get(tile.tile() as usize)
+            .unwrap()
+            .as_ref()
+    }
+
+    fn get_mut(&mut self, tile: TileId) -> Option<&mut T> {
+        self.objs[tile.chip() as usize]
+            .get_mut(tile.tile() as usize)
+            .unwrap()
+            .as_mut()
+    }
+
+    fn add(&mut self, tile: TileId, obj: T) {
+        let cid = tile.chip() as usize;
+        let tid = tile.tile() as usize;
+        if cid >= self.objs.len() {
+            assert_eq!(cid, self.objs.len());
+            self.objs.push(Vec::new());
+        }
+        while tid != self.objs[cid].len() {
+            self.objs[cid].push(None);
+        }
+
+        self.objs[cid].push(Some(obj));
+    }
+}
+
+static TILEMUXS: LazyStaticRefCell<PerTile<TileMux>> = LazyStaticRefCell::default();
+static EXREGS: LazyStaticRefCell<PerTile<ExRegs>> = LazyStaticRefCell::default();
+static TILEGENS: LazyStaticRefCell<PerTile<GenId>> = LazyStaticRefCell::default();
 static EPMTILE: LazyStaticRefCell<StrongRc<TileObject>> = LazyStaticRefCell::default();
 static STATE: StaticCell<State> = StaticCell::new(State::RUNNING);
 
@@ -52,33 +88,20 @@ pub fn state() -> State {
 pub fn init() {
     deprivilege_tiles();
 
-    let mut tiles = Vec::new();
-    let mut tilegens = Vec::new();
+    let mut exregs = PerTile::default();
+    let mut tiles = PerTile::default();
+    let mut tilegens = PerTile::default();
     for tile in platform::all_tiles() {
-        if tile == platform::kernel_tile() {
-            continue;
+        if tile != platform::kernel_tile() {
+            if platform::tile_desc(tile).tile_type() == TileType::Comp {
+                tiles.add(tile, TileMux::new(tile));
+            }
+            exregs.add(tile, ExRegs::new(tile));
         }
-
-        let cid = tile.chip() as usize;
-        let tid = tile.tile() as usize;
-        if cid >= tiles.len() {
-            assert_eq!(cid, tiles.len());
-            tiles.push(Vec::new());
-            tilegens.push(Vec::new());
-        }
-        while tid != tiles[cid].len() {
-            tiles[cid].push(None);
-            tilegens[cid].push(0);
-        }
-
-        let state = match platform::tile_desc(tile).tile_type() {
-            TileType::Comp => TileState::Compute(TileMux::new(tile)),
-            TileType::Mem => TileState::Mem(MemMux::new(tile)),
-        };
-        tiles[cid].push(Some(state));
-        tilegens[cid].push(0);
+        tilegens.add(tile, 0);
     }
-    TILES.set(tiles);
+    TILEMUXS.set(tiles);
+    EXREGS.set(exregs);
     TILEGENS.set(tilegens);
 
     // create tile object for EP memory
@@ -120,8 +143,7 @@ pub fn ep_mem_tile() -> TempRc<TileObject> {
 
 pub fn tilegen(tile: TileId) -> GenId {
     if TILEGENS.is_some() {
-        let chip = &TILEGENS.borrow()[tile.chip() as usize];
-        chip[tile.tile() as usize]
+        *TILEGENS.borrow().get(tile).unwrap()
     }
     else {
         // during initialization we don't reset any tile, so that the generation is always 0
@@ -130,28 +152,20 @@ pub fn tilegen(tile: TileId) -> GenId {
 }
 
 pub fn inc_tilegen(tile: TileId) {
-    let chip = &mut TILEGENS.borrow_mut()[tile.chip() as usize];
-    chip[tile.tile() as usize] += 1;
+    let mut gens = TILEGENS.borrow_mut();
+    *gens.get_mut(tile).unwrap() += 1;
 }
 
 pub fn tilemux(tile: TileId) -> RefMut<'static, TileMux> {
-    RefMut::map(TILES.borrow_mut(), |tiles| {
-        let state = tiles[tile.chip() as usize][tile.tile() as usize].as_mut();
-        match state {
-            Some(TileState::Compute(mux)) => mux,
-            _ => panic!("No TileMux for tile {}", tile),
-        }
+    RefMut::map(TILEMUXS.borrow_mut(), |tiles| {
+        tiles
+            .get_mut(tile)
+            .unwrap_or_else(|| panic!("No TileMux for tile {}", tile))
     })
 }
 
-pub fn memmux(tile: TileId) -> RefMut<'static, MemMux> {
-    RefMut::map(TILES.borrow_mut(), |tiles| {
-        let state = tiles[tile.chip() as usize][tile.tile() as usize].as_mut();
-        match state {
-            Some(TileState::Mem(mux)) => mux,
-            _ => panic!("No memory multiplexer for tile {}", tile),
-        }
-    })
+pub fn exregs(tile: TileId) -> RefMut<'static, ExRegs> {
+    RefMut::map(EXREGS.borrow_mut(), |exregs| exregs.get_mut(tile).unwrap())
 }
 
 pub fn new_tile_obj(tile: TileId) -> StrongRc<TileObject> {

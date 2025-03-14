@@ -46,9 +46,16 @@ impl EpMng {
     }
 
     /// Allocates a new endpoint.
-    pub fn acquire(&mut self, replies: usize) -> Result<EP, Error> {
-        if replies > 0 {
-            EP::new_with(EPArgs::default().replies(replies))
+    pub fn acquire(&mut self, replies: usize, dynamic: bool) -> Result<EP, Error> {
+        // if replies are required or we need a dynamic EP, don't use an existing one
+        if replies > 0 || dynamic {
+            let ep = EP::new_with(EPArgs::default().replies(replies).dynamic(dynamic));
+            if dynamic {
+                if let Ok(ep) = &ep {
+                    ep.mkdyn()?;
+                }
+            }
+            ep
         }
         else if let Some(ep) = self.eps.pop() {
             Ok(ep)

@@ -43,7 +43,7 @@ public:
     static const size_t ACCEL_COUNT = 3;
 
     explicit DirectChain(Pipes &pipesrv, size_t id, FileRef<GenericFile> &in,
-                         FileRef<GenericFile> &out, Mode _mode)
+                         FileRef<GenericFile> &out, Mode _mode, bool tee)
         : mode(_mode),
           acts(),
           accels(),
@@ -60,7 +60,7 @@ public:
             tiles[i] = Tile::get("copy");
             acts[i] = std::make_unique<ChildActivity>(tiles[i], name.str());
 
-            accels[i] = std::make_unique<StreamAccel>(acts[i], ACCEL_TIMES[i]);
+            accels[i] = std::make_unique<StreamAccel>(acts[i], ACCEL_TIMES[i], tee);
 
             if(mode == Mode::DIR_SIMPLE && i + 1 < ACCEL_COUNT) {
                 mems[i] =
@@ -92,6 +92,11 @@ public:
                 else
                     accels[i]->connect_output(accels[i + 1].get());
             }
+        }
+
+        if(tee) {
+            for(size_t i = 0; i < ACCEL_COUNT; ++i)
+                tiles[i]->lock();
         }
     }
 
@@ -148,7 +153,7 @@ static void wait_for(std::unique_ptr<DirectChain> *chains, size_t num) {
     }
 }
 
-CycleDuration chain_direct(const char *in, size_t num, Mode mode) {
+CycleDuration chain_direct(const char *in, size_t num, Mode mode, bool tee) {
     Pipes pipes("pipes");
     std::unique_ptr<DirectChain> chains[num];
     FileRef<GenericFile> infds[num];
@@ -162,7 +167,7 @@ CycleDuration chain_direct(const char *in, size_t num, Mode mode) {
         infds[i] = VFS::open(in, FILE_R | FILE_NEWSESS);
         outfds[i] = VFS::open(outpath.str(), FILE_W | FILE_TRUNC | FILE_CREATE | FILE_NEWSESS);
 
-        chains[i] = std::make_unique<DirectChain>(pipes, i, infds[i], outfds[i], mode);
+        chains[i] = std::make_unique<DirectChain>(pipes, i, infds[i], outfds[i], mode, tee);
     }
 
     if(VERBOSE)

@@ -61,6 +61,7 @@ pub struct OpenSessionReq {
 pub struct AllocMemReq {
     pub dst: Selector,
     pub size: GlobOff,
+    pub align: GlobOff,
     pub perms: kif::Perm,
 }
 
@@ -226,10 +227,17 @@ impl ResMng {
     }
 
     /// Allocates `size` bytes of physical memory with given permissions.
-    pub fn alloc_mem(&self, dst: Selector, size: GlobOff, perms: kif::Perm) -> Result<(), Error> {
+    pub fn alloc_mem(
+        &self,
+        dst: Selector,
+        size: GlobOff,
+        align: GlobOff,
+        perms: kif::Perm,
+    ) -> Result<(), Error> {
         Self::send_receive(&self.sgate, opcodes::ResMng::AllocMem, AllocMemReq {
             dst,
             size,
+            align,
             perms,
         })
         .map(|_| ())

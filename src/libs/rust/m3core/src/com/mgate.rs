@@ -18,6 +18,7 @@
 
 use core::fmt;
 
+use base::cfg;
 use base::mem::GlobAddr;
 
 use crate::cap::{CapFlags, Capability, SelSpace, Selector};
@@ -65,7 +66,7 @@ impl MemCap {
         Activity::own()
             .resmng()
             .unwrap()
-            .alloc_mem(sel, args.size as GlobOff, args.perm)?;
+            .alloc_mem(sel, args.size, args.align, args.perm)?;
         Ok(Self {
             cap: Capability::new(sel, CapFlags::empty()),
             resmng: true,
@@ -130,11 +131,19 @@ impl MemCap {
     /// whereas `user_tile` specifies the tile that should be allowed to use the region. The
     /// memory tile needs to have sufficient quota to install the exclusive region.
     ///
+    /// The `locked` argument specifies whether this region including all overlaps should be locked. If
+    /// so, additional overlaps with this regions are not possible.
+    ///
     /// This does only work if this memory region has a power-of-2 size and is size-aligned.
     ///
     /// Note also that this `MemCap` needs be belong to `mem_tile`.
-    pub fn make_exclusive(&self, mem_tile: &Tile, user_tile: &Tile) -> Result<(), Error> {
-        syscalls::mgate_mkexcl(self.sel(), mem_tile.sel(), user_tile.sel())
+    pub fn make_exclusive(
+        &self,
+        mem_tile: &Tile,
+        user_tile: &Tile,
+        locked: bool,
+    ) -> Result<(), Error> {
+        syscalls::mgate_mkexcl(self.sel(), mem_tile.sel(), user_tile.sel(), locked)
     }
 
     /// Derives a new `MemCap` from `self` that has access to a subset of `self`'s the memory
@@ -266,6 +275,7 @@ pub struct MemGate {
 /// The arguments for [`MemGate`] creations.
 pub struct MGateArgs {
     size: GlobOff,
+    align: GlobOff,
     perm: Perm,
     sel: Selector,
 }
@@ -273,11 +283,28 @@ pub struct MGateArgs {
 impl MGateArgs {
     /// Creates a new `MGateArgs` object with default settings
     pub fn new(size: GlobOff, perm: Perm) -> MGateArgs {
+        let align = if size >= cfg::LPAGE_SIZE as GlobOff {
+            cfg::LPAGE_SIZE as GlobOff
+        }
+        else {
+            cfg::PAGE_SIZE as GlobOff
+        };
+
         MGateArgs {
             size,
+            align,
             perm,
             sel: INVALID_SEL,
         }
+    }
+
+    /// Sets the alignment for the allocation.
+    ///
+    /// By default, it will be large-page aligned if the size is at least as large as a large page
+    /// or page aligned otherwise.
+    pub fn align(mut self, align: GlobOff) -> Self {
+        self.align = align;
+        self
     }
 
     /// Sets the capability selector that should be used for this [`MemGate`]. Otherwise and by

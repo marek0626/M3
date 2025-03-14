@@ -30,7 +30,8 @@
 using namespace m3;
 
 static void usage(const char *name) {
-    eprintln("Usage: {} [-m <mode>] [-c <comptime>] [-n <num>] [-r <repeats>] <in> <out>"_cf, name);
+    eprintln("Usage: {} [-m <mode>] [-c <comptime>] [-n <num>] [-r <repeats>] [-t] <in> <out>"_cf,
+             name);
     eprintln("  <mode> can be:"_cf);
     eprintln("    'indir'      for a single chain, assisted"_cf);
     eprintln("    'dir'        for a single chain, connected directly"_cf);
@@ -39,6 +40,7 @@ static void usage(const char *name) {
     eprintln("  <comptime> specifies the computation time for each accelerator for 1 KiB"_cf);
     eprintln("  <num> specifies the number of accelerators in each chain"_cf);
     eprintln("  <repeats> specifies the number of repetitions of the benchmark"_cf);
+    eprintln("  If -t is specific, the accelerators run as TEEs"_cf);
     exit(1);
 }
 
@@ -47,9 +49,10 @@ int main(int argc, char **argv) {
     CycleDuration comptime = CycleDuration::from_raw(1000);
     size_t num = 1;
     int repeats = 1;
+    bool tee = false;
 
     int opt;
-    while((opt = getopt(argc, argv, "m:c:n:r:")) != -1) {
+    while((opt = getopt(argc, argv, "m:c:n:r:t")) != -1) {
         switch(opt) {
             case 'm': {
                 if(strcmp(optarg, "indir") == 0)
@@ -71,11 +74,16 @@ int main(int argc, char **argv) {
             }
             case 'n': num = IStringStream::read_from<size_t>(optarg); break;
             case 'r': repeats = IStringStream::read_from<int>(optarg); break;
+            case 't': tee = true; break;
             default: usage(argv[0]);
         }
     }
     if(optind + 1 >= argc)
         usage(argv[0]);
+    if(mode == Mode::INDIR && tee) {
+        eprintln("The indirect mode does not support TEEs."_cf);
+        return 1;
+    }
 
     const char *in = argv[optind + 0];
     const char *out = argv[optind + 1];
@@ -88,9 +96,9 @@ int main(int argc, char **argv) {
         if(mode == Mode::INDIR)
             chain_indirect(fin, fout, num, comptime);
         else if(mode == Mode::DIR_MULTI)
-            chain_direct_multi(fin, fout, num, comptime, Mode::DIR);
+            chain_direct_multi(fin, fout, num, comptime, Mode::DIR, tee);
         else
-            chain_direct(fin, fout, num, comptime, mode);
+            chain_direct(fin, fout, num, comptime, mode, tee);
     }
     return 0;
 }

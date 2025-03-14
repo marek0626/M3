@@ -86,7 +86,8 @@ static void cleanup() {
         for(std::string &s : entries)
             remove_rec(s.c_str());
     }
-    catch(...) {
+    catch(const m3::Exception &e) {
+        eprintln("Cleanup failed: {}"_cf, e.what());
         // ignore
     }
 }

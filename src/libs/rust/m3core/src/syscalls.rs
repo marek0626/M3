@@ -258,13 +258,24 @@ pub fn create_sem(dst: Selector, value: u32) -> Result<(), Error> {
 
 /// Allocates a new endpoint for the given activity at selector `dst`. Optionally, it can have `replies`
 /// reply slots attached to it (for receive gate activations).
-pub fn alloc_ep(dst: Selector, act: Selector, epid: EpId, replies: usize) -> Result<EpId, Error> {
+///
+/// The `dynamic` argument indicates whether configurations of this EP need to be acknowledged by
+/// the application before the EP is usable (dynamic=false), or whether the EP can by reconfigured
+/// without ACK (dynamic=true).
+pub fn alloc_ep(
+    dst: Selector,
+    act: Selector,
+    epid: EpId,
+    replies: usize,
+    dynamic: bool,
+) -> Result<EpId, Error> {
     let mut buf = SYSC_BUF.borrow_mut();
     build_vmsg!(buf, syscalls::Operation::AllocEP, syscalls::AllocEP {
         dst,
         act,
         epid,
         replies,
+        dynamic,
     });
 
     let reply: Reply<syscalls::AllocEPReply> = send_receive(&buf)?;
@@ -420,10 +431,18 @@ pub fn mgate_region(mgate: Selector) -> Result<(GlobAddr, GlobOff), Error> {
 /// whereas `user_tile` specifies the tile that should be allowed to use the region. The
 /// memory tile needs to have sufficient quota to install the exclusive region.
 ///
+/// The `locked` argument specifies whether this region including all overlaps should be locked. If
+/// so, additional overlaps with this regions are not possible.
+///
 /// This does only work if this memory region has a power-of-2 size and is size-aligned.
 ///
 /// Note also that `mgate` needs be belong to `mem_tile`.
-pub fn mgate_mkexcl(mgate: Selector, mem_tile: Selector, user_tile: Selector) -> Result<(), Error> {
+pub fn mgate_mkexcl(
+    mgate: Selector,
+    mem_tile: Selector,
+    user_tile: Selector,
+    locked: bool,
+) -> Result<(), Error> {
     let mut buf = SYSC_BUF.borrow_mut();
     build_vmsg!(
         buf,
@@ -431,7 +450,8 @@ pub fn mgate_mkexcl(mgate: Selector, mem_tile: Selector, user_tile: Selector) ->
         syscalls::MGateMkExcl {
             mgate,
             mem_tile,
-            user_tile
+            user_tile,
+            locked
         }
     );
     send_receive_result(&buf)

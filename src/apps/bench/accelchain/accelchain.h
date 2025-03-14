@@ -30,8 +30,8 @@ enum Mode {
 };
 
 void chain_direct(m3::FileRef<m3::GenericFile> &in, m3::FileRef<m3::GenericFile> &out, size_t num,
-                  m3::CycleDuration comptime, Mode mode);
+                  m3::CycleDuration comptime, Mode mode, bool tee);
 void chain_direct_multi(m3::FileRef<m3::GenericFile> &in, m3::FileRef<m3::GenericFile> &out,
-                        size_t num, m3::CycleDuration comptime, Mode mode);
+                        size_t num, m3::CycleDuration comptime, Mode mode, bool tee);
 void chain_indirect(m3::FileRef<m3::GenericFile> &in, m3::FileRef<m3::GenericFile> &out, size_t num,
                     m3::CycleDuration comptime);

@@ -169,6 +169,7 @@ pub struct TileMux {
     queue: base::boxed::Box<crate::com::SendQueue>,
     state: Option<TileState>,
     mux_type: kif::syscalls::MuxType,
+    locked: bool,
     shutdown: bool,
 }
 
@@ -191,11 +192,16 @@ impl TileMux {
             state: None,
             mux_type: kif::syscalls::MuxType::None,
             shutdown: false,
+            locked: false,
         }
     }
 
     pub fn is_initialized(&self) -> bool {
         self.state.is_some() && !self.shutdown
+    }
+
+    pub fn is_locked(&self) -> bool {
+        self.locked
     }
 
     pub fn has_activities(&self) -> bool {
@@ -274,6 +280,11 @@ impl TileMux {
 
         self.state = None;
         self.mux_type = kif::syscalls::MuxType::None;
+    }
+
+    pub fn lock(&mut self) {
+        assert!(!self.locked);
+        self.locked = true;
     }
 
     pub fn reset_async(
@@ -377,6 +388,8 @@ impl TileMux {
         ktcu::reset_tile(tile_id, start)?;
 
         let mut tilemux = tilemng::tilemux(tile_id);
+        tilemux.locked = false;
+
         if start {
             // for root, it has to be TileMux and we don't support async calls yet, because there
             // are no other threads yet to switch to.
@@ -395,8 +408,8 @@ impl TileMux {
             drop(tilemux);
 
             // invalidate all exclusive regions for this user tile
-            for mtile in platform::mem_tiles() {
-                tilemng::memmux(mtile).invalidate(tile_id);
+            for mtile in platform::user_tiles() {
+                tilemng::exregs(mtile).invalidate(tile_id);
             }
         }
 
@@ -567,12 +580,13 @@ impl TileMux {
         obj: &MGateObject,
         tile_id: TileId,
     ) -> anyhow::Result<()> {
-        if let Some(extile) = obj.exclusive_tile() {
-            if self.tile_id() != extile {
+        if obj.is_exclusive() {
+            let exregs = tilemng::exregs(obj.addr().tile());
+            if !exregs.has_access(self.tile_id(), obj) {
                 return Err(kerrno(Code::NoPerm).context(format!(
                     "{} has no permissions to exclusive region of {} ({}..{})",
                     self.tile_id(),
-                    extile,
+                    obj.addr().tile(),
                     obj.addr(),
                     obj.addr() + (obj.size() - 1)
                 )));

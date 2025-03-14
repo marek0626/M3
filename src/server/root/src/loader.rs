@@ -196,7 +196,7 @@ impl<'a> BootMapper<'a> {
         size: usize,
         perm: Perm,
     ) -> anyhow::Result<(Selector, GlobOff)> {
-        let alloc = self.mem_pool.borrow_mut().allocate(size as GlobOff)?;
+        let alloc = self.mem_pool.borrow_mut().allocate(size as GlobOff, None)?;
         let msel = self.mem_pool.borrow().mem_cap(alloc.slice_id());
 
         syscalls::create_map(

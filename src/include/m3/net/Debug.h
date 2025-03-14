@@ -27,8 +27,12 @@ enum NetLogEvent {
     RecvConnected,
     RecvClosed,
     RecvRemoteClosed,
-    StartedWaiting,
-    StoppedWaiting,
+    StartedWait,
+    StoppedWait,
+    StartedCreditWait,
+    StoppedCreditWait,
+    StartedEventWait,
+    StoppedEventWait,
 };
 
 template<typename T1, typename T2>

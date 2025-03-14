@@ -204,7 +204,7 @@ static void execute_pipeline(Pipes &pipesrv, std::unique_ptr<Parser::CmdList> &c
                           const_cast<const char **>(args.get()), vars.get());
         }
         else
-            accels[i] = std::make_unique<StreamAccel>(acts[i], ACOMP_TIME);
+            accels[i] = std::make_unique<StreamAccel>(acts[i], ACOMP_TIME, false);
 
         if(i > 0 && pipes[i - 1]) {
             if(acts[i] && acts[i]->tile_desc().is_programmable())

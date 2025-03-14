@@ -173,6 +173,7 @@ class TCU {
     friend class TimeInstant;
     friend class OwnActivity;
     friend class GenericFile;
+    friend class EP;
 
     explicit TCU() {
     }
@@ -286,7 +287,8 @@ private:
         FETCH_MSG = 5,
         ACK_MSG = 6,
         UNFREEZE = 7,
-        SLEEP = 8,
+        MKDYN = 8,
+        SLEEP = 9,
     };
 
     enum class PrivCmdOpCode {
@@ -315,6 +317,11 @@ public:
     enum MemFlags : reg_t {
         R = 1 << 0,
         W = 1 << 1,
+    };
+
+    enum Features : reg_t {
+        FEAT_PRIV = 1 << 0,
+        FEAT_LOCKED = 1 << 3,
     };
 
     struct Header {
@@ -369,6 +376,11 @@ public:
 
     static TCU &get() {
         return inst;
+    }
+
+    bool is_locked() const {
+        reg_t features = read_reg(ExtRegs::FEATURES);
+        return (features & FEAT_LOCKED) != 0;
     }
 
     bool has_missing_credits(epid_t ep) const {
@@ -487,9 +499,14 @@ private:
         return (r0 >> 63) != 0;
     }
 
-    void unfreeze(epid_t ep) {
+    Errors::Code unfreeze(epid_t ep) {
         write_reg(UnprivRegs::COMMAND, build_command(ep, CmdOpCode::UNFREEZE, 0));
-        get_error();
+        return get_error();
+    }
+
+    Errors::Code mkdyn(epid_t ep) {
+        write_reg(UnprivRegs::COMMAND, build_command(ep, CmdOpCode::MKDYN, 0));
+        return get_error();
     }
 
     void drop_msgs(size_t buf_addr, epid_t ep, label_t label) {
@@ -531,7 +548,11 @@ private:
         while(true) {
             reg_t cmd = read_reg(UnprivRegs::COMMAND);
             if(static_cast<CmdOpCode>(cmd & 0xF) == CmdOpCode::IDLE)
+#if defined(__hw22__) || defined(__hw23__)
                 return static_cast<Errors::Code>((cmd >> 20) & 0x1F);
+#else
+                return static_cast<Errors::Code>((cmd >> 20) & 0x3F);
+#endif
         }
         UNREACHED;
     }
@@ -596,7 +617,11 @@ private:
     }
 
     static reg_t build_command(epid_t ep, CmdOpCode c, reg_t arg = 0) {
+#if defined(__hw22__) || defined(__hw23__)
         return static_cast<reg_t>(c) | (static_cast<reg_t>(ep) << 4) | (arg << 25);
+#else
+        return static_cast<reg_t>(c) | (static_cast<reg_t>(ep) << 4) | (arg << 26);
+#endif
     }
 
     static void config_invalid(epid_t ep) {

@@ -16,6 +16,7 @@
 use base::col::{BitArray, Vec};
 use base::errors::Code;
 use base::tcu::TileId;
+use base::util;
 use thread::{Downgradable, TempRc, Upgradable, WeakRc};
 
 use crate::cap::{MGateObject, TileObject};
@@ -30,13 +31,13 @@ struct ExclRegion {
     mtile: WeakRc<TileObject>,
 }
 
-pub struct MemMux {
+pub struct ExRegs {
     tile: TileId,
     free: BitArray,
     exregs: Vec<ExclRegion>,
 }
 
-impl MemMux {
+impl ExRegs {
     pub fn new(tile: TileId) -> Self {
         Self {
             tile,
@@ -49,14 +50,15 @@ impl MemMux {
         &mut self,
         mgate: TempRc<MGateObject>,
         mem_tile: TempRc<TileObject>,
-        user_tile: TempRc<TileObject>,
+        user_tile: &TempRc<TileObject>,
+        locked: bool,
     ) -> anyhow::Result<()> {
         assert!(mem_tile.tile() == self.tile);
 
         if mem_tile.exregs_quota().left() == 0 {
             return Err(kerrno(Code::NoSpace).context("Exclusive-region quota"));
         }
-        mgate.make_exclusive(&user_tile)?;
+        mgate.make_exclusive();
 
         let idx = self.free.first_clear();
 
@@ -67,6 +69,7 @@ impl MemMux {
             mgate.offset(),
             mgate.size(),
             mgate.perms(),
+            locked,
         )?;
 
         mem_tile.alloc_exreg(1);
@@ -80,6 +83,25 @@ impl MemMux {
         self.free.set(idx);
 
         Ok(())
+    }
+
+    pub fn has_access(&self, tile: TileId, mgate: &MGateObject) -> bool {
+        for ereg in &self.exregs {
+            if let Some(ereg_gate) = ereg.mgate.upgrade() {
+                assert_eq!(ereg_gate.addr().tile(), mgate.addr().tile());
+                if ereg.utile_id == tile
+                    && util::math::overlaps(
+                        ereg_gate.addr().offset(),
+                        ereg_gate.addr().offset() + ereg_gate.size(),
+                        mgate.addr().offset(),
+                        mgate.addr().offset() + mgate.size(),
+                    )
+                {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     pub fn invalidate(&mut self, tile: TileId) {

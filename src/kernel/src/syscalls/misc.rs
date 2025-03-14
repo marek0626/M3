@@ -40,11 +40,12 @@ pub fn alloc_ep_async(act: TempRc<Activity>) -> anyhow::Result<()> {
 
     sysc_log!(
         act,
-        "alloc_ep(dst={}, act={}, epid={}, replies={})",
+        "alloc_ep(dst={}, act={}, epid={}, replies={}, dyn={})",
         r.dst,
         r.act,
         r.epid,
-        r.replies
+        r.replies,
+        r.dynamic
     );
 
     if r.replies > cfg::MAX_RB_SIZE {
@@ -113,6 +114,15 @@ pub fn alloc_ep_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     dst_act.tile().alloc_eps(ep_count);
     tilemux.alloc_eps(epid, ep_count);
 
+    if r.dynamic {
+        // make the EP invalid, but owned by the activity, so that it can make it dynamic if desired.
+        // if the tile is not locked yet, we can also do it directly.
+        ktcu::config_remote_ep(dst_act.tile_id(), epid, |regs, tgtep| {
+            ktcu::config_invalid(regs, tgtep, dst_act.id(), true);
+        })
+        .unwrap();
+    }
+
     let mut kreply = MsgBuf::borrow_def();
     build_vmsg!(kreply, Code::Success, kif::syscalls::AllocEPReply {
         ep: epid
@@ -151,10 +161,11 @@ pub fn mgate_mkexcl(act: &TempRc<Activity>) -> anyhow::Result<()> {
 
     sysc_log!(
         act,
-        "mgate_mkexcl(mgate={}, mem_tile={}, user_tile={})",
+        "mgate_mkexcl(mgate={}, mem_tile={}, user_tile={}, locked={})",
         r.mgate,
         r.mem_tile,
-        r.user_tile
+        r.user_tile,
+        r.locked,
     );
 
     let act_caps = act.obj_caps().borrow();
@@ -175,8 +186,8 @@ pub fn mgate_mkexcl(act: &TempRc<Activity>) -> anyhow::Result<()> {
         return Err(kerrno(Code::InvArgs).context("Invalid address (need size-aligned)"));
     }
 
-    let mut memmux = tilemng::memmux(mem_tile.tile());
-    memmux.add(mgate, mem_tile, user_tile)?;
+    let mut exregs = tilemng::exregs(mem_tile.tile());
+    exregs.add(mgate, mem_tile, &user_tile, r.locked)?;
 
     reply_success(act);
     Ok(())

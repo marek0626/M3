@@ -253,6 +253,21 @@ impl TCU {
         return Self::read_reg(ExtReg::EpsSize as usize) as usize;
     }
 
+    /// Returns true if the TCU is locked
+    ///
+    /// In the locked state, the TCU's endpoints cannot be changed anymore without agreement of the
+    /// application that owns the endpoints. If the kernel changes a non-dynamic EP, the EP is
+    /// frozen and needs to be unfreezed by the application before being usable. Dynamic EPs can be
+    /// changed by the kernel without agreement though, but these need to marked dynamic by the
+    /// application beforehand.
+    ///
+    /// Furthermore, in the locked state all incoming memory requests (reads/writes to the tile
+    /// internal memory are denied.
+    pub fn is_locked() -> bool {
+        let features = Self::read_reg(ExtReg::Features as usize);
+        (features & FeatureFlags::LOCKED.bits()) != 0
+    }
+
     /// Writes the given address and size into the Data register
     pub fn write_data(addr: VirtAddr, size: usize) {
         #[cfg(feature = "hw22")]

@@ -256,7 +256,7 @@ impl Requests {
         let req: resmng::AllocMemReq = Self::unmarshall(is)?;
 
         let child = childs.child_by_id_mut(id).unwrap();
-        child.alloc_mem(req.dst, req.size, req.perms)
+        child.alloc_mem(req.dst, req.size, req.align, req.perms)
     }
 
     fn free_mem(

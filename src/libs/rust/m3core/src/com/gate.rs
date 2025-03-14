@@ -107,7 +107,7 @@ impl Gate {
     pub fn new(sel: Selector, flags: CapFlags, ep: Option<EP>, mem: bool) -> Result<Self, Error> {
         let ep = match ep {
             Some(ep) => ep,
-            None => EpMng::get().acquire(0)?,
+            None => EpMng::get().acquire(0, false)?,
         };
         if mem {
             syscalls::activate_mgate(ep.sel(), sel)?;

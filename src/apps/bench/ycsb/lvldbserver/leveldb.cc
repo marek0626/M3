@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
         uint64_t opcounter = 0;
 
         __m3_sysc_trace(true, 32768);
-        exec->reset_stats();
+        exec->reset();
         hdl->reset();
 
         auto start = TimeInstant::now();

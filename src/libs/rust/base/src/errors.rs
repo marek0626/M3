@@ -61,7 +61,6 @@ pub enum Code {
     NoPMPEP,
     NoIRQ,
     ExRegNoPerm,
-    ExRegWrongTile,
     ExRegOverlaps,
     ExRegExists,
     TileLocked,
