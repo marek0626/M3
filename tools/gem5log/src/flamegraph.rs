@@ -768,14 +768,16 @@ mod ftrace {
                     tid: tid.tid,
                     pid: None,
                 };
-                print(
-                    time,
-                    cur_tile.id,
-                    cur_tile.new_act,
-                    tid,
-                    cur_tile.last_bin,
-                    tswitch(cur_tile.id, (old, switch_tid), (new, switch_tid)),
-                );
+                if matches!(mode, crate::Mode::FTrace { .. }) {
+                    print(
+                        time,
+                        cur_tile.id,
+                        cur_tile.new_act,
+                        tid,
+                        cur_tile.last_bin,
+                        tswitch(cur_tile.id, (old, switch_tid), (new, switch_tid)),
+                    );
+                }
             }
         }
 
