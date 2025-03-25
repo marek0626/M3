@@ -297,6 +297,7 @@ pub fn main() -> Result<(), Error> {
             .alloc_mem((buf_size + sendqueue::RBUF_SIZE) as GlobOff)
             .expect("Unable to allocate memory for receive buffers");
         let pages = (buf_mem.capacity() as usize).div_ceil(cfg::PAGE_SIZE);
+        let buf_mem = buf_mem.derive().expect("derive of receive buffer failed");
         syscalls::create_map(
             rbuf_addr,
             Activity::own().sel(),
@@ -306,20 +307,26 @@ pub fn main() -> Result<(), Error> {
             kif::Perm::R,
         )
         .expect("Unable to map receive buffers");
-        (0, Some(buf_mem.sel()))
+        (0, Some(buf_mem))
     }
     else {
         (rbuf_addr.as_goff(), None)
     };
 
-    let req_rgate = create_rgate(buf_size, max_msg_size, rbuf_mem, rbuf_off, rbuf_addr)
-        .expect("Unable to create request RecvGate");
+    let req_rgate = create_rgate(
+        buf_size,
+        max_msg_size,
+        rbuf_mem.as_ref().map(|r| r.sel()),
+        rbuf_off,
+        rbuf_addr,
+    )
+    .expect("Unable to create request RecvGate");
     let reqs = requests::Requests::new(req_rgate);
 
     let squeue_rgate = create_rgate(
         sendqueue::RBUF_SIZE,
         sendqueue::RBUF_MSG_SIZE,
-        rbuf_mem,
+        rbuf_mem.as_ref().map(|r| r.sel()),
         rbuf_off + buf_size as GlobOff,
         rbuf_addr + buf_size,
     )
