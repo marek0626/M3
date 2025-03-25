@@ -199,9 +199,22 @@ impl RoTSession {
 /// multiplexer is delegated to M3FS and M3FS configures the [`EP`] accordingly
 /// to let the hash multiplexer read the file contents directly.
 pub trait HashInput {
-    /// Input a maximum of `len` bytes of this object into the [`RoTSession`].
-    fn hash_input(&mut self, _sess: &RoTSession, _len: usize) -> Result<usize, Error> {
+    /// Input a single chunk of at most `len` bytes of this object into the [`RoTSession`].
+    fn hash_input_chunk(&mut self, _sess: &RoTSession, _len: usize) -> Result<usize, Error> {
         Err(Error::new(Code::NotSup))
+    }
+
+    /// Input a maximum of `len` bytes of this object into the [`RoTSession`].
+    fn hash_input(&mut self, sess: &RoTSession, len: usize) -> Result<usize, Error> {
+        let mut remaining = len;
+        while remaining > 0 {
+            let amount = self.hash_input_chunk(sess, remaining)?;
+            if amount == 0 {
+                break;
+            }
+            remaining -= amount;
+        }
+        Ok(len - remaining)
     }
 }
 
@@ -211,13 +224,31 @@ pub trait HashInput {
 /// multiplexer is delegated to M3FS and M3FS configures the [`EP`] accordingly
 /// to let the hash multiplexer write the file contents directly.
 pub trait HashOutput {
+    /// Output a single chunk of at most `len` bytes to this object from the [`RoTSession`].
+    ///
+    /// Note that this operation does not allow output of more bytes than
+    /// supported by the current hash algorithm. It is mainly intended for
+    /// use with XOFs (extendable output functions) that allow arbitrarily
+    /// large output, e.g. as pseudo-random number generator.
+    fn hash_output_chunk(&mut self, _sess: &RoTSession, _len: usize) -> Result<usize, Error> {
+        Err(Error::new(Code::NotSup))
+    }
+
     /// Output a maximum of `len` bytes to this object from the [`RoTSession`].
     ///
     /// Note that this operation does not allow output of more bytes than
     /// supported by the current hash algorithm. It is mainly intended for
     /// use with XOFs (extendable output functions) that allow arbitrarily
     /// large output, e.g. as pseudo-random number generator.
-    fn hash_output(&mut self, _sess: &RoTSession, _len: usize) -> Result<usize, Error> {
-        Err(Error::new(Code::NotSup))
+    fn hash_output(&mut self, sess: &RoTSession, len: usize) -> Result<usize, Error> {
+        let mut remaining = len;
+        while remaining > 0 {
+            let amount = self.hash_output_chunk(sess, remaining)?;
+            if amount == 0 {
+                break;
+            }
+            remaining -= amount;
+        }
+        Ok(len - remaining)
     }
 }

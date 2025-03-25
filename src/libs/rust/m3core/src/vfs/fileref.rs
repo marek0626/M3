@@ -226,14 +226,14 @@ impl<T: ?Sized> Map for FileRef<T> {
 }
 
 impl<T: ?Sized> HashInput for FileRef<T> {
-    fn hash_input(&mut self, sess: &RoTSession, len: usize) -> Result<usize, Error> {
-        self.borrow().hash_input(sess, len)
+    fn hash_input_chunk(&mut self, sess: &RoTSession, len: usize) -> Result<usize, Error> {
+        self.borrow().hash_input_chunk(sess, len)
     }
 }
 
 impl<T: ?Sized> HashOutput for FileRef<T> {
-    fn hash_output(&mut self, sess: &RoTSession, len: usize) -> Result<usize, Error> {
-        self.borrow().hash_output(sess, len)
+    fn hash_output_chunk(&mut self, sess: &RoTSession, len: usize) -> Result<usize, Error> {
+        self.borrow().hash_output_chunk(sess, len)
     }
 }
 
