@@ -36,7 +36,7 @@ all_tests = [
     "rust-algo-benchs", "rust-misc-benchs", "rust-vfs-benchs",
     "cpp-algo-benchs", "cpp-misc-benchs", "cpp-vfs-benchs",
     "chantests",
-    "unittests", "hashmux-benchs", "hashmux-tests", "resmngtest",
+    "unittests", "hashmux-benchs", "hashmux-tests", "bench-hashpipe-tee", "resmngtest",
     "facever", "rots-raser", "rots-hello", "rots-evidence-test",
     "find", "tar", "untar", "sqlite", "leveldb", "sha256sum", "sort",
     "cat_awk", "cat_wc", "grep_awk", "grep_wc",

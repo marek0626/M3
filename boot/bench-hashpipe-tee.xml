@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<config>
+    <env>M3_GEM5_CFG=platform/gem5/configs/m3/default.py</env>
+    <kernel args="kernel"/>
+    <dom>
+        <app args="root shmem=inpipe:16K shmem=outpipe:16K">
+            <dom>
+                <app args="pipes" daemon="1">
+                    <serv name="pipes"/>
+                </app>
+            </dom>
+            <dom tile="core+kecacc" tee="1">
+                <shmem name="inpipe"/>
+                <shmem name="outpipe"/>
+                <app args="rots" daemon="1">
+                    <serv name="rot"/>
+                </app>
+            </dom>
+            <dom tee="1">
+                <shmem name="inpipe"/>
+                <shmem name="outpipe"/>
+                <app args="hashpipe">
+                    <sess lname="hash1" gname="rot" args="20000"/>
+                    <sess lname="hash2" gname="rot" args="20000"/>
+                    <sess name="pipes"/>
+                    <shmem name="inpipe"/>
+                    <shmem name="outpipe"/>
+                </app>
+            </dom>
+        </app>
+    </dom>
+</config>

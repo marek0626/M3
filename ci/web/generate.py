@@ -17,7 +17,7 @@ NUM_DAYS = 10
 TESTS = [
     "lxrust-benchs", "lxcpp-benchs", "lxtcutest",
     "chantests",
-    "unittests", "hashmux-benchs", "hashmux-tests", "resmngtest",
+    "unittests", "hashmux-benchs", "hashmux-tests", "bench-hashpipe-tee", "resmngtest",
     "rust-net-tests", "cpp-net-tests", "rust-net-benchs", "cpp-net-benchs",
     "rust-algo-tests", "rust-destr-tests", "rust-misc-tests", "rust-vfs-tests",
     "rust-algo-benchs", "rust-misc-benchs", "rust-vfs-benchs",
