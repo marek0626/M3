@@ -4,8 +4,13 @@
         <xs:choice minOccurs="0" maxOccurs="unbounded">
             <xs:element name="dom">
                 <xs:complexType>
-                    <xs:sequence minOccurs="1" maxOccurs="unbounded">
-                        <xs:element name="app" type="appType"/>
+                    <xs:sequence>
+                        <xs:element name="shmem" minOccurs="0" maxOccurs="unbounded">
+                            <xs:complexType>
+                                <xs:attribute name="name" type="xs:string" use="required"/>
+                            </xs:complexType>
+                        </xs:element>
+                        <xs:element name="app" type="appType" minOccurs="1" maxOccurs="unbounded"/>
                     </xs:sequence>
                     <xs:attribute name="tile" type="xs:string"/>
                     <xs:attribute name="mux" type="xs:string"/>
@@ -93,6 +98,12 @@
                     <xs:attribute name="name" type="xs:string"/>
                     <xs:attribute name="lname" type="xs:string"/>
                     <xs:attribute name="gname" type="xs:string"/>
+                </xs:complexType>
+            </xs:element>
+
+            <xs:element name="shmem">
+                <xs:complexType>
+                    <xs:attribute name="name" type="xs:string" use="required"/>
                 </xs:complexType>
             </xs:element>
 

@@ -349,12 +349,7 @@ impl EvidenceSession {
 pub fn main() -> anyhow::Result<()> {
     let (subsys, mut res) = subsys::Subsystem::new().expect("Unable to read subsystem info");
 
-    let args = subsys.parse_args();
-    for sem in &args.sems {
-        res.semaphores_mut()
-            .add_sem(sem.clone())
-            .expect("Unable to add semaphore");
-    }
+    let args = subsys.parse_args(&mut res);
 
     // mount root FS if we haven't done that yet
     let mut starter = PagedChildStarter::default();

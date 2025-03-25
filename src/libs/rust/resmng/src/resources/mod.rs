@@ -18,6 +18,7 @@ pub mod memory;
 pub mod mods;
 pub mod sems;
 pub mod services;
+pub mod shmem;
 pub mod tiles;
 
 use gates::GateManager;
@@ -25,12 +26,14 @@ use memory::MemoryManager;
 use mods::ModManager;
 use sems::SemManager;
 use services::ServiceManager;
+use shmem::SharedMemManager;
 use tiles::TileManager;
 
 #[derive(Default)]
 pub struct Resources {
     mem: MemoryManager,
     gates: GateManager,
+    shmems: SharedMemManager,
     services: ServiceManager,
     sems: SemManager,
     tiles: TileManager,
@@ -52,6 +55,14 @@ impl Resources {
 
     pub fn gates_mut(&mut self) -> &mut GateManager {
         &mut self.gates
+    }
+
+    pub fn shared_mems(&self) -> &SharedMemManager {
+        &self.shmems
+    }
+
+    pub fn shared_mems_mut(&mut self) -> &mut SharedMemManager {
+        &mut self.shmems
     }
 
     pub fn services(&self) -> &ServiceManager {

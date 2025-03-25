@@ -137,6 +137,8 @@ impl Requests {
 
             Ok(opcodes::ResMng::UseMod) => self.use_mod(childs, res, &mut is, id),
 
+            Ok(opcodes::ResMng::UseShMem) => self.use_shmem(childs, res, &mut is, id),
+
             Ok(opcodes::ResMng::GetSerial) => self.get_serial(childs, res, &mut is, id),
 
             Ok(opcodes::ResMng::GetInfo) => self.get_info(childs, res, &mut is, id),
@@ -362,6 +364,19 @@ impl Requests {
 
         let child = childs.child_by_id_mut(id).unwrap();
         child.use_mod(res, &req.name, req.dst)
+    }
+
+    fn use_shmem(
+        &self,
+        childs: &mut ChildManager,
+        res: &mut Resources,
+        is: &mut GateIStream<'_>,
+        id: Id,
+    ) -> anyhow::Result<()> {
+        let req: resmng::UseReq = Self::unmarshall(is)?;
+
+        let child = childs.child_by_id_mut(id).unwrap();
+        child.use_shmem(res, &req.name, req.dst)
     }
 
     fn get_serial(

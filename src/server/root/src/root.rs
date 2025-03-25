@@ -277,12 +277,8 @@ fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_>) {
 #[cfg_attr(dylint_lib = "m3_lints", allow(unexpected_async))]
 pub fn main() -> Result<(), Error> {
     let (sub, mut res) = subsys::Subsystem::new().expect("Unable to read subsystem info");
-    let args = sub.parse_args();
-    for sem in &args.sems {
-        res.semaphores_mut()
-            .add_sem(sem.clone())
-            .expect("Unable to add semaphore");
-    }
+
+    let args = sub.parse_args(&mut res);
 
     let max_msg_size = 1 << 8;
     let buf_size = max_msg_size * args.max_clients;

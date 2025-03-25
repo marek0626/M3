@@ -373,6 +373,21 @@ pub struct SerialDesc {
     used: Cell<bool>,
 }
 
+#[derive(Default, Debug, Eq, PartialEq)]
+pub struct ShMemDesc {
+    name: String,
+}
+
+impl ShMemDesc {
+    pub fn new(name: String) -> Self {
+        Self { name }
+    }
+
+    pub fn name(&self) -> &String {
+        &self.name
+    }
+}
+
 #[derive(Default, Debug)]
 pub struct Domain {
     pub(crate) pseudo: bool,
@@ -382,23 +397,11 @@ pub struct Domain {
     pub(crate) initrd: Option<String>,
     pub(crate) dtb: Option<String>,
     pub(crate) apps: Vec<Rc<AppConfig>>,
+    pub(crate) shmems: Vec<ShMemDesc>,
     pub(crate) tee: bool,
 }
 
 impl Domain {
-    pub fn new(pseudo: bool, tile: TileType, apps: Vec<Rc<AppConfig>>) -> Self {
-        Self {
-            pseudo,
-            tile,
-            mux: None,
-            mux_mem: None,
-            initrd: None,
-            dtb: None,
-            apps,
-            tee: false,
-        }
-    }
-
     pub fn pseudo(&self) -> bool {
         self.pseudo
     }
@@ -409,6 +412,10 @@ impl Domain {
 
     pub fn apps(&self) -> &Vec<Rc<AppConfig>> {
         &self.apps
+    }
+
+    pub fn shmems(&self) -> &Vec<ShMemDesc> {
+        &self.shmems
     }
 
     pub fn mux(&self) -> Option<&str> {
@@ -454,6 +461,7 @@ pub struct AppConfig {
     pub(crate) rgates: Vec<RGateDesc>,
     pub(crate) sgates: Vec<SGateDesc>,
     pub(crate) sems: Vec<SemDesc>,
+    pub(crate) shmems: Vec<ShMemDesc>,
     pub(crate) tiles: Vec<TileDesc>,
     pub(crate) attestation_id: u32,
 }
@@ -558,6 +566,10 @@ impl AppConfig {
 
     pub fn get_mod(&self, lname: &str) -> Option<&ModDesc> {
         self.mods.iter().find(|r| r.name().local() == lname)
+    }
+
+    pub fn get_shmem(&self, lname: &str) -> Option<&ShMemDesc> {
+        self.shmems.iter().find(|s| s.name() == lname)
     }
 
     pub fn get_rgate(&self, lname: &str) -> Option<&RGateDesc> {
@@ -688,6 +700,9 @@ impl AppConfig {
         for s in &self.sems {
             writeln!(f, "{:0w$}Semaphore[{:?}],", "", s.name, w = layer + 2)?;
         }
+        for s in &self.shmems {
+            writeln!(f, "{:0w$}ShMem[name={}],", "", s.name, w = layer + 2)?;
+        }
         for s in &self.services {
             writeln!(f, "{:0w$}Service[{:?}],", "", s.name, w = layer + 2)?;
         }
@@ -777,6 +792,15 @@ impl AppConfig {
                     w = layer + 2
                 )?;
                 sub_layer += 2;
+            }
+            for shmem in &d.shmems {
+                writeln!(
+                    f,
+                    "{:0w$}ShMem[name={}],",
+                    "",
+                    shmem.name,
+                    w = sub_layer + 2
+                )?;
             }
             for a in &d.apps {
                 a.print_rec(f, sub_layer + 2)?;

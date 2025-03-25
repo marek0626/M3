@@ -228,6 +228,7 @@ fn parse_app(p: &mut ConfigParser, start: usize) -> Option<config::AppConfig> {
                 "rgate" => app.rgates.push(parse_rgate(p)?),
                 "sgate" => app.sgates.push(parse_sgate(p)?),
                 "sem" => app.sems.push(parse_sem(p)?),
+                "shmem" => app.shmems.push(parse_shmem(p)?),
                 "serial" => app.serial = Some(config::SerialDesc::default()),
                 _ => return None,
             }
@@ -328,16 +329,44 @@ fn parse_domain(p: &mut ConfigParser) -> Option<config::Domain> {
 
     let mut app_start = p.pos;
     while let Some(tag) = p.parse_tag_name()? {
-        if tag != "app" {
-            return None;
+        match tag.as_str() {
+            "app" => {
+                dom.apps.push(Rc::new(parse_app(p, app_start)?));
+            },
+            "shmem" => {
+                dom.shmems.push(parse_shmem(p)?);
+                p.consume('/')?;
+                p.consume('>')?;
+            },
+            _ => return None,
         }
 
-        dom.apps.push(Rc::new(parse_app(p, app_start)?));
         app_start = p.pos;
     }
 
     parse_close_tag(p, "dom")?;
     Some(dom)
+}
+
+fn parse_shmem(p: &mut ConfigParser) -> Option<config::ShMemDesc> {
+    let mut name = String::new();
+
+    loop {
+        match p.parse_arg()? {
+            None => break,
+            Some((n, v)) => match n.as_ref() {
+                "name" => name.clone_from(&v),
+                _ => return None,
+            },
+        }
+    }
+
+    if name.is_empty() {
+        None
+    }
+    else {
+        Some(config::ShMemDesc::new(name))
+    }
 }
 
 fn parse_mount(p: &mut ConfigParser) -> Option<config::MountDesc> {
