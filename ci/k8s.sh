@@ -6,7 +6,7 @@ ns="os"
 set -e
 
 create_cache_stor() {
-    sh "$root/config/storage.sh" m3-ci-cache 500Gi | kubectl apply -f -
+    sh "$root/config/storage.sh" m3-ci-cache 1000Gi | kubectl apply -f -
 }
 
 create_results_stor() {
