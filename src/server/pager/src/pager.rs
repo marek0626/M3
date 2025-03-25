@@ -179,7 +179,6 @@ impl subsys::ChildStarter for PagedChildStarter {
                 child.tee(),
                 child.our_tile().tile_obj().clone(),
                 child.mem().pool().clone(),
-                res,
             );
 
             // if we don't run the evidence service, nobody can ask for the hashes and therefore we

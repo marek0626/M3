@@ -28,7 +28,7 @@ use m3::util::math;
 use m3::vec;
 use m3::vec::Vec;
 use m3::vfs::{BufReader, File, FileRef};
-use resmng::resources::{memory, Resources};
+use resmng::resources::memory;
 
 use crate::AddrSpace;
 
@@ -40,7 +40,6 @@ pub(crate) struct ChildMapper<'a> {
     tee: bool,
     tile: Rc<Tile>,
     mem_pool: Rc<RefCell<memory::MemPool>>,
-    res: &'a mut Resources,
     allocs: Vec<memory::Allocation>,
     buf: Vec<u8>,
 }
@@ -53,7 +52,6 @@ impl<'a> ChildMapper<'a> {
         tee: bool,
         tile: Rc<Tile>,
         mem_pool: Rc<RefCell<memory::MemPool>>,
-        res: &'a mut Resources,
     ) -> Self {
         ChildMapper {
             aspace,
@@ -63,7 +61,6 @@ impl<'a> ChildMapper<'a> {
             tee,
             tile,
             mem_pool,
-            res,
             allocs: Vec::new(),
             buf: vec![0u8; 4096],
         }
@@ -177,7 +174,7 @@ impl Mapper for ChildMapper<'_> {
         if self.tee {
             self.mem_pool
                 .borrow_mut()
-                .make_exclusive(self.res, &self.tile)
+                .make_exclusive_for(&self.tile)
                 .map_err(|e| e.downcast::<Error>().unwrap())?;
 
             self.tile.lock()?;

@@ -32,19 +32,25 @@ use m3::util::math;
 use crate::rerrno;
 use crate::rerror;
 
-use super::Resources;
-
 pub struct MemMod {
     mcap: MemCap,
+    tile: Option<Rc<Tile>>,
     addr: GlobAddr,
     size: GlobOff,
     reserved: bool,
 }
 
 impl MemMod {
-    pub fn new(mcap: MemCap, addr: GlobAddr, size: GlobOff, reserved: bool) -> Self {
+    pub fn new(
+        mcap: MemCap,
+        tile: Option<Rc<Tile>>,
+        addr: GlobAddr,
+        size: GlobOff,
+        reserved: bool,
+    ) -> Self {
         MemMod {
             mcap,
+            tile,
             addr,
             size,
             reserved,
@@ -145,7 +151,7 @@ impl MemoryManager {
     pub fn alloc_pool(&mut self, mut size: GlobOff, exclusive: bool) -> anyhow::Result<MemPool> {
         assert!(!exclusive || size.is_power_of_two());
 
-        let mut res = MemPool::new(exclusive);
+        let mut res = MemPool::default();
         size = math::round_up(size, cfg::PAGE_SIZE as GlobOff);
 
         for (m, map) in &mut self.mods {
@@ -155,17 +161,25 @@ impl MemoryManager {
 
             let align = if exclusive { size } else { 1 };
             if let Some(addr) = map.allocate(size, align) {
-                let sl = MemSlice::new(m.clone(), addr - m.addr().offset(), size, Perm::RWX);
-                res.add(sl)?;
+                // derive a new memory cap now for exactly that slice so that we can simply make that
+                // exclusive later without needing to change it.
+                let mut sl = MemSlice::new(m.clone(), addr - m.addr().offset(), size, Perm::RWX);
+                if exclusive {
+                    sl = sl.into_exclusive()?;
+                }
+                res.add(sl);
                 return Ok(res);
             }
 
             if let Some(max_cont) = map.largest_contiguous() {
                 let align = if exclusive { max_cont } else { 1 };
                 if let Some(addr) = map.allocate(max_cont, align) {
-                    let sl =
+                    let mut sl =
                         MemSlice::new(m.clone(), addr - m.addr().offset(), max_cont, Perm::RWX);
-                    res.add(sl)?;
+                    if exclusive {
+                        sl = sl.into_exclusive()?;
+                    }
+                    res.add(sl);
                     size -= max_cont;
                 }
             }
@@ -199,6 +213,33 @@ impl MemSlice {
         }
     }
 
+    pub fn into_exclusive(self) -> anyhow::Result<Self> {
+        let mem = self.derive()?;
+        Ok(MemSlice::new(
+            Rc::new(MemMod::new(
+                mem,
+                self.mem.tile.clone(),
+                self.addr(),
+                self.capacity(),
+                self.in_reserved_mem(),
+            )),
+            0,
+            self.capacity(),
+            Perm::RW,
+        ))
+    }
+
+    pub fn make_exclusive_for(&mut self, user_tile: &Tile, lock: bool) -> anyhow::Result<()> {
+        // the slices have to be exclusive (see into_exclusive)
+        assert_eq!(self.offset, 0);
+        assert_eq!(self.mem.size, self.size);
+
+        self.mem
+            .mcap
+            .make_exclusive(self.mem.tile.as_ref().unwrap(), user_tile, lock)
+            .map_err(|e| rerror(e).context("make MemGate exclusive"))
+    }
+
     pub fn in_reserved_mem(&self) -> bool {
         self.mem.reserved
     }
@@ -230,6 +271,10 @@ impl MemSlice {
 
     pub fn addr(&self) -> GlobAddr {
         self.mem.addr + self.offset
+    }
+
+    pub fn capability(&self) -> &MemCap {
+        &self.mem.mcap
     }
 
     pub fn sel(&self) -> Selector {
@@ -309,19 +354,12 @@ impl fmt::Debug for Allocation {
     }
 }
 
+#[derive(Default)]
 pub struct MemPool {
-    exclusive: bool,
     slices: Vec<MemSlice>,
 }
 
 impl MemPool {
-    pub fn new(exclusive: bool) -> Self {
-        Self {
-            exclusive,
-            slices: Vec::new(),
-        }
-    }
-
     pub fn slices(&self) -> &Vec<MemSlice> {
         &self.slices
     }
@@ -338,45 +376,13 @@ impl MemPool {
         self.slices[idx].mem.mcap.sel()
     }
 
-    fn add(&mut self, s: MemSlice) -> anyhow::Result<()> {
-        let slice = if self.exclusive {
-            // derive a new memory cap now for exactly that slice so that we can simply make that
-            // exclusive later without needing to change it.
-            let mem = s.derive()?;
-            MemSlice::new(
-                Rc::new(MemMod::new(
-                    mem,
-                    s.addr(),
-                    s.capacity(),
-                    s.in_reserved_mem(),
-                )),
-                0,
-                s.capacity(),
-                Perm::RW,
-            )
-        }
-        else {
-            s
-        };
-        self.slices.push(slice);
-        Ok(())
+    fn add(&mut self, s: MemSlice) {
+        self.slices.push(s);
     }
 
-    pub fn make_exclusive(&mut self, res: &Resources, user_tile: &Tile) -> anyhow::Result<()> {
-        assert!(self.exclusive);
-        for s in &self.slices {
-            let mem_tile = res.tiles().find_by_id(
-                s.mem
-                    .mcap
-                    .region()
-                    .map_err(|e| rerror(e).context("exclusive MemGate region"))?
-                    .0
-                    .tile(),
-            )?;
-            s.mem
-                .mcap
-                .make_exclusive(&mem_tile, user_tile, true)
-                .map_err(|e| rerror(e).context("make MemGate exclusive"))?;
+    pub fn make_exclusive_for(&mut self, user_tile: &Tile) -> anyhow::Result<()> {
+        for s in &mut self.slices {
+            s.make_exclusive_for(user_tile, true)?;
         }
         Ok(())
     }

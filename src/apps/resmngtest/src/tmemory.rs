@@ -36,6 +36,7 @@ fn mng_basics(t: &mut dyn WvTester) {
     let mut mng = MemoryManager::default();
     mng.add(Rc::new(MemMod::new(
         MemCap::new_bind(1),
+        None,
         GlobAddr::new_with(TileId::new(0, 0), 0x1000),
         0x4000,
         false,
@@ -83,12 +84,14 @@ fn mng_multi(t: &mut dyn WvTester) {
     let mut mng = MemoryManager::default();
     mng.add(Rc::new(MemMod::new(
         MemCap::new_bind(1),
+        None,
         GlobAddr::new_with(TileId::new(1, 4), 0x10000),
         0x40000,
         false,
     )));
     mng.add(Rc::new(MemMod::new(
         MemCap::new_bind(2),
+        None,
         GlobAddr::new_with(TileId::new(1, 5), 0x0),
         0x100000,
         false,
@@ -139,12 +142,14 @@ fn mng_pool(t: &mut dyn WvTester) {
     let mut mng = MemoryManager::default();
     mng.add(Rc::new(MemMod::new(
         MemCap::new_bind(1),
+        None,
         GlobAddr::new_with(TileId::new(1, 4), 0x10000),
         0x40000,
         false,
     )));
     mng.add(Rc::new(MemMod::new(
         MemCap::new_bind(2),
+        None,
         GlobAddr::new_with(TileId::new(1, 5), 0x0),
         0x100000,
         false,

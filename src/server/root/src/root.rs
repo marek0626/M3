@@ -162,7 +162,6 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
                 child.tee(),
                 child.our_tile().tile_obj().clone(),
                 child.mem().pool().clone(),
-                res,
             )?;
             let bmod_gate = bmod
                 .0
