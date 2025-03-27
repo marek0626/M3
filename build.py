@@ -284,10 +284,15 @@ class M3Env(Env):
 
     def m3_cargo(self, gen, out, featdeps=[]):
         env = self.clone()
+        # QoL extensions for riscv32 to speed up simulation on gem5. also planned for the future hardware platforms.
+        if env['TGT'] in 'gem5' and env['ISA'] in 'riscv32':
+            extensions = "-extensions"
+        else:
+            extensions = ""
         # better specify the path to the json file, because Rust seems to be picky about the triple
         # name in some cases. For example, it doesn't like riscv32-linux-m3-muslsf for some reason.
         # if we specify a path, Rust doesn't seem to care.
-        tgtspec = os.path.abspath('src/toolchain/rust/' + env['TRIPLE'] + '.json')
+        tgtspec = os.path.abspath('src/toolchain/rust/' + env['TRIPLE'] + extensions + '.json')
         env['CRGFLAGS'] += ['--target', tgtspec]
         env['CRGFLAGS'] += ['-Z build-std=core,alloc,std,panic_abort']
         for f in rustfeatures:
@@ -309,7 +314,12 @@ class M3Env(Env):
             # specify crates explicitly, because some crates are only supported by some targets
             env['CRGFLAGS'] += ['-p', crate_name]
 
-        tgtspec = os.path.abspath('src/toolchain/rust/' + env['TRIPLE'] + '.json')
+        # QoL extensions for riscv32 to speed up simulation on gem5. also planned for the future hardware platforms.
+        if env['TGT'] in 'gem5' and env['ISA'] in 'riscv32':
+            extensions = "-extensions"
+        else:
+            extensions = ""
+        tgtspec = os.path.abspath('src/toolchain/rust/' + env['TRIPLE'] + extensions + '.json')
         env['CRGFLAGS'] += ['--target', tgtspec]
         env['CRGFLAGS'] += ['-Z build-std=core,alloc,std,panic_abort']
         for f in rustfeatures:

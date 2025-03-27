@@ -13,14 +13,21 @@
  * General Public License version 2 for more details.
  */
 
+use base::cell::StaticCell;
 use base::cpu::{CPUOps, CPU};
 use base::machine;
 use base::mem::VirtAddr;
 use base::tcu;
 
+static HAS_VIRT_MEM: StaticCell<bool> = StaticCell::new(false);
+
+pub(crate) fn init(has_virtmem: bool) {
+    HAS_VIRT_MEM.set(has_virtmem);
+}
+
 pub fn flush_cache() {
     // nothing to do if we don't have virtual memory
-    if !crate::pex_env().tile_desc.has_virtmem() {
+    if !HAS_VIRT_MEM.get() {
         return;
     }
 

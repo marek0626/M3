@@ -13,6 +13,7 @@ dirs = [
     'thread',
     'vtermcli',
     'pipecli',
+    'mux',
 ]
 
 

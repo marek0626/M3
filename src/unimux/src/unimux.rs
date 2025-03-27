@@ -14,6 +14,7 @@
  */
 
 #![no_std]
+#![allow(warnings)]
 
 #[allow(unused_extern_crates)]
 extern crate heap;
@@ -21,17 +22,14 @@ extern crate heap;
 mod activities;
 mod arch;
 mod cureq;
-mod irqs;
-mod quota;
 mod sidecalls;
 mod timer;
 mod tmcalls;
-mod vma;
 
 use base::cell::{Ref, StaticCell, StaticRefCell};
 use base::cfg;
 use base::env;
-use base::errors::Code;
+use base::errors::{Code, Error};
 use base::io::{self, LogFlags};
 use base::kif;
 use base::libc;
@@ -40,6 +38,7 @@ use base::machine;
 use base::mem;
 use base::serialize::{Deserialize, Serialize};
 use base::tcu;
+use mux::{helper, sendqueue};
 
 use core::ptr;
 
@@ -48,9 +47,11 @@ use isr::{ISRArch, ISR};
 extern "C" {
     fn __m3_init_libc(argc: i32, argv: *const *const u8, envp: *const *const u8, tls: bool);
     fn __m3_heap_set_area(begin: usize, end: usize);
+    fn sleep();
+    fn sleep_once();
 }
 
-const HEAP_SIZE: usize = 512 * 1024;
+const HEAP_SIZE: usize = 128 * 1024;
 
 // the heap area needs to be page-byte aligned
 #[repr(align(4096))]
@@ -90,37 +91,45 @@ pub extern "C" fn exit(_code: i32) {
     machine::shutdown();
 }
 
-static NEED_SCHED: StaticCell<Option<activities::ScheduleAction>> = StaticCell::new(None);
-static NEED_TIMER: StaticCell<bool> = StaticCell::new(false);
+static NEED_TIMER: StaticCell<bool> = StaticCell::new(true);
+static NEED_SWITCH: StaticCell<bool> = StaticCell::new(false);
 
 #[inline]
 fn leave(state: &mut arch::State) -> *mut libc::c_void {
     sidecalls::check();
 
-    let addr = if let Some(action) = NEED_SCHED.replace(None) {
-        activities::schedule(action).as_mut_ptr()
+    if NEED_TIMER.replace(false) {
+        timer::reprogram();
+    }
+
+    if (activities::user_is_some() && activities::user().is_blocked()) {
+        idle();
+    }
+
+    // NMG After this point, using the logger is dangerous because user code
+    // could get pre-empted in the middle and result in a double-borrow
+    // situation.
+    let state = if NEED_SWITCH.replace(false) {
+        let mut user = activities::user();
+        let old = tcu::TCU::xchg_activity(user.activity_reg()).unwrap();
+        user.user_state_addr().as_mut_ptr()
+    }
+    else if activities::user_is_some() && activities::user().is_ready() {
+        crate::switch_user().as_mut_ptr()
     }
     else {
         state as *mut _ as *mut libc::c_void
     };
 
-    if NEED_TIMER.replace(false) {
-        timer::reprogram();
-    }
-
-    addr
-}
-
-pub fn reg_scheduling(action: activities::ScheduleAction) {
-    NEED_SCHED.set(Some(action));
-}
-
-pub fn scheduling_pending() -> bool {
-    NEED_SCHED.get().is_some()
+    state
 }
 
 pub fn reg_timer_reprogram() {
     NEED_TIMER.set(true);
+}
+
+fn halt() {
+    loop {}
 }
 
 pub extern "C" fn unexpected_irq(state: &mut arch::State) -> *mut libc::c_void {
@@ -129,7 +138,7 @@ pub extern "C" fn unexpected_irq(state: &mut arch::State) -> *mut libc::c_void {
         "Unexpected IRQ with user state:\n{:?}",
         state
     );
-    activities::remove_cur(Code::Unspecified);
+    halt();
 
     leave(state)
 }
@@ -139,31 +148,19 @@ pub extern "C" fn unexpected_irq(state: &mut arch::State) -> *mut libc::c_void {
     target_arch = "riscv32",
     target_arch = "x86_64"
 ))]
+
 pub extern "C" fn fpu_ex(state: &mut arch::State) -> *mut libc::c_void {
-    arch::handle_fpu_ex(state);
-    leave(state)
-}
-
-pub extern "C" fn mmu_pf(state: &mut arch::State) -> *mut libc::c_void {
-    let (virt, perm) = ISR::get_pf_info(state);
-    if vma::handle_pf(state, virt, perm).is_err() {
-        activities::remove_cur(Code::Unspecified);
-    }
-
-    leave(state)
-}
-
-pub extern "C" fn tmcall(state: &mut arch::State) -> *mut libc::c_void {
-    tmcalls::handle_call(state);
-
-    leave(state)
+    panic!("Unexpected FPU exception!");
 }
 
 pub extern "C" fn ext_irq(state: &mut arch::State) -> *mut libc::c_void {
     match ISR::fetch_irq() {
         isr::IRQSource::TCU(tcu::IRQ::Timer) => {
-            activities::cur().consume_time();
+            let mut user = activities::user();
+            ISR::set_entry_sp(user.user_state_addr() + mem::size_of::<arch::State>());
+            user.block(false);
             timer::trigger();
+            NEED_SWITCH.set(true);
         },
 
         isr::IRQSource::TCU(tcu::IRQ::CUReq) => {
@@ -174,9 +171,73 @@ pub extern "C" fn ext_irq(state: &mut arch::State) -> *mut libc::c_void {
         },
 
         isr::IRQSource::Ext(id) => {
-            irqs::signal(id);
+            panic!("Unexpected external IRQ: {}!", id);
         },
+    };
+
+    leave(state)
+}
+
+extern "Rust" {
+    fn env_run() -> !;
+}
+
+pub fn switch_user() -> mem::VirtAddr {
+    // NMG This may be a double-init of libc. We'll just have to see what happens here.
+    // When we switch into the target we need to switch our activity ID, too, so that our EPs work as expected.
+    let old = tcu::TCU::xchg_activity(activities::user().activity_reg()).unwrap();
+    let mut user = activities::user();
+    crate::arch::init_fpu();
+    activities::set_cur(user.activity_reg());
+    ISR::set_entry_sp(user.user_state_addr() + mem::size_of::<arch::State>());
+    log!(
+        LogFlags::Debug,
+        "switching to user and starting up: reg {} user_state_addr {}",
+        user.activity_reg(),
+        user.user_state_addr()
+    );
+    user.started();
+    user.user_state_addr()
+}
+
+fn wait_for_init() -> Result<(), Error> {
+    // This first time we know the activity register always contanins 'our'
+    let old = tcu::TCU::xchg_activity(activities::idle().activity_reg()).unwrap();
+    activities::our().set_activity_reg(old);
+    activities::set_cur(activities::idle().activity_reg());
+    loop {
+        sidecalls::check();
+        if activities::user_is_some() && activities::user().is_ready() {
+            break;
+        }
+        unsafe {
+            sleep_once();
+        }
     }
+    Ok(())
+}
+
+fn idle() {
+    activities::set_cur(activities::idle().activity_reg());
+    let old = tcu::TCU::xchg_activity(activities::idle().activity_reg()).unwrap();
+    // NMG Have to switch the stack so we don't clobber stuff on nested IRQs (?)
+    ISR::set_entry_sp(activities::idle().user_state_addr() + mem::size_of::<arch::State>());
+    activities::get_mut(old).unwrap().set_activity_reg(old);
+    sidecalls::check();
+    ISR::enable_irqs();
+    loop {
+        #[cfg(feature = "gem5")]
+        unsafe {
+            {
+                sleep_once();
+            }
+        }
+    }
+}
+
+pub extern "C" fn tmcall(state: &mut arch::State) -> *mut libc::c_void {
+    log!(LogFlags::MuxCalls, "received irq for tmcall");
+    tmcalls::handle_call(state);
 
     leave(state)
 }
@@ -200,19 +261,17 @@ pub extern "C" fn init() -> usize {
         );
     }
 
-    mux::init(crate::pex_env());
     io::init(
         tcu::TileId::new_from_raw(pex_env().tile_id as u16),
-        "tilemux",
+        "unimux",
     );
-    activities::init();
 
-    // switch to idle; we don't want to keep the reference here, because activities::schedule()
-    // below will also take a reference to idle.
-    activities::idle().start();
+    mux::init(crate::pex_env());
+    activities::init();
 
     let state_top = {
         let mut idle = activities::idle();
+        idle.start();
         let state = idle.user_state();
         ISR::init(state);
         state as *const _ as usize + mem::size_of::<arch::State>()
@@ -222,8 +281,6 @@ pub extern "C" fn init() -> usize {
     isr::reg_all(unexpected_irq);
     // Handle the mux calls, e.g. wait, exit, yield
     ISR::reg_tm_calls(tmcall);
-    // Handle page faults
-    ISR::reg_page_faults(mmu_pf);
     // Handle illegal intructions
     #[cfg(any(
         target_arch = "riscv64",
@@ -239,28 +296,18 @@ pub extern "C" fn init() -> usize {
     ISR::reg_external(ext_irq);
 
     sidecalls::basic_handlers_init();
-    sidecalls::tilemux_handlers_init();
-
-    if TM_ENV.borrow().tile_desc.has_virtmem() {
-        // Now that we're running with virtual memory enabled and can handle interrupts, we want to
-        // know about PMP failures. Without virtual memory, the core might send speculative memory
-        // accesses to physical memory and PMP is the first layer that can check their validity.
-        // Therefore, PMP shouldn't report failures due to speculative accesses via CU requests.
-        // With virtual memory, the core checks the validity of the accesses via paging and of
-        // course still knows that these are speculative and can thus simply be ignored. The TCU
-        // performing PMP however does not have this information.
-        tcu::TCU::enable_pmp_cureqs();
-    }
 
     // store platform already in app env, because we need it for logging
     app_env().boot.platform = pex_env().platform;
 
-    // now that interrupts have been set up, we can schedule and thereby switch to idle in the TCU
-    activities::schedule(activities::ScheduleAction::Yield);
+    // NMG After this returns we have switched to the user task mid-interrupt,
+    // and when we return we should be working on the new user stack.
+    wait_for_init();
 
-    // in case messages arrived before we scheduled, handle them now. if any arrives after we
-    // switched to idle, we'll get an interrupt later
-    sidecalls::check();
+    ISR::enable_irqs();
+    unsafe {
+        env_run();
+    }
 
     state_top
 }

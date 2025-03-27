@@ -41,6 +41,7 @@ members = [
     "apps/spammer",
     "apps/teetest",
     "kernel",
+    "unimux",
     "server/crypto/hashmux",
     "server/crypto/rots",
     "server/disk",

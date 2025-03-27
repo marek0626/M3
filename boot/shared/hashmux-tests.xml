@@ -13,7 +13,7 @@
                 <serv name="m3fs"/>
                 <mod name="fs"/>
             </app>
-            <dom tile="core+kecacc">
+            <dom tile="core+kecacc" unimux="1" mux="rots">
                 <app args="rots" daemon="1">
                     <serv name="rot"/>
                 </app>

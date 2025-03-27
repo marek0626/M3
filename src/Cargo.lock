@@ -455,6 +455,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mux"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "heap",
+]
+
+[[package]]
 name = "net"
 version = "0.1.0"
 dependencies = [
@@ -657,11 +665,13 @@ dependencies = [
 name = "rots"
 version = "0.1.0"
 dependencies = [
+ "base",
  "heap",
  "kecacc",
  "lang",
  "m3core",
  "rot",
+ "unimux",
 ]
 
 [[package]]
@@ -961,6 +971,19 @@ name = "unicode-ident"
 version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
+
+[[package]]
+name = "unimux"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "heap",
+ "isr",
+ "mux",
+ "num-traits",
+ "num_enum",
+ "paging",
+]
 
 [[package]]
 name = "vamic"

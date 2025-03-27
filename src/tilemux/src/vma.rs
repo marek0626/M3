@@ -24,7 +24,7 @@ use base::mem::{MsgBuf, VirtAddr};
 use base::tcu;
 
 use crate::activities;
-use crate::helper;
+use mux::helper;
 
 use isr::StateArch;
 

@@ -40,5 +40,5 @@ pub use self::evidence::EvidenceSession;
 pub use self::network::Network;
 pub use self::pager::{MapFlags, Pager};
 pub use self::resmng::{ResMng, ResMngChild};
-pub use self::rot::{HashInput, HashOutput, RoTSession};
+pub use self::rot::{Features, HashInput, HashOutput, RoTSession};
 pub use self::session::ClientSession;

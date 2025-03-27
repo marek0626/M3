@@ -5,7 +5,7 @@
     <kernel args="kernel"/>
     <dom>
         <app args="root sem=net-tcp">
-            <dom tile="core+rot">
+            <dom tile="core+kecacc+rot" mux="rots" unimux="1">
                 <app args="rots" daemon="1">
                     <serv name="rot"/>
                     <mod name="rot-certificate.json" perm="r"/>

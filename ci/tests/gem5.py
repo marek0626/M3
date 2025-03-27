@@ -88,7 +88,7 @@ class Test:
         if self.name in rots_tests and self.isa == "x86_64":
             return False
         # additionally, rots-raser *only* works on riscv64
-        if self.name == "rots-raser" and self.isa == "riscv64":
+        if "raser" in self.name and self.isa != "riscv64":
             return False
         # rust-sndrcv and vmtest don't run with SPM
         if (self.name == "rust-sndrcv" or self.name == "vmtest") and self.ty == "a":

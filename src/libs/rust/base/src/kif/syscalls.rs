@@ -325,6 +325,7 @@ pub enum MuxType {
     TileMux,
     Linux,
     Accel,
+    Unimux,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

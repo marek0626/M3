@@ -18,38 +18,18 @@ use base::errors::{Code, Error};
 use base::io::LogFlags;
 use base::kif;
 use base::log;
-use base::mem::{GlobAddr, MsgBuf, VirtAddr, VirtAddrRaw};
-use base::serialize::{Deserialize, M3Deserializer};
+use base::mem::{GlobAddr, MsgBuf};
+use base::serialize::M3Deserializer;
 use base::tcu;
 use base::time::TimeDuration;
 
+use mux::sidecalls::*;
+
 use crate::activities;
-use crate::helper;
 use crate::quota;
-use crate::sendqueue;
+use mux::{helper, sendqueue};
 
-fn side_rbuf_addr() -> VirtAddr {
-    crate::pex_env().tile_desc.rbuf_mux_space().0 + cfg::KPEX_RBUF_SIZE as VirtAddrRaw
-}
-
-fn get_request<'de, R: Deserialize<'de>>(msg: &'static tcu::Message) -> Result<R, Error> {
-    let mut de = M3Deserializer::new(msg.as_words());
-    de.skip(1);
-    de.pop().map_err(|e| e.into())
-}
-
-fn reply_msg(msg: &'static tcu::Message, reply: &MsgBuf) {
-    let msg_off = tcu::TCU::msg_to_offset(side_rbuf_addr(), msg);
-    tcu::TCU::reply(tcu::TMSIDE_REP, reply, msg_off).unwrap();
-}
-
-fn info(_msg: &'static tcu::Message) -> Result<kif::syscalls::MuxType, Error> {
-    log!(LogFlags::MuxSideCalls, "sidecall::info()",);
-
-    Ok(kif::syscalls::MuxType::TileMux)
-}
-
-fn activity_init(msg: &'static tcu::Message) -> Result<(), Error> {
+fn activity_init(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     let r: kif::tilemux::ActInit = get_request(msg)?;
 
     log!(
@@ -61,10 +41,10 @@ fn activity_init(msg: &'static tcu::Message) -> Result<(), Error> {
         r.eps_start
     );
 
-    activities::add(r.act_id, r.time_quota, r.pt_quota, r.eps_start)
+    activities::add(r.act_id, r.time_quota, r.pt_quota, r.eps_start).map(|_| (0, 0))
 }
 
-fn activity_ctrl(msg: &'static tcu::Message) -> Result<(), Error> {
+fn activity_ctrl(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     let r: kif::tilemux::ActivityCtrl = get_request(msg)?;
 
     log!(
@@ -85,7 +65,7 @@ fn activity_ctrl(msg: &'static tcu::Message) -> Result<(), Error> {
             act.unblock(activities::Event::Start);
             // now switch back
             cur.switch_to();
-            Ok(())
+            Ok((0, 0))
         },
 
         _ => {
@@ -96,12 +76,12 @@ fn activity_ctrl(msg: &'static tcu::Message) -> Result<(), Error> {
                 },
                 _ => activities::remove(r.act_id, Code::Success, false, true),
             }
-            Ok(())
+            Ok((0, 0))
         },
     }
 }
 
-fn map(msg: &'static tcu::Message) -> Result<(), Error> {
+fn map(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     let r: kif::tilemux::Map = get_request(msg)?;
 
     log!(
@@ -133,14 +113,14 @@ fn map(msg: &'static tcu::Message) -> Result<(), Error> {
             r.perm | kif::PageFlags::U
         };
 
-        act.map(r.virt, r.global, r.pages, perm)
+        act.map(r.virt, r.global, r.pages, perm).map(|_| (0, 0))
     }
     else {
-        Ok(())
+        Ok((0, 0))
     }
 }
 
-fn translate(msg: &'static tcu::Message) -> Result<kif::PTE, Error> {
+fn translate(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     let r: kif::tilemux::Translate = get_request(msg)?;
 
     log!(
@@ -158,11 +138,11 @@ fn translate(msg: &'static tcu::Message) -> Result<kif::PTE, Error> {
         Err(Error::new(Code::NoPerm))
     }
     else {
-        Ok(GlobAddr::new_from_phys(phys).unwrap().raw())
+        Ok((GlobAddr::new_from_phys(phys).unwrap().raw(), 0))
     }
 }
 
-fn rem_msgs(msg: &'static tcu::Message) -> Result<(), Error> {
+fn rem_msgs(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     let r: kif::tilemux::RemMsgs = get_request(msg)?;
 
     log!(
@@ -178,10 +158,10 @@ fn rem_msgs(msg: &'static tcu::Message) -> Result<(), Error> {
         act.rem_msgs(r.unread_mask.count_ones() as u16);
     }
 
-    Ok(())
+    Ok((0, 0))
 }
 
-fn ep_inval(msg: &'static tcu::Message) -> Result<(), Error> {
+fn ep_inval(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     let r: kif::tilemux::EpInval = get_request(msg)?;
 
     log!(
@@ -196,43 +176,10 @@ fn ep_inval(msg: &'static tcu::Message) -> Result<(), Error> {
         act.unblock(activities::Event::EpInvalid);
     }
 
-    Ok(())
+    Ok((0, 0))
 }
 
-fn derive_quota(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
-    let r: kif::tilemux::DeriveQuota = get_request(msg)?;
-
-    log!(
-        LogFlags::MuxSideCalls,
-        "sidecall::derive_quota(ptime={}, ppts={}, time={:?}, pts={:?})",
-        r.parent_time,
-        r.parent_pts,
-        r.time,
-        r.pts
-    );
-
-    quota::derive(
-        r.parent_time,
-        r.parent_pts,
-        r.time.map(TimeDuration::from_nanos),
-        r.pts,
-    )
-}
-
-fn get_quota(msg: &'static tcu::Message) -> Result<(u64, u64, usize, usize), Error> {
-    let r: kif::tilemux::GetQuota = get_request(msg)?;
-
-    log!(
-        LogFlags::MuxSideCalls,
-        "sidecall::get_quota(time={}, pts={})",
-        r.time,
-        r.pts
-    );
-
-    quota::get(r.time, r.pts)
-}
-
-fn set_quota(msg: &'static tcu::Message) -> Result<(), Error> {
+fn set_quota(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     let r: kif::tilemux::SetQuota = get_request(msg)?;
 
     log!(
@@ -243,10 +190,10 @@ fn set_quota(msg: &'static tcu::Message) -> Result<(), Error> {
         r.pts
     );
 
-    quota::set(r.id, TimeDuration::from_nanos(r.time), r.pts)
+    quota::set(r.id, TimeDuration::from_nanos(r.time), r.pts).map(|_| (0, 0))
 }
 
-fn remove_quotas(msg: &'static tcu::Message) -> Result<(), Error> {
+fn remove_quotas(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     let r: kif::tilemux::RemoveQuotas = get_request(msg)?;
 
     log!(
@@ -256,10 +203,10 @@ fn remove_quotas(msg: &'static tcu::Message) -> Result<(), Error> {
         r.pts
     );
 
-    quota::remove(r.time, r.pts)
+    quota::remove(r.time, r.pts).map(|_| (0, 0))
 }
 
-fn reset_stats(_msg: &'static tcu::Message) -> Result<(), Error> {
+fn reset_stats(_msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     log!(LogFlags::MuxSideCalls, "sidecall::reset_stats()",);
 
     for id in 0..64 {
@@ -268,10 +215,10 @@ fn reset_stats(_msg: &'static tcu::Message) -> Result<(), Error> {
         }
     }
 
-    Ok(())
+    Ok((0, 0))
 }
 
-fn shutdown(msg: &'static tcu::Message) -> Result<(), Error> {
+fn shutdown(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     log!(LogFlags::MuxSideCalls, "sidecall::shutdown()",);
 
     base::machine::write_coverage(0);
@@ -296,51 +243,77 @@ fn shutdown(msg: &'static tcu::Message) -> Result<(), Error> {
     unreachable!();
 }
 
+fn info(_msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
+    log!(LogFlags::MuxSideCalls, "sidecall::info()",);
+    Ok((kif::syscalls::MuxType::TileMux.into(), 0))
+}
+
+fn derive_quota(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
+    let r: kif::tilemux::DeriveQuota = get_request(msg)?;
+
+    log!(
+        LogFlags::MuxSideCalls,
+        "sidecall::derive_quota(ptime={}, ppts={}, time={:?}, pts={:?})",
+        r.parent_time,
+        r.parent_pts,
+        r.time,
+        r.pts
+    );
+
+    quota::derive(
+        r.parent_time,
+        r.parent_pts,
+        r.time.map(TimeDuration::from_nanos),
+        r.pts,
+    )
+}
+
+fn get_quota(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
+    let r: kif::tilemux::GetQuota = get_request(msg)?;
+
+    log!(
+        LogFlags::MuxSideCalls,
+        "sidecall::get_quota(time={}, pts={})",
+        r.time,
+        r.pts
+    );
+
+    quota::get(r.time, r.pts).map(|(t_total, t_left, p_total, p_left)| {
+        (
+            (t_total << 32 | t_left),
+            ((p_total as u64) << 32 | (p_left as u64)),
+        )
+    })
+}
+
+// Sidecalls are messages from the kernel to do many kinds of things at the basic resource level, such as changing mappings, managing an activity, etc.
 fn handle_sidecall(msg: &'static tcu::Message) {
     let mut de = M3Deserializer::new(msg.as_words());
 
-    let mut val1 = 0;
-    let mut val2 = 0;
     let op: kif::tilemux::Sidecalls = de.pop().unwrap();
-    let res = match op {
-        kif::tilemux::Sidecalls::Info => info(msg).map(|t| {
-            val1 = t.into();
-        }),
-        kif::tilemux::Sidecalls::ActInit => activity_init(msg),
-        kif::tilemux::Sidecalls::ActCtrl => activity_ctrl(msg),
-        kif::tilemux::Sidecalls::Map => map(msg),
-        kif::tilemux::Sidecalls::Translate => translate(msg).map(|pte| val1 = pte),
-        kif::tilemux::Sidecalls::ReqEP => Err(Error::new(Code::NotSup)),
-        kif::tilemux::Sidecalls::RemMsgs => rem_msgs(msg),
-        kif::tilemux::Sidecalls::EPInval => ep_inval(msg),
-        kif::tilemux::Sidecalls::DeriveQuota => derive_quota(msg).map(|(time, pts)| {
-            val1 = time;
-            val2 = pts;
-        }),
-        kif::tilemux::Sidecalls::GetQuota => {
-            get_quota(msg).map(|(t_total, t_left, p_total, p_left)| {
-                val1 = t_total << 32 | t_left;
-                val2 = (p_total as u64) << 32 | (p_left as u64);
-            })
-        },
-        kif::tilemux::Sidecalls::SetQuota => set_quota(msg),
-        kif::tilemux::Sidecalls::RemoveQuotas => remove_quotas(msg),
-        kif::tilemux::Sidecalls::ResetStats => reset_stats(msg),
-        kif::tilemux::Sidecalls::Shutdown => shutdown(msg),
+    let res = if let Some(handler) = find_handler(op) {
+        handler(msg)
+    }
+    else {
+        Err(Error::new(Code::NotSup))
     };
 
     let mut reply_buf = MsgBuf::borrow_def();
-    base::build_vmsg!(
-        reply_buf,
-        match res {
-            Ok(_) => Code::Success,
-            Err(e) => {
-                log!(LogFlags::MuxSideCalls, "sidecall {:?} failed: {}", op, e);
-                e.code()
-            },
+    match res {
+        Ok(values) => {
+            base::build_vmsg!(reply_buf, Code::Success, kif::tilemux::Response {
+                val1: values.0,
+                val2: values.1
+            });
         },
-        kif::tilemux::Response { val1, val2 }
-    );
+        Err(e) => {
+            log!(LogFlags::MuxSideCalls, "sidecall {:?} failed: {}", op, e);
+            base::build_vmsg!(reply_buf, e.code(), kif::tilemux::Response {
+                val1: 0,
+                val2: 0
+            });
+        },
+    }
     reply_msg(msg, &reply_buf);
 }
 
@@ -373,6 +346,7 @@ fn handle_sidecalls(mut our: activities::ActivityRef<'_>) {
     }
 }
 
+// Called at the end of every interrupt handling routine to check if we've received a kernel message of any kind.
 #[inline(always)]
 pub fn check() {
     let our = activities::our();
@@ -381,4 +355,23 @@ pub fn check() {
     }
 
     handle_sidecalls(our);
+}
+
+pub fn basic_handlers_init() {
+    register_sidecall_handler(kif::tilemux::Sidecalls::ActInit, activity_init).ok();
+    register_sidecall_handler(kif::tilemux::Sidecalls::RemMsgs, rem_msgs).ok();
+    register_sidecall_handler(kif::tilemux::Sidecalls::EPInval, ep_inval).ok();
+    register_sidecall_handler(kif::tilemux::Sidecalls::Shutdown, shutdown).ok();
+    register_sidecall_handler(kif::tilemux::Sidecalls::Info, info).ok();
+}
+
+pub fn tilemux_handlers_init() {
+    register_sidecall_handler(kif::tilemux::Sidecalls::ActCtrl, activity_ctrl).ok();
+    register_sidecall_handler(kif::tilemux::Sidecalls::Map, map).ok();
+    register_sidecall_handler(kif::tilemux::Sidecalls::Translate, translate).ok();
+    register_sidecall_handler(kif::tilemux::Sidecalls::SetQuota, set_quota).ok();
+    register_sidecall_handler(kif::tilemux::Sidecalls::RemoveQuotas, remove_quotas).ok();
+    register_sidecall_handler(kif::tilemux::Sidecalls::ResetStats, reset_stats).ok();
+    register_sidecall_handler(kif::tilemux::Sidecalls::GetQuota, get_quota).ok();
+    register_sidecall_handler(kif::tilemux::Sidecalls::DeriveQuota, derive_quota).ok();
 }
