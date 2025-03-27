@@ -30,7 +30,7 @@ use m3::server::DEF_MAX_CLIENTS;
 use m3::tcu::{self, TileId};
 use m3::tiles::{Activity, ChildActivity, Tile, TileArgs};
 use m3::time::TimeDuration;
-use m3::util::math;
+use m3::util::{math, parse};
 use m3::{format, log};
 
 use crate::config::validator;
@@ -56,14 +56,12 @@ pub(crate) const SERIAL_RGATE_SEL: Selector = SUBSYS_SELS + 1;
 
 pub struct Arguments {
     pub max_clients: usize,
-    pub sems: Vec<String>,
 }
 
 impl Default for Arguments {
     fn default() -> Self {
         Self {
             max_clients: DEF_MAX_CLIENTS,
-            sems: Vec::new(),
         }
     }
 }
@@ -164,8 +162,23 @@ impl Subsystem {
 
         log!(LogFlags::Info, "Available memory:");
         for (i, mem) in self.mems().iter().enumerate() {
+            let mem_cap = self.get_mem(i);
+            let mem_tile = res
+                .tiles()
+                .find_by_id(
+                    mem_cap
+                        .region()
+                        .map_err(|e| rerror(e).context("MemGate region"))?
+                        .0
+                        .tile(),
+                )
+                // we don't find the memory tile if we don't start any TEEs, because in this case
+                // our parent does not give us access to them. that's fine, because we also only
+                // need them in this case.
+                .ok();
             let mem_mod = Rc::new(memory::MemMod::new(
-                self.get_mem(i),
+                mem_cap,
+                mem_tile,
                 mem.addr(),
                 mem.size(),
                 mem.reserved(),
@@ -245,7 +258,7 @@ impl Subsystem {
         Ok((xml_str, cfg))
     }
 
-    pub fn parse_args(&self) -> Arguments {
+    pub fn parse_args(&self, res: &mut Resources) -> Arguments {
         let mut args = Arguments::default();
         for arg in self.cfg().args() {
             if let Some(clients) = arg.strip_prefix("maxcli=") {
@@ -254,7 +267,33 @@ impl Subsystem {
                     .expect("Failed to parse client count");
             }
             else if let Some(sem) = arg.strip_prefix("sem=") {
-                args.sems.push(sem.to_string());
+                res.semaphores_mut()
+                    .add_sem(sem.to_string())
+                    .expect("Unable to add semaphore");
+            }
+            else if let Some(shmem) = arg.strip_prefix("shmem=") {
+                let mut parts = shmem.split(':');
+                let name = parts.next().expect("Missing name for shmem region");
+                let size = parts.next().expect("Missing size for shmem region");
+                let size = parse::size(size).expect("Unable to parse size");
+
+                // determine number of users of this shared memory region
+                let users = self
+                    .cfg()
+                    .domains()
+                    .iter()
+                    .flat_map(|d| d.shmems().iter().find(|sh| sh.name() == name))
+                    .count();
+
+                // allocate memory slice
+                let slice = res
+                    .memory_mut()
+                    .alloc_mem(size as GlobOff)
+                    .unwrap_or_else(|_| panic!("Unable to allocate {}b of shared memory", size));
+                let slice = slice.into_exclusive().expect("Derive cap for slice failed");
+
+                res.shared_mems_mut()
+                    .add_mem(slice, name.to_string(), users);
             }
         }
         args
@@ -556,6 +595,17 @@ impl Subsystem {
             else {
                 None
             };
+
+            // make shared memory regions available to this domain
+            for shmem in dom.shmems() {
+                res.shared_mems_mut()
+                    .acquire_for_tile(shmem.name(), tile_usage.tile_obj())
+                    .context(format!(
+                        "acquire shared memory '{}' for tile {}",
+                        shmem.name(),
+                        tile_usage.tile_obj().id()
+                    ))?;
+            }
 
             for cfg in dom.apps() {
                 // determine tile object with potentially reduced number of EPs

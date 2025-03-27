@@ -736,41 +736,33 @@ impl Map for GenericFile {
 }
 
 impl HashInput for GenericFile {
-    fn hash_input(&mut self, sess: &RoTSession, len: usize) -> Result<usize, Error> {
+    fn hash_input_chunk(&mut self, sess: &RoTSession, len: usize) -> Result<usize, Error> {
         self.delegate_ep(sess.ep().sel(), sess.ep().id())?;
 
-        let mut remaining = len;
-        while remaining > 0 {
-            let amount = self.next_in(remaining)?;
-            if amount == 0 {
-                break;
-            }
-
-            sess.input(self.off + self.pos, amount)?;
-            self.pos += amount;
-            remaining -= amount;
+        let amount = self.next_in(len)?;
+        if amount == 0 {
+            return Ok(0);
         }
-        Ok(len - remaining)
+
+        sess.input(self.off + self.pos, amount)?;
+        self.pos += amount;
+        Ok(amount)
     }
 }
 
 impl HashOutput for GenericFile {
-    fn hash_output(&mut self, sess: &RoTSession, len: usize) -> Result<usize, Error> {
+    fn hash_output_chunk(&mut self, sess: &RoTSession, len: usize) -> Result<usize, Error> {
         self.delegate_ep(sess.ep().sel(), sess.ep().id())?;
 
-        let mut remaining = len;
-        while remaining > 0 {
-            let amount = self.next_out(remaining)?;
-            if amount == 0 {
-                break;
-            }
-
-            sess.output(self.off + self.pos, amount)?;
-            self.pos += amount;
-            remaining -= amount;
+        let amount = self.next_out(len)?;
+        if amount == 0 {
+            return Ok(0);
         }
+
+        sess.output(self.off + self.pos, amount)?;
+        self.pos += amount;
         self.writing = true;
-        Ok(len - remaining)
+        Ok(amount)
     }
 }
 

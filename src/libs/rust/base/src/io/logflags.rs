@@ -143,9 +143,11 @@ bitflags! {
         const ResMngTiles   = 1 << (Self::__resmng_start.bits() + 6);
         /// Resource manager (root/pager): serial operations
         const ResMngSerial  = 1 << (Self::__resmng_start.bits() + 7);
+        /// Resource manager (root/pager): shared-memory operations
+        const ResMngShMem   = 1 << (Self::__resmng_start.bits() + 8);
 
         #[doc(hidden)]
-        const __net_start = Self::__resmng_start.bits() + 8;
+        const __net_start = Self::__resmng_start.bits() + 9;
 
         /// Net: session operations
         const NetSess       = 1 << (Self::__net_start.bits() + 0);

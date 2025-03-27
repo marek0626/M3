@@ -261,6 +261,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hashpipe"
+version = "0.1.0"
+dependencies = [
+ "hex-literal",
+ "m3",
+ "pipecli",
+]
+
+[[package]]
 name = "hashsum"
 version = "0.1.0"
 dependencies = [

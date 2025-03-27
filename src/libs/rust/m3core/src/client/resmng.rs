@@ -313,6 +313,15 @@ impl ResMng {
         .map(|_| ())
     }
 
+    /// Attaches to the shared-memory region with given name using selector `dst`.
+    pub fn use_shmem(&self, dst: Selector, name: &str) -> Result<(), Error> {
+        Self::send_receive(&self.sgate, opcodes::ResMng::UseShMem, UseReq {
+            dst,
+            name: name.to_string(),
+        })
+        .map(|_| ())
+    }
+
     /// Retrieves the receive gate to receive serial input
     pub fn get_serial(&self, dst: Selector) -> Result<RecvGate, Error> {
         Self::send_receive(&self.sgate, opcodes::ResMng::GetSerial, GetSerialReq {

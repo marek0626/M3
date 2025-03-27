@@ -7,6 +7,7 @@ dirs = [
     'fs',
     'fstrace',
     'hashmuxbenchs',
+    'hashpipe',
     'imgproc',
     'ipc',
     'loadgen',

@@ -37,7 +37,6 @@ use m3::vec;
 use m3::vfs;
 
 use resmng::rerror;
-use resmng::resources::Resources;
 
 use crate::memory;
 
@@ -151,19 +150,18 @@ impl fmt::Debug for BootFile {
     }
 }
 
-pub struct BootMapper<'a> {
+pub struct BootMapper {
     act_sel: Selector,
     mem_sel: Selector,
     has_virtmem: bool,
     tee: bool,
     tile: Rc<Tile>,
     mem_pool: Rc<RefCell<memory::MemPool>>,
-    res: &'a mut Resources,
     allocs: Vec<memory::Allocation>,
     buf: Vec<u8>,
 }
 
-impl<'a> BootMapper<'a> {
+impl BootMapper {
     pub fn new(
         act_sel: Selector,
         mem_sel: Selector,
@@ -171,7 +169,6 @@ impl<'a> BootMapper<'a> {
         tee: bool,
         tile: Rc<Tile>,
         mem_pool: Rc<RefCell<memory::MemPool>>,
-        res: &'a mut Resources,
     ) -> anyhow::Result<Self> {
         Ok(BootMapper {
             act_sel,
@@ -180,7 +177,6 @@ impl<'a> BootMapper<'a> {
             tee,
             tile,
             mem_pool,
-            res,
             allocs: Vec::new(),
             buf: vec![0u8; 4096],
         })
@@ -214,7 +210,7 @@ impl<'a> BootMapper<'a> {
     }
 }
 
-impl Mapper for BootMapper<'_> {
+impl Mapper for BootMapper {
     fn buffer(&mut self) -> Option<&mut [u8]> {
         Some(&mut self.buf)
     }
@@ -294,7 +290,7 @@ impl Mapper for BootMapper<'_> {
         if self.tee {
             self.mem_pool
                 .borrow_mut()
-                .make_exclusive(self.res, &self.tile)
+                .make_exclusive_for(&self.tile)
                 .map_err(|e| e.downcast::<Error>().unwrap())?;
 
             self.tile.lock()?;

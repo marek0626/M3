@@ -1,0 +1,14 @@
+[package]
+name = "hashpipe"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/hashpipe.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+hex-literal = "0.3.4"
+m3 = { path = "../../../libs/rust/m3" }
+pipecli = { path = "../../../libs/rust/pipecli" }
+

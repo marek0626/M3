@@ -49,6 +49,7 @@ static void usage(const char *name) {
     eprintln("    'indir'      for a single chain, assisted"_cf);
     eprintln("    'dir'        for a single chain, connected directly"_cf);
     eprintln("    'dir-simple' for a single chain, connected via pipes"_cf);
+    eprintln("    'dir-pipe'   for a single chain, connected directly but feed via pipe"_cf);
     eprintln("  <num> specifies the number of chains"_cf);
     eprintln("  <warmups> specifies the number of warmups"_cf);
     eprintln("  <repeats> specifies the number of repetitions of the benchmark"_cf);
@@ -75,6 +76,8 @@ int main(int argc, char **argv) {
                     mode = Mode::DIR;
                 else if(strcmp(optarg, "dir-simple") == 0)
                     mode = Mode::DIR_SIMPLE;
+                else if(strcmp(optarg, "dir-pipe") == 0)
+                    mode = Mode::DIR_PIPE;
                 else
                     usage(argv[0]);
                 break;
@@ -88,9 +91,12 @@ int main(int argc, char **argv) {
     }
     if(optind >= argc)
         usage(argv[0]);
-    if(mode == Mode::INDIR && tee) {
-        eprintln("The indirect mode does not support TEEs."_cf);
-        return 1;
+    if(tee) {
+        if(repeats + warmup > 1) {
+            eprintln("Multiple runs are not supported in TEE mode."_cf);
+            warmup = 0;
+            repeats = 1;
+        }
     }
 
     const char *in = argv[optind];
@@ -100,8 +106,10 @@ int main(int argc, char **argv) {
         CycleDuration time;
         if(mode == Mode::INDIR)
             time = chain_indirect(in, num);
+        else if(mode == Mode::DIR_PIPE)
+            time = chain_direct_pipes(in, num, tee);
         else
-            time = chain_direct(in, num, mode, tee);
+            time = chain_direct(in, num, mode);
 
         if(i >= warmup)
             res.push(time);

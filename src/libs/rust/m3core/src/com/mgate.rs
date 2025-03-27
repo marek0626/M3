@@ -115,6 +115,16 @@ impl MemCap {
         })
     }
 
+    /// Binds a new `MemCap` to the shared-memory region with given name.
+    pub fn new_shmem(name: &str) -> Result<Self, Error> {
+        let sel = SelSpace::get().alloc_sel();
+        Activity::own().resmng().unwrap().use_shmem(sel, name)?;
+        Ok(Self {
+            cap: Capability::new(sel, CapFlags::empty()),
+            resmng: false,
+        })
+    }
+
     /// Returns the selector of this `MemCap`
     pub fn sel(&self) -> Selector {
         self.cap.sel()

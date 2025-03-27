@@ -541,6 +541,26 @@ pub trait Child {
         self.res_mut().mods.push(mcap);
         self.delegate(our_sel, sel)
     }
+    fn use_shmem(&mut self, res: &Resources, name: &str, sel: Selector) -> anyhow::Result<()> {
+        log!(
+            LogFlags::ResMngShMem,
+            "{}: use_shmem(name={}, sel={})",
+            self.name(),
+            name,
+            sel,
+        );
+
+        let cfg = self.cfg();
+        let mdesc = cfg.get_shmem(name).ok_or_else(|| {
+            rerrno(Code::InvArgs).context(format!("child has no shared memory {}", name))
+        })?;
+
+        let mcap = res.shared_mems().get(mdesc.name()).ok_or_else(|| {
+            rerrno(Code::NotFound).context(format!("shared-memory {} not found", mdesc.name()))
+        })?;
+
+        self.delegate(mcap.sel(), sel)
+    }
 
     fn get_serial(&mut self, sel: Selector) -> anyhow::Result<()> {
         log!(

@@ -162,7 +162,6 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
                 child.tee(),
                 child.our_tile().tile_obj().clone(),
                 child.mem().pool().clone(),
-                res,
             )?;
             let bmod_gate = bmod
                 .0
@@ -278,12 +277,8 @@ fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_>) {
 #[cfg_attr(dylint_lib = "m3_lints", allow(unexpected_async))]
 pub fn main() -> Result<(), Error> {
     let (sub, mut res) = subsys::Subsystem::new().expect("Unable to read subsystem info");
-    let args = sub.parse_args();
-    for sem in &args.sems {
-        res.semaphores_mut()
-            .add_sem(sem.clone())
-            .expect("Unable to add semaphore");
-    }
+
+    let args = sub.parse_args(&mut res);
 
     let max_msg_size = 1 << 8;
     let buf_size = max_msg_size * args.max_clients;
@@ -298,6 +293,7 @@ pub fn main() -> Result<(), Error> {
             .alloc_mem((buf_size + sendqueue::RBUF_SIZE) as GlobOff)
             .expect("Unable to allocate memory for receive buffers");
         let pages = (buf_mem.capacity() as usize).div_ceil(cfg::PAGE_SIZE);
+        let buf_mem = buf_mem.derive().expect("derive of receive buffer failed");
         syscalls::create_map(
             rbuf_addr,
             Activity::own().sel(),
@@ -307,20 +303,26 @@ pub fn main() -> Result<(), Error> {
             kif::Perm::R,
         )
         .expect("Unable to map receive buffers");
-        (0, Some(buf_mem.sel()))
+        (0, Some(buf_mem))
     }
     else {
         (rbuf_addr.as_goff(), None)
     };
 
-    let req_rgate = create_rgate(buf_size, max_msg_size, rbuf_mem, rbuf_off, rbuf_addr)
-        .expect("Unable to create request RecvGate");
+    let req_rgate = create_rgate(
+        buf_size,
+        max_msg_size,
+        rbuf_mem.as_ref().map(|r| r.sel()),
+        rbuf_off,
+        rbuf_addr,
+    )
+    .expect("Unable to create request RecvGate");
     let reqs = requests::Requests::new(req_rgate);
 
     let squeue_rgate = create_rgate(
         sendqueue::RBUF_SIZE,
         sendqueue::RBUF_MSG_SIZE,
-        rbuf_mem,
+        rbuf_mem.as_ref().map(|r| r.sel()),
         rbuf_off + buf_size as GlobOff,
         rbuf_addr + buf_size,
     )

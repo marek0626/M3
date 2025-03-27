@@ -4,6 +4,7 @@ members = [
     "apps/bench/facever",
     "apps/bench/fs",
     "apps/bench/hashmuxbenchs",
+    "apps/bench/hashpipe",
     "apps/bench/ipc",
     "apps/bench/mem",
     "apps/bench/netlat",
