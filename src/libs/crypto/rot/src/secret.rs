@@ -15,6 +15,7 @@
 use core::fmt;
 
 #[repr(transparent)]
+#[derive(Clone)]
 pub struct Secret<T> {
     pub secret: T,
 }

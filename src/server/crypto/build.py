@@ -1,6 +1,5 @@
 dirs = [
     'hashmux',
-    'rots',
 ]
 
 

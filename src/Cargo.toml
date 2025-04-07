@@ -43,7 +43,6 @@ members = [
     "kernel",
     "unimux",
     "server/crypto/hashmux",
-    "server/crypto/rots",
     "server/disk",
     "server/m3fs",
     "server/net",

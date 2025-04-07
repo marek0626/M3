@@ -478,6 +478,7 @@ pub fn write_ep_remote(tile: TileId, ep: EpId, regs: &[Reg]) -> anyhow::Result<(
     }
 }
 
+#[allow(unused)]
 pub fn set_excl_region(
     mem_tile: TileId,
     user_tile: TileId,
@@ -487,22 +488,25 @@ pub fn set_excl_region(
     perm: kif::Perm,
     locked: bool,
 ) -> anyhow::Result<()> {
-    if let Some((cmd, arg1)) = TCU::build_exreg_cmd(
-        mem_tile,
-        user_tile,
-        tilemng::tilegen(user_tile),
-        idx,
-        addr,
-        size,
-        perm,
-        locked,
-    ) {
+    #[cfg(not(feature = "gem5"))]
+    return Ok(());
+
+    #[cfg(feature = "gem5")]
+    {
+        let (cmd, arg1) = TCU::build_exreg_cmd(
+            mem_tile,
+            user_tile,
+            tilemng::tilegen(user_tile),
+            idx,
+            addr,
+            size,
+            perm,
+            locked,
+        )
+        .unwrap();
         let arg_addr = TCU::ext_reg_addr(ExtReg::ExtArg1).as_goff();
         try_write_slice(mem_tile, arg_addr, &[arg1])?;
         do_ext_cmd(mem_tile, cmd).map(|_| ())
-    }
-    else {
-        Ok(())
     }
 }
 

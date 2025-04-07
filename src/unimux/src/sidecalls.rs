@@ -22,7 +22,7 @@ use base::kif;
 use base::log;
 use base::mem::{GlobAddr, MsgBuf, VirtAddr, VirtAddrRaw};
 use base::serialize::{Deserialize, M3Deserializer};
-use base::tcu;
+use base::tcu::{self, TCU};
 use base::time::TimeDuration;
 
 use crate::activities;
@@ -128,6 +128,23 @@ fn handle_sidecalls(mut our: activities::ActivityRef<'_>) {
         if let Some(mut old) = activities::try_cur() {
             log!(LogFlags::MuxSideCalls, "cur is {}", old);
             activities::get_mut(old).unwrap().set_activity_reg(old_act);
+        }
+
+        // if the SEP is still frozen, it means that the kernel just initialized our tile and these
+        // EPs, so unfreeze them. Note that the kernel does not configure TMSIDE_REP (rosa did that)
+        // and thus it does not need to be unfrozen.
+        if TCU::is_frozen(tcu::KPEX_REP) {
+            let tile_desc = crate::pex_env().tile_desc;
+            TCU::check_recv_ep(
+                tcu::KPEX_REP,
+                tile_desc.rbuf_mux_space().0.as_phys(tile_desc),
+                1 << cfg::KPEX_RBUF_ORD,
+                false,
+            )
+            .expect("KPEX_REP not sane");
+
+            TCU::unfreeze(tcu::KPEX_REP).unwrap();
+            TCU::unfreeze(tcu::KPEX_SEP).unwrap();
         }
 
         if let Some(msg_off) = tcu::TCU::fetch_msg(tcu::TMSIDE_REP) {

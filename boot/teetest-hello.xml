@@ -4,10 +4,16 @@
     <mods>
         <mod name="fs" file="default.img"/>
     </mods>
-    <rot layers="brom,blau.bin,rosa.bin"/>
+    <rot layers="brom,blau.bin,rosa.bin,rots.bin"/>
     <kernel args="kernel"/>
     <dom>
         <app args="root">
+            <dom tile="core+kecacc+rot" unimux="1">
+                <app args="rots" daemon="1">
+                    <serv name="rot"/>
+                    <mod name="rot-certificate.json" perm="r"/>
+                </app>
+            </dom>
             <dom>
                 <app args="m3fs mem" daemon="1">
                     <serv name="m3fs"/>

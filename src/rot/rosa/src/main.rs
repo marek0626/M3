@@ -22,7 +22,7 @@ use base::cell::StaticUnsafeCell;
 use base::errors::Error;
 use base::io::LogFlags;
 use base::mem::{AlignedBuf, GlobAddr, GlobOff};
-use base::tcu::{EpId, TCU};
+use base::tcu::{self, EpId, TCU};
 use base::{log, machine};
 #[allow(unused_imports)]
 use lang as _;
@@ -31,10 +31,11 @@ use rot::CtxData;
 mod stage1;
 mod stage2;
 
-pub const MEM_EP: EpId = 1;
-pub const COPY_EP: EpId = 2;
-pub const TILE_EP: EpId = 3;
-pub const ENV_EP: EpId = 4;
+pub const MEM_EP: EpId = tcu::FIRST_USER_EP + 0;
+pub const COPY_EP: EpId = tcu::FIRST_USER_EP + 1;
+pub const TILE_EP: EpId = tcu::FIRST_USER_EP + 2;
+pub const ENV_EP: EpId = tcu::FIRST_USER_EP + 3;
+pub const SELF_EP: EpId = tcu::FIRST_USER_EP + 4;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -43,6 +44,7 @@ pub struct RosaPrivateCtx {
     kernel_tile_id: u64,
     kernel_tile_desc: u64,
     kenv_addr: GlobAddr,
+    root_tile_id: u64,
 }
 
 impl CtxData for RosaPrivateCtx {

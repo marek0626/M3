@@ -23,7 +23,8 @@ use base::io::{log, LogFlags, Read};
 use base::mem::{GlobOff, VirtAddr};
 use base::tcu::TCU;
 use base::util::math::round_up;
-use base::{env, log, mem, tcu, util};
+use base::vec::Vec;
+use base::{env, format, log, mem, tcu, util};
 use rot::{self, CtxData, RosaCtx};
 
 fn write_args<S, I>(args: I, env_off: &mut GlobOff) -> (VirtAddr, usize)
@@ -129,7 +130,14 @@ pub fn main() -> ! {
         // Copy kernel arguments and environment variables
         let mut env_off = mem::size_of::<BootEnv>() as GlobOff;
         let kernel_cmdline = util::cstr_slice_to_str(&cfg.data.kernel_cmdline);
-        let (argv, argc) = write_args(kernel_cmdline.split(' '), &mut env_off);
+
+        // append "--root <root-tile>" to the arguments
+        let mut kargs = kernel_cmdline.split(' ').collect::<Vec<_>>();
+        kargs.push("--root");
+        let root_tile_arg = format!("{}", ctx.data.root_tile_id);
+        kargs.push(&root_tile_arg);
+
+        let (argv, argc) = write_args(kargs.iter(), &mut env_off);
         let (envp, _) = write_args(env::Vars::default(), &mut env_off);
 
         let env = BootEnv {
@@ -158,8 +166,11 @@ pub fn main() -> ! {
             .expect("Failed to write kernel trampoline");
     }
 
+    log!(LogFlags::RoTDbg, "loading rots");
+    // Load ROTS
+    let _ = unsafe { rot::load_bin(rot::ROSA_ROTS_NEXT_ADDR, &cfg.data.next_layer) };
     // Fixup context
-    ctx.entry_addr = rot::ROSA_NEXT_ADDR;
+    ctx.entry_addr = rot::ROSA_NEXT_ADDR; // NMG This is where we load RoTS
     ctx.magic = RosaCtx::MAGIC;
 
     {
@@ -179,5 +190,11 @@ pub fn main() -> ! {
         log!(LogFlags::RoTDbg, "Reset command complete: {}", res);
     }
 
-    unsafe { ctx.sleep() }
+    log!(LogFlags::RoTDbg, "switch to rots");
+    let next_ctx = rot::LayerCtx::new(rot::ROSA_ROTS_NEXT_ADDR, rot::RotsCtx {
+        derived_private_key: ctx.data.next.derived_private_key.clone(),
+        kmac_cdi: ctx.data.next.kmac_cdi.clone(),
+    });
+    // NMG Switch directly to RoTS instead of waiting for the kernel to reset/wake us.
+    unsafe { next_ctx.switch() }
 }

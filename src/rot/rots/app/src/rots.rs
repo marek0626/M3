@@ -26,6 +26,9 @@ extern crate heap;
 use core::cmp::min;
 use core::ops::Deref;
 
+use base::env::{self, BaseEnv, BootEnv};
+use base::mem::PhysAddrRaw;
+use base::{cfg, tcu};
 use kecacc::{KecAcc, KecAccState};
 use m3core::cell::{LazyReadOnlyCell, LazyStaticRefCell, StaticCell, StaticRefCell};
 use m3core::col::{Vec, VecDeque};
@@ -33,7 +36,7 @@ use m3core::com::{opcodes, EpMng, GateIStream, MemCap, Perm, RecvGate, EP};
 use m3core::crypto::{HashAlgorithm, HashType};
 use m3core::errors::{Code, Error};
 use m3core::io::LogFlags;
-use m3core::kif::{CapRngDesc, CapType};
+use m3core::kif::{CapRngDesc, CapType, FIRST_FREE_SEL};
 use m3core::mem::{size_of, AlignedBuf, GlobOff, MsgBuf, MsgBufRef, VirtAddr};
 use m3core::serialize::bytes::Bytes;
 use m3core::server::{
@@ -47,8 +50,77 @@ use m3core::{build_vmsg, const_assert, log, mem, reply_vmsg};
 use rot::ed25519::Signer;
 use rot::{ed25519, Hex, OpaqueKMacKey, Secret};
 
+fn check_std_endpoints() {
+    let tile_desc = env::boot().tile_desc();
+    let mut rbuf_addr = tile_desc.rbuf_std_space().0.as_phys(tile_desc);
+    TCU::check_recv_ep(
+        tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF,
+        rbuf_addr,
+        cfg::SYSC_RBUF_SIZE,
+        false,
+    )
+    .expect("SYSC_REP not sane");
+    rbuf_addr += cfg::SYSC_RBUF_SIZE as PhysAddrRaw;
+
+    TCU::check_recv_ep(
+        tcu::FIRST_USER_EP + tcu::UPCALL_REP_OFF,
+        rbuf_addr,
+        cfg::UPCALL_RBUF_SIZE,
+        true,
+    )
+    .expect("UPCALL_REP not sane");
+    rbuf_addr += cfg::UPCALL_RBUF_SIZE as PhysAddrRaw;
+
+    TCU::check_recv_ep(
+        tcu::FIRST_USER_EP + tcu::DEF_REP_OFF,
+        rbuf_addr,
+        cfg::DEF_RBUF_SIZE,
+        false,
+    )
+    .expect("DEF_REP_OFF not sane");
+
+    // now unfreeze all the standard EPs created by the kernel
+    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_SEP_OFF).unwrap();
+    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF).unwrap();
+    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::UPCALL_REP_OFF).unwrap();
+    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::DEF_REP_OFF).unwrap();
+}
+
 #[no_mangle]
 pub extern "C" fn env_run() -> ! {
+    let rom_env: &BootEnv = unsafe { &*(cfg::ENV_START_ROT.as_ptr()) };
+    let rots_env_src: &BaseEnv =
+        unsafe { &*((cfg::ENV_START.as_local() + cfg::ENV_SIZE / 2) as *const _) };
+    let rots_env: &mut BaseEnv = unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) };
+
+    // save important info
+    let act_id = rots_env_src.act_id;
+    let rmng_sel = rots_env_src.rmng_sel;
+
+    // overwrite everything with default values
+    *rots_env = BaseEnv::default();
+
+    // copy boot env from previous stages
+    rots_env.boot = *rom_env;
+
+    // hard code the arguments here
+    rots_env.boot.argc = 1;
+    rots_env.boot.argv = (cfg::ENV_START.as_local() + size_of::<BaseEnv>()) as u64;
+    let argv = rots_env.boot.argv as *mut *const u8;
+    unsafe {
+        *argv = b"rots\0".as_ptr();
+    }
+
+    // init the remaining relevant fields
+    rots_env.first_std_ep = tcu::FIRST_USER_EP as u64;
+    rots_env.first_sel = FIRST_FREE_SEL;
+    rots_env.heap_size = cfg::MOD_HEAP_SIZE as u64;
+    rots_env.rmng_sel = rmng_sel;
+    rots_env.act_id = act_id;
+
+    // check and unfreeze standard EPs configured by the kernel
+    check_std_endpoints();
+
     m3core::env::init();
 
     m3core::env::run();

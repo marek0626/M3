@@ -23,7 +23,7 @@ use m3::col::{String, ToString, Vec};
 use m3::com::{GateCap, MemCap, MemGate};
 use m3::errors::Code;
 use m3::io::LogFlags;
-use m3::kif::{boot, CapRngDesc, CapType, Perm, TileDesc, FIRST_FREE_SEL};
+use m3::kif::{boot, CapRngDesc, CapType, Perm, TileAttr, TileDesc, FIRST_FREE_SEL};
 use m3::mem::{size_of, GlobOff};
 use m3::rc::Rc;
 use m3::server::DEF_MAX_CLIENTS;
@@ -445,49 +445,59 @@ impl Subsystem {
 
             // if the activities should run on our own tile, all PMP EPs are already installed
             if tile_usage.tile_id() != Activity::own().tile_id() {
-                let mux = dom.mux().unwrap_or("tilemux");
-                let mux_mem = dom.mux_mem().unwrap_or(cfg::FIXED_TILEMUX_MEM);
-                // load multiplexer onto tile
-                tile_usage.state_mut().load_mux(
-                    mux,
-                    mux_mem,
-                    domain_total_eps,
-                    dom.initrd(),
-                    dom.dtb(),
-                    |size| {
-                        let mux_mem_slice = match res.memory_mut().alloc_mem(size as GlobOff, 1) {
-                            Ok(mem) => mem,
-                            Err(e) => {
-                                return Err(e.context(format!(
-                                    "Unable to allocate {}b for multiplexer",
-                                    size
-                                )));
-                            },
-                        };
-                        mux_mem_slice
-                            .derive()
-                            .map_err(|e| e.context("mux mem derive"))?
-                            .activate()
-                            .map_err(|e| rerror(e).context("mux mem activate"))
-                            .map(|m| (m, None))
-                    },
-                    |name| match starter.get_bootmod(name) {
-                        Ok(mem) => Ok(mem),
-                        Err(e) => Err(e.context(format!("Unable to get boot module {}", name))),
-                    },
-                )?;
-
-                // add regions to PMP
-                for slice in mem_pool.borrow().slices() {
+                if tile_usage.tile_obj().desc().attr().contains(TileAttr::ROT) {
                     tile_usage
                         .state_mut()
-                        .add_mem_region(
-                            slice.derive().with_context(|| "PMP region derive")?,
-                            slice.capacity() as usize,
-                            true,
-                            true,
-                        )
-                        .map_err(|e| e.context("Unable to add PMP region"))?;
+                        .start(None, cfg::DEF_EP_COUNT)
+                        .context("Unable to start RoT tile")?;
+                }
+                else {
+                    let mux = dom.mux().unwrap_or("tilemux");
+                    let mux_mem = dom.mux_mem().unwrap_or(cfg::FIXED_TILEMUX_MEM);
+
+                    // load multiplexer onto tile
+                    tile_usage.state_mut().load_mux(
+                        mux,
+                        mux_mem,
+                        domain_total_eps,
+                        dom.initrd(),
+                        dom.dtb(),
+                        |size| {
+                            let mux_mem_slice = match res.memory_mut().alloc_mem(size as GlobOff, 1)
+                            {
+                                Ok(mem) => mem,
+                                Err(e) => {
+                                    return Err(e.context(format!(
+                                        "Unable to allocate {}b for multiplexer",
+                                        size
+                                    )));
+                                },
+                            };
+                            mux_mem_slice
+                                .derive()
+                                .map_err(|e| e.context("mux mem derive"))?
+                                .activate()
+                                .map_err(|e| rerror(e).context("mux mem activate"))
+                                .map(|m| (m, None))
+                        },
+                        |name| match starter.get_bootmod(name) {
+                            Ok(mem) => Ok(mem),
+                            Err(e) => Err(e.context(format!("Unable to get boot module {}", name))),
+                        },
+                    )?;
+
+                    // add regions to PMP
+                    for slice in mem_pool.borrow().slices() {
+                        tile_usage
+                            .state_mut()
+                            .add_mem_region(
+                                slice.derive().with_context(|| "PMP region derive")?,
+                                slice.capacity() as usize,
+                                true,
+                                true,
+                            )
+                            .map_err(|e| e.context("Unable to add PMP region"))?;
+                    }
                 }
             }
             else {

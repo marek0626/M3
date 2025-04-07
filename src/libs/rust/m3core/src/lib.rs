@@ -29,9 +29,12 @@ pub mod net;
 
 pub use base::{
     backtrace, borrow, boxed, build_vmsg, cell, cfg, col, const_assert, cpu, crypto, elf, errors,
-    format, function, impl_boxitem, kif, libc, log, mem, quota, rc, serde, serialize, sync, tcu,
-    time, tmif, util, vec, verror,
+    format, function, impl_boxitem, kif, libc, log, mem, quota, rc, serde, serialize, tcu, time,
+    tmif, util, vec, verror,
 };
+
+#[cfg(target_has_atomic = "ptr")]
+pub use base::sync;
 
 pub mod cap;
 pub mod client;

@@ -1,0 +1,17 @@
+[package]
+name = "rots"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/rots.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+base.workspace = true
+lang.workspace = true
+rot.workspace = true
+kecacc.workspace = true
+heap.workspace = true
+m3core.workspace = true
+unimux.workspace = true

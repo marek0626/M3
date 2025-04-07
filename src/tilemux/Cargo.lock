@@ -103,6 +103,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mux"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "heap",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -242,6 +250,7 @@ dependencies = [
  "base",
  "heap",
  "isr",
+ "mux",
  "num-traits",
  "num_enum",
  "paging",

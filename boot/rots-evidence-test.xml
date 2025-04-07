@@ -4,11 +4,11 @@
     <mods>
         <mod name="fs" file="default.img"/>
     </mods>
-    <rot layers="brom,blau.bin,rosa.bin"/>
+    <rot layers="brom,blau.bin,rosa.bin,rots.bin"/>
     <kernel args="kernel"/>
     <dom>
         <app args="root">
-            <dom tile="core+kecacc+rot" mux="rots" unimux="1">
+            <dom tile="core+kecacc+rot" unimux="1">
                 <app args="rots" daemon="1">
                     <serv name="rot"/>
                     <mod name="rot-certificate.json" perm="r"/>
