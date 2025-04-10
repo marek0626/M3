@@ -111,7 +111,11 @@ impl Requests {
             Ok(opcodes::ResMng::OpenSess) => self.open_session_async(childs, res, &mut is, id),
             Ok(opcodes::ResMng::CloseSess) => self.close_session_async(childs, res, &mut is, id),
 
-            Ok(opcodes::ResMng::AddChild) => self.add_child(childs, res, &mut is, id),
+            Ok(opcodes::ResMng::AddChild) => match self.add_child(childs, res, &mut is, id) {
+                // reply already done
+                Ok(_) => return,
+                Err(e) => Err(e),
+            },
             Ok(opcodes::ResMng::RemChild) => self.rem_child_async(childs, res, &mut is, id),
 
             Ok(opcodes::ResMng::AllocMem) => self.alloc_mem(childs, res, &mut is, id),
@@ -223,17 +227,22 @@ impl Requests {
     ) -> anyhow::Result<()> {
         let req: resmng::AddChildReq = Self::unmarshall(is)?;
 
-        childs.add_child(
-            res,
-            &self.rgate,
-            id,
-            req.id,
-            req.act,
-            req.tile,
-            req.kmem,
-            req.sgate,
-            req.name,
-        )
+        childs
+            .add_child(
+                res,
+                &self.rgate,
+                id,
+                req.id,
+                req.act,
+                req.tile,
+                req.kmem,
+                req.sgate,
+                req.name,
+            )
+            .and_then(|id| {
+                reply_vmsg!(is, Code::Success, resmng::AddChildReply { id })
+                    .map_err(|e| rerror(e).context("add-child reply"))
+            })
     }
 
     fn rem_child_async(

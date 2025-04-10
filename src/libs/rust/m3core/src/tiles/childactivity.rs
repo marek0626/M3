@@ -141,6 +141,10 @@ impl ChildActivity {
     ///
     /// The given tile specifies the tile where the activity will execute and its resource share
     /// (CPU time etc.).
+    ///
+    /// # Panics
+    /// Panics if the own pager needs to be cloned but not the resource manager as this requires
+    /// knowing the resource-manager-internal child ID.
     pub fn new_with(tile: Rc<Tile>, args: ActivityArgs<'_>) -> Result<Self, Error> {
         let sel = SelSpace::get().alloc_sels(3);
 
@@ -164,29 +168,6 @@ impl ChildActivity {
         act.id = id;
         act.eps_start = eps_start;
 
-        // determine and initialize pager
-        act.pager = if act.tile_desc().has_virtmem() {
-            let pager = if let Some(p) = args.pager {
-                Some(p)
-            }
-            else if let Some(p) = Activity::own().pager() {
-                Some(p.new_clone()?)
-            }
-            else {
-                None
-            };
-            match pager {
-                Some(mut pg) => {
-                    pg.init(&act)?;
-                    Some(pg)
-                },
-                None => None,
-            }
-        }
-        else {
-            None
-        };
-
         // determine resource manager
         act.rmng = if let Some(rmng_scap) = args.rmng {
             act.delegate_obj(rmng_scap.sel())?;
@@ -207,6 +188,35 @@ impl ChildActivity {
         SelSpace::get()
             .next
             .set(cmp::max(act.child_sel.get(), SelSpace::get().next.get()));
+
+        // determine and initialize pager
+        act.pager = if act.tile_desc().has_virtmem() {
+            let pager = if let Some(p) = args.pager {
+                Some(p)
+            }
+            else if let Some(p) = Activity::own().pager() {
+                Some(
+                    p.new_clone(
+                        act.rmng
+                            .id()
+                            .expect("cannot clone pager without knowing child ID"),
+                    )?,
+                )
+            }
+            else {
+                None
+            };
+            match pager {
+                Some(mut pg) => {
+                    pg.init(&act)?;
+                    Some(pg)
+                },
+                None => None,
+            }
+        }
+        else {
+            None
+        };
 
         Ok(act)
     }

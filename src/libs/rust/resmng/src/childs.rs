@@ -50,7 +50,7 @@ use crate::resources::{
 use crate::subsys::{ChildStarter, SubsystemBuilder};
 use crate::{events, rerrno, rerror, subsys};
 
-pub type Id = u32;
+pub type Id = resmng::Id;
 
 pub struct ChildMem {
     id: Id,
@@ -1386,7 +1386,7 @@ impl ChildManager {
         kmem_sel: Selector,
         sgate_sel: Selector,
         name: String,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Id> {
         let nid = self.next_id();
         let child = self.child_by_id_mut(id).unwrap();
         // TODO it would be better to disallow activity creation for childs and do that for them so
@@ -1446,7 +1446,7 @@ impl ChildManager {
 
         child.res_mut().childs.push((nid, act_sel));
         self.add(nchild);
-        Ok(())
+        Ok(nid)
     }
 
     pub fn rem_child_async(

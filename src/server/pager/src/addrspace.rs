@@ -74,10 +74,6 @@ impl AddrSpace {
         self.serv.id()
     }
 
-    pub fn child_id(&self) -> Option<childs::Id> {
-        self.child
-    }
-
     #[allow(unused)]
     pub fn parent(&self) -> Option<SessId> {
         self.parent
@@ -93,7 +89,8 @@ impl AddrSpace {
         sid: SessId,
         xchg: &mut CapExchange<'_>,
     ) -> Result<(), Error> {
-        let child_id = cli.get_mut(sid).unwrap().child_id();
+        let child_id = xchg.in_args().pop()?;
+        // TODO: Validate that this child_id is actually a child of the requesting activity.
 
         let (crd, _) = cli.add(crt, |_cli, serv| {
             log!(
@@ -102,7 +99,7 @@ impl AddrSpace {
                 sid,
                 serv.id()
             );
-            Ok(AddrSpace::new(serv, Some(sid), child_id))
+            Ok(AddrSpace::new(serv, Some(sid), Some(child_id)))
         })?;
 
         xchg.out_caps(crd);
