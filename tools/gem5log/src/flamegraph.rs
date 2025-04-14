@@ -533,7 +533,13 @@ pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> 
     let mut wr = stdout.lock();
 
     let mut line = String::new();
-    while reader.read_line(&mut line)? != 0 {
+    loop {
+        match reader.read_line(&mut line) {
+            Ok(0) => break,
+            Ok(_) => {},
+            Err(_) => continue,
+        }
+
         if let Some((time, tile, maybe_addr)) = get_func_addr(&line) {
             match mode {
                 crate::Mode::FlameGraph { end: Some(end), .. } if (time >= end) => {
