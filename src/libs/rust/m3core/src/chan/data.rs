@@ -565,11 +565,6 @@ where
     R: BlockReceiver,
     T: Clone + 'r,
 {
-    assert_eq!(
-        send.block_size(),
-        recv.buf_size() / send.credits() as GlobOff
-    );
-
     let buf_size = send.block_size() / size_of::<T>() as GlobOff;
     let mut iter = recv.iter();
     let mut pos = 0;
@@ -577,10 +572,11 @@ where
     // first push out as many blocks as we have credits
     let mut count = 0;
     while count < send.credits() && pos < items.len() {
-        let last = last && pos + buf_size as usize == items.len();
-        send.send_slice(&items[pos..pos + buf_size as usize], last, user.clone())?;
+        let amount = (items.len() - pos).min(buf_size as usize);
+        let last = last && pos + amount == items.len();
+        send.send_slice(&items[pos..pos + amount], last, user.clone())?;
         count += 1;
-        pos += buf_size as usize;
+        pos += amount;
     }
 
     // now receive a block and send out a new one
@@ -588,9 +584,10 @@ where
         let blk = iter.next().unwrap();
         func(blk);
 
-        let last = last && pos + buf_size as usize == items.len();
-        send.send_slice(&items[pos..pos + buf_size as usize], last, user.clone())?;
-        pos += buf_size as usize;
+        let amount = (items.len() - pos).min(buf_size as usize);
+        let last = last && pos + amount == items.len();
+        send.send_slice(&items[pos..pos + amount], last, user.clone())?;
+        pos += amount;
     }
 
     // receive remaining blocks
