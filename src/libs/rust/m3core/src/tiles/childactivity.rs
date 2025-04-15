@@ -93,7 +93,6 @@ pub struct ActivityArgs<'n> {
     pager: Option<Pager>,
     kmem: Option<Rc<KMem>>,
     rmng: Option<SendCap>,
-    first_sel: Selector,
 }
 
 impl<'n> ActivityArgs<'n> {
@@ -104,7 +103,6 @@ impl<'n> ActivityArgs<'n> {
             pager: None,
             kmem: None,
             rmng: None,
-            first_sel: kif::FIRST_FREE_SEL,
         }
     }
 
@@ -125,12 +123,6 @@ impl<'n> ActivityArgs<'n> {
     /// activity will be used.
     pub fn kmem(mut self, kmem: Rc<KMem>) -> Self {
         self.kmem = Some(kmem);
-        self
-    }
-
-    /// Sets the first selector to be used by the child (kif::FIRST_FREE_SEL by default).
-    pub fn first_sel(mut self, sel: Selector) -> Self {
-        self.first_sel = sel;
         self
     }
 }
@@ -160,7 +152,7 @@ impl ChildActivity {
                 tile.clone(),
                 args.kmem.unwrap_or_else(|| Activity::own().kmem().clone()),
             ),
-            child_sel: Cell::from(args.first_sel),
+            child_sel: Cell::from(cmp::max(sel.start() + sel.count(), kif::FIRST_FREE_SEL)),
             files: Vec::new(),
             mounts: Vec::new(),
         };
@@ -193,9 +185,6 @@ impl ChildActivity {
         else {
             None
         };
-
-        act.child_sel
-            .set(cmp::max(act.kmem().sel() + 1, act.child_sel.get()));
 
         // determine resource manager
         act.rmng = if let Some(rmng_scap) = args.rmng {

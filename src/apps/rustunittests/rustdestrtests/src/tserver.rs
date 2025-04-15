@@ -375,8 +375,7 @@ fn testderive(t: &mut dyn WvTester) {
     let server_tile = wv_require_ok!(Tile::get("compat|own"));
     let mut serv = wv_require_ok!(ChildActivity::new_with(
         server_tile,
-        // ensure that srv_sel is not reused by the child
-        ActivityArgs::new("server").first_sel(srv_sel + 1)
+        ActivityArgs::new("server")
     ));
 
     wv_assert_ok!(t, serv.delegate_obj(sig_sem.sel()));
