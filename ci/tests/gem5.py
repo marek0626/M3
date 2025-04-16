@@ -90,6 +90,9 @@ class Test:
         # don't run ROT tests on x86_64, they aren't supported there.
         if self.name in rots_tests and self.isa == "x86_64":
             return False
+        # hashmux-{benchs,tests} need the default.py, which uses non-SPM-tiles
+        if self.name.startswith("hashmux-") and self.isa == "riscv32":
+            return False
         # additionally, rots-raser *only* works on riscv64
         if "raser" in self.name and self.isa != "riscv64":
             return False
