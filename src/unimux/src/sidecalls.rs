@@ -111,6 +111,8 @@ fn handle_sidecall(msg: &'static tcu::Message) {
     reply_msg(msg, &reply_buf);
 }
 
+// TODO another workaround for the weird compiler/UB problem with ActivityRef
+#[inline(never)]
 fn handle_sidecalls(mut our: activities::ActivityRef<'_>) {
     let _cmd_saved = helper::TCUGuard::new();
 
