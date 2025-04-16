@@ -111,11 +111,11 @@ impl MainMemory {
         }
     }
 
-    pub fn largest_contiguous(&self, mtype: MemType) -> Option<GlobOff> {
+    pub fn largest_contiguous(&self, mtype: MemType, align: GlobOff) -> Option<GlobOff> {
         let mut max = None;
         for m in &self.mods {
             if m.mem_type() == mtype {
-                let m_max = m.largest_contiguous();
+                let m_max = m.largest_contiguous(align);
                 if m_max.unwrap_or(0) > max.unwrap_or(0) {
                     max = m_max;
                 }

@@ -171,7 +171,7 @@ impl MemoryManager {
                 return Ok(res);
             }
 
-            if let Some(max_cont) = map.largest_contiguous() {
+            if let Some(max_cont) = map.largest_contiguous(align) {
                 let align = if exclusive { max_cont } else { 1 };
                 if let Some(addr) = map.allocate(max_cont, align) {
                     let mut sl =

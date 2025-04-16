@@ -157,11 +157,14 @@ impl<T: PrimInt + ops::AddAssign + ops::SubAssign> MemMap<T> {
     }
 
     /// Returns the size of the largest contiguous free space
-    pub fn largest_contiguous(&self) -> Option<T> {
+    pub fn largest_contiguous(&self, align: T) -> Option<T> {
         self.areas
             .iter()
-            .max_by(|a, b| a.size.cmp(&b.size))
-            .map(|a| a.size)
+            .map(|a| {
+                let diff = math::round_up(a.addr, align) - a.addr;
+                a.size - diff
+            })
+            .max()
     }
 
     /// Returns a pair of the remaining space and the number of areas.
@@ -210,22 +213,27 @@ mod tests {
 
     #[test]
     fn largest_contiguous() {
-        let mut m = MemMap::new(0, 1000);
+        let mut m = MemMap::new(0, 0x2000);
 
-        assert_eq!(m.largest_contiguous(), Some(1000));
+        assert_eq!(m.largest_contiguous(1), Some(0x2000));
 
-        assert_eq!(m.allocate(200, 1), Some(0));
-        assert_eq!(m.allocate(200, 1), Some(200));
-        assert_eq!(m.allocate(200, 1), Some(400));
-        assert_eq!(m.allocate(200, 1), Some(600));
+        assert_eq!(m.allocate(0x200, 1), Some(0));
+        assert_eq!(m.allocate(0x200, 1), Some(0x200));
+        assert_eq!(m.allocate(0x200, 1), Some(0x400));
+        assert_eq!(m.allocate(0x200, 1), Some(0x600));
 
-        assert_eq!(m.largest_contiguous(), Some(200));
+        assert_eq!(m.largest_contiguous(1), Some(0x1800));
+        assert_eq!(m.largest_contiguous(0x1000), Some(0x1000));
 
-        m.free(400, 200);
-        assert_eq!(m.largest_contiguous(), Some(200));
+        m.free(0x400, 0x200);
+        assert_eq!(m.largest_contiguous(1), Some(0x1800));
+        assert_eq!(m.largest_contiguous(0x1000), Some(0x1000));
 
-        m.free(200, 200);
-        assert_eq!(m.largest_contiguous(), Some(400));
+        m.free(0x200, 0x200);
+        assert_eq!(m.largest_contiguous(1), Some(0x1800));
+
+        m.free(0x600, 0x200);
+        assert_eq!(m.largest_contiguous(1), Some(0x1E00));
     }
 
     #[test]
@@ -238,7 +246,7 @@ mod tests {
 
         // each allocation leaves a 0x50 hole after it (@ 0x50, @ 0x150, @ 0x250). the last one
         // goes to the end of the area, making it the largest contiguous region.
-        assert_eq!(m.largest_contiguous(), Some(0x1000 - 0x250));
+        assert_eq!(m.largest_contiguous(1), Some(0x1000 - 0x250));
     }
 
     #[test]
