@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 <config>
-    <env>M3_GEM5_CFG=platform/gem5/configs/m3/default.py</env>
+    <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py M3_GEM5_O3_CORES=0 M3_GEM5_MINOR_CORES=4</env>
+    <rot layers="brom,blau.bin,rosa.bin"/>
     <kernel args="kernel"/>
     <dom>
         <app args="root shmem=inpipe:16K shmem=outpipe:16K">
@@ -9,7 +10,7 @@
                     <serv name="pipes"/>
                 </app>
             </dom>
-            <dom tile="core+kecacc" tee="1">
+            <dom tile="core+kecacc" mux="rots" unimux="1" tee="1">
                 <shmem name="inpipe"/>
                 <shmem name="outpipe"/>
                 <app args="rots" daemon="1">
