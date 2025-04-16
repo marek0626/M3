@@ -182,7 +182,7 @@ pub fn mgate_mkexcl(act: &TempRc<Activity>) -> anyhow::Result<()> {
     if (size & 0x7) != 0 || !size.is_power_of_two() {
         return Err(kerrno(Code::InvArgs).context("Invalid size (need 8-byte aligned power of 2)"));
     }
-    if (addr & 0x3) != 0 || ((addr >> 2) & ((size >> 3) - 1)) != 0 {
+    if (addr & 0x3) != 0 || ((addr >> 3) & ((size >> 3) - 1)) != 0 {
         return Err(kerrno(Code::InvArgs).context("Invalid address (need size-aligned)"));
     }
 
