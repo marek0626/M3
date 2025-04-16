@@ -90,7 +90,7 @@ pub fn run_subsys<F>(
     let mux = "tilemux";
     let mux_mod = wv_require_ok!(MemCap::new_bind_bootmod(mux));
     child_sub.add_mod(mux_mod, mux);
-    let sub_mem = wv_require_ok!(res.memory_mut().alloc_mem(64 * 1024 * 1024));
+    let sub_mem = wv_require_ok!(res.memory_mut().alloc_mem(64 * 1024 * 1024, 1));
     child_sub.add_mem(wv_require_ok!(sub_mem.derive()), false);
     customize_subsys(&mut child_sub);
 

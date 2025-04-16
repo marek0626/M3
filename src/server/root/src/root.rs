@@ -290,7 +290,7 @@ pub fn main() -> Result<(), Error> {
     let (rbuf_off, rbuf_mem) = if Activity::own().tile_desc().has_virtmem() {
         let buf_mem = res
             .memory_mut()
-            .alloc_mem((buf_size + sendqueue::RBUF_SIZE) as GlobOff)
+            .alloc_mem((buf_size + sendqueue::RBUF_SIZE) as GlobOff, 1)
             .expect("Unable to allocate memory for receive buffers");
         let pages = (buf_mem.capacity() as usize).div_ceil(cfg::PAGE_SIZE);
         let buf_mem = buf_mem.derive().expect("derive of receive buffer failed");

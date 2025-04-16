@@ -288,7 +288,7 @@ impl Subsystem {
                 // allocate memory slice
                 let slice = res
                     .memory_mut()
-                    .alloc_mem(size as GlobOff)
+                    .alloc_mem(size as GlobOff, size as GlobOff)
                     .unwrap_or_else(|_| panic!("Unable to allocate {}b of shared memory", size));
                 let slice = slice.into_exclusive().expect("Derive cap for slice failed");
 
@@ -455,7 +455,7 @@ impl Subsystem {
                     dom.initrd(),
                     dom.dtb(),
                     |size| {
-                        let mux_mem_slice = match res.memory_mut().alloc_mem(size as GlobOff) {
+                        let mux_mem_slice = match res.memory_mut().alloc_mem(size as GlobOff, 1) {
                             Ok(mem) => mem,
                             Err(e) => {
                                 return Err(e.context(format!(
@@ -770,7 +770,7 @@ impl Subsystem {
         let cfg_range = cfg.cfg_range();
         let cfg_str = &self.cfg_str()[cfg_range.0..cfg_range.1];
         sub.add_config(cfg_str, |size| {
-            let cfg_slice = res.memory_mut().alloc_mem(size)?;
+            let cfg_slice = res.memory_mut().alloc_mem(size, 1)?;
             // alloc_mem gives us full pages; cut it down to the string size
             cfg_slice
                 .derive_with(0, size)?
@@ -892,7 +892,7 @@ impl SubsystemBuilder {
 
         let mem = res
             .memory_mut()
-            .alloc_mem(self.desc_size() as GlobOff)
+            .alloc_mem(self.desc_size() as GlobOff, 1)
             .map_err(|e| {
                 e.context(format!(
                     "Unable to allocate {}b for subsys info",
