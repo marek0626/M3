@@ -52,7 +52,10 @@ for num in range(1, 5):
     all_tests.append("imgproc-dir-{}".format(num))
 fstrace_tests = ["find", "tar", "untar", "sqlite", "leveldb", "sha256sum", "sort"]
 pipe_tests = ["cat_awk", "cat_wc", "grep_awk", "grep_wc"]
-rots_tests = ["rots-raser", "rots-hello", "rots-evidence-test"]
+rots_tests = [
+    "rots-raser", "rots-hello", "rots-evidence-test",
+    "hashmux-benchs", "hashmux-tests", "bench-hashpipe-tee"
+]
 
 if len(args.tests) == 0:
     args.tests = all_tests
