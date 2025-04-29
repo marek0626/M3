@@ -50,6 +50,7 @@ build=build/$M3_TARGET-$M3_ISA-$M3_BUILD
 bindir=$build/bin/
 tooldir=$build/toolsbin
 gem5dir=build/gem5
+cachedirtag=build/CACHEDIR.TAG
 
 # rust env vars
 rusttoolchain="$root/src/toolchain/rust"
@@ -268,6 +269,15 @@ fi
 cargs+=("$@")
 
 mkdir -p "$build" "$M3_OUT"
+# Allow exclusion of the build directory from backups.
+if [ ! -f "$cachedirtag" ]; then
+    cat >"$cachedirtag" <<EOF
+Signature: 8a477f597d28d172789f06886806bc55
+# This file is a cache directory tag created by b.
+# For information about cache directory tags, see:
+#   http://www.brynosaurus.com/cachedir/
+EOF
+fi
 export NPBUILD="$build"
 
 ninjaargs=()
