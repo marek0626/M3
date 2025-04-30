@@ -52,7 +52,10 @@ for num in range(1, 5):
     all_tests.append("imgproc-dir-{}".format(num))
 fstrace_tests = ["find", "tar", "untar", "sqlite", "leveldb", "sha256sum", "sort"]
 pipe_tests = ["cat_awk", "cat_wc", "grep_awk", "grep_wc"]
-rots_tests = ["rots-raser", "rots-hello", "rots-evidence-test"]
+rots_tests = [
+    "rots-raser", "rots-hello", "rots-evidence-test",
+    "hashmux-benchs", "hashmux-tests", "bench-hashpipe-tee"
+]
 
 if len(args.tests) == 0:
     args.tests = all_tests
@@ -86,6 +89,9 @@ class Test:
             return False
         # don't run ROT tests on x86_64, they aren't supported there.
         if self.name in rots_tests and self.isa == "x86_64":
+            return False
+        # hashmux-{benchs,tests} need the default.py, which uses non-SPM-tiles
+        if self.name.startswith("hashmux-") and self.isa == "riscv32":
             return False
         # additionally, rots-raser *only* works on riscv64
         if "raser" in self.name and self.isa != "riscv64":

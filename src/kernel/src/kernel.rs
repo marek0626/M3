@@ -41,6 +41,7 @@ use base::errors::Error;
 use base::io::{self, LogFlags};
 use base::log;
 use base::machine;
+use base::mem::GlobOff;
 use base::mem::VirtAddr;
 use base::tcu;
 use base::util::math;
@@ -131,24 +132,21 @@ fn create_heap() {
 
 fn extend_heap() {
     if platform::tile_desc(platform::kernel_tile()).has_virtmem() {
-        let free_contiguous = mem::borrow_mut().largest_contiguous(mem::MemType::KERNEL);
-        if let Some(bytes) = free_contiguous {
-            let heap_end = VirtAddr::from(unsafe { __m3_heap_get_end() });
+        let heap_end = VirtAddr::from(unsafe { __m3_heap_get_end() });
 
-            // determine page count and virtual start address
-            let pages = (bytes as usize) >> cfg::PAGE_BITS;
-            let virt = math::round_up(heap_end, VirtAddr::from(cfg::PAGE_SIZE));
+        // first map small pages until the next large page
+        let virt = math::round_up(heap_end, VirtAddr::from(cfg::PAGE_SIZE));
+        let virt_next_lpage = (virt + cfg::LPAGE_SIZE - 1) & VirtAddr::from(!(cfg::LPAGE_SIZE - 1));
+        let small_pages = ((virt_next_lpage - virt) >> cfg::PAGE_BITS).as_local();
 
-            // first map small pages until the next large page
-            let virt_next_lpage =
-                (virt + cfg::LPAGE_SIZE - 1) & VirtAddr::from(!(cfg::LPAGE_SIZE - 1));
-            let small_pages = ((virt_next_lpage - virt) >> cfg::PAGE_BITS).as_local();
+        runtime::paging::map_new_mem(virt, small_pages, cfg::PAGE_SIZE);
+        unsafe { __m3_heap_append(small_pages) };
 
-            runtime::paging::map_new_mem(virt, small_pages, cfg::PAGE_SIZE);
-            unsafe { __m3_heap_append(small_pages) };
-
-            // now map the rest with large pages
-            let large_pages = ((pages - small_pages) * cfg::PAGE_SIZE) / cfg::LPAGE_SIZE;
+        // now map the rest with large pages
+        let free_large =
+            mem::borrow_mut().largest_contiguous(mem::MemType::KERNEL, cfg::LPAGE_SIZE as GlobOff);
+        if let Some(free_large) = free_large {
+            let large_pages = (free_large as usize) >> cfg::LPAGE_BITS;
             let pages_per_lpage = cfg::LPAGE_SIZE / cfg::PAGE_SIZE;
             runtime::paging::map_new_mem(
                 virt_next_lpage,

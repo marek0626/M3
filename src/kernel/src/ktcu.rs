@@ -505,7 +505,7 @@ pub fn set_excl_region(
             cfg |= 1 << 3;
         }
 
-        assert!(((addr >> 2) & ((size >> 3) - 1)) == 0);
+        assert!(((addr >> 3) & ((size >> 3) - 1)) == 0);
         assert!(size.is_power_of_two());
         let addr_size = (addr >> 2) | ((size >> 3) - 1);
         let arg1 = TCU::ext_reg_addr(ExtReg::ExtArg1).as_goff();

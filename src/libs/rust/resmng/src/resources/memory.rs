@@ -130,13 +130,13 @@ impl MemoryManager {
         Err(rerrno(Code::InvArgs).context(format!("find memory with {}:{} {:?}", addr, size, perm)))
     }
 
-    pub fn alloc_mem(&mut self, mut size: GlobOff) -> anyhow::Result<MemSlice> {
+    pub fn alloc_mem(&mut self, mut size: GlobOff, align: GlobOff) -> anyhow::Result<MemSlice> {
         size = math::round_up(size, cfg::PAGE_SIZE as GlobOff);
         for (m, map) in &mut self.mods {
             if m.reserved {
                 continue;
             }
-            if let Some(addr) = map.allocate(size, 1) {
+            if let Some(addr) = map.allocate(size, align) {
                 return Ok(MemSlice::new(
                     m.clone(),
                     addr - m.addr().offset(),
@@ -171,7 +171,7 @@ impl MemoryManager {
                 return Ok(res);
             }
 
-            if let Some(max_cont) = map.largest_contiguous() {
+            if let Some(max_cont) = map.largest_contiguous(align) {
                 let align = if exclusive { max_cont } else { 1 };
                 if let Some(addr) = map.allocate(max_cont, align) {
                     let mut sl =

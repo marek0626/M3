@@ -32,11 +32,7 @@ fn destroy(t: &mut dyn WvTester) {
     let child_sel = SelSpace::get().alloc_sel();
 
     let tile = wv_require_ok!(Tile::get("compat|own"));
-    let mut child = wv_require_ok!(ChildActivity::new_with(
-        tile,
-        // ensure that child_sel is not reused by the child
-        ActivityArgs::new("child").first_sel(child_sel + 1)
-    ));
+    let mut child = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("child")));
     wv_assert_ok!(t, child.delegate_obj(c2p_sem.sel()));
 
     let mut dst = child.data_sink();
@@ -77,11 +73,7 @@ fn destroy_ep(t: &mut dyn WvTester) {
     let c2p_sem = wv_require_ok!(Semaphore::create(0));
 
     let tile = wv_require_ok!(Tile::get("compat|own"));
-    let mut child = wv_require_ok!(ChildActivity::new_with(
-        tile,
-        // Ensure that c2p_sem.sel() is not reused by the child.
-        ActivityArgs::new("child").first_sel(c2p_sem.sel() + 1)
-    ));
+    let mut child = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("child")));
     wv_assert_ok!(t, child.delegate_obj(scap.sel()));
     wv_assert_ok!(t, child.delegate_obj(ep.sel()));
     wv_assert_ok!(t, child.delegate_obj(c2p_sem.sel()));

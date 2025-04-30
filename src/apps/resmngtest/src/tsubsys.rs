@@ -36,11 +36,7 @@ pub fn run(t: &mut dyn WvTester) {
 
 fn subsys_builder(t: &mut dyn WvTester) {
     let tile = wv_require_ok!(Tile::get("compat|own"));
-    let mut child = wv_require_ok!(ChildActivity::new_with(
-        tile,
-        // ensure that the selector for the resmng and the subsystem don't collide
-        ActivityArgs::new("test").first_sel(1000)
-    ));
+    let mut child = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
 
     let (_our_sub, mut res) = wv_require_ok!(Subsystem::new());
 

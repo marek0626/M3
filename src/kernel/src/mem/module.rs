@@ -42,7 +42,7 @@ impl MemMod {
         MemMod {
             gaddr: GlobAddr::new_with(tile, offset),
             size,
-            map: MemMap::new(0, size),
+            map: MemMap::new(offset, size),
             ty,
         }
     }
@@ -55,8 +55,8 @@ impl MemMod {
         self.gaddr
     }
 
-    pub fn largest_contiguous(&self) -> Option<GlobOff> {
-        self.map.largest_contiguous()
+    pub fn largest_contiguous(&self, align: GlobOff) -> Option<GlobOff> {
+        self.map.largest_contiguous(align)
     }
 
     pub fn capacity(&self) -> GlobOff {
@@ -70,13 +70,13 @@ impl MemMod {
     pub fn allocate(&mut self, size: GlobOff, align: GlobOff) -> anyhow::Result<GlobAddr> {
         self.map
             .allocate(size, align)
-            .map(|addr| self.gaddr + addr)
+            .map(|addr| GlobAddr::new_with(self.gaddr.tile(), addr))
             .ok_or_else(|| kerrno(Code::OutOfMem))
     }
 
     pub fn free(&mut self, addr: GlobAddr, size: GlobOff) -> bool {
         if addr.tile() == self.gaddr.tile() {
-            self.map.free(addr.offset() - self.gaddr.offset(), size);
+            self.map.free(addr.offset(), size);
             true
         }
         else {
