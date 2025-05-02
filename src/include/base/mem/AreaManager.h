@@ -29,6 +29,12 @@ struct Area {
     Area *next;
 };
 
+/**
+ * Manages memory areas by storing the meta data via heap allocations.
+ *
+ * The AreaManager manages a contiguous piece of memory by using heap allocations to store meta
+ * data. This is in contrast to the InPlaceAreaManager, which stores this meta data in-place.
+ */
 class AreaManager {
 public:
     /**
@@ -67,12 +73,11 @@ public:
     }
 
     /**
-     * Allocates an area in the given map, that is <size> bytes large.
+     * Allocates an area that is <size> bytes large.
      *
-     * @param map the map
      * @param size the size of the area
      * @param align the desired alignment
-     * @return the address, if space was found
+     * @return the address, if space was found, 0 otherwise
      */
     goff_t allocate(size_t size, size_t align = 1) {
         Area *a;
@@ -120,7 +125,6 @@ public:
     /**
      * Frees the area at <addr> with <size> bytes.
      *
-     * @param map the map
      * @param addr the address of the area
      * @param size the size of the area
      */
@@ -161,7 +165,6 @@ public:
     /**
      * Just for debugging/testing: Determines the total number of free bytes in the map
      *
-     * @param map the map
      * @return a pair of the free bytes and the number of areas
      */
     std::pair<size_t, size_t> size() const {
