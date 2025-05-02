@@ -69,7 +69,7 @@ public:
     void free(RecvBuf *rbuf) noexcept;
 
 private:
-    AreaManager<> _bufs;
+    AreaManager _bufs;
     static RecvBufs _inst;
 };
 
