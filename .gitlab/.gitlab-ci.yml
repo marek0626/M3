@@ -1,4 +1,6 @@
-image: "registry.adbi.barkhauseninstitut.org/os/code/m3/m3/m3-ci:latest"
+image:
+  name: "registry.adbi.barkhauseninstitut.org/os/code/m3/m3/m3-ci:latest"
+  pull_policy: always
 
 # run the pipeline only for merge requests into dev or master
 workflow:

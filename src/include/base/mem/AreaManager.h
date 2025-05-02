@@ -17,10 +17,8 @@
 
 #include <base/stream/Format.h>
 #include <base/util/Math.h>
-#include <base/util/Option.h>
 
 #include <memory>
-#include <optional>
 #include <utility>
 
 namespace m3 {
@@ -31,7 +29,12 @@ struct Area {
     Area *next;
 };
 
-template<class A = Area>
+/**
+ * Manages memory areas by storing the meta data via heap allocations.
+ *
+ * The AreaManager manages a contiguous piece of memory by using heap allocations to store meta
+ * data. This is in contrast to the InPlaceAreaManager, which stores this meta data in-place.
+ */
 class AreaManager {
 public:
     /**
@@ -48,7 +51,7 @@ public:
      * @param addr the base address
      * @param size the mem size
      */
-    explicit AreaManager(goff_t addr, size_t size) : list(new A()) {
+    explicit AreaManager(goff_t addr, size_t size) : list(new Area()) {
         list->addr = addr;
         list->size = size;
         list->next = nullptr;
@@ -61,8 +64,8 @@ public:
      * Destroys this map
      */
     ~AreaManager() {
-        for(A *a = list; a != nullptr;) {
-            A *n = static_cast<A *>(a->next);
+        for(auto *a = list; a != nullptr;) {
+            auto *n = a->next;
             delete a;
             a = n;
         }
@@ -70,28 +73,27 @@ public:
     }
 
     /**
-     * Allocates an area in the given map, that is <size> bytes large.
+     * Allocates an area that is <size> bytes large.
      *
-     * @param map the map
      * @param size the size of the area
      * @param align the desired alignment
-     * @return the address, if space was found
+     * @return the address, if space was found, 0 otherwise
      */
-    Option<goff_t> allocate(size_t size, size_t align) {
-        A *a;
-        A *p = nullptr;
-        for(a = list; a != nullptr; p = a, a = static_cast<A *>(a->next)) {
+    goff_t allocate(size_t size, size_t align = 1) {
+        Area *a;
+        Area *p = nullptr;
+        for(a = list; a != nullptr; p = a, a = a->next) {
             size_t diff = m3::Math::round_up(a->addr, static_cast<goff_t>(align)) - a->addr;
             if(a->size > diff && a->size - diff >= size)
                 break;
         }
         if(a == nullptr)
-            return None;
+            return 0;
 
-        /* if we need to do some alignment, create a new area in front of a */
+        // if we need to do some alignment, create a new area in front of a
         size_t diff = m3::Math::round_up(a->addr, static_cast<goff_t>(align)) - a->addr;
         if(diff) {
-            A *n = new A();
+            auto *n = new Area();
             n->addr = a->addr;
             n->size = diff;
             if(p)
@@ -105,52 +107,51 @@ public:
             p = n;
         }
 
-        /* take it from the front */
+        // take it from the front
         goff_t res = a->addr;
         a->size -= size;
         a->addr += size;
-        /* if the area is empty now, remove it */
+        // if the area is empty now, remove it
         if(a->size == 0) {
             if(p)
                 p->next = a->next;
             else
-                list = static_cast<A *>(a->next);
+                list = a->next;
             delete a;
         }
-        return Some(res);
+        return res;
     }
 
     /**
      * Frees the area at <addr> with <size> bytes.
      *
-     * @param map the map
      * @param addr the address of the area
      * @param size the size of the area
      */
     void free(goff_t addr, size_t size) {
-        /* find the area behind ours */
-        A *n, *p = nullptr;
-        for(n = list; n != nullptr && addr > n->addr; p = n, n = static_cast<A *>(n->next))
+        // find the area behind ours
+        Area *n, *p = nullptr;
+        for(n = list; n != nullptr && addr > n->addr; p = n, n = n->next)
             ;
 
-        /* merge with prev and next */
+        // merge with prev and next
         if(p && p->addr + p->size == addr && n && addr + size == n->addr) {
             p->size += size + n->size;
             p->next = n->next;
             delete n;
         }
-        /* merge with prev */
+        // merge with prev
         else if(p && p->addr + p->size == addr) {
             p->size += size;
         }
-        /* merge with next */
+        // merge with next
         else if(n && addr + size == n->addr) {
             n->addr -= size;
             n->size += size;
         }
-        /* create new area between them */
+        // create new area between them
         else {
-            A *a = new A();
+            auto *a = new Area();
             a->addr = addr;
             a->size = size;
             if(p)
@@ -164,13 +165,12 @@ public:
     /**
      * Just for debugging/testing: Determines the total number of free bytes in the map
      *
-     * @param map the map
      * @return a pair of the free bytes and the number of areas
      */
-    std::pair<size_t, size_t> get_size() const {
+    std::pair<size_t, size_t> size() const {
         size_t total = 0;
         size_t areas = 0;
-        for(A *a = list; a != nullptr; a = static_cast<A *>(a->next)) {
+        for(auto *a = list; a != nullptr; a = a->next) {
             total += a->size;
             areas++;
         }
@@ -178,14 +178,14 @@ public:
     }
 
     void format(OStream &os, const FormatSpecs &) const {
-        size_t areas;
-        format_to(os, "Total: {} KiB:\n"_cf, get_size(&areas) / 1024);
-        for(A *a = list; a != nullptr; a = a->next)
+        size_t total = size().first;
+        format_to(os, "Total: {} KiB:\n"_cf, total / 1024);
+        for(auto *a = list; a != nullptr; a = a->next)
             format_to(os, "\t@ {:p}, {} KiB\n"_cf, a->addr, a->size / 1024);
     }
 
 private:
-    A *list;
+    Area *list;
 };
 
 }

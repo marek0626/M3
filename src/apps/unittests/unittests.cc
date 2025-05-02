@@ -40,6 +40,7 @@ int main() {
     RUN_SUITE(tpipe);
     RUN_SUITE(tstring);
     RUN_SUITE(tsgate);
+    RUN_SUITE(tareamng);
 
     if(failed > 0)
         println("\033[1;31m{} tests failed\033[0;m"_cf, failed);
