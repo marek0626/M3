@@ -56,7 +56,7 @@ extern "C" {
     fn __m3_init_libc(argc: i32, argv: *const *const u8, envp: *const *const u8, tls: bool);
     fn __m3_heap_get_end() -> usize;
     fn __m3_heap_set_area(begin: usize, end: usize);
-    fn __m3_heap_append(pages: usize) -> bool;
+    fn __m3_heap_append(pages: usize);
 }
 
 pub fn kerrno(code: Code) -> anyhow::Error {
@@ -140,7 +140,7 @@ fn extend_heap() {
         let small_pages = ((virt_next_lpage - virt) >> cfg::PAGE_BITS).as_local();
 
         runtime::paging::map_new_mem(virt, small_pages, cfg::PAGE_SIZE);
-        assert!(unsafe { __m3_heap_append(small_pages) });
+        unsafe { __m3_heap_append(small_pages) };
 
         // now map the rest with large pages
         let free_large =
@@ -153,7 +153,7 @@ fn extend_heap() {
                 large_pages * pages_per_lpage,
                 cfg::LPAGE_SIZE,
             );
-            assert!(unsafe { __m3_heap_append(large_pages * pages_per_lpage) });
+            unsafe { __m3_heap_append(large_pages * pages_per_lpage) };
         }
     }
 }
