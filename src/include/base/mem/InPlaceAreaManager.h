@@ -72,22 +72,33 @@ public:
     }
 
     /**
-     * Appends the given amount of space to the last area
+     * Appends the given amount of space to the end of the managed region.
      *
-     * @param size the amount of space
-     * @return true on success
+     * That is, append assumes that there are <size> bytes available directly after the current end
+     * of the managed area and will append this to its managed area.
+     *
+     * Note that the size needs to be a multiple of sizeof(InPlaceArea);
+     *
+     * @param size the amount of space (in bytes)
      */
-    bool append(size_t size) {
-        InPlaceArea *a;
-        for(a = list; a != nullptr; a = a->next) {
+    void append(size_t size) {
+        InPlaceArea *a, *p = nullptr;
+        for(a = list; a != nullptr; p = a, a = a->next) {
             if(reinterpret_cast<uintptr_t>(a) + a->size == end)
                 break;
         }
-        if(a == nullptr)
-            return false;
-        a->size += size;
+        if(a == nullptr) {
+            a = reinterpret_cast<InPlaceArea *>(end);
+            a->next = nullptr;
+            a->size = size;
+            if(p)
+                p->next = a;
+            else
+                list = a;
+        }
+        else
+            a->size += size;
         end += size;
-        return true;
     }
 
     /**

@@ -105,6 +105,42 @@ static void areamng_aligns() {
     WVASSERTEQ(mng.size().second, 1U);
 }
 
+static void inplace_append() {
+    std::unique_ptr<uint8_t[]> mem(new uint8_t[0x5000]());
+    InPlaceAreaManager mng(mem.get(), 0x1000);
+
+    WVASSERTEQ(mng.size().first, 0x1000U);
+
+    mng.append(0x1000);
+
+    WVASSERTEQ(mng.size().first, 0x2000U);
+
+    auto res = mng.allocate(0x2000);
+    memset(res, 0, 0x2000);
+    mng.free(res, 0x2000);
+
+    WVASSERTEQ(mng.size().first, 0x2000U);
+
+    mng.append(0x2000);
+
+    WVASSERTEQ(mng.size().first, 0x4000U);
+
+    auto res1 = mng.allocate(0x4000);
+    memset(res1, 0, 0x4000);
+
+    mng.append(0x1000);
+
+    WVASSERTEQ(mng.size().first, 0x1000U);
+
+    auto res2 = mng.allocate(0x1000);
+    memset(res2, 0, 0x1000);
+
+    mng.free(res1, 0x1000);
+    mng.free(res2, 0x4000);
+
+    WVASSERTEQ(mng.size().first, 0x5000U);
+}
+
 static void inplace_areamng() {
     std::unique_ptr<uint8_t[]> mem(new uint8_t[0x1000]());
     InPlaceAreaManager mng(mem.get(), 0x1000);
@@ -118,4 +154,5 @@ void tareamng() {
     RUN_TEST(areamng);
     RUN_TEST(areamng_aligns);
     RUN_TEST(inplace_areamng);
+    RUN_TEST(inplace_append);
 }
