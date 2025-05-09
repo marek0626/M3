@@ -587,4 +587,77 @@ impl<S: RequestSession + 'static, O: Into<usize> + TryFrom<usize> + Debug> Reque
             },
         }
     }
+
+    /// Create a temporary [`Handler`] from `self` that calls `func` on exchange.
+    ///
+    /// This is used to customize the handler functions by, e.g., passing state.
+    /// The registered capabilitity handlers are skipped.
+    /// The behavior of open, close, etc. is not altered.
+    pub fn with<F>(&mut self, func: F) -> RequestHandlerWith<'_, S, O, F>
+    where
+        for<'a, 'b, 'c> F: FnMut(
+            &'a mut ClientManager<S>,
+            usize,
+            SessId,
+            usize,
+            &'b mut CapExchange<'c>,
+        ) -> Result<(), Error>,
+    {
+        RequestHandlerWith { reqhdl: self, func }
+    }
+}
+
+/// A temporarily wrapped [`RequestHandler`] that customizes the exchange handling.
+///
+/// All other invocations are just passed to the wrapped request handler.
+pub struct RequestHandlerWith<'r, S, O, F> {
+    pub reqhdl: &'r mut RequestHandler<S, O>,
+    /// Executed on capability exchange instead of the registered handlers.
+    pub func: F,
+}
+
+impl<'r, S: RequestSession + 'static, O: Into<usize> + TryFrom<usize> + Debug, F> Handler<S>
+    for RequestHandlerWith<'r, S, O, F>
+where
+    for<'a, 'b, 'c> F: FnMut(
+        &'a mut ClientManager<S>,
+        usize,
+        SessId,
+        usize,
+        &'b mut CapExchange<'c>,
+    ) -> Result<(), Error>,
+{
+    fn sessions(&mut self) -> &mut SessionContainer<S> {
+        self.reqhdl.sessions()
+    }
+
+    fn init(&mut self, serv: &Server) {
+        self.reqhdl.init(serv)
+    }
+
+    fn exchange(
+        &mut self,
+        crt: usize,
+        sid: SessId,
+        xchg: &mut CapExchange<'_>,
+    ) -> Result<(), Error> {
+        self.reqhdl
+            .handle_capxchg_with(crt, sid, xchg, |reqhdl, opcode, xchg| {
+                // Call the stored function instead.
+                (self.func)(reqhdl.clients_mut(), crt, sid, opcode, xchg)
+            })
+    }
+
+    fn open(
+        &mut self,
+        crt: usize,
+        srv_sel: Selector,
+        arg: &str,
+    ) -> Result<(Selector, SessId), Error> {
+        self.reqhdl.open(crt, srv_sel, arg)
+    }
+
+    fn close(&mut self, crt: usize, sid: SessId) {
+        self.reqhdl.close(crt, sid);
+    }
 }
