@@ -47,6 +47,7 @@ typedef uint64_t cycles_t;
 
 typedef ulong epid_t;
 typedef uint16_t actid_t;
+typedef uint32_t childid_t;
 typedef uint64_t goff_t;
 typedef uint64_t event_t;
 typedef uint64_t xfer_t;

@@ -85,12 +85,13 @@ void Pager::unmap(goff_t virt) {
     reply.pull_result();
 }
 
-Reference<Pager> Pager::create_clone() {
+Reference<Pager> Pager::create_clone(childid_t id) {
     KIF::CapRngDesc caps;
     {
         KIF::ExchangeArgs args;
         ExchangeOStream os(args);
         os << opcodes::Pager::ADD_CHILD;
+        os << id;
         args.bytes = os.total();
         caps = obtain(1, &args);
     }
