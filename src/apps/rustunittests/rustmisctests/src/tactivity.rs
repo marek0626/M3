@@ -28,6 +28,7 @@ use m3::{send_vmsg, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
 
 pub fn run(t: &mut dyn WvTester) {
     wv_run_test!(t, run_arguments);
+    wv_run_test!(t, run_nested);
     wv_run_test!(t, run_send_receive);
     wv_run_test!(t, exec_fail);
     wv_run_test!(t, exec_hello);
@@ -43,6 +44,25 @@ fn run_arguments(t: &mut dyn WvTester) {
         wv_assert_eq!(t, env::args().count(), 1);
         assert!(env::args().next().is_some());
         assert!(env::args().next().unwrap().ends_with("rustmisctests"));
+        Ok(())
+    }));
+
+    wv_assert_eq!(t, act.wait(), Ok(Code::Success));
+}
+
+fn run_nested(t: &mut dyn WvTester) {
+    let tile = wv_require_ok!(Tile::get("compat|own"));
+    let mut act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
+    act.add_mount("/", "/");
+
+    let act = wv_require_ok!(act.run(|| {
+        let mut t = DefaultWvTester::default();
+        let tile = wv_require_ok!(Tile::get("compat|own"));
+        let act = wv_require_ok!(ChildActivity::new_with(tile, ActivityArgs::new("test")));
+
+        let act = wv_require_ok!(act.run(|| { Ok(()) }));
+
+        wv_assert_eq!(t, act.wait(), Ok(Code::Success));
         Ok(())
     }));
 
