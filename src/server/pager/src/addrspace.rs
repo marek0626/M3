@@ -88,9 +88,29 @@ impl AddrSpace {
         crt: usize,
         sid: SessId,
         xchg: &mut CapExchange<'_>,
+        childs: &childs::ChildManager,
     ) -> Result<(), Error> {
         let child_id = xchg.in_args().pop()?;
-        // TODO: Validate that this child_id is actually a child of the requesting activity.
+        let Some(this_id) = cli.get_mut(sid).unwrap().child
+        else {
+            log!(LogFlags::Error, "Invalid session");
+            return Err(Error::new(Code::InvArgs));
+        };
+
+        // Do a permission test by asserting that the proclaimed child has the caller as the parent.
+        // This implies that one cannot call add_child for an OwnedChild.
+        if !childs
+            .child_by_id(child_id)
+            .is_some_and(|child| child.parent() == Some(this_id))
+        {
+            log!(
+                LogFlags::Error,
+                "Child {} it not a child of {}",
+                child_id,
+                this_id
+            );
+            return Err(Error::new(Code::InvArgs));
+        }
 
         let (crd, _) = cli.add(crt, |_cli, serv| {
             log!(
