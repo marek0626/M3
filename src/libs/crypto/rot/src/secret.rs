@@ -24,6 +24,10 @@ impl<T> Secret<T> {
     pub const fn new(secret: T) -> Self {
         Self { secret }
     }
+
+    pub fn get(&self) -> &T {
+        &self.secret
+    }
 }
 
 impl<const N: usize> Secret<[u8; N]> {

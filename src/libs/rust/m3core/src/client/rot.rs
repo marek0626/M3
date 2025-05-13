@@ -13,19 +13,21 @@
  */
 
 use crate::client::ClientSession;
-use crate::com::{opcodes, MemGate, RecvGate, SendGate, EP};
+use crate::com::{opcodes, GateCap, MemCap, MemGate, RecvGate, SendGate, EP};
 use crate::crypto::HashAlgorithm;
 use crate::errors::{Code, Error};
 use crate::mem::GlobOff;
 use crate::serialize::bytes::{ByteBuf, Bytes};
 use crate::vec::Vec;
+use base::cfg;
+use base::kif::{CapRngDesc, CapType, Perm};
 use base::serialize::{Deserialize, Serialize};
 use bitflags::bitflags;
 
 pub struct RoTSession {
     sess: ClientSession,
     sgate: SendGate,
-    secret_mem: Option<MemGate>,
+    secret_mem: Option<(MemGate, MemCap)>,
     ep: EP,
     algo: &'static HashAlgorithm,
 }
@@ -56,12 +58,19 @@ impl RoTSession {
 
         let features = rot_sess.features();
         rot_sess.secret_mem = if features.unwrap().contains(Features::RoT) {
+            // TODO for TEEs, this memory could be made exclusive
+            let mem = MemCap::new(cfg::PAGE_SIZE as GlobOff, Perm::RW)?;
+            let mem_derive = mem.derive(0, cfg::PAGE_SIZE as GlobOff, Perm::RW)?;
             let smem_opt = rot_sess
                 .sess
-                .obtain(1, |is| is.push(opcodes::RoT::GetSecretMem), |_| Ok(()))
+                .delegate(
+                    CapRngDesc::new(CapType::Object, mem_derive.sel(), 1).unwrap(),
+                    |is| is.push(opcodes::RoT::SetSecretMem),
+                    |_| Ok(()),
+                )
                 .ok();
             if smem_opt.is_some() {
-                Some(MemGate::new_bind(smem_opt.unwrap().start())?)
+                Some((mem.activate()?, mem_derive))
             }
             else {
                 None
@@ -164,42 +173,29 @@ impl RoTSession {
         )
     }
 
-    pub fn secret_mem(&self) -> &Option<MemGate> {
-        &self.secret_mem
+    pub fn secret_mem(&self) -> Option<&MemGate> {
+        self.secret_mem.as_ref().map(|(our, _rots)| our)
     }
 
-    pub fn get_cdi(&self) -> Result<(GlobOff, usize), Error> {
+    pub fn get_cdi(&self) -> Result<Vec<u8>, Error> {
         send_recv_res!(self.sgate, RecvGate::def(), opcodes::RoT::GetCdi)?.pop()
     }
 
-    pub fn read_cdi<const N: usize>(&self) -> Result<[u8; N], Error> {
-        let (off, size) = self.get_cdi()?;
-        assert_eq!(size, N);
-        if let Some(smem) = &self.secret_mem {
-            smem.read_obj(off)
-        }
-        else {
-            Err(Error::new(Code::NotSup))
-        }
-    }
-
-    pub fn derive_secret(&self, custom: &str, size: usize) -> Result<GlobOff, Error> {
-        let (off, derived_size): (GlobOff, usize) = send_recv_res!(
+    pub fn derive_secret(&self, custom: &str, size: usize) -> Result<(), Error> {
+        send_recv_res!(
             self.sgate,
             RecvGate::def(),
             opcodes::RoT::DeriveSecret,
             custom,
             size
-        )?
-        .pop()?;
-        assert_eq!(derived_size, size);
-        Ok(off)
+        )
+        .map(|_| ())
     }
 
     pub fn read_derived_secret<const N: usize>(&self, custom: &str) -> Result<[u8; N], Error> {
-        let off = self.derive_secret(custom, N)?;
-        if let Some(smem) = &self.secret_mem {
-            smem.read_obj(off)
+        self.derive_secret(custom, N)?;
+        if let Some(smem) = self.secret_mem() {
+            smem.read_obj(0)
         }
         else {
             Err(Error::new(Code::NotSup))
