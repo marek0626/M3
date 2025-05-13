@@ -108,11 +108,14 @@ pub fn alloc_ep_async(act: TempRc<Activity>) -> anyhow::Result<()> {
         r.replies,
         dst_act.tile_weak().clone(),
     );
-    let cap = Capability::new(r.dst, ep);
-    act.obj_caps().borrow_mut().insert_as_child(cap, r.act)?;
-
+    // alloc EPs first and drop tilemux to ensure that the insert_as_child below can fail
+    // if it fails, it will drop EPObject, which will acquire tilemux by itself and free the EPs
     dst_act.tile().alloc_eps(ep_count);
     tilemux.alloc_eps(epid, ep_count);
+    drop(tilemux);
+
+    let cap = Capability::new(r.dst, ep);
+    act.obj_caps().borrow_mut().insert_as_child(cap, r.act)?;
 
     if r.dynamic {
         // make the EP invalid, but owned by the activity, so that it can make it dynamic if desired.
