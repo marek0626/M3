@@ -478,7 +478,6 @@ pub fn write_ep_remote(tile: TileId, ep: EpId, regs: &[Reg]) -> anyhow::Result<(
     }
 }
 
-#[allow(unused)]
 pub fn set_excl_region(
     mem_tile: TileId,
     user_tile: TileId,
@@ -488,31 +487,22 @@ pub fn set_excl_region(
     perm: kif::Perm,
     locked: bool,
 ) -> anyhow::Result<()> {
-    #[cfg(not(feature = "gem5"))]
-    return Ok(());
-
-    #[cfg(feature = "gem5")]
-    {
-        let mut cfg =
-            (tilemng::tilegen(user_tile) as Reg) << 18 | (user_tile.raw() as Reg) << 4 | 1;
-        if locked {
-            cfg |= 1 << 1;
-        }
-        if perm.contains(kif::Perm::R) {
-            cfg |= 1 << 2;
-        }
-        if perm.contains(kif::Perm::W) {
-            cfg |= 1 << 3;
-        }
-
-        assert!(((addr >> 3) & ((size >> 3) - 1)) == 0);
-        assert!(size.is_power_of_two());
-        let addr_size = (addr >> 2) | ((size >> 3) - 1);
-        let arg1 = TCU::ext_reg_addr(ExtReg::ExtArg1).as_goff();
-        try_write_slice(mem_tile, arg1, &[addr_size])?;
-
-        let reg = TCU::build_ext_cmd(ExtCmdOpCode::SetExcl, cfg | (idx as u64) << 34);
-        do_ext_cmd(mem_tile, reg).map(|_| ())
+    if let Some((cmd, arg1)) = TCU::build_exreg_cmd(
+        mem_tile,
+        user_tile,
+        tilemng::tilegen(user_tile),
+        idx,
+        addr,
+        size,
+        perm,
+        locked,
+    ) {
+        let arg_addr = TCU::ext_reg_addr(ExtReg::ExtArg1).as_goff();
+        try_write_slice(mem_tile, arg_addr, &[arg1])?;
+        do_ext_cmd(mem_tile, cmd).map(|_| ())
+    }
+    else {
+        Ok(())
     }
 }
 
