@@ -54,16 +54,18 @@ pub const TILE_MEM_BASE: VirtAddr = VirtAddr::new(0xE000_0000);
 
 pub const MEM_CAP_END: VirtAddr = RBUF_STD_ADDR;
 
-#[cfg(all(target_arch = "riscv32", not(feature = "rot")))]
-pub const ENV_START: VirtAddr = VirtAddr::new(0x1_0000);
-#[cfg(all(target_arch = "riscv32", feature = "rot"))]
-pub const ENV_START: VirtAddr = VirtAddr::new(0x0b00_1000);
-#[cfg(all(target_arch = "riscv64", not(feature = "rot")))]
-pub const ENV_START: VirtAddr = VirtAddr::new(0x1000_1000);
-#[cfg(all(target_arch = "riscv64", feature = "rot"))]
-pub const ENV_START: VirtAddr = VirtAddr::new(0x0b00_1000);
+#[cfg(target_arch = "riscv32")]
+pub const ENV_START_DEF: VirtAddr = VirtAddr::new(0x1_0000);
+#[cfg(target_arch = "riscv64")]
+pub const ENV_START_DEF: VirtAddr = VirtAddr::new(0x1000_1000);
 #[cfg(target_arch = "x86_64")]
-pub const ENV_START: VirtAddr = VirtAddr::new(0x1F_E000);
+pub const ENV_START_DEF: VirtAddr = VirtAddr::new(0x1F_E000);
+pub const ENV_START_ROT: VirtAddr = VirtAddr::new(0x0b00_1000);
+
+#[cfg(feature = "rot")]
+pub const ENV_START: VirtAddr = ENV_START_ROT;
+#[cfg(not(feature = "rot"))]
+pub const ENV_START: VirtAddr = ENV_START_DEF;
 
 pub const ENV_SIZE: usize = PAGE_SIZE;
 
