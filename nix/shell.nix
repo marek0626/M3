@@ -35,7 +35,8 @@ let
     };
 
     # building the C cross compiler
-    crossInputs = [ gcc perl unzip bc flock fhsEnv ] ++
+    crossInputs = [ gcc perl unzip bc flock ] ++
+        lib.optional (!stdenv.isDarwin) fhsEnv ++
         lib.optional stdenv.isDarwin (runCommand "CoreFoundation" {} ''
             # I think the vanilla CoreFoundation package should add its frameworks search path
             # but it doesn’t, so we stitch together a new package here
