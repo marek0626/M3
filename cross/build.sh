@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# Buildroot builds its own Python and gets confused if PYTHONPATH is still set by the nix shell.
+unset PYTHONPATH
+
 # If m3-fhs-env exists and were are not already inside the FHS environment, drop us into this
 # environment.
 if [ -z "$M3_FHS_ENV" ] && command -v m3-fhs-env 1>/dev/null 2>&1; then
