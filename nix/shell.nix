@@ -13,8 +13,29 @@ let
         python311Full python311Packages.pydot pre-commit
     ];
 
+    # simple script that just executes the passed command as the init script for the wrapped FHS
+    # environment
+    fhsRunner = writeShellApplication {
+        name = "m3-fhs-run";
+        text = ''
+            if [ $# -eq 0 ]; then
+                exec bash
+            else
+                exec "$@"
+            fi
+        '';
+    };
+
+    # a script that drops the command into an FHS-compliant environment with the absolute paths
+    # present that are needed by buildroot
+    fhsEnv = buildFHSEnv {
+        name = "m3-fhs-env";
+        targetPkgs = pkgs: with pkgs; [ bashInteractive fhsRunner file ];
+        runScript = "m3-fhs-run";
+    };
+
     # building the C cross compiler
-    crossInputs = [ gcc perl unzip bc flock ] ++
+    crossInputs = [ gcc perl unzip bc flock fhsEnv ] ++
         lib.optional stdenv.isDarwin (runCommand "CoreFoundation" {} ''
             # I think the vanilla CoreFoundation package should add its frameworks search path
             # but it doesn’t, so we stitch together a new package here

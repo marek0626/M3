@@ -1,5 +1,11 @@
 #!/bin/sh
 
+# If m3-fhs-env exists and were are not already inside the FHS environment, drop us into this
+# environment.
+if [ -z "$M3_FHS_ENV" ] && command -v m3-fhs-env 1>/dev/null 2>&1; then
+    M3_FHS_ENV=1 exec m3-fhs-env "$0" "$@"
+fi
+
 MAKE_ARGS="-j"$(nproc)
 
 usage() {
