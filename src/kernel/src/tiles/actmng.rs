@@ -174,14 +174,20 @@ impl ActivityMng {
     }
 
     pub fn start_root_async() -> anyhow::Result<()> {
-        // TODO temporary
-        let isa = platform::tile_desc(platform::kernel_tile()).isa();
-        let tile_emem = kif::TileDesc::new(kif::TileType::Comp, isa, 0);
-        let tile_imem =
-            kif::TileDesc::new_with_attr(kif::TileType::Comp, isa, 0, kif::TileAttr::IMEM);
+        let tile_id = if let Some(root_tile) = args::get().root_tile {
+            root_tile
+        }
+        else {
+            // TODO temporary
+            let isa = platform::tile_desc(platform::kernel_tile()).isa();
+            let tile_emem = kif::TileDesc::new(kif::TileType::Comp, isa, 0);
+            let tile_imem =
+                kif::TileDesc::new_with_attr(kif::TileType::Comp, isa, 0, kif::TileAttr::IMEM);
 
-        let tile_id = tilemng::find_tile(&tile_emem)
-            .unwrap_or_else(|| tilemng::find_tile(&tile_imem).unwrap());
+            tilemng::find_tile(&tile_emem)
+                .unwrap_or_else(|| tilemng::find_tile(&tile_imem).unwrap())
+        };
+
         let tile = tilemng::tilemux(tile_id).new_tile_obj();
         let tile_desc = platform::tile_desc(tile_id);
 

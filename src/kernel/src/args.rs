@@ -17,11 +17,13 @@ use base::cell::{LazyStaticRefCell, Ref};
 use base::cfg;
 use base::col::Vec;
 use base::env;
+use base::tcu::TileId;
 use base::util::parse;
 
 pub struct Args {
     pub kmem: usize,
     pub root_eps: usize,
+    pub root_tile: Option<TileId>,
 }
 
 impl Default for Args {
@@ -29,6 +31,7 @@ impl Default for Args {
         Self {
             kmem: 64 * 1024 * 1024,
             root_eps: cfg::DEF_EP_COUNT,
+            root_tile: None,
         }
     }
 }
@@ -65,6 +68,10 @@ pub fn parse() {
                 usage();
             }
             args.root_eps = ep_count;
+        }
+        else if argv[i] == "--root" {
+            let tile_id = get_size_arg(&argv, &mut i) as u16;
+            args.root_tile = Some(TileId::new_from_raw(tile_id));
         }
         i += 1;
     }
