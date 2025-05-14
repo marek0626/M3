@@ -591,7 +591,7 @@ impl<S: RequestSession + 'static, O: Into<usize> + TryFrom<usize> + Debug> Reque
     /// Create a temporary [`Handler`] from `self` that calls `func` on exchange.
     ///
     /// This is used to customize the handler functions by, e.g., passing state.
-    /// The registered capabilitity handlers are skipped.
+    /// The registered capability handlers are skipped.
     /// The behavior of open, close, etc. is not altered.
     pub fn with<F>(&mut self, func: F) -> RequestHandlerWith<'_, S, O, F>
     where

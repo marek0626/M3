@@ -405,7 +405,7 @@ impl Default for ResMngChild {
         Self {
             scap: SendCap::new_bind(kif::INVALID_SEL),
             act_sel: kif::INVALID_SEL,
-            id: Default::default(),
+            id: None,
         }
     }
 }
@@ -424,7 +424,7 @@ impl ResMngChild {
         Self {
             scap,
             act_sel: kif::INVALID_SEL,
-            id: Default::default(),
+            id: None,
         }
     }
 
