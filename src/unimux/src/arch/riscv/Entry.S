@@ -78,7 +78,7 @@ BEGIN_FUNC(sleep_once)
     // skip wfi on hw (TODO why does that not work?)
 1:  bnez    a0, 2f
     wfi
-2:	li a0, 0
-    csrs sstatus, a0
+2:	li a0, 2
+    csrc sstatus, a0
     ret
 END_FUNC(sleep_once)
