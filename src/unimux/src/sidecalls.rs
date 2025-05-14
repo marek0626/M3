@@ -111,7 +111,6 @@ fn handle_sidecall(msg: &'static tcu::Message) {
     reply_msg(msg, &reply_buf);
 }
 
-// TODO another workaround for the weird compiler/UB problem with ActivityRef
 #[inline(never)]
 fn handle_sidecalls(mut our: activities::ActivityRef<'_>) {
     let _cmd_saved = helper::TCUGuard::new();
@@ -173,9 +172,7 @@ fn handle_sidecalls(mut our: activities::ActivityRef<'_>) {
     }
 }
 
-// NMG This has a borrow bug in it at the moment
-// Called at the end of every interrupt handling routine to check if we've received a kernel message of any kind.
-#[inline(never)]
+#[inline(always)]
 pub fn check() {
     let our = activities::our();
     if !our.has_msgs() {

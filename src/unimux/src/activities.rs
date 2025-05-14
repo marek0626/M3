@@ -80,8 +80,6 @@ impl<'m> ActivityRef<'m> {
 }
 
 impl Drop for ActivityRef<'_> {
-    //NMG Make the compiler cooperate with UB
-    #[inline(never)]
     fn drop(&mut self) {
         self.act.has_refs = false;
     }
