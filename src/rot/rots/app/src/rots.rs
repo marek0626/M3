@@ -229,6 +229,9 @@ impl RequestSession for RoTSession {
                 .derive(0, ctx.rot_cert_size, Perm::R)
                 .expect("Couldn't derive");
             let mut kmac_cdi = Secret::new_zeroed();
+            // TODO this uses KECACC internally which forces us to save/restore the state
+            // before/after if required. maybe this should be changed to have a wrapper that
+            // performs the save/restore instead of doing it manually at all places.
             rot::derive_cdi(&ctx.kmac_cdi, arg.as_bytes(), &mut kmac_cdi);
             (Some(rot_sig_cap), Some(kmac_cdi))
         }
@@ -247,6 +250,13 @@ impl RequestSession for RoTSession {
         else {
             DEFAULT_TIME_SLICE
         };
+
+        // Swap any context here
+        let cur_id_opt = CURRENT.get();
+        let mut state = STATES.borrow_mut();
+        if let Some(cur_id) = cur_id_opt {
+            KECACC.start_save(&mut state[cur_id]);
+        }
 
         // Only if we detected and configured a valid Root of Trust context at activity startup, do this part
         let ctx_data = match CTX.is_some() {
@@ -269,21 +279,13 @@ impl RequestSession for RoTSession {
             output_bytes: 0,
         };
 
-        // Swap any context here
-        let cur_id_opt = CURRENT.get();
-        //log!(LogFlags::Info, "getting states");
-        let mut state = STATES.borrow_mut();
-        if let Some(cur_id) = cur_id_opt {
-            //log!(LogFlags::Info, "saving kecacc");
-            KECACC.start_save(&mut state[cur_id]);
-        }
-        //log!(LogFlags::Info, "hashing");
         rot::hash(rot::cert::HASH_TYPE, arg.as_bytes(), &mut sess.arg_hash[..]);
+
         // And restore it. Not sure that I need to do this, really
         if let Some(cur_id) = cur_id_opt {
-            //log!(LogFlags::Info, "starting load");
             KECACC.start_load(&state[cur_id]);
         }
+
         log!(
             LogFlags::RoTReqs,
             "Hash for client '{}': {}",
@@ -517,8 +519,21 @@ impl RoTSession {
             return Err(Error::new(Code::InvArgs));
         };
 
+        // save current state
+        let cur_id_opt = CURRENT.get();
+        let mut state = STATES.borrow_mut();
+        if let Some(cur_id) = cur_id_opt {
+            KECACC.start_save(&mut state[cur_id]);
+        }
+
         let mut temp = [0u8; MAX_DERIVED_SECRET_SIZE];
         rot::derive_key(kmac_cdi, custom, &[], &mut temp[..size]);
+
+        // and restore the state again
+        if let Some(cur_id) = cur_id_opt {
+            KECACC.start_load(&state[cur_id]);
+        }
+
         secret_cap.get().unwrap().write_obj(&temp, 0)?;
 
         reply_vmsg!(is, Code::Success)
