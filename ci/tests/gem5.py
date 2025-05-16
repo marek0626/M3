@@ -38,6 +38,7 @@ all_tests = [
     "cpp-algo-benchs", "cpp-misc-benchs", "cpp-vfs-benchs",
     "chantests",
     "unittests", "hashmux-benchs", "hashmux-tests", "bench-hashpipe-tee", "resmngtest",
+    "hello",
     "facever", "rots-raser", "rots-hello", "rots-evidence-test",
     "find", "tar", "untar", "sqlite", "leveldb", "sha256sum", "sort",
     "cat_awk", "cat_wc", "grep_awk", "grep_wc",
