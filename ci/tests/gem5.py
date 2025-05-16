@@ -6,6 +6,7 @@ import resource
 import shutil
 import subprocess
 import sys
+import traceback
 
 from datetime import datetime
 from enum import Enum
@@ -330,7 +331,11 @@ for test in args.tests:
 # execute everything
 try:
     jobs.run(os.cpu_count())
-except (KeyboardInterrupt, Exception):
+except Exception:
+    print(traceback.format_exc())
+    print("Stopping tests...")
+    jobs.stop()
+except KeyboardInterrupt:
     print("Stopping tests...")
     jobs.stop()
 
