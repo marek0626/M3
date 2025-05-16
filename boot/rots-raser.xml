@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <config>
-    <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py M3_GEM5_O3_CORES=2 M3_GEM5_MINOR_CORES=4</env>
+    <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py</env>
     <rot layers="brom,blau.bin,rosa.bin,rots.bin"/>
     <kernel args="kernel"/>
     <dom>
