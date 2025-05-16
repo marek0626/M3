@@ -127,9 +127,9 @@ class Test:
         bootfile = rundir / "boot.tmp.xml"
         boot = open(bootfile, "w")
         if self.ty == "sh" and shpath.exists():
-            subprocess.run(shpath, stdout=boot, env=env)
+            subprocess.run(shpath, stdout=boot, env=env, check=True)
         else:
-            subprocess.run(defpath, stdout=boot, env=env)
+            subprocess.run(defpath, stdout=boot, env=env, check=True)
         return bootfile
 
     def boot_script(self, rundir):
@@ -311,13 +311,15 @@ for isa in args.isas:
                         builddir / "src" / "fs" / "bench",
                         str(64 * 1024),  # blocks
                         str(4096),       # inodes
-                        str(bpe)])
+                        str(bpe)],
+                       check=True)
         subprocess.run([builddir / "toolsbin" / "mkm3fs",
                         bmoddir / "default.img",
                         builddir / "src" / "fs" / "default",
                         str(16 * 1024),  # blocks
                         str(512),        # inodes
-                        str(bpe)])
+                        str(bpe)],
+                       check=True)
 
 # collect jobs
 jobs = Jobs(args.results)
