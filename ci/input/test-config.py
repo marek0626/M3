@@ -121,6 +121,15 @@ ether1 = createEtherTile(noc=root.noc,
                          memTile=None)
 tiles.append(ether1)
 
+# create tile for serial input (unless we're debugging gem5)
+if int(os.environ.get("DBG_GEM5", 0)) != 1:
+    tile = createSerialTile(noc=root.noc,
+                            options=options,
+                            id=TileId(0, num_tiles + num_copy + num_indir +
+                                      1 + num_sto + 2 + num_kecacc + 2),
+                            memTile=None)
+    tiles.append(tile)
+
 linkEthertiles(ether0, ether1)
 
 runSimulation(root, options, tiles)
