@@ -3,6 +3,7 @@
 import argparse
 import os
 import resource
+import shlex
 import shutil
 import subprocess
 import sys
@@ -222,7 +223,7 @@ class Test:
             # set environment variables
             for var in vars:
                 if var != "M3_OUT" and var != "M3_MOD_PATH":
-                    f.write("export {}={}\n".format(var, vars[var]))
+                    f.write("export {}={}\n".format(var, shlex.quote(vars[var])))
             f.write("export M3_MOD_PATH=$tmp\n")
             f.write("\n")
             # rebuild to ensure that mkm3fs is up-to-date
