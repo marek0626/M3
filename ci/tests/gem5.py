@@ -219,6 +219,15 @@ class Test:
             f.write("tmp=$(mktemp -d)\n")
             f.write("trap 'rm -rf \"$tmp\"' EXIT ERR INT TERM\n")
             f.write("\n")
+            # set environment variables
+            for var in vars:
+                if var != "M3_OUT" and var != "M3_MOD_PATH":
+                    f.write("export {}={}\n".format(var, vars[var]))
+            f.write("export M3_MOD_PATH=$tmp\n")
+            f.write("\n")
+            # rebuild to ensure that mkm3fs is up-to-date
+            f.write("./b\n")
+            f.write("\n")
             # create FS images
             for img in ["bench", "default"]:
                 cmd = fscmd["fsimgs-{}-{}".format(self.bpe, img)].copy()
@@ -232,12 +241,6 @@ class Test:
                 for line in fin:
                     f.write(line)
             f.write("EOF\n\n")
-            # set environment variables
-            for var in vars:
-                if var != "M3_OUT" and var != "M3_MOD_PATH":
-                    f.write("export {}={}\n".format(var, vars[var]))
-            f.write("export M3_MOD_PATH=$tmp\n")
-            f.write("\n")
             # now we're ready for running/debugging
             f.write("echo \\# You can now run the test via:\n")
             f.write("echo ./b run \"$tmp/boot.xml\"\n")
