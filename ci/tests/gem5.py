@@ -236,7 +236,7 @@ class Test:
                 f.write("\n")
             f.write("\n")
             # generate boot script
-            f.write("cat > \"$tmp/boot.xml\" <<EOF\n")
+            f.write("cat > \"$tmp/boot.xml\" <<\"EOF\"\n")
             with open(bootin, 'r') as fin:
                 for line in fin:
                     f.write(line)
