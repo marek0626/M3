@@ -209,53 +209,55 @@ class Test:
         resource.setrlimit(resource.RLIMIT_AS, (vlimit, vlimit))
         resource.setrlimit(resource.RLIMIT_CPU, (tlimit, tlimit))
 
+    def create_run_script(self, rundir, bootin, vars):
+        # create a run.sh that drops the user into a shell to exactly
+        # reproduce and analyze a test
+        runfile = str(rundir) + "/run.sh"
+        with open(runfile, "w") as f:
+            f.write("#!/usr/bin/env bash\n")
+            # create temp dir
+            f.write("tmp=$(mktemp -d)\n")
+            f.write("trap 'rm -rf $tmp' EXIT ERR INT TERM\n")
+            f.write("\n")
+            # create FS images
+            for img in ["bench", "default"]:
+                cmd = fscmd["fsimgs-{}-{}".format(self.bpe, img)].copy()
+                cmd[1] = "\"$tmp/{}\"".format(os.path.basename(cmd[1]))
+                f.write(" ".join(cmd))
+                f.write("\n")
+            f.write("\n")
+            # generate boot script
+            f.write("cat > \"$tmp/boot.xml\" <<EOF\n")
+            with open(bootin, 'r') as fin:
+                for line in fin:
+                    f.write(line)
+            f.write("EOF\n\n")
+            # set environment variables
+            for var in vars:
+                if var != "M3_OUT" and var != "M3_MOD_PATH":
+                    f.write("export {}={}\n".format(var, vars[var]))
+            f.write("export M3_MOD_PATH=$tmp\n")
+            f.write("\n")
+            # now we're ready for running/debugging
+            f.write("echo \\# You can now run the test via:\n")
+            f.write("echo ./b run \"$tmp/boot.xml\"\n")
+            f.write("\n")
+            f.write("if [ \"$SHELL\" != \"\" ]; then\n")
+            f.write("    \"$SHELL\"\n")
+            f.write("else\n")
+            f.write("    /usr/bin/env bash\n")
+            f.write("fi\n")
+        os.chmod(runfile, 0o755)
+
     def step(self, dir):
         rundir = Path(dir) / self.run_dir()
         if self.state == State.INIT:
             rundir.mkdir(exist_ok=True, parents=True)
             vars = self.build_env(rundir)
             bootin = self.boot_script(rundir)
+            self.create_run_script(rundir, bootin, vars)
             bootgen = rundir / "boot.gen.xml"
             shutil.copyfile(bootin, bootgen)
-
-            # create a run.sh that drops the user into a shell to exactly
-            # reproduce and analyze a test
-            runfile = str(rundir) + "/run.sh"
-            with open(runfile, "w") as f:
-                f.write("#!/usr/bin/env bash\n")
-                # create temp dir
-                f.write("tmp=$(mktemp -d)\n")
-                f.write("trap 'rm -rf $tmp' EXIT ERR INT TERM\n")
-                f.write("\n")
-                # create FS images
-                for img in ["bench", "default"]:
-                    cmd = fscmd["fsimgs-{}-{}".format(self.bpe, img)].copy()
-                    cmd[1] = "\"$tmp/{}\"".format(os.path.basename(cmd[1]))
-                    f.write(" ".join(cmd))
-                    f.write("\n")
-                f.write("\n")
-                # generate boot script
-                f.write("cat > \"$tmp/boot.xml\" <<EOF\n")
-                with open(bootin, 'r') as fin:
-                    for line in fin:
-                        f.write(line)
-                f.write("EOF\n\n")
-                # set environment variables
-                for var in vars:
-                    if var != "M3_OUT" and var != "M3_MOD_PATH":
-                        f.write("export {}={}\n".format(var, vars[var]))
-                f.write("export M3_MOD_PATH=$tmp\n")
-                f.write("\n")
-                # now we're ready for running/debugging
-                f.write("echo \\# You can now run the test via:\n")
-                f.write("echo ./b run \"$tmp/boot.xml\"\n")
-                f.write("\n")
-                f.write("if [ \"$SHELL\" != \"\" ]; then\n")
-                f.write("    \"$SHELL\"\n")
-                f.write("else\n")
-                f.write("    /usr/bin/env bash\n")
-                f.write("fi\n")
-            os.chmod(runfile, 0o755)
 
             self.job = subprocess.Popen(["nice", "./b", "run", bootgen, "-n"],
                                         stdin=subprocess.DEVNULL,
