@@ -158,7 +158,7 @@ pub extern "C" fn ext_irq(state: &mut arch::State) -> *mut libc::c_void {
         isr::IRQSource::TCU(tcu::IRQ::Timer) => {
             let mut user = activities::user();
             ISR::set_entry_sp(user.user_state_addr() + mem::size_of::<arch::State>());
-            user.block(false);
+            user.set_blocked(false);
             timer::trigger();
             NEED_SWITCH.set(true);
         },

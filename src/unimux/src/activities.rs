@@ -188,7 +188,7 @@ pub fn update_our_activity() {
 }
 
 pub fn stop_activity(status: Code) {
-    user().block(true);
+    user().set_blocked(true);
 
     let act = tcu::TCU::get_cur_activity();
     user().set_activity_reg(act);
@@ -255,7 +255,7 @@ impl Activity {
         self.user_state_addr
     }
 
-    pub fn block(&mut self, state: bool) {
+    pub fn set_blocked(&mut self, state: bool) {
         self.state = match state {
             true => ActivityState::BLOCKED,
             false => ActivityState::STARTED,

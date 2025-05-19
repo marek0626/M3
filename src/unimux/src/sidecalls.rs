@@ -240,6 +240,12 @@ fn activity_ctrl(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
             Ok((0, 0))
         },
 
+        kif::tilemux::ActivityOp::Stop => {
+            // mark it as blocked to idle instead of returning to the app
+            activities::user().set_blocked(true);
+            Ok((0, 0))
+        },
+
         _ => Ok((0, 0)),
     }
 }
