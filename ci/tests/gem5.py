@@ -64,6 +64,7 @@ if len(args.tests) == 0:
 
 indir = Path("ci") / "input"
 gem5cfg = Path("platform") / "gem5" / "configs" / "m3"
+fscmd = {}
 
 
 class State(Enum):
@@ -216,6 +217,46 @@ class Test:
             bootin = self.boot_script(rundir)
             bootgen = rundir / "boot.gen.xml"
             shutil.copyfile(bootin, bootgen)
+
+            # create a run.sh that drops the user into a shell to exactly
+            # reproduce and analyze a test
+            runfile = str(rundir) + "/run.sh"
+            with open(runfile, "w") as f:
+                f.write("#!/usr/bin/env bash\n")
+                # create temp dir
+                f.write("tmp=$(mktemp -d)\n")
+                f.write("trap 'rm -rf $tmp' EXIT ERR INT TERM\n")
+                f.write("\n")
+                # create FS images
+                for img in ["bench", "default"]:
+                    cmd = fscmd["fsimgs-{}-{}".format(self.bpe, img)].copy()
+                    cmd[1] = "\"$tmp/{}\"".format(os.path.basename(cmd[1]))
+                    f.write(" ".join(cmd))
+                    f.write("\n")
+                f.write("\n")
+                # generate boot script
+                f.write("cat > \"$tmp/boot.xml\" <<EOF\n")
+                with open(bootin, 'r') as fin:
+                    for line in fin:
+                        f.write(line)
+                f.write("EOF\n\n")
+                # set environment variables
+                for var in vars:
+                    if var != "M3_OUT" and var != "M3_MOD_PATH":
+                        f.write("export {}={}\n".format(var, vars[var]))
+                f.write("export M3_MOD_PATH=$tmp\n")
+                f.write("\n")
+                # now we're ready for running/debugging
+                f.write("echo \\# You can now run the test via:\n")
+                f.write("echo ./b run \"$tmp/boot.xml\"\n")
+                f.write("\n")
+                f.write("if [ \"$SHELL\" != \"\" ]; then\n")
+                f.write("    \"$SHELL\"\n")
+                f.write("else\n")
+                f.write("    /usr/bin/env bash\n")
+                f.write("fi\n")
+            os.chmod(runfile, 0o755)
+
             self.job = subprocess.Popen(["nice", "./b", "run", bootgen, "-n"],
                                         stdin=subprocess.DEVNULL,
                                         stdout=subprocess.DEVNULL,
@@ -300,26 +341,33 @@ class Jobs:
         self.running = []
 
 
+def build_image(name, argv):
+    argv = [str(e) for e in argv]
+    fscmd[name] = argv
+    subprocess.run(argv, check=True)
+
+
 # create FS images
 for isa in args.isas:
     builddir = Path("build") / "gem5-{}-{}".format(isa, "bench")
     for bpe in args.bpes:
-        bmoddir = builddir / "fsimgs-{}".format(bpe)
+        name = "fsimgs-{}".format(bpe)
+        bmoddir = builddir / name
         bmoddir.mkdir(exist_ok=True, parents=True)
-        subprocess.run([builddir / "toolsbin" / "mkm3fs",
-                        bmoddir / "bench.img",
-                        builddir / "src" / "fs" / "bench",
-                        str(64 * 1024),  # blocks
-                        str(4096),       # inodes
-                        str(bpe)],
-                       check=True)
-        subprocess.run([builddir / "toolsbin" / "mkm3fs",
-                        bmoddir / "default.img",
-                        builddir / "src" / "fs" / "default",
-                        str(16 * 1024),  # blocks
-                        str(512),        # inodes
-                        str(bpe)],
-                       check=True)
+        build_image(name + "-bench",
+                    [builddir / "toolsbin" / "mkm3fs",
+                     bmoddir / "bench.img",
+                     builddir / "src" / "fs" / "bench",
+                     64 * 1024,  # blocks
+                     4096,       # inodes
+                     bpe])
+        build_image(name + "-default",
+                    [builddir / "toolsbin" / "mkm3fs",
+                     bmoddir / "default.img",
+                     builddir / "src" / "fs" / "default",
+                     16 * 1024,  # blocks
+                     512,        # inodes
+                     bpe])
 
 # collect jobs
 jobs = Jobs(args.results)
