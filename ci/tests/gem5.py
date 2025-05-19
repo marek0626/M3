@@ -217,7 +217,7 @@ class Test:
             f.write("#!/usr/bin/env bash\n")
             # create temp dir
             f.write("tmp=$(mktemp -d)\n")
-            f.write("trap 'rm -rf $tmp' EXIT ERR INT TERM\n")
+            f.write("trap 'rm -rf \"$tmp\"' EXIT ERR INT TERM\n")
             f.write("\n")
             # create FS images
             for img in ["bench", "default"]:
