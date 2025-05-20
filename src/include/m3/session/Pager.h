@@ -58,7 +58,7 @@ public:
 
     void init(ChildActivity &act);
 
-    Reference<Pager> create_clone();
+    Reference<Pager> create_clone(childid_t);
     void clone();
     void pagefault(goff_t addr, uint access);
     void map_anon(goff_t *virt, size_t len, int prot, int flags);

@@ -29,6 +29,9 @@ use crate::tcu::{ActId, TileId};
 use crate::tiles::Activity;
 use crate::time::TimeDuration;
 
+// Internal ID to reference child activities
+pub type Id = u32;
+
 // use a separate message buffer here, because the default buffer could be in use for a message over
 // a SendGate, for which the reply gate needs to activated first, possibly involving a MemGate
 // creation via the resource manager.
@@ -120,6 +123,13 @@ pub struct AddChildReq {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(crate = "base::serde")]
+pub struct AddChildReply {
+    // The internal ID of the child; needed by the pager.
+    pub id: Id,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(crate = "base::serde")]
 pub struct ActInfo {
     pub id: ActId,
     pub layer: u32,
@@ -179,15 +189,20 @@ impl ResMng {
         sgate: Selector,
         name: &str,
     ) -> Result<ResMngChild, Error> {
-        Self::send_receive(&self.sgate, opcodes::ResMng::AddChild, AddChildReq {
+        let mut reply = Self::send_receive(&self.sgate, opcodes::ResMng::AddChild, AddChildReq {
             id: act.id(),
             act: act.sel(),
             tile: act.tile().sel(),
             kmem: act.kmem().sel(),
             sgate,
             name: name.to_string(),
-        })
-        .map(|_| ResMngChild::new_clone(SendCap::new_bind(sgate), act.sel()))
+        })?;
+        let reply: AddChildReply = reply.pop()?;
+        Ok(ResMngChild::new_clone(
+            SendCap::new_bind(sgate),
+            act.sel(),
+            reply.id,
+        ))
     }
 
     /// Registers a service with given name at selector `dst`, using `sgate` for session creations.
@@ -381,6 +396,8 @@ impl ResMng {
 pub struct ResMngChild {
     scap: SendCap,
     act_sel: Selector,
+    /// The internal child ID at the resource manager if known
+    id: Option<Id>,
 }
 
 impl Default for ResMngChild {
@@ -388,13 +405,18 @@ impl Default for ResMngChild {
         Self {
             scap: SendCap::new_bind(kif::INVALID_SEL),
             act_sel: kif::INVALID_SEL,
+            id: None,
         }
     }
 }
 
 impl ResMngChild {
-    fn new_clone(scap: SendCap, act_sel: Selector) -> Self {
-        Self { scap, act_sel }
+    fn new_clone(scap: SendCap, act_sel: Selector, id: Id) -> Self {
+        Self {
+            scap,
+            act_sel,
+            id: Some(id),
+        }
     }
 
     /// Creates a new instance with given `SendCap` for a self-managed child
@@ -402,12 +424,18 @@ impl ResMngChild {
         Self {
             scap,
             act_sel: kif::INVALID_SEL,
+            id: None,
         }
     }
 
     /// Returns the selector for the `SendCap` to communicate with the resource manager
     pub fn sel(&self) -> Selector {
         self.scap.sel()
+    }
+
+    /// The internal child ID at the resource manager if known
+    pub fn id(&self) -> Option<Id> {
+        self.id
     }
 }
 

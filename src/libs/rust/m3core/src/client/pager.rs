@@ -29,6 +29,8 @@ use crate::serialize::{Deserialize, Serialize};
 use crate::syscalls;
 use crate::tiles::ChildActivity;
 
+use super::resmng::Id;
+
 /// Represents a session at the pager
 ///
 /// The pager allows to map memory into the virtual address space and is responsible to resolve page
@@ -91,10 +93,18 @@ impl Pager {
     }
 
     /// Clones the session to be shared with the given activity.
-    pub(crate) fn new_clone(&self) -> Result<Self, Error> {
-        let res = self
-            .sess
-            .obtain(1, |os| os.push(opcodes::Pager::AddChild), |_| Ok(()))?;
+    ///
+    /// Pass the resource-manager-internal [`Id`] of the child activity to link them together
+    /// on the pager side.
+    pub(crate) fn new_clone(&self, id: Id) -> Result<Self, Error> {
+        let res = self.sess.obtain(
+            1,
+            |os| {
+                os.push(opcodes::Pager::AddChild);
+                os.push(id);
+            },
+            |_| Ok(()),
+        )?;
         let sess = ClientSession::new_owned_bind(res.start());
 
         // get send gates for us and our child

@@ -56,21 +56,21 @@ ChildActivity::ChildActivity(const Reference<class Tile> &tile, const std::strin
     _eps_start = eps_start;
     _id = id;
 
+    // clone resource manager
+    capsel_t sgate_sel = SelSpace::get().alloc_sel();
+    _resmng = Activity::own().resmng()->clone(*this, sgate_sel, name);
+
     // determine and initialize pager
     if(_tile->desc().has_virtmem()) {
         if(args._pager)
             _pager = args._pager;
         else if(Activity::own().pager())
-            _pager = Activity::own().pager()->create_clone();
+            _pager = Activity::own().pager()->create_clone(_resmng->id());
         // we need a pager on VM tiles
         else
             throw Exception(Errors::NOT_SUP);
         _pager->init(*this);
     }
-
-    // clone resource manager
-    capsel_t sgate_sel = SelSpace::get().alloc_sel();
-    _resmng = Activity::own().resmng()->clone(*this, sgate_sel, name);
 }
 
 ChildActivity::~ChildActivity() {

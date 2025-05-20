@@ -74,10 +74,6 @@ impl AddrSpace {
         self.serv.id()
     }
 
-    pub fn child_id(&self) -> Option<childs::Id> {
-        self.child
-    }
-
     #[allow(unused)]
     pub fn parent(&self) -> Option<SessId> {
         self.parent
@@ -92,8 +88,29 @@ impl AddrSpace {
         crt: usize,
         sid: SessId,
         xchg: &mut CapExchange<'_>,
+        childs: &childs::ChildManager,
     ) -> Result<(), Error> {
-        let child_id = cli.get_mut(sid).unwrap().child_id();
+        let child_id = xchg.in_args().pop()?;
+        let Some(this_id) = cli.get_mut(sid).unwrap().child
+        else {
+            log!(LogFlags::Error, "Invalid session");
+            return Err(Error::new(Code::InvArgs));
+        };
+
+        // Do a permission test by asserting that the proclaimed child has the caller as the parent.
+        // This implies that one cannot call add_child for an OwnedChild.
+        if !childs
+            .child_by_id(child_id)
+            .is_some_and(|child| child.parent() == Some(this_id))
+        {
+            log!(
+                LogFlags::Error,
+                "Child {} it not a child of {}",
+                child_id,
+                this_id
+            );
+            return Err(Error::new(Code::InvArgs));
+        }
 
         let (crd, _) = cli.add(crt, |_cli, serv| {
             log!(
@@ -102,7 +119,7 @@ impl AddrSpace {
                 sid,
                 serv.id()
             );
-            Ok(AddrSpace::new(serv, Some(sid), child_id))
+            Ok(AddrSpace::new(serv, Some(sid), Some(child_id)))
         })?;
 
         xchg.out_caps(crd);

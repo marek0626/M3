@@ -50,7 +50,7 @@ use crate::resources::{
 use crate::subsys::{ChildStarter, SubsystemBuilder};
 use crate::{events, rerrno, rerror, subsys};
 
-pub type Id = u32;
+pub type Id = resmng::Id;
 
 pub struct ChildMem {
     id: Id,
@@ -140,6 +140,10 @@ impl ChildResources {
 
 pub trait Child {
     fn id(&self) -> Id;
+    /// Returns the parent.
+    ///
+    /// Always returns None for [`OwnChild`]s.
+    fn parent(&self) -> Option<Id>;
     fn layer(&self) -> u32;
     fn name(&self) -> &String;
     fn arguments(&self) -> &[String];
@@ -826,6 +830,10 @@ impl Child for OwnChild {
         self.id
     }
 
+    fn parent(&self) -> Option<Id> {
+        None
+    }
+
     fn layer(&self) -> u32 {
         1
     }
@@ -920,6 +928,7 @@ impl fmt::Debug for OwnChild {
 
 pub struct ForeignChild {
     id: Id,
+    parent: Id,
     act_id: tcu::ActId,
     layer: u32,
     name: String,
@@ -938,6 +947,7 @@ impl ForeignChild {
     pub fn new(
         res: &Resources,
         id: Id,
+        parent: Id,
         layer: u32,
         name: String,
         parent_tile: TileUsage,
@@ -953,6 +963,7 @@ impl ForeignChild {
 
         ForeignChild {
             id,
+            parent,
             layer,
             name,
             parent_tile,
@@ -971,6 +982,10 @@ impl ForeignChild {
 impl Child for ForeignChild {
     fn id(&self) -> Id {
         self.id
+    }
+
+    fn parent(&self) -> Option<Id> {
+        Some(self.parent)
     }
 
     fn layer(&self) -> u32 {
@@ -1386,7 +1401,7 @@ impl ChildManager {
         kmem_sel: Selector,
         sgate_sel: Selector,
         name: String,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Id> {
         let nid = self.next_id();
         let child = self.child_by_id_mut(id).unwrap();
         // TODO it would be better to disallow activity creation for childs and do that for them so
@@ -1425,6 +1440,7 @@ impl ChildManager {
         let nchild = Box::new(ForeignChild::new(
             res,
             nid,
+            id,
             child.layer() + 1,
             child_name,
             // actually, we don't know the tile it's running on. But the TileUsage is only used to set
@@ -1446,7 +1462,7 @@ impl ChildManager {
 
         child.res_mut().childs.push((nid, act_sel));
         self.add(nchild);
-        Ok(())
+        Ok(nid)
     }
 
     pub fn rem_child_async(

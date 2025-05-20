@@ -69,13 +69,7 @@ fn activity_ctrl(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
         },
 
         _ => {
-            // we cannot remove the current activity here; remove it via scheduling
-            match activities::try_cur() {
-                Some(cur) if cur.id() == r.act_id => {
-                    crate::reg_scheduling(activities::ScheduleAction::Kill)
-                },
-                _ => activities::remove(r.act_id, Code::Success, false, true),
-            }
+            activities::remove(r.act_id, Code::Success, false, true);
             Ok((0, 0))
         },
     }

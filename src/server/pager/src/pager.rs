@@ -273,7 +273,24 @@ fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_, '_, '_>) {
                     });
             }
 
-            serv.fetch_and_handle(REQHDL.borrow_mut().deref_mut()).ok();
+            serv.fetch_and_handle(&mut REQHDL.borrow_mut().deref_mut().with(
+                |cli, crt, sid, opcode, xchg| match (opcode, xchg.ty()) {
+                    (o, ExcType::Del(1)) if o == opcodes::Pager::Init.into() => {
+                        AddrSpace::init(cli, crt, sid, xchg)
+                    },
+                    (o, ExcType::Obt(1)) if o == opcodes::Pager::AddChild.into() => {
+                        AddrSpace::add_child(cli, crt, sid, xchg, childmng)
+                    },
+                    (o, ExcType::Del(1)) if o == opcodes::Pager::MapDS.into() => {
+                        AddrSpace::map_ds(cli, crt, sid, xchg)
+                    },
+                    (o, ExcType::Del(1)) if o == opcodes::Pager::MapMem.into() => {
+                        AddrSpace::map_mem(cli, crt, sid, xchg)
+                    },
+                    _ => Err(Error::new(Code::InvArgs)),
+                },
+            ))
+            .ok();
 
             REQHDL.borrow_mut().fetch_and_handle_msg_with(
                 |_handler, opcode, sess, is| match opcode {
@@ -382,11 +399,6 @@ pub fn main() -> anyhow::Result<()> {
         },
     };
 
-    use opcodes::Pager;
-    hdl.reg_cap_handler(Pager::Init, ExcType::Del(1), AddrSpace::init);
-    hdl.reg_cap_handler(Pager::AddChild, ExcType::Obt(1), AddrSpace::add_child);
-    hdl.reg_cap_handler(Pager::MapDS, ExcType::Del(1), AddrSpace::map_ds);
-    hdl.reg_cap_handler(Pager::MapMem, ExcType::Del(1), AddrSpace::map_mem);
     REQHDL.set(hdl);
 
     let req_rgate = RecvGate::new(
