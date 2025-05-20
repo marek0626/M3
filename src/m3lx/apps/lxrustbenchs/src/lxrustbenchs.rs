@@ -23,6 +23,7 @@ mod bmisc;
 mod bregfile;
 
 fn main() -> Result<(), std::io::Error> {
+    m3files::vfs_init().expect("Couldn't init vfs subsystem.");
     m3::env::init();
 
     let mut tester = DefaultWvTester::default();
