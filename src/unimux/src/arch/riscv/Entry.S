@@ -70,15 +70,13 @@ BEGIN_FUNC(sleep)
 END_FUNC(sleep)
 
 BEGIN_FUNC(sleep_once)
-    li     a0, 2
-    csrs   sstatus, a0
+    csrsi   sstatus, 2
     la      a0, ENV_START
     // load platform from environment
     lmw     a0, 0(a0)
     // skip wfi on hw (TODO why does that not work?)
 1:  bnez    a0, 2f
     wfi
-2:	li a0, 0
-    csrs sstatus, a0
+2:  csrci   sstatus, 2
     ret
 END_FUNC(sleep_once)

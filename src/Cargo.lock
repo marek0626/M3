@@ -662,19 +662,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rots"
-version = "0.1.0"
-dependencies = [
- "base",
- "heap",
- "kecacc",
- "lang",
- "m3core",
- "rot",
- "unimux",
-]
-
-[[package]]
 name = "rotshashtests"
 version = "0.1.0"
 dependencies = [
@@ -979,6 +966,7 @@ dependencies = [
  "base",
  "heap",
  "isr",
+ "lang",
  "mux",
  "num-traits",
  "num_enum",

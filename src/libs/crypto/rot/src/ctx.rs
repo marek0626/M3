@@ -65,6 +65,17 @@ impl CtxData for RosaCtx {
 
 #[repr(C)]
 #[derive(Debug)]
+pub struct RotsCtx {
+    pub kmac_cdi: Secret<OpaqueKMacKey>,
+    pub derived_private_key: Secret<ed25519::SecretKey>,
+}
+
+impl CtxData for RotsCtx {
+    const MAGIC: Magic = encode_magic(b"deadb0b", 1);
+}
+
+#[repr(C)]
+#[derive(Debug)]
 pub struct LayerCtx<Data: CtxData> {
     pub brom_hdr_magic: Magic,
     pub entry_addr: usize,
@@ -75,6 +86,7 @@ pub struct LayerCtx<Data: CtxData> {
 pub type BromLayerCtx = LayerCtx<BromCtx>;
 pub type BlauLayerCtx = LayerCtx<BlauCtx>;
 pub type RosaLayerCtx = LayerCtx<RosaCtx>;
+pub type RotsLayerCtx = LayerCtx<RotsCtx>;
 
 impl CtxData for () {
     const MAGIC: Magic = 0;

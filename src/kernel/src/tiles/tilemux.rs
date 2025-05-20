@@ -255,18 +255,20 @@ impl TileMux {
             rbuf += 1 << cfg::KPEX_RBUF_ORD;
 
             // configure upcall EP
-            ktcu::config_remote_ep(self.tile_id(), tcu::TMSIDE_REP, |regs, tgtep| {
-                ktcu::config_recv(
-                    regs,
-                    tgtep,
-                    kif::tilemux::ACT_ID as ActId,
-                    rbuf,
-                    cfg::TMUP_RBUF_ORD,
-                    cfg::TMUP_RBUF_ORD,
-                    Some(tcu::TMSIDE_RPLEP),
-                );
-            })
-            .unwrap();
+            if !desc.attr().contains(TileAttr::ROT) {
+                ktcu::config_remote_ep(self.tile_id(), tcu::TMSIDE_REP, |regs, tgtep| {
+                    ktcu::config_recv(
+                        regs,
+                        tgtep,
+                        kif::tilemux::ACT_ID as ActId,
+                        rbuf,
+                        cfg::TMUP_RBUF_ORD,
+                        cfg::TMUP_RBUF_ORD,
+                        Some(tcu::TMSIDE_RPLEP),
+                    );
+                })
+                .unwrap();
+            }
         }
     }
 
@@ -294,6 +296,8 @@ impl TileMux {
         ep_count: Option<usize>,
         root: bool,
     ) -> anyhow::Result<()> {
+        let is_rot = platform::tile_desc(tile_id).attr().contains(TileAttr::ROT);
+
         if tilemng::tilemux(tile_id).has_activities() {
             return Err(kerrno(Code::InvState).context("Cannot reset tile with activities"));
         }
@@ -316,7 +320,7 @@ impl TileMux {
                 tilemux.init_state(&tile, ep_count);
                 drop(tile);
 
-                if platform::tile_desc(tile_id).is_programmable() {
+                if !is_rot && platform::tile_desc(tile_id).is_programmable() {
                     // here we need a multiplexer and therefore memory
                     if mux_mem.is_none() {
                         return Err(
@@ -384,17 +388,22 @@ impl TileMux {
             start
         };
 
-        // reset the tile and start/stop it
-        ktcu::reset_tile(tile_id, start)?;
+        if !is_rot {
+            // reset the tile and start/stop it
+            ktcu::reset_tile(tile_id, start)?;
+        }
 
         let mut tilemux = tilemng::tilemux(tile_id);
-        tilemux.locked = false;
+        tilemux.locked = is_rot;
 
         if start {
             // for root, it has to be TileMux and we don't support async calls yet, because there
             // are no other threads yet to switch to.
             if root {
                 tilemux.mux_type = kif::syscalls::MuxType::TileMux;
+            }
+            else if is_rot {
+                tilemux.mux_type = kif::syscalls::MuxType::Unimux;
             }
             else if !platform::tile_desc(tile_id).supports_tilemux() {
                 tilemux.mux_type = kif::syscalls::MuxType::None;

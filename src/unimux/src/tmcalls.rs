@@ -53,7 +53,7 @@ fn tmcall_wait(state: &mut arch::State) -> Result<(), Error> {
     };
 
     if let Some(t) = timeout {
-        activities::user().block(true);
+        activities::user().set_blocked(true);
         timer::set_timeout(t);
         crate::reg_timer_reprogram();
     }

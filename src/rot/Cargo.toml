@@ -4,6 +4,7 @@ members = [
     "brom",
     "rosa",
 ]
+exclude = [ "rots" ]
 resolver = "2"
 
 [workspace.dependencies]

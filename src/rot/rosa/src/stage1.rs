@@ -12,13 +12,14 @@
  * General Public License version 2 for more details.
  */
 
+use crate::Error;
 use base::col::{BTreeMap, BTreeMapEntry, Vec};
 use base::io::log::LogColor;
 use base::io::{log, LogFlags};
 use base::kif::boot::{Info, Mem, Mod};
-use base::kif::{Perm, TileAttr, TileType};
+use base::kif::{tilemux, Perm, TileAttr, TileType};
 use base::mem::{GlobAddr, GlobOff};
-use base::tcu::TCU;
+use base::tcu::{ActId, TCU};
 use base::util::math::round_up;
 use base::{cfg, env, log, mem, tcu, util};
 use rot::cert::{HashBuf, M3RawCertificate};
@@ -69,13 +70,13 @@ fn config_local_ep_remote_tcu(noc_id: u16, perm: Perm) {
 /// The current implementation is not very efficient, it iterates several times
 /// checking the base condition over and over again.
 macro_rules! find_best_position {
-    ($iter:expr, |$name:ident| $base_cond:expr) => {
-        $iter.position(|$name| $base_cond)
+    ($iter:expr, |($idx:ident,$name:ident)| $base_cond:expr) => {
+        $iter.enumerate().position(|($idx, $name)| $base_cond)
     };
-    ($iter:expr, |$name:ident| $base_cond:expr,
+    ($iter:expr, |($idx:ident,$name:ident)| $base_cond:expr,
      try => $prefer_cond:expr $(, try => $cond_tail:expr)* $(,)?) => {
-        $iter.position(|$name| $base_cond && $prefer_cond)
-            .or_else(|| find_best_position!($iter, |$name| $base_cond $(, try => $cond_tail)*))
+        $iter.enumerate().position(|($idx, $name)| $base_cond && $prefer_cond)
+            .or_else(|| find_best_position!($iter, |($idx, $name)| $base_cond $(, try => $cond_tail)*))
     };
 }
 
@@ -272,7 +273,7 @@ pub fn main() -> ! {
             cert_json,
         );
 
-        TCU::write_slice(1, cert_json.as_bytes(), mem_offset)
+        TCU::write_slice(crate::MEM_EP, cert_json.as_bytes(), mem_offset)
             .expect("Failed to write rot-certificate.json to DRAM");
 
         mods.push(Mod::new(
@@ -350,7 +351,7 @@ pub fn main() -> ! {
     let ktile_idx = {
         find_best_position!(
             m3.tiles.iter(),
-            |desc| desc.is_programmable() && !desc.attr().contains(TileAttr::ROT),
+            |(_idx, desc)| desc.is_programmable() && !desc.attr().contains(TileAttr::ROT),
             try => desc.has_virtmem() && desc.attr().contains(TileAttr::EFFI),
             try => desc.has_virtmem(),
             try => desc.attr().contains(TileAttr::EFFI),
@@ -425,12 +426,157 @@ pub fn main() -> ! {
         )
     });
 
+    // determine tile for root
+    let root_tile_idx = {
+        find_best_position!(
+            m3.tiles.iter(),
+            |(idx, desc)| idx != ktile_idx && desc.is_programmable() && !desc.attr().contains(TileAttr::ROT),
+            try => desc.has_virtmem(),
+        )
+        .expect("No suitable tile found for root")
+    };
+    let root_tile_raw = env::boot().raw_tile_ids[root_tile_idx] as u16;
+    let root_tile = TCU::nocid_to_tileid(root_tile_raw);
+    log!(
+        LogFlags::RoTBoot,
+        "Picked root tile {} with desc: {:?}",
+        root_tile,
+        m3.tiles[root_tile_idx]
+    );
+
+    // prepare execution of rots/unimux and lock tile
+    {
+        let ourtile_idx = {
+            find_best_position!(m3.tiles.iter(), |(_idx, desc)| desc.is_programmable()
+                && desc.attr().contains(TileAttr::ROT))
+            .expect("No suitable tile found for self")
+        };
+        let ourtile_raw = env::boot().raw_tile_ids[ourtile_idx] as u16;
+
+        // configure unimux's sidecall EP
+        let desc = env::boot().tile_desc();
+        let mut rbuf = desc.rbuf_mux_space().0.as_phys(desc);
+        rbuf += 1 << cfg::KPEX_RBUF_ORD;
+        config_local_ep(tcu::TMSIDE_REP, |regs| {
+            TCU::config_recv(
+                regs,
+                tilemux::ACT_ID as ActId,
+                rbuf,
+                cfg::TMUP_RBUF_ORD,
+                cfg::TMUP_RBUF_ORD,
+                Some(tcu::TMSIDE_RPLEP),
+            );
+        });
+
+        // setup EP for our own TCU MMIO region
+        config_local_ep(crate::SELF_EP, |regs| {
+            TCU::config_mem_raw(
+                regs,
+                rot::TCU_ACT_ID,
+                ourtile_raw,
+                0,
+                tcu::MMIO_ADDR.as_local() as GlobOff,
+                tcu::MMIO_SIZE,
+                Perm::W | Perm::R,
+            )
+        });
+
+        // configure exclusive region for the environment, accessible only from the root tile
+        #[cfg(feature = "gem5")]
+        if let Some((cmd, arg1)) = TCU::build_exreg_cmd(
+            TCU::nocid_to_tileid(ourtile_raw),
+            root_tile,
+            0,
+            0,
+            cfg::ENV_START_DEF.as_goff() + (cfg::ENV_SIZE as GlobOff) / 2,
+            (cfg::ENV_SIZE / 2) as GlobOff,
+            Perm::W,
+            true,
+        ) {
+            let arg_addr = TCU::ext_reg_addr(tcu::ExtReg::ExtArg1).as_goff();
+            mmio_write_slice(&[arg1], arg_addr).unwrap();
+            do_ext_cmd(cmd).unwrap();
+        }
+
+        // now lock the tile
+
+        // get the address of the register
+        let reg_addr = TCU::ext_reg_addr(tcu::ExtReg::Features).as_goff();
+        // get features
+        let mut features: u64 = mmio_read_obj(reg_addr).expect("Failed to read object");
+        // set locked bit
+        features |= tcu::FeatureFlags::LOCKED.bits();
+        // write it
+        mmio_write_slice(&[features], reg_addr).expect("failed to write slice");
+    }
+
     // Continue loading in second stage after clearing secrets
     let next_ctx = rot::LayerCtx::new(rot::ROSA_ADDR, crate::RosaPrivateCtx {
         next: next_ctx,
         kernel_tile_id: ktile.raw() as u64,
         kernel_tile_desc: m3.tiles[ktile_idx].value(),
         kenv_addr: GlobAddr::new_with(mem_tile, kenv_offset),
+        root_tile_id: root_tile.raw() as u64,
     });
     unsafe { next_ctx.switch() }
+}
+
+fn mmio_write_slice<T>(sl: &[T], addr: GlobOff) -> Result<(), Error> {
+    let sl_addr = sl.as_ptr() as *const u8;
+
+    mmio_write_mem(sl_addr, mem::size_of_val(sl), addr)
+}
+
+fn mmio_write_mem(data: *const u8, size: usize, addr: GlobOff) -> Result<(), Error> {
+    log!(LogFlags::RoTDbg, "writing {} bytes to {:#x}", size, addr);
+    TCU::write(
+        crate::SELF_EP,
+        data,
+        size,
+        addr - tcu::MMIO_ADDR.as_local() as GlobOff,
+    )
+}
+
+fn mmio_read_obj<T: Default>(addr: GlobOff) -> Result<T, Error> {
+    let mut obj: T = T::default();
+    let obj_addr = &mut obj as *mut T as *mut u8;
+    mmio_read_mem(obj_addr, mem::size_of::<T>(), addr)?;
+    Ok(obj)
+}
+
+fn mmio_read_mem(data: *mut u8, size: usize, addr: GlobOff) -> Result<(), Error> {
+    log!(LogFlags::RoTDbg, "reading {} bytes from {:#x}", size, addr);
+    TCU::read(
+        crate::SELF_EP,
+        data,
+        size,
+        addr - tcu::MMIO_ADDR.as_local() as GlobOff,
+    )
+}
+
+#[cfg(feature = "gem5")]
+fn do_ext_cmd(cmd: tcu::Reg) -> Result<tcu::Reg, Error> {
+    let addr = TCU::ext_reg_addr(tcu::ExtReg::ExtCmd).as_goff();
+    mmio_write_slice(&[cmd], addr)?;
+    wait_ext_cmd()
+}
+
+#[cfg(feature = "gem5")]
+fn wait_ext_cmd() -> Result<tcu::Reg, Error> {
+    use base::errors::Code;
+
+    let addr = TCU::ext_reg_addr(tcu::ExtReg::ExtCmd).as_goff();
+
+    let res = loop {
+        let res: tcu::Reg = mmio_read_obj(addr)?;
+        let idle_code: tcu::Reg = tcu::ExtCmdOpCode::Idle.into();
+        if (res & 0xF) == idle_code {
+            break res;
+        }
+    };
+
+    match Code::try_from(((res >> 4) & 0x3F) as u32).unwrap() {
+        Code::Success => Ok(res >> 10),
+        e => Err(Error::new(e)),
+    }
 }

@@ -45,5 +45,7 @@ pub fn main() -> Result<(), Error> {
 
     let cert = rotc::obtain_certificate(&rot, &sig_key)?;
     println!("{}", rot::json::to_string_pretty(&cert).unwrap());
-    nets::serve(&sig_key, &cert)
+    // ignore errors here
+    nets::serve(&sig_key, &cert).ok();
+    Ok(())
 }

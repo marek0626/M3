@@ -15,6 +15,7 @@
 use core::fmt;
 
 #[repr(transparent)]
+#[derive(Clone)]
 pub struct Secret<T> {
     pub secret: T,
 }
@@ -22,6 +23,10 @@ pub struct Secret<T> {
 impl<T> Secret<T> {
     pub const fn new(secret: T) -> Self {
         Self { secret }
+    }
+
+    pub fn get(&self) -> &T {
+        &self.secret
     }
 }
 

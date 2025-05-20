@@ -5,6 +5,9 @@ outs = [
     "brom",
     "rosa",
 ]
+dirs = [
+    "rots",
+]
 
 
 def build(gen, env):
@@ -19,7 +22,6 @@ def build(gen, env):
     env = env.new(env['ISA'], True)
 
     env['BINDIR'] = env['BUILDDIR'] + '/rotbin'
-    env['CRGFLAGS'] += ['--features', 'rosa/' + env['TGT']]
 
     # FIXME: The RoT cannot be built in debug mode at the moment.
     # There are two issues:
@@ -49,6 +51,9 @@ def build(gen, env):
     if 'TARGET_CFLAGS' in env['CRGENV']:
         env['CRGENV']['TARGET_CFLAGS'] += ' --target=' + env['ISA'] + '-unknown-none-elf'
 
+    for d in dirs:
+        env.sub_build(gen, d)
+    env['CRGFLAGS'] += ['--features', 'rosa/' + env['TGT']]
     cargo_ws(env, gen, outs=outs)
 
 

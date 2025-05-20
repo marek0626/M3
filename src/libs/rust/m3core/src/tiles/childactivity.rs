@@ -23,6 +23,7 @@ use core::fmt;
 use core::ops::{Deref, DerefMut};
 
 use base::kif::syscalls::MuxType;
+use base::kif::TileAttr;
 
 use crate::cap::{CapFlags, Capability, SelSpace, Selector};
 use crate::cell::Cell;
@@ -448,8 +449,18 @@ impl ChildActivity {
             cenv.set_heap_size(cfg::MOD_HEAP_SIZE);
         }
 
+        // when we load something onto the RoT tile, don't overwrite the start of the env as we do
+        // not have access there. this way, the RoT prevents that we have write access to critical
+        // parts of the environment all the time.
+        let off = if self.tile_desc().attr().contains(TileAttr::ROT) {
+            (env_size as GlobOff) / 2
+        }
+        else {
+            0
+        };
+
         // write arguments and environment variables
-        let mut addr = env_start + mem::size_of_val(&cenv);
+        let mut addr = env_start + off + mem::size_of_val(&cenv);
         let env_off = env_start.as_goff();
         cenv.set_argc(args.len());
         cenv.set_argv(env::write_args(args, &mem, &mut addr, env_off)?);
@@ -468,7 +479,7 @@ impl ChildActivity {
         self.serialize_data(write_words, &mut cenv, &mut addr)?;
 
         // write environment to tile
-        mem.write_bytes(&cenv as *const _ as *const u8, mem::size_of_val(&cenv), 0)
+        mem.write_bytes(&cenv as *const _ as *const u8, mem::size_of_val(&cenv), off)
     }
 
     fn serialize_files<F>(&self, write: F, env: &mut Env, addr: &mut VirtAddr) -> Result<(), Error>

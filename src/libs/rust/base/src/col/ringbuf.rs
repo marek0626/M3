@@ -56,6 +56,10 @@ impl VarRingBuf {
     ///
     /// Note that `size` has to be greater than 0.
     pub fn get_write_pos(&self, size: usize) -> Option<usize> {
+        if self.cap - self.size < size {
+            return None;
+        }
+
         if self.wr_pos >= self.rd_pos {
             if self.cap - self.wr_pos >= size {
                 return Some(self.wr_pos);
@@ -107,12 +111,12 @@ impl VarRingBuf {
             if self.cap - self.wr_pos >= req_size {
                 self.wr_pos += size;
             }
-            else if self.rd_pos > req_size && size > 0 {
+            else {
                 self.last = self.wr_pos;
                 self.wr_pos = size;
             }
         }
-        else if self.rd_pos - self.wr_pos >= req_size {
+        else {
             self.wr_pos += size;
         }
         self.size += size;
@@ -153,6 +157,34 @@ mod tests {
 
         assert!(rb.empty());
         rb.get_write_pos(10);
+    }
+
+    #[test]
+    fn full() {
+        let mut rb = VarRingBuf::new(10);
+
+        let wpos1 = rb.get_write_pos(5).unwrap();
+        assert_eq!(wpos1, 0);
+        rb.push(5, 5);
+
+        let wpos2 = rb.get_write_pos(5).unwrap();
+        assert_eq!(wpos2, 5);
+        rb.push(5, 5);
+
+        let rpos1 = rb.get_read_pos(5).unwrap().0;
+        assert_eq!(rpos1, 0);
+        rb.pull(5);
+
+        let wpos3 = rb.get_write_pos(5).unwrap();
+        assert_eq!(wpos3, 0);
+        rb.push(5, 5);
+
+        assert_eq!(rb.get_write_pos(5), None);
+
+        assert_eq!(rb.rd_pos, 5);
+        assert_eq!(rb.wr_pos, 5);
+        assert_eq!(rb.size, 10);
+        assert_eq!(rb.cap, 10);
     }
 
     #[test]

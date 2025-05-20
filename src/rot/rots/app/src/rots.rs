@@ -24,31 +24,98 @@ extern crate lang;
 extern crate heap;
 
 use core::cmp::min;
-use core::ops::Deref;
 
+use base::env::{self, BaseEnv, BootEnv};
+use base::mem::PhysAddrRaw;
+use base::{cfg, tcu};
 use kecacc::{KecAcc, KecAccState};
+use m3core::cap::SelSpace;
 use m3core::cell::{LazyReadOnlyCell, LazyStaticRefCell, StaticCell, StaticRefCell};
 use m3core::col::{Vec, VecDeque};
-use m3core::com::{opcodes, EpMng, GateIStream, MemCap, Perm, RecvGate, EP};
+use m3core::com::{opcodes, EpMng, GateIStream, LazyGate, MemCap, Perm, RecvGate, EP};
 use m3core::crypto::{HashAlgorithm, HashType};
 use m3core::errors::{Code, Error};
 use m3core::io::LogFlags;
 use m3core::kif::{CapRngDesc, CapType};
-use m3core::mem::{size_of, AlignedBuf, GlobOff, MsgBuf, MsgBufRef, VirtAddr};
+use m3core::mem::{size_of, AlignedBuf, GlobOff, MsgBuf, MsgBufRef};
 use m3core::serialize::bytes::Bytes;
 use m3core::server::{
     server_loop, CapExchange, ClientManager, ExcType, RequestHandler, RequestSession, Server,
-    ServerSession, SessId,
+    ServerSession, SessId, DEF_MAX_CLIENTS,
 };
 use m3core::tcu::{EpId, Message, TCU};
-use m3core::tiles::Activity;
 use m3core::time::{TimeDuration, TimeInstant};
-use m3core::{build_vmsg, const_assert, log, mem, reply_vmsg};
+use m3core::{build_vmsg, const_assert, log, reply_vmsg};
 use rot::ed25519::Signer;
 use rot::{ed25519, Hex, OpaqueKMacKey, Secret};
 
+fn check_std_endpoints() {
+    let tile_desc = env::boot().tile_desc();
+    let mut rbuf_addr = tile_desc.rbuf_std_space().0.as_phys(tile_desc);
+    TCU::check_recv_ep(
+        tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF,
+        rbuf_addr,
+        cfg::SYSC_RBUF_SIZE,
+        false,
+    )
+    .expect("SYSC_REP not sane");
+    rbuf_addr += cfg::SYSC_RBUF_SIZE as PhysAddrRaw;
+
+    TCU::check_recv_ep(
+        tcu::FIRST_USER_EP + tcu::UPCALL_REP_OFF,
+        rbuf_addr,
+        cfg::UPCALL_RBUF_SIZE,
+        true,
+    )
+    .expect("UPCALL_REP not sane");
+    rbuf_addr += cfg::UPCALL_RBUF_SIZE as PhysAddrRaw;
+
+    TCU::check_recv_ep(
+        tcu::FIRST_USER_EP + tcu::DEF_REP_OFF,
+        rbuf_addr,
+        cfg::DEF_RBUF_SIZE,
+        false,
+    )
+    .expect("DEF_REP_OFF not sane");
+
+    // now unfreeze all the standard EPs created by the kernel
+    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_SEP_OFF).unwrap();
+    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF).unwrap();
+    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::UPCALL_REP_OFF).unwrap();
+    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::DEF_REP_OFF).unwrap();
+}
+
 #[no_mangle]
 pub extern "C" fn env_run() -> ! {
+    let rom_env: &BootEnv = unsafe { &*(cfg::ENV_START_ROT.as_ptr()) };
+    let rots_env_src: &BaseEnv =
+        unsafe { &*((cfg::ENV_START.as_local() + cfg::ENV_SIZE / 2) as *const _) };
+    let rots_env: &mut BaseEnv = unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) };
+
+    // overwrite everything with default values
+    *rots_env = BaseEnv::default();
+
+    // copy boot env from previous stages
+    rots_env.boot = *rom_env;
+
+    // hard code the arguments here
+    rots_env.boot.argc = 1;
+    rots_env.boot.argv = (cfg::ENV_START.as_local() + size_of::<BaseEnv>()) as u64;
+    let argv = rots_env.boot.argv as *mut *const u8;
+    unsafe {
+        *argv = b"rots\0".as_ptr();
+    }
+
+    // init the remaining relevant fields
+    rots_env.first_std_ep = tcu::FIRST_USER_EP as u64;
+    rots_env.first_sel = rots_env_src.first_sel;
+    rots_env.heap_size = cfg::MOD_HEAP_SIZE as u64;
+    rots_env.rmng_sel = rots_env_src.rmng_sel;
+    rots_env.act_id = rots_env_src.act_id;
+
+    // check and unfreeze standard EPs configured by the kernel
+    check_std_endpoints();
+
     m3core::env::init();
 
     m3core::env::run();
@@ -57,14 +124,11 @@ pub extern "C" fn env_run() -> ! {
 const MAX_MSG_SIZE: usize = 256;
 
 const MAX_DERIVED_SECRET_SIZE: usize = 64;
-const SECRET_AREA_SIZE: usize = 4096;
-const MAX_CLIENTS: usize = SECRET_AREA_SIZE / ClientSecretArea::SIZE;
 
 const HASH_SIZE: usize = rot::cert::HASH_ALGO.output_bytes;
 const MAX_SIGN_SIZE: usize = HASH_SIZE + MAX_MSG_SIZE;
 
 static CTX: LazyReadOnlyCell<RotsCtx> = LazyReadOnlyCell::default();
-static SECRETS: StaticRefCell<SecretArea> = StaticRefCell::new(SecretArea::new_zeroed());
 
 //
 
@@ -137,22 +201,14 @@ struct RotsCtx {
     signing_key: ed25519::SigningKey,
     rot_cert_cap: MemCap,
     rot_cert_size: GlobOff,
-    secret_cap: MemCap,
 }
-
-struct ClientSecretArea {
-    kmac_cdi: Secret<OpaqueKMacKey>,
-    derived_secret: Secret<[u8; MAX_DERIVED_SECRET_SIZE]>,
-}
-
-#[repr(align(4096))]
-struct SecretArea([ClientSecretArea; MAX_CLIENTS]);
 
 struct RoTSession {
     serv: ServerSession,
     rot_sig_cap: Option<MemCap>,
     arg_hash: Hex<[u8; HASH_SIZE]>,
-    secret_cap: Option<MemCap>,
+    kmac_cdi: Option<Secret<OpaqueKMacKey>>,
+    secret_cap: Option<LazyGate<MemCap>>,
     mem: Option<EP>,
     algo: Option<&'static HashAlgorithm>,
     state_saved: bool,
@@ -162,63 +218,22 @@ struct RoTSession {
     output_bytes: usize,
 }
 
-impl ClientSecretArea {
-    const SIZE: usize = mem::size_of::<Self>();
-    const ZEROED: Self = Self {
-        kmac_cdi: Secret::new_zeroed(),
-        derived_secret: Secret::new_zeroed(),
-    };
-
-    fn clear(&mut self) {
-        unsafe {
-            m3core::util::clear_volatile(self as *mut Self);
-        }
-    }
-}
-
-impl SecretArea {
-    const fn new_zeroed() -> Self {
-        Self([ClientSecretArea::ZEROED; MAX_CLIENTS])
-    }
-
-    fn get(&mut self, sid: SessId) -> &mut ClientSecretArea {
-        &mut self.0[sid]
-    }
-
-    fn offset(&self, sid: SessId) -> GlobOff {
-        (&self.0[sid] as *const _ as usize - self as *const _ as usize) as GlobOff
-    }
-}
-
-impl Drop for RoTSession {
-    fn drop(&mut self) {
-        SECRETS.borrow_mut().get(self.sid()).clear();
-    }
-}
-
 impl RequestSession for RoTSession {
     /// ROTS provides two things: Root of Trust and hash acceleration
     /// functionality. ROTS can provide either/or without panicking.
     fn new(serv: ServerSession, arg: &str) -> Result<Self, Error> {
-        fn have_ctx(sid: usize, arg: &str) -> (Option<MemCap>, Option<MemCap>) {
+        fn have_ctx(arg: &str) -> (Option<MemCap>, Option<Secret<OpaqueKMacKey>>) {
             let ctx = CTX.get();
             let rot_sig_cap = ctx
                 .rot_cert_cap
                 .derive(0, ctx.rot_cert_size, Perm::R)
                 .expect("Couldn't derive");
-            let mut secrets = SECRETS.borrow_mut();
-            let secret_cap = ctx
-                .secret_cap
-                .derive(
-                    secrets.offset(sid),
-                    ClientSecretArea::SIZE as GlobOff,
-                    Perm::R,
-                )
-                .expect("Couldn't derive secret cap");
-            let csecrets = secrets.get(sid);
-            //log!(LogFlags::Info, "deriving cdi");
-            rot::derive_cdi(&ctx.kmac_cdi, arg.as_bytes(), &mut csecrets.kmac_cdi);
-            (Some(rot_sig_cap), Some(secret_cap))
+            let mut kmac_cdi = Secret::new_zeroed();
+            // TODO this uses KECACC internally which forces us to save/restore the state
+            // before/after if required. maybe this should be changed to have a wrapper that
+            // performs the save/restore instead of doing it manually at all places.
+            rot::derive_cdi(&ctx.kmac_cdi, arg.as_bytes(), &mut kmac_cdi);
+            (Some(rot_sig_cap), Some(kmac_cdi))
         }
 
         let sid = serv.id();
@@ -236,9 +251,16 @@ impl RequestSession for RoTSession {
             DEFAULT_TIME_SLICE
         };
 
+        // Swap any context here
+        let cur_id_opt = CURRENT.get();
+        let mut state = STATES.borrow_mut();
+        if let Some(cur_id) = cur_id_opt {
+            KECACC.start_save(&mut state[cur_id]);
+        }
+
         // Only if we detected and configured a valid Root of Trust context at activity startup, do this part
         let ctx_data = match CTX.is_some() {
-            true => have_ctx(sid, arg),
+            true => have_ctx(arg),
             false => (None, None),
         };
 
@@ -246,7 +268,8 @@ impl RequestSession for RoTSession {
             serv,
             rot_sig_cap: ctx_data.0,
             arg_hash: Hex::new_zeroed(),
-            secret_cap: ctx_data.1,
+            kmac_cdi: ctx_data.1,
+            secret_cap: None,
             mem: None,
             algo: None,
             state_saved: false,
@@ -256,21 +279,13 @@ impl RequestSession for RoTSession {
             output_bytes: 0,
         };
 
-        // Swap any context here
-        let cur_id_opt = CURRENT.get();
-        //log!(LogFlags::Info, "getting states");
-        let mut state = STATES.borrow_mut();
-        if let Some(cur_id) = cur_id_opt {
-            //log!(LogFlags::Info, "saving kecacc");
-            KECACC.start_save(&mut state[cur_id]);
-        }
-        //log!(LogFlags::Info, "hashing");
         rot::hash(rot::cert::HASH_TYPE, arg.as_bytes(), &mut sess.arg_hash[..]);
+
         // And restore it. Not sure that I need to do this, really
         if let Some(cur_id) = cur_id_opt {
-            //log!(LogFlags::Info, "starting load");
             KECACC.start_load(&state[cur_id]);
         }
+
         log!(
             LogFlags::RoTReqs,
             "Hash for client '{}': {}",
@@ -440,7 +455,7 @@ impl RoTSession {
         Ok(())
     }
 
-    fn get_secret_mem(
+    fn set_secret_mem(
         cli: &mut ClientManager<Self>,
         _crt: usize,
         sid: SessId,
@@ -450,13 +465,15 @@ impl RoTSession {
         if !CTX.is_some() {
             return Err(Error::new(Code::NotSup));
         }
-        let sess = cli.get(sid).ok_or_else(|| Error::new(Code::InvArgs))?;
-        xchg.out_caps(CapRngDesc::new_single(
-            CapType::Object,
-            sess.secret_cap.as_ref().unwrap().sel(),
-        ));
-        xchg.out_args().push(0);
-        xchg.out_args().push(ClientSecretArea::SIZE);
+
+        let sess = cli.get_mut(sid).ok_or_else(|| Error::new(Code::InvArgs))?;
+        if sess.secret_cap.is_some() {
+            return Err(Error::new(Code::Exists));
+        }
+
+        let sel = SelSpace::get().alloc_sel();
+        sess.secret_cap = Some(LazyGate::new((sel, false)));
+        xchg.out_caps(CapRngDesc::new_single(CapType::Object, sel));
         Ok(())
     }
 
@@ -473,12 +490,13 @@ impl RoTSession {
         if !CTX.is_some() {
             return Err(Error::new(Code::InvArgs));
         }
-        reply_vmsg!(
-            is,
-            Code::Success,
-            mem::offset_of!(ClientSecretArea, kmac_cdi),
-            mem::size_of::<OpaqueKMacKey>()
-        )
+        if let Some(kmac_cdi) = &self.kmac_cdi {
+            let vec = kmac_cdi.get().to_vec();
+            reply_vmsg!(is, Code::Success, vec)
+        }
+        else {
+            reply_vmsg!(is, Code::InvArgs)
+        }
     }
 
     fn derive_secret(&mut self, is: &mut GateIStream<'_>) -> Result<(), Error> {
@@ -492,20 +510,33 @@ impl RoTSession {
             return Err(Error::new(Code::InvArgs));
         }
 
-        let mut secrets = SECRETS.borrow_mut();
-        let csecrets = secrets.get(self.sid());
-        rot::derive_key(
-            &csecrets.kmac_cdi,
-            custom,
-            &[],
-            &mut csecrets.derived_secret.secret[..size],
-        );
-        reply_vmsg!(
-            is,
-            Code::Success,
-            mem::offset_of!(ClientSecretArea, derived_secret),
-            size
-        )
+        let Some(kmac_cdi) = &self.kmac_cdi
+        else {
+            return Err(Error::new(Code::InvArgs));
+        };
+        let Some(secret_cap) = &mut self.secret_cap
+        else {
+            return Err(Error::new(Code::InvArgs));
+        };
+
+        // save current state
+        let cur_id_opt = CURRENT.get();
+        let mut state = STATES.borrow_mut();
+        if let Some(cur_id) = cur_id_opt {
+            KECACC.start_save(&mut state[cur_id]);
+        }
+
+        let mut temp = [0u8; MAX_DERIVED_SECRET_SIZE];
+        rot::derive_key(kmac_cdi, custom, &[], &mut temp[..size]);
+
+        // and restore the state again
+        if let Some(cur_id) = cur_id_opt {
+            KECACC.start_load(&state[cur_id]);
+        }
+
+        secret_cap.get().unwrap().write_obj(&temp, 0)?;
+
+        reply_vmsg!(is, Code::Success)
     }
 
     fn certify(&mut self, is: &mut GateIStream<'_>) -> Result<(), Error> {
@@ -939,7 +970,7 @@ impl HashMuxReceiver {
     }
 }
 
-fn init_rot() -> Result<(MemCap, u64, MemCap), Error> {
+fn init_rot() -> Result<(MemCap, u64), Error> {
     log!(LogFlags::Info, "cert load");
     let rot_cert_cap = match MemCap::new_bind_bootmod("rot-certificate.json") {
         Ok(rot_cert_cap) => rot_cert_cap,
@@ -951,20 +982,7 @@ fn init_rot() -> Result<(MemCap, u64, MemCap), Error> {
         Ok(rgn) => rgn.1,
         Err(e) => return Err(e),
     };
-
-    log!(LogFlags::Info, "borrow secrets");
-    let secrets = SECRETS.borrow();
-    // We don't need the activated MemGate returned by Activity::own().get_mem()
-    let secret_cap = match MemCap::new_foreign(
-        Activity::own().sel(),
-        VirtAddr::from(secrets.deref() as *const SecretArea),
-        SECRET_AREA_SIZE as GlobOff,
-        Perm::R,
-    ) {
-        Ok(cap) => cap,
-        Err(e) => return Err(e),
-    };
-    Ok((rot_cert_cap, rot_cert_size, secret_cap))
+    Ok((rot_cert_cap, rot_cert_size))
 }
 
 #[no_mangle]
@@ -977,7 +995,7 @@ pub fn main() -> Result<(), Error> {
         init_rot()
             .map(|res_tuple| {
                 log!(LogFlags::Info, "inited rot successfully");
-                let (rot_cert_cap, rot_cert_size, secret_cap) = res_tuple;
+                let (rot_cert_cap, rot_cert_size) = res_tuple;
                 CTX.set(RotsCtx {
                     kmac_cdi: ctx.data.kmac_cdi,
                     signing_key: ed25519::SigningKey::from_bytes(
@@ -985,7 +1003,6 @@ pub fn main() -> Result<(), Error> {
                     ),
                     rot_cert_cap,
                     rot_cert_size,
-                    secret_cap,
                 });
                 log!(LogFlags::RoTDbg, "Derived own {:?}", CTX.get().signing_key);
                 Ok::<(), Error>(())
@@ -997,7 +1014,7 @@ pub fn main() -> Result<(), Error> {
             .ok();
     }
 
-    let mut hdl = RequestHandler::new_with(MAX_CLIENTS, MAX_MSG_SIZE, 1)
+    let mut hdl = RequestHandler::new_with(DEF_MAX_CLIENTS, MAX_MSG_SIZE, 1)
         .expect("Unable to create request handler");
     let srv = Server::new("rot", &mut hdl).expect("Unable to create service 'rot'");
 
@@ -1008,9 +1025,9 @@ pub fn main() -> Result<(), Error> {
         RoTSession::get_rot_certificate,
     );
     hdl.reg_cap_handler(
-        RoT::GetSecretMem,
-        ExcType::Obt(1),
-        RoTSession::get_secret_mem,
+        RoT::SetSecretMem,
+        ExcType::Del(1),
+        RoTSession::set_secret_mem,
     );
     hdl.reg_cap_handler(RoT::GetMem, ExcType::Obt(1), RoTSession::get_mem);
     hdl.reg_msg_handler(RoT::GetHash, RoTSession::get_hash);

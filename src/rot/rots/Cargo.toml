@@ -1,0 +1,15 @@
+[workspace]
+members = ["app"]
+
+[workspace.dependencies]
+base = { path = "../../libs/rust/base" }
+lang = { path = "../../libs/rust/lang" }
+rot = { path = "../../libs/crypto/rot" }
+kecacc = { path = "../../libs/crypto/kecacc" }
+heap = { path = "../../libs/rust/heap" }
+m3core = { path = "../../libs/rust/m3core" }
+unimux = { path = "../../unimux" }
+
+[profile.release]
+lto = true
+codegen-units = 1

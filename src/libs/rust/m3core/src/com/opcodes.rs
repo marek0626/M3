@@ -179,9 +179,9 @@ pub enum Hash {
 #[repr(usize)]
 pub enum RoT {
     GetRotCertificate,
-    GetSecretMem,
     GetHash,
     GetCdi,
+    SetSecretMem,
     DeriveSecret,
     Certify,
     GetMem,

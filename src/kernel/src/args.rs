@@ -17,10 +17,13 @@ use base::cell::{LazyStaticRefCell, Ref};
 use base::cfg;
 use base::col::Vec;
 use base::env;
+use base::tcu::TileId;
+use base::util::parse;
 
 pub struct Args {
     pub kmem: usize,
     pub root_eps: usize,
+    pub root_tile: Option<TileId>,
 }
 
 impl Default for Args {
@@ -28,6 +31,7 @@ impl Default for Args {
         Self {
             kmem: 64 * 1024 * 1024,
             root_eps: cfg::DEF_EP_COUNT,
+            root_tile: None,
         }
     }
 }
@@ -43,7 +47,7 @@ pub fn parse() {
 
     let get_size_arg = |argv: &Vec<&str>, i: &mut usize| -> usize {
         let size_str = argv.get(*i + 1).unwrap_or_else(|| usage());
-        let size = parse_size(size_str).unwrap_or_else(|| usage());
+        let size = parse::size(size_str).unwrap_or_else(|| usage());
         *i += 1;
         size
     };
@@ -65,6 +69,10 @@ pub fn parse() {
             }
             args.root_eps = ep_count;
         }
+        else if argv[i] == "--root" {
+            let tile_id = get_size_arg(&argv, &mut i) as u16;
+            args.root_tile = Some(TileId::new_from_raw(tile_id));
+        }
         i += 1;
     }
 
@@ -77,18 +85,4 @@ fn usage() -> ! {
           -m: the kernel memory size (> FIXED_KMEM)",
         env::args().next().unwrap()
     );
-}
-
-fn parse_size(s: &str) -> Option<usize> {
-    let mul = match s.chars().last() {
-        Some(c) if c >= '0' && c <= '9' => 1,
-        Some('k') | Some('K') => 1024,
-        Some('m') | Some('M') => 1024 * 1024,
-        Some('g') | Some('G') => 1024 * 1024 * 1024,
-        _ => return None,
-    };
-    Some(match mul {
-        1 => s.parse::<u64>().ok()? as usize,
-        m => m * s[0..s.len() - 1].parse::<u64>().ok()? as usize,
-    })
 }

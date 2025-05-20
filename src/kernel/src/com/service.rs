@@ -49,8 +49,8 @@ impl Service {
     pub fn new(act: TempRc<Activity>, name: String, rgate: TempRc<RGateObject>) -> Rc<Self> {
         Rc::new(Service {
             name,
+            queue: RefCell::from(SendQueue::new(QueueId::Serv, rgate.location().unwrap().0)),
             rgate: rgate.downgrade_store(),
-            queue: RefCell::from(SendQueue::new(QueueId::Serv, act.tile_id())),
             act: act.downgrade_store(),
             cur_derive: RefCell::from(None),
         })

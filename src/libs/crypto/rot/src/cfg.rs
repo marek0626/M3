@@ -70,10 +70,11 @@ pub struct RosaCfg {
     // Can reduce this a bit more to free up space, or reduce number of boot modules
     pub kernel_cmdline: [u8; 47],
     pub mods: [Mod; Self::MAX_MODS],
+    pub next_layer: SimpleBinaryCfg,
 }
 
 impl RosaCfg {
-    pub const MAX_MODS: usize = 50;
+    pub const MAX_MODS: usize = 25;
 
     pub fn mod_count(&self) -> usize {
         self.mods.iter().take_while(|&m| m.size != 0).count()

@@ -80,8 +80,6 @@ impl<'m> ActivityRef<'m> {
 }
 
 impl Drop for ActivityRef<'_> {
-    //NMG Make the compiler cooperate with UB
-    #[inline(never)]
     fn drop(&mut self) {
         self.act.has_refs = false;
     }
@@ -190,7 +188,7 @@ pub fn update_our_activity() {
 }
 
 pub fn stop_activity(status: Code) {
-    user().block(true);
+    user().set_blocked(true);
 
     let act = tcu::TCU::get_cur_activity();
     user().set_activity_reg(act);
@@ -257,7 +255,7 @@ impl Activity {
         self.user_state_addr
     }
 
-    pub fn block(&mut self, state: bool) {
+    pub fn set_blocked(&mut self, state: bool) {
         self.state = match state {
             true => ActivityState::BLOCKED,
             false => ActivityState::STARTED,
@@ -278,23 +276,22 @@ impl Activity {
 
     pub fn start(&mut self) {
         assert!(self.user_state_addr.is_null());
-        // remember the current tile and platform
-        crate::app_env().boot.tile_id = pex_env().tile_id;
-        crate::app_env().boot.platform = pex_env().platform;
         let entry = crate::env_run;
         if self.id() != kif::tilemux::IDLE_ID {
+            extern "C" {
+                static baremetal_stack: u8;
+            }
+
             log!(
                 LogFlags::MuxActs,
                 "Starting Activity {} with entry={:#x}, sp={:#x}",
                 self.id(),
                 entry as usize,
-                crate::app_env().sp
+                unsafe { core::ptr::addr_of!(baremetal_stack) as usize },
             );
-            arch::init_state(
-                &mut self.user_state,
-                entry as usize,
-                crate::app_env().sp as usize,
-            );
+            arch::init_state(&mut self.user_state, entry as usize, unsafe {
+                core::ptr::addr_of!(baremetal_stack) as usize
+            });
         }
         self.user_state_addr = VirtAddr::from(&self.user_state as *const _);
         self.state = ActivityState::READY;

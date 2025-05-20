@@ -26,10 +26,10 @@ use cfg_if::cfg_if;
 
 use crate::arch::{CPUOps, CPU};
 use crate::cell::LazyReadOnlyCell;
-use crate::cfg;
 use crate::env;
 use crate::kif::Perm;
 use crate::mem::{self, GlobOff, PhysAddr, VirtAddr};
+use crate::{cfg, kif};
 
 use crate::tcu::{
     ActId, EpId, EpType, GenId, Label, Reg, TileId, EP_REGS, MMIO_ADDR, MMIO_EPS_ADDR, NO_REPLIES,
@@ -302,6 +302,41 @@ impl TCU {
         }
         // ensure that all accesses are finished before we try to use the EP
         CPU::memory_barrier();
+    }
+
+    #[allow(unused, clippy::too_many_arguments)]
+    pub fn build_exreg_cmd(
+        mem_tile: TileId,
+        user_tile: TileId,
+        user_tile_gen: GenId,
+        idx: usize,
+        addr: GlobOff,
+        size: GlobOff,
+        perm: kif::Perm,
+        locked: bool,
+    ) -> Option<(Reg, Reg)> {
+        #[cfg(not(feature = "gem5"))]
+        return None;
+
+        #[cfg(feature = "gem5")]
+        {
+            let mut cfg = (user_tile_gen as Reg) << 18 | (user_tile.raw() as Reg) << 4 | 1;
+            if locked {
+                cfg |= 1 << 1;
+            }
+            if perm.contains(kif::Perm::R) {
+                cfg |= 1 << 2;
+            }
+            if perm.contains(kif::Perm::W) {
+                cfg |= 1 << 3;
+            }
+
+            assert!(((addr >> 3) & ((size >> 3) - 1)) == 0);
+            assert!(size.is_power_of_two());
+            let addr_size = (addr >> 2) | ((size >> 3) - 1);
+            let cmd = TCU::build_ext_cmd(ExtCmdOpCode::SetExcl, cfg | (idx as u64) << 34);
+            Some((cmd, addr_size))
+        }
     }
 
     /// Returns the value for the `ExtCmd` register for given opcode and argument.

@@ -51,7 +51,6 @@ fn set_fpu_mode(mut status: usize, mode: FSMode) -> usize {
 }
 
 pub fn init_state(state: &mut State, entry: usize, sp: usize) {
-    state.r[9] = 0xDEAD_BEEF; // a0; don't set the stackpointer in crt0
     state.epc = entry;
     state.r[1] = sp;
     state.status = read_csr!("sstatus");

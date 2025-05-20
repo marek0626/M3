@@ -1,11 +1,19 @@
 <?xml version="1.0"?>
 <config>
+    <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py M3_GEM5_ROT_CPU=TimingSimpleCPU</env>
     <mods>
         <mod name="fs" file="default.img"/>
     </mods>
+    <rot layers="brom,blau.bin,rosa.bin,rots.bin"/>
     <kernel args="kernel"/>
     <dom>
         <app args="root">
+            <dom tile="core+kecacc+rot" unimux="1">
+                <app args="rots" daemon="1">
+                    <serv name="rot"/>
+                    <mod name="rot-certificate.json" perm="r"/>
+                </app>
+            </dom>
             <app args="pipes" daemon="1">
                 <serv name="pipes"/>
             </app>
@@ -13,11 +21,6 @@
                 <serv name="m3fs"/>
                 <mod name="fs"/>
             </app>
-            <dom tile="core+kecacc" unimux="1" mux="rots">
-                <app args="rots" daemon="1">
-                    <serv name="rot"/>
-                </app>
-            </dom>
             <dom>
                 <app args="pager">
                     <sess name="m3fs"/>

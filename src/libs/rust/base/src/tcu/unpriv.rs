@@ -31,6 +31,7 @@ use crate::cfg;
 use crate::env;
 use crate::errors::{Code, Error};
 use crate::kif::Perm;
+use crate::mem::PhysAddr;
 use crate::mem::{self, GlobOff, MaybeUninit, PhysAddrRaw, VirtAddr};
 use crate::tmif;
 use crate::util::math;
@@ -426,6 +427,34 @@ impl TCU {
             Self::build_cmd(ep, CmdOpCode::AckMsg, msg_off as Reg),
         );
         Self::get_error()
+    }
+
+    /// Checks whether the given receive EP is sane.
+    ///
+    /// The function ensures that it's actually a receive EP, that the buffer is as expected, and
+    /// the reply EPs start after the given EP id.
+    pub fn check_recv_ep(
+        ep: EpId,
+        buf_addr: PhysAddr,
+        buf_size: usize,
+        replies: bool,
+    ) -> Result<(), Error> {
+        let rinfo = TCU::recv_info(ep).ok_or_else(|| Error::new(Code::KernelBroken))?;
+        // check if the physical address and the buffer size is as expected (otherwise the
+        // kernel could send us messages to overwrite specific areas of memory).
+        if PhysAddr::new_raw(env::boot().tile_desc(), rinfo.0) != buf_addr {
+            return Err(Error::new(Code::KernelBroken));
+        }
+        if (1 << (rinfo.1 + rinfo.2)) as usize != buf_size {
+            return Err(Error::new(Code::KernelBroken));
+        }
+        // check that the reply EPs are at the expected position (otherwise the kernel could
+        // let the TCU overwrite other send EPs and thereby trick us to send to unexpected
+        // receivers).
+        if (replies && rinfo.3 != ep + 1) || (!replies && rinfo.3 != INVALID_EP) {
+            return Err(Error::new(Code::KernelBroken));
+        }
+        Ok(())
     }
 
     /// Returns true if the given EP is frozen
