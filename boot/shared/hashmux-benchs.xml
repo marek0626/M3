@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <config>
-    <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py</env>
+    <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py M3_GEM5_ROT_CPU=TimingSimpleCPU</env>
     <mods>
         <mod name="fs" file="bench.img"/>
     </mods>
