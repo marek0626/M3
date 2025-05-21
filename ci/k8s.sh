@@ -38,9 +38,11 @@ create_image() {
 create_pod() {
     name="$1"
     image="$2"
-    buildpod=$(sh "$root/config/pod.sh" "$name" "$image")
-    echo "$buildpod" | kubectl apply -f -
-    kubectl wait -n "$ns" --for=condition=ready --timeout=5m "pod/$name"
+    if ! kubectl get pod -n "$ns" "$name" &>/dev/null; then
+        buildpod=$(sh "$root/config/pod.sh" "$name" "$image")
+        echo "$buildpod" | kubectl apply -f -
+        kubectl wait -n "$ns" --for=condition=ready --timeout=5m "pod/$name"
+    fi
 }
 
 remove_pod() {
@@ -54,16 +56,25 @@ exec_shell() {
     kubectl exec -n "$ns" -ti "$name" -- bash
 }
 
+debug_test() {
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT ERR INT TERM
+    kubectl cp -n "$ns" "m3-ci:$1/run.sh" "$tmp"
+    chmod +x "$tmp"
+    "$tmp"
+}
+
 mkdir -p "$root/out"
 cp -f "$HOME/.kube/config" "$root/out/kubecfg"
 trap 'rm -f "$root/out/kubecfg" 2>/dev/null' EXIT ERR INT TERM
 
 usage() {
-    echo "Usage: $1 (img ...|run|rm)"
+    echo "Usage: $1 (img ...|run|debug <test-dir>|rm)"
     echo ""
     echo "Commands:"
     echo "  img <gitlab-user> <gitlab-pw> - create new image"
     echo "  run                           - run shell in CI pod"
+    echo "  debug <test-dir>              - download run.sh from test directory and execute it"
     echo "  rm                            - remove CI pod"
     exit 1
 }
@@ -78,10 +89,15 @@ case "$1" in
     run)
         create_cache_stor
         create_results_stor
-        if ! kubectl get pod -n "$ns" m3-ci &>/dev/null; then
-            create_pod m3-ci m3-ci
-        fi
+        create_pod m3-ci m3-ci
         exec_shell m3-ci
+        ;;
+    debug)
+        if [ $# != 2 ]; then
+            usage "$0"
+        fi
+        create_pod m3-ci m3-ci
+        debug_test "$2"
         ;;
     rm)
         remove_pod m3-ci
