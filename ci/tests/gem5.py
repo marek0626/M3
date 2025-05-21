@@ -216,6 +216,7 @@ class Test:
         runfile = str(rundir) + "/run.sh"
         with open(runfile, "w") as f:
             f.write("#!/usr/bin/env bash\n")
+            f.write("set -e\n\n")
             # create temp dir
             f.write("tmp=$(mktemp -d)\n")
             f.write("trap 'rm -rf \"$tmp\"' EXIT ERR INT TERM\n")
