@@ -213,7 +213,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
     tasks = []
     for isa in ccisas:
         t = BuildTask(name="build/buildroot-{}".format(isa),
-                      deps=NIX_DEPS + ['cross/buildroot'],
+                      deps=NIX_DEPS + ['cross/buildroot', 'cross/config-' + isa],
                       out_path='build/cross-{}'.format(isa),
                       cache_dir=cache_dir,
                       cmd='cd cross && ./build.sh {}'.format(isa),
