@@ -25,7 +25,7 @@ use rot::cert::{HashBuf, M3RawCertificate};
 use rot::ed25519::{Signer, SigningKey};
 use rot::{Hex, Secret};
 
-use crate::idxtile::IndexedTile;
+use crate::idxtile::{self, IndexedTile};
 use crate::{config_local_ep, EPS_PER_PAGE, EP_REGS_SIZE};
 
 /// Helper macro to find the best position in an iterator that satisfies a condition.
@@ -456,6 +456,7 @@ pub fn main() -> ! {
     let mut next_ctx = rot::RosaCtx {
         kmac_cdi: Secret::new_zeroed(),
         derived_private_key: Secret::new_zeroed(),
+        occupied_eps: (idxtile::TILE_TCU_EP_START, m3.tiles.len()),
     };
     derive_cdi(&ctx, &m3, &mut next_ctx);
     m3.pub_key = derive_public_key(&mut next_ctx);
@@ -542,9 +543,9 @@ pub fn main() -> ! {
         next: next_ctx,
         our_tile,
         kernel_tile: ktile,
-        kernel_tile_desc: m3.tiles[ktile.index()].value(),
+        root_tile,
+        kernel_tile_desc: m3.tiles[ktile.index()],
         kenv_addr: GlobAddr::new_with(mem_tile.id(), kenv_offset),
-        root_tile_id: root_tile.id().raw() as u64,
     });
     unsafe { next_ctx.switch() }
 }

@@ -15,17 +15,17 @@
 #![no_std]
 #![no_main]
 
-use core::cmp::min;
-use riscv_rt::entry;
-
 use base::cell::StaticUnsafeCell;
 use base::errors::Error;
 use base::io::LogFlags;
+use base::kif::TileDesc;
 use base::mem::{self, AlignedBuf, GlobAddr, GlobOff};
 use base::tcu::{self, EpId, TCU};
 use base::{cfg, log, machine};
+use core::cmp::min;
 #[allow(unused_imports)]
 use lang as _;
+use riscv_rt::entry;
 use rot::CtxData;
 
 mod idxtile;
@@ -43,9 +43,9 @@ pub struct RosaPrivateCtx {
     next: rot::RosaCtx,
     our_tile: idxtile::IndexedTile,
     kernel_tile: idxtile::IndexedTile,
-    kernel_tile_desc: u64,
+    root_tile: idxtile::IndexedTile,
+    kernel_tile_desc: TileDesc,
     kenv_addr: GlobAddr,
-    root_tile_id: u64,
 }
 
 impl CtxData for RosaPrivateCtx {

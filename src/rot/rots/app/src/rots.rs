@@ -44,6 +44,7 @@ use m3core::server::{
     ServerSession, SessId, DEF_MAX_CLIENTS,
 };
 use m3core::tcu::{EpId, Message, TCU};
+use m3core::tiles::Activity;
 use m3core::time::{TimeDuration, TimeInstant};
 use m3core::{build_vmsg, const_assert, log, reply_vmsg};
 use rot::ed25519::Signer;
@@ -989,8 +990,24 @@ fn init_rot() -> Result<(MemCap, u64), Error> {
 pub fn main() -> Result<(), Error> {
     log!(LogFlags::RoTBoot, "Hello World!");
 
-    {
-        let ctx = unsafe { rot::RosaLayerCtx::take() };
+    let _eps = {
+        let ctx = unsafe { rot::RotsLayerCtx::take() };
+
+        // ensure that the occupied EPs are not reused by the kernel
+        let mut eps = Vec::new();
+        let (mut ep_start, ep_count) = ctx.data.occupied_eps;
+        let ep_end = ep_start + ep_count as tcu::EpId;
+        while ep_start < ep_end {
+            // to avoid many syscalls we specify replies here, which is of course not true, but
+            // currently only leads to 1 + <replies> EPs being allocated.
+            let amount = ep_count.min(cfg::MAX_RB_SIZE);
+            eps.push(EpMng::acquire_for(
+                Activity::own().sel(),
+                ep_start,
+                amount - 1,
+            ));
+            ep_start += amount as tcu::EpId;
+        }
 
         init_rot()
             .map(|res_tuple| {
@@ -1012,7 +1029,9 @@ pub fn main() -> Result<(), Error> {
                 Ok::<(), Error>(())
             })
             .ok();
-    }
+
+        eps
+    };
 
     let mut hdl = RequestHandler::new_with(DEF_MAX_CLIENTS, MAX_MSG_SIZE, 1)
         .expect("Unable to create request handler");

@@ -13,7 +13,7 @@
  */
 
 use base::io::LogFlags;
-use base::log;
+use base::{log, tcu};
 use core::fmt::Debug;
 
 use crate::cert::BinaryPayload;
@@ -56,6 +56,7 @@ impl CtxData for BlauCtx {
 pub struct RosaCtx {
     pub kmac_cdi: Secret<OpaqueKMacKey>,
     pub derived_private_key: Secret<ed25519::SecretKey>,
+    pub occupied_eps: (tcu::EpId, usize),
     // rot-certificate.json is stored in DRAM as regular boot module
 }
 
@@ -68,6 +69,7 @@ impl CtxData for RosaCtx {
 pub struct RotsCtx {
     pub kmac_cdi: Secret<OpaqueKMacKey>,
     pub derived_private_key: Secret<ed25519::SecretKey>,
+    pub occupied_eps: (tcu::EpId, usize),
 }
 
 impl CtxData for RotsCtx {

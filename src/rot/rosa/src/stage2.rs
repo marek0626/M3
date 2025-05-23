@@ -145,7 +145,7 @@ pub fn main() -> ! {
         // append "--root <root-tile>" to the arguments
         let mut kargs = kernel_cmdline.split(' ').collect::<Vec<_>>();
         kargs.push("--root");
-        let root_tile_arg = format!("{}", ctx.data.root_tile_id);
+        let root_tile_arg = format!("{}", ctx.data.root_tile.id().raw());
         kargs.push(&root_tile_arg);
 
         let (argv, argc) = write_args(kargs.iter(), &mut env_off);
@@ -154,7 +154,7 @@ pub fn main() -> ! {
         let env = BootEnv {
             platform: env::boot().platform,
             tile_id: ctx.data.kernel_tile.id().raw() as u64,
-            tile_desc: ctx.data.kernel_tile_desc,
+            tile_desc: ctx.data.kernel_tile_desc.value(),
             argc: argc as u64,
             argv: argv.as_raw(),
             envp: envp.as_raw(),
@@ -205,6 +205,7 @@ pub fn main() -> ! {
     let next_ctx = rot::LayerCtx::new(rot::ROSA_ROTS_NEXT_ADDR, rot::RotsCtx {
         derived_private_key: ctx.data.next.derived_private_key.clone(),
         kmac_cdi: ctx.data.next.kmac_cdi.clone(),
+        occupied_eps: ctx.data.next.occupied_eps,
     });
     // NMG Switch directly to RoTS instead of waiting for the kernel to reset/wake us.
     unsafe { next_ctx.switch() }
