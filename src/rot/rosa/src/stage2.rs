@@ -20,12 +20,23 @@ use base::env::BootEnv;
 use base::errors::Error;
 use base::io::log::LogColor;
 use base::io::{log, LogFlags, Read};
+use base::kif::Perm;
 use base::mem::{GlobOff, VirtAddr};
-use base::tcu::TCU;
+use base::tcu::{EpId, EP_REGS, TCU};
 use base::util::math::round_up;
 use base::vec::Vec;
 use base::{env, format, log, mem, tcu, util};
 use rot::{self, CtxData, RosaCtx};
+
+use crate::config_local_ep;
+
+fn invalidate_local_ep(ep: EpId) {
+    config_local_ep(ep, |regs| {
+        for r in regs.iter_mut().take(EP_REGS) {
+            *r = 0;
+        }
+    });
+}
 
 fn write_args<S, I>(args: I, env_off: &mut GlobOff) -> (VirtAddr, usize)
 where
@@ -142,7 +153,7 @@ pub fn main() -> ! {
 
         let env = BootEnv {
             platform: env::boot().platform,
-            tile_id: ctx.data.kernel_tile_id,
+            tile_id: ctx.data.kernel_tile.id().raw() as u64,
             tile_desc: ctx.data.kernel_tile_desc,
             argc: argc as u64,
             argv: argv.as_raw(),
@@ -173,22 +184,22 @@ pub fn main() -> ! {
     ctx.entry_addr = rot::ROSA_NEXT_ADDR; // NMG This is where we load RoTS
     ctx.magic = RosaCtx::MAGIC;
 
-    {
-        log!(LogFlags::RoTBoot, "Resetting kernel tile");
-        let ext_cmd_addr = (TCU::ext_reg_addr(tcu::ExtReg::ExtCmd) - tcu::MMIO_ADDR).as_goff();
-        let reset_val = tcu::TCU::build_ext_cmd(tcu::ExtCmdOpCode::Reset, 1);
-        TCU::write_obj(crate::TILE_EP, &reset_val, ext_cmd_addr)
-            .expect("Failed to write kernel reset");
+    log!(LogFlags::RoTBoot, "Resetting kernel tile");
+    ctx.data
+        .kernel_tile
+        .ext_cmd(tcu::TCU::build_ext_cmd(tcu::ExtCmdOpCode::Reset, 1))
+        .expect("Failed to reset kernel tile");
 
-        let res = loop {
-            let res: tcu::Reg = TCU::read_obj(crate::TILE_EP, ext_cmd_addr)
-                .expect("Failed to read kernel reset status");
-            if (res & 0xF) == tcu::ExtCmdOpCode::Idle as tcu::Reg {
-                break res;
-            }
-        };
-        log!(LogFlags::RoTDbg, "Reset command complete: {}", res);
-    }
+    // invalidate all no-longer needed EPs
+    invalidate_local_ep(rot::FLASH_EP);
+    invalidate_local_ep(crate::MEM_EP);
+    invalidate_local_ep(crate::COPY_EP);
+    invalidate_local_ep(crate::ENV_EP);
+    invalidate_local_ep(crate::SELF_EP);
+
+    // reduce our TCU-MMIO-area permission to read-only
+    ctx.data.our_tile.init(Perm::R);
+    ctx.data.kernel_tile.init(Perm::R);
 
     log!(LogFlags::RoTDbg, "switch to rots");
     let next_ctx = rot::LayerCtx::new(rot::ROSA_ROTS_NEXT_ADDR, rot::RotsCtx {

@@ -12,56 +12,21 @@
  * General Public License version 2 for more details.
  */
 
-use crate::Error;
 use base::col::{BTreeMap, BTreeMapEntry, Vec};
 use base::io::log::LogColor;
 use base::io::{log, LogFlags};
 use base::kif::boot::{Info, Mem, Mod};
 use base::kif::{tilemux, Perm, TileAttr, TileType};
 use base::mem::{GlobAddr, GlobOff};
-use base::tcu::{ActId, TileId, TCU};
+use base::tcu::{ActId, TCU};
 use base::util::math::round_up;
 use base::{cfg, env, log, mem, tcu, util};
 use rot::cert::{HashBuf, M3RawCertificate};
 use rot::ed25519::{Signer, SigningKey};
 use rot::{Hex, Secret};
 
-const EP_REGS_SIZE: usize = tcu::EP_REGS * mem::size_of::<tcu::Reg>();
-const EPS_PER_PAGE: usize = cfg::PAGE_SIZE / EP_REGS_SIZE;
-
-fn config_local_ep<CFG>(ep: tcu::EpId, cfg: CFG)
-where
-    CFG: FnOnce(&mut [tcu::Reg]),
-{
-    let mut regs = [0; tcu::EP_REGS];
-    cfg(&mut regs);
-    TCU::set_ep_regs(ep, &regs);
-}
-
-fn config_remote_ep<CFG>(rtcu_ep: tcu::EpId, ep: tcu::EpId, cfg: CFG)
-where
-    CFG: FnOnce(&mut [tcu::Reg]),
-{
-    let mut regs = [0; tcu::EP_REGS];
-    cfg(&mut regs);
-    let off = (TCU::ep_regs_addr(ep) - tcu::MMIO_ADDR).as_goff();
-    TCU::write_slice(rtcu_ep, &regs[..], off).expect("Failed to configure remote TCU endpoint");
-}
-
-fn config_local_ep_remote_tcu(tile: TileId, perm: Perm) {
-    config_local_ep(crate::TILE_EP, |regs| {
-        TCU::config_mem(
-            regs,
-            rot::TCU_ACT_ID,
-            tile,
-            0,
-            tcu::MMIO_ADDR.as_goff(),
-            // We never configure more than one remote EP at the moment
-            tcu::MMIO_SIZE + tcu::MMIO_PRIV_SIZE + 1 * EP_REGS_SIZE,
-            perm,
-        );
-    });
-}
+use crate::idxtile::IndexedTile;
+use crate::{config_local_ep, EPS_PER_PAGE, EP_REGS_SIZE};
 
 /// Helper macro to find the best position in an iterator that satisfies a condition.
 /// The base condition must always be satisfied, the preferred conditions are tried
@@ -80,7 +45,7 @@ macro_rules! find_best_position {
     };
 }
 
-fn determine_mem_tile(m3: &rot::cert::M3Payload<'_>) -> (TileId, usize) {
+fn determine_mem_tile(m3: &rot::cert::M3Payload<'_>) -> IndexedTile {
     // We just use the first mem tile for now and assume it has sufficient space
     let idx = m3
         .tiles
@@ -90,7 +55,7 @@ fn determine_mem_tile(m3: &rot::cert::M3Payload<'_>) -> (TileId, usize) {
     pick_tile(m3, idx, "memory")
 }
 
-fn determine_kernel_tile(m3: &rot::cert::M3Payload<'_>) -> (TileId, usize) {
+fn determine_kernel_tile(m3: &rot::cert::M3Payload<'_>) -> IndexedTile {
     let idx = {
         find_best_position!(
             m3.tiles.iter(),
@@ -104,11 +69,11 @@ fn determine_kernel_tile(m3: &rot::cert::M3Payload<'_>) -> (TileId, usize) {
     pick_tile(m3, idx, "kernel")
 }
 
-fn determine_root_tile(m3: &rot::cert::M3Payload<'_>, ktile_idx: usize) -> (TileId, usize) {
+fn determine_root_tile(m3: &rot::cert::M3Payload<'_>, ktile: IndexedTile) -> IndexedTile {
     let idx = {
         find_best_position!(
             m3.tiles.iter(),
-            |(idx, desc)| idx != ktile_idx && desc.is_programmable() && !desc.attr().contains(TileAttr::ROT),
+            |(idx, desc)| idx != ktile.index() && desc.is_programmable() && !desc.attr().contains(TileAttr::ROT),
             try => desc.has_virtmem(),
         )
         .expect("No suitable tile found for root")
@@ -116,7 +81,7 @@ fn determine_root_tile(m3: &rot::cert::M3Payload<'_>, ktile_idx: usize) -> (Tile
     pick_tile(m3, idx, "root")
 }
 
-fn determine_our_tile(m3: &rot::cert::M3Payload<'_>) -> (TileId, usize) {
+fn determine_our_tile(m3: &rot::cert::M3Payload<'_>) -> IndexedTile {
     let idx = {
         find_best_position!(m3.tiles.iter(), |(_idx, desc)| desc.is_programmable()
             && desc.attr().contains(TileAttr::ROT))
@@ -125,7 +90,7 @@ fn determine_our_tile(m3: &rot::cert::M3Payload<'_>) -> (TileId, usize) {
     pick_tile(m3, idx, "our")
 }
 
-fn pick_tile(m3: &rot::cert::M3Payload<'_>, idx: usize, name: &str) -> (TileId, usize) {
+fn pick_tile(m3: &rot::cert::M3Payload<'_>, idx: usize, name: &str) -> IndexedTile {
     let tile_raw = env::boot().raw_tile_ids[idx] as u16;
     let tile = TCU::nocid_to_tileid(tile_raw);
     log!(
@@ -135,13 +100,13 @@ fn pick_tile(m3: &rot::cert::M3Payload<'_>, idx: usize, name: &str) -> (TileId, 
         tile,
         m3.tiles[idx]
     );
-    (tile, idx)
+    IndexedTile::new(tile, idx)
 }
 
 fn load_modules<'p, 'c: 'p>(
     cfg: &'c rot::RosaLayerCfg,
     m3: &mut rot::cert::M3Payload<'p>,
-    mem_tile: TileId,
+    mem_tile: IndexedTile,
 ) -> (GlobOff, Vec<Mod>) {
     let mod_count = cfg.data.mod_count();
     let mut mods = Vec::with_capacity(mod_count + 1);
@@ -159,7 +124,7 @@ fn load_modules<'p, 'c: 'p>(
             mname,
             msize / 1024,
             m.addr(),
-            GlobAddr::new_with(mem_tile, mem_offset)
+            GlobAddr::new_with(mem_tile.id(), mem_offset)
         );
 
         // Make sure we don't read anything from inside the RoT tile
@@ -201,7 +166,7 @@ fn load_modules<'p, 'c: 'p>(
             },
         };
 
-        let new_addr = GlobAddr::new_with(mem_tile, mem_offset);
+        let new_addr = GlobAddr::new_with(mem_tile.id(), mem_offset);
         mods.push(Mod::new(new_addr, m.size, mname));
         mem_offset = round_up(mem_offset + msize as GlobOff, cfg::PAGE_SIZE as GlobOff);
     }
@@ -286,7 +251,7 @@ fn create_signature(ctx: rot::BlauLayerCtx, m3: &rot::cert::M3Payload<'_>, dest:
 fn write_kenv(
     m3: &rot::cert::M3Payload<'_>,
     mods: &[Mod],
-    mem_tile: TileId,
+    mem_tile: IndexedTile,
     mem_size: usize,
     mem_offset: &mut GlobOff,
 ) -> (GlobOff, GlobOff, GlobOff) {
@@ -300,14 +265,16 @@ fn write_kenv(
     *mem_offset += total_env_size as GlobOff;
     let kenv_end = *mem_offset;
     *mem_offset = round_up(*mem_offset, cfg::PAGE_SIZE as GlobOff);
-    #[cfg(not(feature = "hw23"))]
+    #[cfg(feature = "gem5")]
     let keps_offset = *mem_offset;
+    #[cfg(not(feature = "gem5"))]
+    let keps_offset = 0;
     *mem_offset += (m3.kernel.eps_num as usize * EP_REGS_SIZE) as GlobOff;
     let kernel_offset = *mem_offset;
     *mem_offset += m3.kernel.mem_size as GlobOff;
 
     let mems: [Mem; MEM_COUNT] = [Mem::new(
-        GlobAddr::new_with(mem_tile, *mem_offset),
+        GlobAddr::new_with(mem_tile.id(), *mem_offset),
         mem_size as GlobOff - *mem_offset,
         false,
     )];
@@ -333,10 +300,11 @@ fn write_kenv(
     (kenv_offset, keps_offset, kernel_offset)
 }
 
-#[allow(unused)]
+#[cfg(feature = "gem5")]
 fn init_kernel_eps(
     m3: &rot::cert::M3Payload<'_>,
-    mem_tile: TileId,
+    mem_tile: IndexedTile,
+    ktile: IndexedTile,
     keps_offset: GlobOff,
     kernel_offset: GlobOff,
 ) {
@@ -348,20 +316,21 @@ fn init_kernel_eps(
         "EpsAddr and EpsSize must be consecutive registers (or code needs changes)"
     );
 
-    let eps_addr = ((TCU::tileid_to_nocid(mem_tile) as tcu::Reg) << 50) | keps_offset as tcu::Reg;
-    TCU::write_slice(
-        crate::TILE_EP,
-        &[eps_addr, kernel_offset - keps_offset],
-        (TCU::ext_reg_addr(tcu::ExtReg::EpsAddr) - tcu::MMIO_ADDR).as_goff(),
-    )
-    .expect("Failed to configure endpoint memory region in kernel tile TCU");
+    let eps_addr =
+        ((TCU::tileid_to_nocid(mem_tile.id()) as tcu::Reg) << 50) | keps_offset as tcu::Reg;
+    ktile
+        .write_tcu(
+            &[eps_addr, kernel_offset - keps_offset],
+            TCU::ext_reg_addr(tcu::ExtReg::EpsAddr).as_goff(),
+        )
+        .expect("Failed to configure endpoint memory region in kernel tile TCU");
 
-    // Configure kernel memory endpoint
-    config_remote_ep(crate::TILE_EP, 0, |regs| {
+    // Configure kernel's first PMP EP
+    ktile.config_ep(0, |regs| {
         TCU::config_mem(
             regs,
             rot::TCU_ACT_ID,
-            mem_tile,
+            mem_tile.id(),
             0,
             kernel_offset,
             m3.kernel.mem_size as usize,
@@ -371,7 +340,7 @@ fn init_kernel_eps(
 }
 
 #[allow(unused)]
-fn prepare_for_rots(our_tile: TileId, root_tile: TileId) {
+fn prepare_for_rots(our_tile: IndexedTile, root_tile: IndexedTile) {
     // configure unimux's sidecall EP
     let desc = env::boot().tile_desc();
     let mut rbuf = desc.rbuf_mux_space().0.as_phys(desc);
@@ -390,8 +359,8 @@ fn prepare_for_rots(our_tile: TileId, root_tile: TileId) {
     // configure exclusive region for the environment, accessible only from the root tile
     #[cfg(feature = "gem5")]
     if let Some((cmd, arg1)) = TCU::build_exreg_cmd(
-        our_tile,
-        root_tile,
+        our_tile.id(),
+        root_tile.id(),
         0,
         0,
         cfg::ENV_START_DEF.as_goff() + (cfg::ENV_SIZE as GlobOff) / 2,
@@ -400,20 +369,24 @@ fn prepare_for_rots(our_tile: TileId, root_tile: TileId) {
         true,
     ) {
         let arg_addr = TCU::ext_reg_addr(tcu::ExtReg::ExtArg1).as_goff();
-        mmio_write_slice(&[arg1], arg_addr).unwrap();
-        do_ext_cmd(cmd).unwrap();
+        our_tile.write_tcu(&[arg1], arg_addr).unwrap();
+        our_tile.ext_cmd(cmd).unwrap();
     }
 }
 
-fn lock_tile() {
+fn lock_tile(our_tile: IndexedTile) {
     // get the address of the register
     let reg_addr = TCU::ext_reg_addr(tcu::ExtReg::Features).as_goff();
     // get features
-    let mut features: u64 = mmio_read_obj(reg_addr).expect("Failed to read object");
+    let mut features: u64 = our_tile
+        .read_tcu_obj(reg_addr)
+        .expect("Failed to read object");
     // set locked bit
     features |= tcu::FeatureFlags::LOCKED.bits();
     // write it
-    mmio_write_slice(&[features], reg_addr).expect("failed to write slice");
+    our_tile
+        .write_tcu(&[features], reg_addr)
+        .expect("failed to write slice");
 }
 
 pub fn main() -> ! {
@@ -426,14 +399,21 @@ pub fn main() -> ! {
     log!(LogFlags::RoTBoot, "Scanning tiles");
     let tiles = env::boot().raw_tile_ids[0..env::boot().raw_tile_count as usize]
         .iter()
-        .map(|id| {
-            let tile_id = TCU::nocid_to_tileid(*id as u16);
-            config_local_ep_remote_tcu(tile_id, Perm::R);
-            TCU::read_obj(
-                crate::TILE_EP,
-                (TCU::ext_reg_addr(tcu::ExtReg::TileDesc) - tcu::MMIO_ADDR).as_goff(),
-            )
-            .expect("Failed to read tile desc")
+        .enumerate()
+        .map(|(idx, id)| {
+            // configure EP to access the remote TCU's MMIO region
+            let tile = IndexedTile::new(TCU::nocid_to_tileid(*id as u16), idx);
+            let perm = if tile.id() == env::boot().tile_id() {
+                Perm::RW
+            }
+            else {
+                Perm::R
+            };
+            tile.init(perm);
+
+            // read out tile description
+            tile.read_tcu_obj(TCU::ext_reg_addr(tcu::ExtReg::TileDesc).as_goff())
+                .expect("Failed to read tile desc")
         })
         .collect();
     log!(LogFlags::RoTDbg, "Tiles: {:#?}", tiles);
@@ -448,27 +428,27 @@ pub fn main() -> ! {
         mods: BTreeMap::new(),
         pub_key: Hex::new_zeroed(),
     };
-    if cfg!(feature = "hw23") {
+    if !cfg!(feature = "gem5") {
         m3.kernel.eps_num = 0; // hw23 does not have virteps
     }
 
-    let (mem_tile, mem_tile_idx) = determine_mem_tile(&m3);
+    let mem_tile = determine_mem_tile(&m3);
 
     // Configure memory endpoint that spans the entire memory tile
     config_local_ep(crate::MEM_EP, |regs| {
         TCU::config_mem(
             regs,
             rot::TCU_ACT_ID,
-            mem_tile,
+            mem_tile.id(),
             0,
             0,
-            m3.tiles[mem_tile_idx].mem_size(),
+            m3.tiles[mem_tile.index()].mem_size(),
             Perm::W,
         )
     });
 
     // Load modules
-    let (mut mem_offset, mut mods) = load_modules(&cfg, &mut m3, mem_tile);
+    let (mut mem_offset, mut mods) = load_modules(cfg, &mut m3, mem_tile);
     log!(LogFlags::RoTDbg, "Loaded modules: {:#?}", mods);
     log!(LogFlags::RoTDbg, "Module hashes: {:#?}", m3.mods);
 
@@ -481,18 +461,19 @@ pub fn main() -> ! {
     m3.pub_key = derive_public_key(&mut next_ctx);
 
     // create signature and add it as boot module
-    let sig_addr = GlobAddr::new_with(mem_tile, mem_offset);
+    let sig_addr = GlobAddr::new_with(mem_tile.id(), mem_offset);
     let sig_mod = create_signature(ctx, &m3, sig_addr);
     mods.push(sig_mod);
     mem_offset += sig_mod.size;
     mem_offset = round_up(mem_offset, cfg::PAGE_SIZE as GlobOff);
 
     // write kernel environment
+    #[allow(unused)]
     let (kenv_offset, keps_offset, kernel_offset) = write_kenv(
         &m3,
         &mods[..],
         mem_tile,
-        m3.tiles[mem_tile_idx].mem_size(),
+        m3.tiles[mem_tile.index()].mem_size(),
         &mut mem_offset,
     );
 
@@ -515,25 +496,24 @@ pub fn main() -> ! {
         )
     });
 
-    let (ktile, ktile_idx) = determine_kernel_tile(&m3);
-    assert_ne!(ktile, env::boot().tile_id());
-
-    // Configure endpoint to kernel TCU
-    config_local_ep_remote_tcu(ktile, Perm::RW);
+    let ktile = determine_kernel_tile(&m3);
+    assert_ne!(ktile.id(), env::boot().tile_id());
+    // we need write access to the kernel EPs
+    ktile.init(Perm::RW);
 
     // Setup memory region for kernel endpoints
-    #[cfg(not(feature = "hw23"))]
-    init_kernel_eps(&m3, mem_tile, keps_offset, kernel_offset);
+    #[cfg(feature = "gem5")]
+    init_kernel_eps(&m3, mem_tile, ktile, keps_offset, kernel_offset);
 
-    let (root_tile, _root_tile_idx) = determine_root_tile(&m3, ktile_idx);
-    let (our_tile, _our_tile_idx) = determine_our_tile(&m3);
+    let root_tile = determine_root_tile(&m3, ktile);
+    let our_tile = determine_our_tile(&m3);
 
     // Configure endpoint used to load kernel ELF
     config_local_ep(crate::MEM_EP, |regs| {
         TCU::config_mem(
             regs,
             rot::TCU_ACT_ID,
-            ktile,
+            ktile.id(),
             0,
             rot::MEM_OFFSET as GlobOff,
             m3.kernel.mem_size as usize,
@@ -545,97 +525,26 @@ pub fn main() -> ! {
         TCU::config_mem(
             regs,
             rot::TCU_ACT_ID,
-            ktile,
+            ktile.id(),
             0,
             rot::MEM_ENV_START.as_goff(),
             cfg::ENV_SIZE,
             Perm::W,
         )
     });
-    // setup EP for our own TCU MMIO region
-    config_local_ep(crate::SELF_EP, |regs| {
-        TCU::config_mem(
-            regs,
-            rot::TCU_ACT_ID,
-            our_tile,
-            0,
-            tcu::MMIO_ADDR.as_local() as GlobOff,
-            tcu::MMIO_SIZE,
-            Perm::W | Perm::R,
-        )
-    });
 
     // prepare execution of rots/unimux and lock tile as we're about to start the kernel
     prepare_for_rots(our_tile, root_tile);
-    lock_tile();
+    lock_tile(our_tile);
 
     // Continue loading in second stage after clearing secrets
     let next_ctx = rot::LayerCtx::new(rot::ROSA_ADDR, crate::RosaPrivateCtx {
         next: next_ctx,
-        kernel_tile_id: ktile.raw() as u64,
-        kernel_tile_desc: m3.tiles[ktile_idx].value(),
-        kenv_addr: GlobAddr::new_with(mem_tile, kenv_offset),
-        root_tile_id: root_tile.raw() as u64,
+        our_tile,
+        kernel_tile: ktile,
+        kernel_tile_desc: m3.tiles[ktile.index()].value(),
+        kenv_addr: GlobAddr::new_with(mem_tile.id(), kenv_offset),
+        root_tile_id: root_tile.id().raw() as u64,
     });
     unsafe { next_ctx.switch() }
-}
-
-fn mmio_write_slice<T>(sl: &[T], addr: GlobOff) -> Result<(), Error> {
-    let sl_addr = sl.as_ptr() as *const u8;
-
-    mmio_write_mem(sl_addr, mem::size_of_val(sl), addr)
-}
-
-fn mmio_write_mem(data: *const u8, size: usize, addr: GlobOff) -> Result<(), Error> {
-    log!(LogFlags::RoTDbg, "writing {} bytes to {:#x}", size, addr);
-    TCU::write(
-        crate::SELF_EP,
-        data,
-        size,
-        addr - tcu::MMIO_ADDR.as_local() as GlobOff,
-    )
-}
-
-fn mmio_read_obj<T: Default>(addr: GlobOff) -> Result<T, Error> {
-    let mut obj: T = T::default();
-    let obj_addr = &mut obj as *mut T as *mut u8;
-    mmio_read_mem(obj_addr, mem::size_of::<T>(), addr)?;
-    Ok(obj)
-}
-
-fn mmio_read_mem(data: *mut u8, size: usize, addr: GlobOff) -> Result<(), Error> {
-    log!(LogFlags::RoTDbg, "reading {} bytes from {:#x}", size, addr);
-    TCU::read(
-        crate::SELF_EP,
-        data,
-        size,
-        addr - tcu::MMIO_ADDR.as_local() as GlobOff,
-    )
-}
-
-#[cfg(feature = "gem5")]
-fn do_ext_cmd(cmd: tcu::Reg) -> Result<tcu::Reg, Error> {
-    let addr = TCU::ext_reg_addr(tcu::ExtReg::ExtCmd).as_goff();
-    mmio_write_slice(&[cmd], addr)?;
-    wait_ext_cmd()
-}
-
-#[cfg(feature = "gem5")]
-fn wait_ext_cmd() -> Result<tcu::Reg, Error> {
-    use base::errors::Code;
-
-    let addr = TCU::ext_reg_addr(tcu::ExtReg::ExtCmd).as_goff();
-
-    let res = loop {
-        let res: tcu::Reg = mmio_read_obj(addr)?;
-        let idle_code: tcu::Reg = tcu::ExtCmdOpCode::Idle.into();
-        if (res & 0xF) == idle_code {
-            break res;
-        }
-    };
-
-    match Code::try_from(((res >> 4) & 0x3F) as u32).unwrap() {
-        Code::Success => Ok(res >> 10),
-        e => Err(Error::new(e)),
-    }
 }
