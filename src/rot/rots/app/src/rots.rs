@@ -971,13 +971,13 @@ impl HashMuxReceiver {
 }
 
 fn init_rot() -> Result<(MemCap, u64), Error> {
-    log!(LogFlags::Info, "cert load");
+    log!(LogFlags::RoTDbg, "cert load");
     let rot_cert_cap = match MemCap::new_bind_bootmod("rot-certificate.json") {
         Ok(rot_cert_cap) => rot_cert_cap,
         Err(e) => return Err(e),
     };
 
-    log!(LogFlags::Info, "cert rgn");
+    log!(LogFlags::RoTDbg, "cert rgn");
     let rot_cert_size = match rot_cert_cap.region() {
         Ok(rgn) => rgn.1,
         Err(e) => return Err(e),
@@ -994,7 +994,7 @@ pub fn main() -> Result<(), Error> {
 
         init_rot()
             .map(|res_tuple| {
-                log!(LogFlags::Info, "inited rot successfully");
+                log!(LogFlags::RoTDbg, "inited rot successfully");
                 let (rot_cert_cap, rot_cert_size) = res_tuple;
                 CTX.set(RotsCtx {
                     kmac_cdi: ctx.data.kmac_cdi,
