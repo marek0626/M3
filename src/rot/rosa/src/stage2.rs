@@ -22,21 +22,11 @@ use base::io::log::LogColor;
 use base::io::{log, LogFlags, Read};
 use base::kif::Perm;
 use base::mem::{GlobOff, VirtAddr};
-use base::tcu::{EpId, EP_REGS, TCU};
+use base::tcu::TCU;
 use base::util::math::round_up;
 use base::vec::Vec;
 use base::{env, format, log, mem, tcu, util};
 use rot::{self, CtxData, RosaCtx};
-
-use crate::config_local_ep;
-
-fn invalidate_local_ep(ep: EpId) {
-    config_local_ep(ep, |regs| {
-        for r in regs.iter_mut().take(EP_REGS) {
-            *r = 0;
-        }
-    });
-}
 
 fn write_args<S, I>(args: I, env_off: &mut GlobOff) -> (VirtAddr, usize)
 where
@@ -184,18 +174,18 @@ pub fn main() -> ! {
     ctx.entry_addr = rot::ROSA_NEXT_ADDR; // NMG This is where we load RoTS
     ctx.magic = RosaCtx::MAGIC;
 
+    // invalidate all no-longer needed EPs
+    ctx.data.our_tile.invalidate_ep(rot::FLASH_EP).unwrap();
+    ctx.data.our_tile.invalidate_ep(crate::MEM_EP).unwrap();
+    ctx.data.our_tile.invalidate_ep(crate::COPY_EP).unwrap();
+    ctx.data.our_tile.invalidate_ep(crate::ENV_EP).unwrap();
+    ctx.data.our_tile.invalidate_ep(crate::SELF_EP).unwrap();
+
     log!(LogFlags::RoTBoot, "Resetting kernel tile");
     ctx.data
         .kernel_tile
         .ext_cmd(tcu::TCU::build_ext_cmd(tcu::ExtCmdOpCode::Reset, 1))
         .expect("Failed to reset kernel tile");
-
-    // invalidate all no-longer needed EPs
-    invalidate_local_ep(rot::FLASH_EP);
-    invalidate_local_ep(crate::MEM_EP);
-    invalidate_local_ep(crate::COPY_EP);
-    invalidate_local_ep(crate::ENV_EP);
-    invalidate_local_ep(crate::SELF_EP);
 
     // reduce our TCU-MMIO-area permission to read-only
     ctx.data.our_tile.init(Perm::R);

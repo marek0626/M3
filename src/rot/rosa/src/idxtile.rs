@@ -17,8 +17,7 @@
 use base::errors::{Code, Error};
 use base::kif::Perm;
 use base::mem::GlobOff;
-use base::tcu;
-use base::tcu::{TileId, TCU};
+use base::tcu::{self, TileId, TCU};
 
 use crate::{config_local_ep, EP_REGS_SIZE};
 
@@ -75,6 +74,11 @@ impl IndexedTile {
         cfg(&mut regs);
         self.write_tcu(&regs[..], TCU::ep_regs_addr(ep).as_goff())
             .expect("Failed to configure remote TCU endpoint");
+    }
+
+    pub fn invalidate_ep(&self, ep: tcu::EpId) -> Result<(), Error> {
+        let reg = TCU::build_ext_cmd(tcu::ExtCmdOpCode::InvEP, (ep as u64) | (1 as u64) << 16);
+        self.ext_cmd(reg).map(|_| ())
     }
 
     pub fn read_tcu_obj<T>(&self, off: GlobOff) -> Result<T, Error> {
