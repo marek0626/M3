@@ -1,4 +1,4 @@
-from ninjapie import BuildPath, SourcePath
+from ninjapie import SourcePath
 
 
 def build(gen, env):
@@ -9,8 +9,7 @@ def build(gen, env):
         env['LINKFLAGS'] += ['-nostartfiles']
 
         deps = env.rust_deps()
-        deps += [SourcePath.new(env, 'Cargo.toml'), SourcePath.new(env, '../Cargo.toml')]
-        deps += env.glob(gen, '**/*.rs')
+        deps += [SourcePath.new(env, '../Cargo.toml')]
         # rots also depends on unimux
         deps += [SourcePath.new(env, '../../../unimux/Cargo.toml')]
         deps += env.glob(gen, '../../../unimux/**/*.rs')
