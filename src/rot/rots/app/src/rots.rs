@@ -41,7 +41,7 @@ use m3core::mem::{size_of, AlignedBuf, GlobOff, MsgBuf, MsgBufRef};
 use m3core::serialize::bytes::Bytes;
 use m3core::server::{
     server_loop, CapExchange, ClientManager, ExcType, RequestHandler, RequestSession, Server,
-    ServerSession, SessId, DEF_MAX_CLIENTS,
+    ServerSession, SessId,
 };
 use m3core::tcu::{EpId, Message, TCU};
 use m3core::tiles::Activity;
@@ -122,6 +122,7 @@ pub extern "C" fn env_run() -> ! {
     m3core::env::run();
 }
 
+const MAX_CLIENTS: usize = 4;
 const MAX_MSG_SIZE: usize = 256;
 
 const MAX_DERIVED_SECRET_SIZE: usize = 64;
@@ -1033,7 +1034,7 @@ pub fn main() -> Result<(), Error> {
         eps
     };
 
-    let mut hdl = RequestHandler::new_with(DEF_MAX_CLIENTS, MAX_MSG_SIZE, 1)
+    let mut hdl = RequestHandler::new_with(MAX_CLIENTS, MAX_MSG_SIZE, 1)
         .expect("Unable to create request handler");
     let srv = Server::new("rot", &mut hdl).expect("Unable to create service 'rot'");
 
