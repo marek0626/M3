@@ -17,7 +17,7 @@
 #![allow(warnings)]
 
 #[allow(unused_extern_crates)]
-extern crate heap;
+extern crate heapsimple;
 
 mod activities;
 mod arch;
@@ -46,12 +46,12 @@ use isr::{ISRArch, ISR};
 
 extern "C" {
     fn __m3_init_libc(argc: i32, argv: *const *const u8, envp: *const *const u8, tls: bool);
-    fn __m3_heap_set_area(begin: usize, end: usize);
+    fn __heap_simple_init(addr: usize, size: usize);
     fn sleep();
     fn sleep_once();
 }
 
-const HEAP_SIZE: usize = 128 * 1024;
+const HEAP_SIZE: usize = 8 * 1024;
 
 // the heap area needs to be page-byte aligned
 #[repr(align(4096))]
@@ -148,7 +148,6 @@ pub extern "C" fn unexpected_irq(state: &mut arch::State) -> *mut libc::c_void {
     target_arch = "riscv32",
     target_arch = "x86_64"
 ))]
-
 pub extern "C" fn fpu_ex(state: &mut arch::State) -> *mut libc::c_void {
     panic!("Unexpected FPU exception!");
 }
@@ -259,10 +258,7 @@ pub extern "C" fn init() -> usize {
 
     unsafe {
         __m3_init_libc(0, ptr::null(), ptr::null(), false);
-        __m3_heap_set_area(
-            &HEAP.0 as *const u64 as usize,
-            &HEAP.0 as *const u64 as usize + mem::size_of_val(&HEAP.0),
-        );
+        __heap_simple_init(&HEAP.0 as *const u64 as usize, mem::size_of_val(&HEAP.0));
     }
 
     io::init(

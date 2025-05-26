@@ -14,7 +14,7 @@ isr = { path = "../libs/rust/isr" }
 mux = { path = "../libs/rust/mux" }
 paging = { path = "../libs/rust/paging" }
 num_enum = { version = "0.6.1", default-features = false }
-heap = { path = "../libs/rust/heap" }
+heapsimple = { path = "../libs/rust/heapsimple" }
 
 [features]
 default = []

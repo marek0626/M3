@@ -1,14 +1,12 @@
 [package]
-name = "mux"
+name = "heapsimple"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-path = "src/mux.rs"
+name = "heapsimple"
 crate-type = ["rlib"]
 
 [dependencies]
+bitflags = "2.1.0"
 base = { path = "../base" }
-
-[features]
-default = []

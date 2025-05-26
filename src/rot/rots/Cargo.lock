@@ -166,7 +166,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "heap"
+name = "heapsimple"
 version = "0.1.0"
 dependencies = [
  "base",
@@ -251,7 +251,6 @@ name = "mux"
 version = "0.1.0"
 dependencies = [
  "base",
- "heap",
 ]
 
 [[package]]
@@ -327,7 +326,7 @@ name = "rots"
 version = "0.1.0"
 dependencies = [
  "base",
- "heap",
+ "heapsimple",
  "kecacc",
  "lang",
  "m3core",
@@ -491,7 +490,7 @@ name = "unimux"
 version = "0.1.0"
 dependencies = [
  "base",
- "heap",
+ "heapsimple",
  "isr",
  "lang",
  "mux",

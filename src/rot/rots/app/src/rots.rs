@@ -20,9 +20,6 @@ extern crate unimux;
 #[allow(unused_extern_crates)]
 extern crate lang;
 
-#[allow(unused_extern_crates)]
-extern crate heap;
-
 use core::cmp::min;
 
 use base::env::{self, BaseEnv, BootEnv};

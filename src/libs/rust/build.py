@@ -2,6 +2,7 @@ dirs = [
     'accel',
     'base',
     'heap',
+    'heapsimple',
     'isr',
     'lang',
     'm3',

@@ -6,7 +6,7 @@ base = { path = "../../libs/rust/base" }
 lang = { path = "../../libs/rust/lang" }
 rot = { path = "../../libs/crypto/rot" }
 kecacc = { path = "../../libs/crypto/kecacc" }
-heap = { path = "../../libs/rust/heap" }
+heapsimple = { path = "../../libs/rust/heapsimple" }
 m3core = { path = "../../libs/rust/m3core" }
 unimux = { path = "../../unimux" }
 

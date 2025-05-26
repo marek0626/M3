@@ -286,6 +286,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "heapsimple"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "bitflags 2.5.0",
+]
+
+[[package]]
 name = "hex"
 version = "0.1.0"
 dependencies = [
@@ -459,7 +467,6 @@ name = "mux"
 version = "0.1.0"
 dependencies = [
  "base",
- "heap",
 ]
 
 [[package]]
@@ -964,7 +971,7 @@ name = "unimux"
 version = "0.1.0"
 dependencies = [
  "base",
- "heap",
+ "heapsimple",
  "isr",
  "lang",
  "mux",
