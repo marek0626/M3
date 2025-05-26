@@ -20,14 +20,12 @@ extern crate unimux;
 #[allow(unused_extern_crates)]
 extern crate lang;
 
-#[allow(unused_extern_crates)]
-extern crate heap;
-
 use core::cmp::min;
 
 use base::env::{self, BaseEnv, BootEnv};
 use base::mem::PhysAddrRaw;
 use base::{cfg, tcu};
+use heapsimple::create_heap;
 use kecacc::{KecAcc, KecAccState};
 use m3core::cap::SelSpace;
 use m3core::cell::{LazyReadOnlyCell, LazyStaticRefCell, StaticCell, StaticRefCell};
@@ -41,13 +39,16 @@ use m3core::mem::{size_of, AlignedBuf, GlobOff, MsgBuf, MsgBufRef};
 use m3core::serialize::bytes::Bytes;
 use m3core::server::{
     server_loop, CapExchange, ClientManager, ExcType, RequestHandler, RequestSession, Server,
-    ServerSession, SessId, DEF_MAX_CLIENTS,
+    ServerSession, SessId,
 };
 use m3core::tcu::{EpId, Message, TCU};
+use m3core::tiles::Activity;
 use m3core::time::{TimeDuration, TimeInstant};
 use m3core::{build_vmsg, const_assert, log, reply_vmsg};
 use rot::ed25519::Signer;
 use rot::{ed25519, Hex, OpaqueKMacKey, Secret};
+
+create_heap!(8 * 1024);
 
 fn check_std_endpoints() {
     let tile_desc = env::boot().tile_desc();
@@ -121,6 +122,7 @@ pub extern "C" fn env_run() -> ! {
     m3core::env::run();
 }
 
+const MAX_CLIENTS: usize = 4;
 const MAX_MSG_SIZE: usize = 256;
 
 const MAX_DERIVED_SECRET_SIZE: usize = 64;
@@ -971,13 +973,13 @@ impl HashMuxReceiver {
 }
 
 fn init_rot() -> Result<(MemCap, u64), Error> {
-    log!(LogFlags::Info, "cert load");
+    log!(LogFlags::RoTDbg, "cert load");
     let rot_cert_cap = match MemCap::new_bind_bootmod("rot-certificate.json") {
         Ok(rot_cert_cap) => rot_cert_cap,
         Err(e) => return Err(e),
     };
 
-    log!(LogFlags::Info, "cert rgn");
+    log!(LogFlags::RoTDbg, "cert rgn");
     let rot_cert_size = match rot_cert_cap.region() {
         Ok(rgn) => rgn.1,
         Err(e) => return Err(e),
@@ -989,12 +991,28 @@ fn init_rot() -> Result<(MemCap, u64), Error> {
 pub fn main() -> Result<(), Error> {
     log!(LogFlags::RoTBoot, "Hello World!");
 
-    {
-        let ctx = unsafe { rot::RosaLayerCtx::take() };
+    let _eps = {
+        let ctx = unsafe { rot::RotsLayerCtx::take() };
+
+        // ensure that the occupied EPs are not reused by the kernel
+        let mut eps = Vec::new();
+        let (mut ep_start, ep_count) = ctx.data.occupied_eps;
+        let ep_end = ep_start + ep_count as tcu::EpId;
+        while ep_start < ep_end {
+            // to avoid many syscalls we specify replies here, which is of course not true, but
+            // currently only leads to 1 + <replies> EPs being allocated.
+            let amount = ep_count.min(cfg::MAX_RB_SIZE);
+            eps.push(EpMng::acquire_for(
+                Activity::own().sel(),
+                ep_start,
+                amount - 1,
+            ));
+            ep_start += amount as tcu::EpId;
+        }
 
         init_rot()
             .map(|res_tuple| {
-                log!(LogFlags::Info, "inited rot successfully");
+                log!(LogFlags::RoTDbg, "inited rot successfully");
                 let (rot_cert_cap, rot_cert_size) = res_tuple;
                 CTX.set(RotsCtx {
                     kmac_cdi: ctx.data.kmac_cdi,
@@ -1012,9 +1030,11 @@ pub fn main() -> Result<(), Error> {
                 Ok::<(), Error>(())
             })
             .ok();
-    }
 
-    let mut hdl = RequestHandler::new_with(DEF_MAX_CLIENTS, MAX_MSG_SIZE, 1)
+        eps
+    };
+
+    let mut hdl = RequestHandler::new_with(MAX_CLIENTS, MAX_MSG_SIZE, 1)
         .expect("Unable to create request handler");
     let srv = Server::new("rot", &mut hdl).expect("Unable to create service 'rot'");
 

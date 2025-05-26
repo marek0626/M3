@@ -15,36 +15,37 @@
 #![no_std]
 #![no_main]
 
-use core::cmp::min;
-use riscv_rt::entry;
-
 use base::cell::StaticUnsafeCell;
 use base::errors::Error;
 use base::io::LogFlags;
-use base::mem::{AlignedBuf, GlobAddr, GlobOff};
+use base::kif::TileDesc;
+use base::mem::{self, AlignedBuf, GlobAddr, GlobOff};
 use base::tcu::{self, EpId, TCU};
-use base::{log, machine};
+use base::{cfg, log, machine};
+use core::cmp::min;
 #[allow(unused_imports)]
 use lang as _;
+use riscv_rt::entry;
 use rot::CtxData;
 
+mod idxtile;
 mod stage1;
 mod stage2;
 
 pub const MEM_EP: EpId = tcu::FIRST_USER_EP + 0;
 pub const COPY_EP: EpId = tcu::FIRST_USER_EP + 1;
-pub const TILE_EP: EpId = tcu::FIRST_USER_EP + 2;
-pub const ENV_EP: EpId = tcu::FIRST_USER_EP + 3;
-pub const SELF_EP: EpId = tcu::FIRST_USER_EP + 4;
+pub const ENV_EP: EpId = tcu::FIRST_USER_EP + 2;
+pub const SELF_EP: EpId = tcu::FIRST_USER_EP + 3;
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct RosaPrivateCtx {
     next: rot::RosaCtx,
-    kernel_tile_id: u64,
-    kernel_tile_desc: u64,
+    our_tile: idxtile::IndexedTile,
+    kernel_tile: idxtile::IndexedTile,
+    root_tile: idxtile::IndexedTile,
+    kernel_tile_desc: TileDesc,
     kenv_addr: GlobAddr,
-    root_tile_id: u64,
 }
 
 impl CtxData for RosaPrivateCtx {
@@ -56,6 +57,9 @@ pub type RosaPrivateLayerCtx = rot::LayerCtx<RosaPrivateCtx>;
 
 const HEAP_SIZE: usize = 32 * 1024;
 const COPY_BUF_SIZE: usize = 4 * 1024;
+
+pub const EP_REGS_SIZE: usize = tcu::EP_REGS * mem::size_of::<tcu::Reg>();
+pub const EPS_PER_PAGE: usize = cfg::PAGE_SIZE / EP_REGS_SIZE;
 
 // unsafe could be avoided using StaticRefCell but this would waste 4 KiB
 // of memory because of the required page-alignment
@@ -80,6 +84,15 @@ pub fn clear_mem(mut off: GlobOff, mut size: usize) -> Result<(), Error> {
         size -= len;
     }
     Ok(())
+}
+
+pub fn config_local_ep<CFG>(ep: tcu::EpId, cfg: CFG)
+where
+    CFG: FnOnce(&mut [tcu::Reg]),
+{
+    let mut regs = [0; tcu::EP_REGS];
+    cfg(&mut regs);
+    TCU::set_ep_regs(ep, &regs);
 }
 
 #[no_mangle]

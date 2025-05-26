@@ -10,7 +10,7 @@
                     <serv name="pipes"/>
                 </app>
             </dom>
-            <dom tile="core+kecacc" mux="rots" unimux="1" tee="1">
+            <dom tile="core+kecacc" mux="rots" tee="1">
                 <shmem name="inpipe"/>
                 <shmem name="outpipe"/>
                 <app args="rots" daemon="1">

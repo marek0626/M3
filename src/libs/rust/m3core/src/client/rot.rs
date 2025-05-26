@@ -38,8 +38,8 @@ pub struct RoTSession {
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
     pub struct Features : u8 {
-	const RoT     = 0x1;
-	const HashMux = 0x2;
+        const RoT     = 0x1;
+        const HashMux = 0x2;
     }
 }
 

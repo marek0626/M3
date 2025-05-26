@@ -459,7 +459,6 @@ name = "mux"
 version = "0.1.0"
 dependencies = [
  "base",
- "heap",
 ]
 
 [[package]]
@@ -964,7 +963,6 @@ name = "unimux"
 version = "0.1.0"
 dependencies = [
  "base",
- "heap",
  "isr",
  "lang",
  "mux",

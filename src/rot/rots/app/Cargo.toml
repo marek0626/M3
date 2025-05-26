@@ -12,6 +12,6 @@ base.workspace = true
 lang.workspace = true
 rot.workspace = true
 kecacc.workspace = true
-heap.workspace = true
+heapsimple.workspace = true
 m3core.workspace = true
 unimux.workspace = true
