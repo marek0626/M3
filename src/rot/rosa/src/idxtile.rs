@@ -77,7 +77,7 @@ impl IndexedTile {
     }
 
     pub fn invalidate_ep(&self, ep: tcu::EpId) -> Result<(), Error> {
-        let reg = TCU::build_ext_cmd(tcu::ExtCmdOpCode::InvEP, (ep as u64) | (1 as u64) << 16);
+        let reg = TCU::build_ext_cmd(tcu::ExtCmdOpCode::InvEP, (ep as u64) | 1_u64 << 16);
         self.ext_cmd(reg).map(|_| ())
     }
 
