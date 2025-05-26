@@ -76,9 +76,17 @@ fn usage(prog: &str) -> ! {
 }
 
 fn determine_isa(file: &str) -> Result<ISA, error::Error> {
+    let path = if file.contains("+0x") {
+        let mut parts = file.split("+0x");
+        parts.next().ok_or(error::Error::InvalPath)?
+    }
+    else {
+        file
+    };
+
     let mut cmd = Command::new("file")
         .arg("-b")
-        .arg(file)
+        .arg(path)
         .stdout(Stdio::piped())
         .spawn()?;
     let stdout = cmd.stdout.as_mut().unwrap();

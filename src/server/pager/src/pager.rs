@@ -162,14 +162,14 @@ impl subsys::ChildStarter for PagedChildStarter {
             act.add_mount(m.path(), &path);
         }
 
+        // init address space (give it activity and mgate selector)
+        let mut hdl = REQHDL.borrow_mut();
+        let aspace = hdl.clients_mut().get_mut(child_sid).unwrap();
+        aspace.do_init(Some(child.id()), Some(act.sel())).unwrap();
+
         // if TileMux is running on that tile, we have control about the activity's virtual address
         // space and can thus load the program into the address space.
         let run = if tile.mux_type().unwrap() == MuxType::TileMux {
-            // init address space (give it activity and mgate selector)
-            let mut hdl = REQHDL.borrow_mut();
-            let aspace = hdl.clients_mut().get_mut(child_sid).unwrap();
-            aspace.do_init(Some(child.id()), Some(act.sel())).unwrap();
-
             // start activity
             let file = vfs::VFS::open(child.name(), vfs::OpenFlags::RX | vfs::OpenFlags::NEW_SESS)
                 .map_err(|e| rerror(e).context(format!("open {}", child.name())))?;
