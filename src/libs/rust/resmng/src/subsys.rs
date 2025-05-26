@@ -606,16 +606,6 @@ impl Subsystem {
                 None
             };
 
-            // NMG We only allow (as a hack?) 'unimux' type domains to have no
-            // apps. These are ones where the *only* application that's
-            // running is the "mux," which in these cases will be a mux+some
-            // application fused together as a "unikernel"-type application.
-            if !dom.unimux() && dom.apps().is_empty() {
-                return Err(
-                    rerrno(Code::InvArgs).context("Can't have zero apps when not a unimux tile.")
-                );
-            }
-
             // make shared memory regions available to this domain
             for shmem in dom.shmems() {
                 res.shared_mems_mut()
