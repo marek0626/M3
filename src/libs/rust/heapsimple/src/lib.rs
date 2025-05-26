@@ -15,23 +15,39 @@
 
 #![no_std]
 
-use base::cell::{LazyStaticCell, StaticCell};
+use base::cell::StaticCell;
 use base::io::LogFlags;
 use base::log;
 use base::{libc, mem};
 
+#[macro_export]
+macro_rules! create_heap {
+    ($size:expr) => {
+        const HEAP_SIZE: usize = $size;
+
+        // the heap area needs to be page-byte aligned
+        #[repr(align(4096))]
+        struct Heap([u64; HEAP_SIZE / core::mem::size_of::<u64>()]);
+        #[used]
+        static mut HEAP: Heap = Heap([0; HEAP_SIZE / core::mem::size_of::<u64>()]);
+
+        #[no_mangle]
+        extern "C" fn __heap_simple_memory(addr: *mut usize, size: *mut usize) {
+            unsafe {
+                *addr = &HEAP.0 as *const u64 as usize;
+                *size = core::mem::size_of_val(&HEAP.0);
+            }
+        }
+    };
+}
+
 extern "C" {
+    fn __heap_simple_memory(addr: *mut usize, size: *mut usize);
     fn memcpy(dst: *mut libc::c_void, src: *const libc::c_void, len: usize);
     fn memset(s: *mut libc::c_void, b: u8, len: usize);
 }
 
-static HEAP: LazyStaticCell<(usize, usize)> = LazyStaticCell::default();
 static HEAP_POS: StaticCell<usize> = StaticCell::new(0);
-
-#[no_mangle]
-extern "C" fn __heap_simple_init(addr: usize, size: usize) {
-    HEAP.set((addr, size));
-}
 
 #[no_mangle]
 extern "C" fn __rdl_alloc(size: usize, _align: usize, _err: *mut u8) -> *mut libc::c_void {
@@ -39,7 +55,10 @@ extern "C" fn __rdl_alloc(size: usize, _align: usize, _err: *mut u8) -> *mut lib
     let size = words * mem::size_of::<u64>();
 
     let res = unsafe {
-        let (addr, size) = HEAP.get();
+        let mut addr = 0usize;
+        let mut size = 0usize;
+        __heap_simple_memory(&mut addr as *mut _, &mut size as *mut _);
+
         let start = addr as *mut u64;
         let end = start.add(size / mem::size_of::<u64>());
         let res = start.add(HEAP_POS.get());

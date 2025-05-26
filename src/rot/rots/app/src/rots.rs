@@ -25,6 +25,7 @@ use core::cmp::min;
 use base::env::{self, BaseEnv, BootEnv};
 use base::mem::PhysAddrRaw;
 use base::{cfg, tcu};
+use heapsimple::create_heap;
 use kecacc::{KecAcc, KecAccState};
 use m3core::cap::SelSpace;
 use m3core::cell::{LazyReadOnlyCell, LazyStaticRefCell, StaticCell, StaticRefCell};
@@ -46,6 +47,8 @@ use m3core::time::{TimeDuration, TimeInstant};
 use m3core::{build_vmsg, const_assert, log, reply_vmsg};
 use rot::ed25519::Signer;
 use rot::{ed25519, Hex, OpaqueKMacKey, Secret};
+
+create_heap!(8 * 1024);
 
 fn check_std_endpoints() {
     let tile_desc = env::boot().tile_desc();
