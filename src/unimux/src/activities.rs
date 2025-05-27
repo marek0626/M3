@@ -126,6 +126,18 @@ pub fn init() {
         IDLE.set(Box::new(Activity::new(kif::tilemux::IDLE_ID, 0)));
     }
 
+    if pex_env().org_tile_desc.has_virtmem() {
+        // insert fixed entry for messages into TLB
+        let virt = VirtAddr::from(MsgBuf::borrow_def().bytes().as_ptr());
+        tcu::TCU::insert_tlb(
+            kif::tilemux::ACT_ID as u16,
+            virt,
+            virt.as_phys(pex_env().org_tile_desc),
+            kif::PageFlags::RW | kif::PageFlags::FIXED,
+        )
+        .unwrap();
+    }
+
     Paging::disable();
 }
 
@@ -289,6 +301,7 @@ impl Activity {
                 entry as usize,
                 unsafe { core::ptr::addr_of!(baremetal_stack) as usize },
             );
+            crate::app_env().boot.tile_desc = pex_env().tile_desc.value();
             arch::init_state(&mut self.user_state, entry as usize, unsafe {
                 core::ptr::addr_of!(baremetal_stack) as usize
             });

@@ -12,6 +12,7 @@ pub mod sidecalls;
 
 pub struct TMEnv {
     pub tile_id: u64,
+    pub org_tile_desc: kif::TileDesc,
     pub tile_desc: kif::TileDesc,
     pub platform: env::Platform,
 }

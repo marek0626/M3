@@ -1,14 +1,20 @@
-[workspace]
-members = ["app"]
+[package]
+name = "rots"
+version = "0.1.0"
+edition = "2021"
 
-[workspace.dependencies]
+[lib]
+path = "src/rots.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
 base = { path = "../../libs/rust/base" }
 lang = { path = "../../libs/rust/lang" }
 rot = { path = "../../libs/crypto/rot" }
 kecacc = { path = "../../libs/crypto/kecacc" }
 heapsimple = { path = "../../libs/rust/heapsimple" }
 m3core = { path = "../../libs/rust/m3core" }
-unimux = { path = "../../unimux" }
+unimux = { path = "../../unimux", features = ["rots"] }
 
 [profile.release]
 lto = true

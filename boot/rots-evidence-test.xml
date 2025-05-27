@@ -27,16 +27,16 @@
                     <sess name="rot"/>
                     <mod name="fs" perm="r"/>
                     <mod name="tilemux" perm="r"/>
-                    <tiles count="2" type="core"/>
+                    <tiles count="1" type="core"/>
                     <dom>
-                        <app args="/bin/rustalgobenchs" time="2s" attestation_id="1">
+                        <app args="/bin/sleep 2" time="2s" attestation_id="42">
                             <mount fs="m3fs" path="/"/>
                         </app>
                     </dom>
                 </app>
             </dom>
-            <dom>
-                <app args="teetest">
+            <dom mux="teetest" tee="1">
+                <app args="teetest 42">
                     <sess name="evidence"/>
                 </app>
             </dom>

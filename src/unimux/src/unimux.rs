@@ -28,7 +28,7 @@ use base::cfg;
 use base::env::{self, BootEnv};
 use base::errors::{Code, Error};
 use base::io::{self, LogFlags};
-use base::kif;
+use base::kif::{self, TileAttr};
 use base::libc;
 use base::log;
 use base::machine;
@@ -49,6 +49,7 @@ extern "C" {
 
 static TM_ENV: StaticRefCell<mux::TMEnv> = StaticRefCell::new(mux::TMEnv {
     tile_id: 0,
+    org_tile_desc: kif::TileDesc::new_from(0),
     tile_desc: kif::TileDesc::new_from(0),
     platform: env::Platform::Gem5,
 });
@@ -129,15 +130,6 @@ pub extern "C" fn unexpected_irq(state: &mut arch::State) -> *mut libc::c_void {
     halt();
 
     leave(state)
-}
-
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "riscv32",
-    target_arch = "x86_64"
-))]
-pub extern "C" fn fpu_ex(state: &mut arch::State) -> *mut libc::c_void {
-    panic!("Unexpected FPU exception!");
 }
 
 pub extern "C" fn ext_irq(state: &mut arch::State) -> *mut libc::c_void {
@@ -229,10 +221,13 @@ pub extern "C" fn tmcall(state: &mut arch::State) -> *mut libc::c_void {
 
 #[no_mangle]
 pub extern "C" fn init() -> usize {
-    // copy the environment from earlier stages
-    let rot_env: &BootEnv = unsafe { &*(cfg::ENV_START_ROT.as_ptr()) };
-    let rots_env: &mut BootEnv = unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) };
-    *rots_env = *rot_env;
+    // copy the environment from earlier stages if we are the RoT
+    #[cfg(feature = "rots")]
+    {
+        let rot_env: &BootEnv = unsafe { &*(cfg::ENV_START_ROT.as_ptr()) };
+        let rots_env: &mut BootEnv = unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) };
+        *rots_env = *rot_env;
+    }
 
     // init our own environment; at this point we can still access app_env, because it is mapped by
     // the gem5 loader for us. afterwards, our address space does not contain that anymore.
@@ -240,7 +235,20 @@ pub extern "C" fn init() -> usize {
     {
         let mut env = TM_ENV.borrow_mut();
         env.tile_id = app_env().boot.tile_id;
-        env.tile_desc = kif::TileDesc::new_from(app_env().boot.tile_desc);
+        env.org_tile_desc = app_env().boot.tile_desc();
+        if env.org_tile_desc.has_virtmem() {
+            let (_pmp_tile, _pmp_off, pmp_size, _pmp_perm) = TCU::unpack_mem_ep(0).unwrap();
+            env.tile_desc = kif::TileDesc::new_with_attr(
+                env.org_tile_desc.tile_type(),
+                env.org_tile_desc.isa(),
+                pmp_size as usize,
+                env.org_tile_desc.attr() | TileAttr::IMEM,
+            );
+        }
+        else {
+            env.tile_desc = env.org_tile_desc;
+        }
+
         env.platform = app_env().boot.platform;
     }
 
@@ -268,13 +276,6 @@ pub extern "C" fn init() -> usize {
     isr::reg_all(unexpected_irq);
     // Handle the mux calls, e.g. wait, exit, yield
     ISR::reg_tm_calls(tmcall);
-    // Handle illegal intructions
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "riscv32",
-        target_arch = "x86_64"
-    ))]
-    ISR::reg_illegal_instr(fpu_ex);
     // Handle the (very important) message receive as well as PMP failures
     ISR::reg_cu_reqs(ext_irq);
     // Handle timer interrupts, simple

@@ -60,6 +60,7 @@ static mut HEAP: Heap = Heap([0; HEAP_SIZE / mem::size_of::<u64>()]);
 
 static TM_ENV: StaticRefCell<mux::TMEnv> = StaticRefCell::new(mux::TMEnv {
     tile_id: 0,
+    org_tile_desc: kif::TileDesc::new_from(0),
     tile_desc: kif::TileDesc::new_from(0),
     platform: env::Platform::Gem5,
 });

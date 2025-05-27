@@ -18,7 +18,7 @@ use base::io::LogFlags;
 use base::kif;
 use base::log;
 use base::mem::{GlobAddr, GlobAddrRaw, VirtAddr};
-use base::tcu::{EpId, INVALID_EP, IRQ};
+use base::tcu::{EpId, INVALID_EP, IRQ, TCU};
 use base::time::TimeDuration;
 use base::tmif;
 
@@ -46,6 +46,29 @@ fn tmcall_translate(state: &mut arch::State) -> Result<(), Error> {
     Ok(())
 }
 
+fn tmcall_transl_fault(state: &mut arch::State) -> Result<(), Error> {
+    let virt = VirtAddr::from(state.r[isr::TMC_ARG1]);
+    let access = kif::Perm::from_bits_truncate(state.r[isr::TMC_ARG2] as u32);
+    let flags = kif::PageFlags::from(access) & kif::PageFlags::RW;
+
+    log!(
+        LogFlags::MuxCalls,
+        "tmcall::transl_fault(virt={}, access={:?})",
+        virt,
+        access
+    );
+
+    TCU::insert_tlb(
+        activities::user().id() as u16,
+        virt,
+        virt.as_phys(crate::pex_env().org_tile_desc),
+        flags,
+    )
+    .unwrap();
+
+    Ok(())
+}
+
 fn tmcall_wait(state: &mut arch::State) -> Result<(), Error> {
     let timeout = match state.r[isr::TMC_ARG4] {
         usize::MAX => None,
@@ -66,6 +89,7 @@ pub fn handle_call(state: &mut arch::State) {
     let res = match opcode {
         o if o == tmif::Operation::Exit.into() => tmcall_stop(state),
         o if o == tmif::Operation::Translate.into() => tmcall_translate(state),
+        o if o == tmif::Operation::TranslFault.into() => tmcall_transl_fault(state),
         o if o == tmif::Operation::Wait.into() => tmcall_wait(state),
         _ => Err(Error::new(Code::InvArgs)),
     };
