@@ -33,6 +33,11 @@ fn side_rbuf_addr() -> VirtAddr {
     crate::pex_env().tile_desc.rbuf_mux_space().0 + cfg::KPEX_RBUF_SIZE as VirtAddrRaw
 }
 
+fn info(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
+    log!(LogFlags::MuxSideCalls, "sidecall::info()",);
+    Ok((kif::syscalls::MuxType::Unimux.into(), 0))
+}
+
 fn activity_init(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     let r: kif::tilemux::ActInit = get_request(msg)?;
 
@@ -48,7 +53,62 @@ fn activity_init(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     Ok((0, 0))
 }
 
-pub fn shutdown(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
+fn activity_ctrl(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
+    let r: kif::tilemux::ActivityCtrl = get_request(msg)?;
+
+    log!(
+        LogFlags::MuxSideCalls,
+        "sidecall::activity_ctrl(act={}, op={:?})",
+        r.act_id,
+        r.act_op,
+    );
+
+    match r.act_op {
+        kif::tilemux::ActivityOp::Start => {
+            activities::user().start();
+            Ok((0, 0))
+        },
+
+        kif::tilemux::ActivityOp::Stop => {
+            // mark it as blocked to idle instead of returning to the app
+            activities::user().set_blocked(true);
+            Ok((0, 0))
+        },
+
+        _ => Ok((0, 0)),
+    }
+}
+
+fn set_quota(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
+    let r: kif::tilemux::SetQuota = get_request(msg)?;
+
+    log!(
+        LogFlags::MuxSideCalls,
+        "sidecall::set_quota(id={}, time={:?}, pts={})",
+        r.id,
+        r.time,
+        r.pts
+    );
+
+    Ok((0, 0))
+}
+
+fn derive_quota(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
+    let r: kif::tilemux::DeriveQuota = get_request(msg)?;
+
+    log!(
+        LogFlags::MuxSideCalls,
+        "sidecall::derive_quota(ptime={}, ppts={}, time={:?}, pts={:?})",
+        r.parent_time,
+        r.parent_pts,
+        r.time,
+        r.pts
+    );
+
+    Ok((1, 1))
+}
+
+fn shutdown(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     log!(LogFlags::MuxSideCalls, "sidecall::shutdown()",);
 
     base::machine::write_coverage(0);
@@ -73,9 +133,22 @@ pub fn shutdown(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     unreachable!();
 }
 
-fn info(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
-    log!(LogFlags::MuxSideCalls, "sidecall::info()",);
-    Ok((kif::syscalls::MuxType::Unimux.into(), 0))
+fn get_quota(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
+    let r: kif::tilemux::GetQuota = get_request(msg)?;
+
+    log!(
+        LogFlags::MuxSideCalls,
+        "sidecall::get_quota(time={}, pts={})",
+        r.time,
+        r.pts
+    );
+
+    Ok((1 << 32 | 1, 1 << 32 | 1))
+}
+
+fn go_away(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
+    log!(LogFlags::MuxSideCalls, "Not supported! Go away kernel!");
+    Ok((0, 0))
 }
 
 // Sidecalls are messages from the kernel to do many kinds of things at the basic resource level, such as changing mappings, managing an activity, etc.
@@ -180,79 +253,6 @@ pub fn check() {
     }
 
     handle_sidecalls(our);
-}
-
-fn get_quota(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
-    let r: kif::tilemux::GetQuota = get_request(msg)?;
-
-    log!(
-        LogFlags::MuxSideCalls,
-        "sidecall::get_quota(time={}, pts={})",
-        r.time,
-        r.pts
-    );
-
-    Ok((1 << 32 | 1, 1 << 32 | 1))
-}
-
-fn set_quota(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
-    let r: kif::tilemux::SetQuota = get_request(msg)?;
-
-    log!(
-        LogFlags::MuxSideCalls,
-        "sidecall::set_quota(id={}, time={:?}, pts={})",
-        r.id,
-        r.time,
-        r.pts
-    );
-
-    Ok((0, 0))
-}
-
-fn derive_quota(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
-    let r: kif::tilemux::DeriveQuota = get_request(msg)?;
-
-    log!(
-        LogFlags::MuxSideCalls,
-        "sidecall::derive_quota(ptime={}, ppts={}, time={:?}, pts={:?})",
-        r.parent_time,
-        r.parent_pts,
-        r.time,
-        r.pts
-    );
-
-    Ok((1, 1))
-}
-
-fn activity_ctrl(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
-    let r: kif::tilemux::ActivityCtrl = get_request(msg)?;
-
-    log!(
-        LogFlags::MuxSideCalls,
-        "sidecall::activity_ctrl(act={}, op={:?})",
-        r.act_id,
-        r.act_op,
-    );
-
-    match r.act_op {
-        kif::tilemux::ActivityOp::Start => {
-            activities::user().start();
-            Ok((0, 0))
-        },
-
-        kif::tilemux::ActivityOp::Stop => {
-            // mark it as blocked to idle instead of returning to the app
-            activities::user().set_blocked(true);
-            Ok((0, 0))
-        },
-
-        _ => Ok((0, 0)),
-    }
-}
-
-fn go_away(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
-    log!(LogFlags::MuxSideCalls, "Not supported! Go away kernel!");
-    Ok((0, 0))
 }
 
 pub fn basic_handlers_init() {
