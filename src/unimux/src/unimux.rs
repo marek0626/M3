@@ -28,7 +28,7 @@ use base::cfg;
 use base::env::{self, BootEnv};
 use base::errors::{Code, Error};
 use base::io::{self, LogFlags};
-use base::kif;
+use base::kif::{self, TileAttr};
 use base::libc;
 use base::log;
 use base::machine;
@@ -49,6 +49,7 @@ extern "C" {
 
 static TM_ENV: StaticRefCell<mux::TMEnv> = StaticRefCell::new(mux::TMEnv {
     tile_id: 0,
+    org_tile_desc: kif::TileDesc::new_from(0),
     tile_desc: kif::TileDesc::new_from(0),
     platform: env::Platform::Gem5,
 });
@@ -234,7 +235,20 @@ pub extern "C" fn init() -> usize {
     {
         let mut env = TM_ENV.borrow_mut();
         env.tile_id = app_env().boot.tile_id;
-        env.tile_desc = kif::TileDesc::new_from(app_env().boot.tile_desc);
+        env.org_tile_desc = app_env().boot.tile_desc();
+        if env.org_tile_desc.has_virtmem() {
+            let (_pmp_tile, _pmp_off, pmp_size, _pmp_perm) = TCU::unpack_mem_ep(0).unwrap();
+            env.tile_desc = kif::TileDesc::new_with_attr(
+                env.org_tile_desc.tile_type(),
+                env.org_tile_desc.isa(),
+                pmp_size as usize,
+                env.org_tile_desc.attr() | TileAttr::IMEM,
+            );
+        }
+        else {
+            env.tile_desc = env.org_tile_desc;
+        }
+
         env.platform = app_env().boot.platform;
     }
 

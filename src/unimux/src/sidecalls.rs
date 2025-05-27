@@ -25,7 +25,7 @@ use base::serialize::{Deserialize, M3Deserializer};
 use base::tcu::{self, TCU};
 use base::time::TimeDuration;
 
-use crate::activities;
+use crate::{activities, pex_env};
 use mux::sidecalls::*;
 use mux::{helper, sendqueue};
 
@@ -146,6 +146,27 @@ fn get_quota(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     Ok((1 << 32 | 1, 1 << 32 | 1))
 }
 
+fn translate(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
+    let r: kif::tilemux::Translate = get_request(msg)?;
+
+    log!(
+        LogFlags::MuxSideCalls,
+        "sidecall::translate(act={}, virt={}, perm={:?})",
+        r.act_id,
+        r.virt,
+        r.perm
+    );
+
+    match r.virt {
+        cfg::ENV_START => Ok((GlobAddr::new(cfg::ENV_START.as_goff()).raw(), 0)),
+        cfg::RBUF_STD_ADDR => Ok((
+            GlobAddr::new(pex_env().tile_desc.rbuf_std_space().0.as_goff()).raw(),
+            0,
+        )),
+        _ => Err(Error::new(Code::NotSup)),
+    }
+}
+
 fn go_away(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     log!(LogFlags::MuxSideCalls, "Not supported! Go away kernel!");
     Ok((0, 0))
@@ -245,6 +266,7 @@ pub fn basic_handlers_init() {
     register_sidecall_handler(kif::tilemux::Sidecalls::RemMsgs, go_away).ok();
     register_sidecall_handler(kif::tilemux::Sidecalls::EPInval, go_away).ok();
     register_sidecall_handler(kif::tilemux::Sidecalls::Shutdown, shutdown).ok();
+    register_sidecall_handler(kif::tilemux::Sidecalls::Translate, translate).ok();
     register_sidecall_handler(kif::tilemux::Sidecalls::Info, info).ok();
 
     register_sidecall_handler(kif::tilemux::Sidecalls::GetQuota, get_quota).ok();
