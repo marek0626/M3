@@ -153,8 +153,6 @@ fn go_away(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
 
 // Sidecalls are messages from the kernel to do many kinds of things at the basic resource level, such as changing mappings, managing an activity, etc.
 fn handle_sidecall(msg: &'static tcu::Message) {
-    log!(LogFlags::Debug, "handling sidecall");
-
     let mut de = M3Deserializer::new(msg.as_words());
 
     let op: kif::tilemux::Sidecalls = de.pop().unwrap();
@@ -191,14 +189,7 @@ fn handle_sidecalls(mut our: activities::ActivityRef<'_>) {
     loop {
         // change to our activity
         let old_act = tcu::TCU::xchg_activity(our.activity_reg()).unwrap();
-        log!(
-            LogFlags::MuxSideCalls,
-            "our {} old act {}",
-            our.activity_reg(),
-            old_act
-        );
         if let Some(mut old) = activities::try_cur() {
-            log!(LogFlags::MuxSideCalls, "cur is {}", old);
             activities::get_mut(old).unwrap().set_activity_reg(old_act);
         }
 
@@ -225,19 +216,12 @@ fn handle_sidecalls(mut our: activities::ActivityRef<'_>) {
         }
 
         // check if the kernel answered a request from us
-        log!(LogFlags::MuxSideCalls, "checking replies");
         sendqueue::check_replies();
 
         // change back to old activity
 
         let new_act = activities::try_cur().unwrap_or(old_act);
         our.set_activity_reg(tcu::TCU::xchg_activity(new_act).unwrap());
-        log!(
-            LogFlags::MuxSideCalls,
-            "switching back to act id {} our {}",
-            new_act,
-            our.activity_reg()
-        );
         // if no events arrived in the meantime, we're done
         if !our.has_msgs() {
             break;

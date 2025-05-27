@@ -32,16 +32,9 @@ pub fn handle(req: tcu::CUReq) {
 
 fn handle_foreign_recv(act: u16, ep: tcu::EpId) {
     // add message to activity
-    log!(
-        LogFlags::MuxSideCalls,
-        "act {} act sa id {}",
-        act,
-        act as activities::Id
-    );
     if let Some(mut v) = activities::get_mut(act as activities::Id) {
         // if this activity is currently running, we have to update the CUR_ACT register
         if (tcu::TCU::get_cur_activity() & 0xFFFF) == act as activities::Id {
-            log!(LogFlags::MuxCUReqs, "idle switch");
             // temporary switch to idle
             let old_act = tcu::TCU::xchg_activity(activities::idle().activity_reg()).unwrap();
             // set user event
@@ -52,7 +45,6 @@ fn handle_foreign_recv(act: u16, ep: tcu::EpId) {
         }
         // otherwise, just add it to our copy of CUR_ACT
         else {
-            log!(LogFlags::MuxCUReqs, "simple add");
             v.add_msg();
         }
 
