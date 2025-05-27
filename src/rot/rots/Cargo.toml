@@ -1,7 +1,13 @@
-[workspace]
-members = ["app"]
+[package]
+name = "rots"
+version = "0.1.0"
+edition = "2021"
 
-[workspace.dependencies]
+[lib]
+path = "src/rots.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
 base = { path = "../../libs/rust/base" }
 lang = { path = "../../libs/rust/lang" }
 rot = { path = "../../libs/crypto/rot" }
