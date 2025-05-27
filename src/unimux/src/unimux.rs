@@ -131,15 +131,6 @@ pub extern "C" fn unexpected_irq(state: &mut arch::State) -> *mut libc::c_void {
     leave(state)
 }
 
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "riscv32",
-    target_arch = "x86_64"
-))]
-pub extern "C" fn fpu_ex(state: &mut arch::State) -> *mut libc::c_void {
-    panic!("Unexpected FPU exception!");
-}
-
 pub extern "C" fn ext_irq(state: &mut arch::State) -> *mut libc::c_void {
     match ISR::fetch_irq() {
         isr::IRQSource::TCU(tcu::IRQ::Timer) => {
@@ -268,13 +259,6 @@ pub extern "C" fn init() -> usize {
     isr::reg_all(unexpected_irq);
     // Handle the mux calls, e.g. wait, exit, yield
     ISR::reg_tm_calls(tmcall);
-    // Handle illegal intructions
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "riscv32",
-        target_arch = "x86_64"
-    ))]
-    ISR::reg_illegal_instr(fpu_ex);
     // Handle the (very important) message receive as well as PMP failures
     ISR::reg_cu_reqs(ext_irq);
     // Handle timer interrupts, simple
