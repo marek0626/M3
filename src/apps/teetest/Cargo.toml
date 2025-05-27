@@ -8,4 +8,7 @@ path = "src/teetest.rs"
 crate-type = ["staticlib"]
 
 [dependencies]
-m3 = { path = "../../libs/rust/m3" }
+base = { path = "../../libs/rust/base" }
+m3core = { path = "../../libs/rust/m3core" }
+heapsimple = { path = "../../libs/rust/heapsimple" }
+unimux = { path = "../../unimux" }
