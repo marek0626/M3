@@ -220,10 +220,13 @@ pub extern "C" fn tmcall(state: &mut arch::State) -> *mut libc::c_void {
 
 #[no_mangle]
 pub extern "C" fn init() -> usize {
-    // copy the environment from earlier stages
-    let rot_env: &BootEnv = unsafe { &*(cfg::ENV_START_ROT.as_ptr()) };
-    let rots_env: &mut BootEnv = unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) };
-    *rots_env = *rot_env;
+    // copy the environment from earlier stages if we are the RoT
+    #[cfg(feature = "rots")]
+    {
+        let rot_env: &BootEnv = unsafe { &*(cfg::ENV_START_ROT.as_ptr()) };
+        let rots_env: &mut BootEnv = unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) };
+        *rots_env = *rot_env;
+    }
 
     // init our own environment; at this point we can still access app_env, because it is mapped by
     // the gem5 loader for us. afterwards, our address space does not contain that anymore.

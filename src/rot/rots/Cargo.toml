@@ -8,7 +8,7 @@ rot = { path = "../../libs/crypto/rot" }
 kecacc = { path = "../../libs/crypto/kecacc" }
 heapsimple = { path = "../../libs/rust/heapsimple" }
 m3core = { path = "../../libs/rust/m3core" }
-unimux = { path = "../../unimux" }
+unimux = { path = "../../unimux", features = ["rots"] }
 
 [profile.release]
 lto = true
