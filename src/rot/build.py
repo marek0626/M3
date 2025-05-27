@@ -21,8 +21,6 @@ def build(gen, env):
     # we want soft-float
     env = env.new(env['ISA'], True)
 
-    env['BINDIR'] = env['BUILDDIR'] + '/rotbin'
-
     # FIXME: The RoT cannot be built in debug mode at the moment.
     # There are two issues:
     #   1. The RoT layers have fixed memory regions that are too small for
@@ -74,5 +72,6 @@ def cargo_ws(env, gen, outs):
         env.install(gen, outdir=env['BINDIR'], input=o)
         # Install as raw binary as well for the RoT layers
         bin = env.objcopy(gen, BuildPath.with_file_ext(env, o, 'bin'), o, type='binary')
-        env.install(gen, env['BINDIR'], bin)
+        env.install(gen, env['BUILDDIR'] + '/rotbin', bin)
+    env.install(gen, outdir=env['BUILDDIR'] + '/rotbin', input=outs[1])
     return outs

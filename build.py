@@ -252,6 +252,31 @@ class M3Env(Env):
 
         return env.m3_exe(gen, out, ins, libs, dir, True, ldscript, varAddr)
 
+    def m3_rust_tee_exe(self, gen, out, libs=[], dir='bin', ldscript='isr'):
+        env = self.clone()
+        env['LINKFLAGS'] += ['-nostartfiles']
+        env['CRGFLAGS'] += ['--target', env['TRIPLE'], '-Z build-std=core,alloc']
+
+        # add unimux as dependency
+        deps = env.rust_deps()
+        deps += [SourcePath.new(env, '../../unimux/Cargo.toml')]
+        deps += env.glob(gen, '../../unimux/**/*.rs')
+        env.add_rust_features()
+
+        lib = env.rust_exe(gen, out='lib' + out + '.a', deps=deps)
+        env.install(gen, env['LIBDIR'], lib)
+
+        return env.m3_rust_exe(
+            gen,
+            out,
+            libs=libs + ['isr-nostackswitch', 'unimux'],
+            dir=dir,
+            startup=None,
+            ldscript=ldscript,
+            varAddr=False,
+            cargo_ws=False,
+        )
+
     def rust_exe(self, gen, out, deps=[]):
         deps += env.glob(gen, '**/*.rs') + [SourcePath.new(self, 'Cargo.toml')]
         cfg = SourcePath.new(self, '.cargo/config.toml')
