@@ -15,7 +15,6 @@ bins = {
 }
 rustapps = []
 rustlibs = []
-rustfeatures = []
 nextenvid = 1
 if isa == 'riscv64':
     link_addr = 0x11000000
@@ -235,13 +234,26 @@ class M3Env(Env):
         return bin
 
     def m3_rust_exe(self, gen, out, libs=[], dir='bin', startup=None, ldscript='default',
-                    varAddr=True, std=False, features=[], cargo_ws=True):
-        global rustapps, rustfeatures
-        if cargo_ws:
-            rustapps += [self.cur_dir]
-        rustfeatures += features
-
+                    varAddr=True, std=False):
         env = self.clone()
+
+        deps = env.rust_deps()
+
+        if env['TGT'] in 'gem5' and env['TRIPLE'] == 'riscv32-linux-m3-musl':
+            extensions = "-extensions"
+        else:
+            extensions = ""
+        tgtspec = os.path.abspath('src/toolchain/rust/' + env['TRIPLE'] + extensions + '.json')
+        env['CRGFLAGS'] += ['--target', tgtspec]
+        # let the caller customize the std libraries to build
+        if not any('-Z build-std=' in f for f in env['CRGFLAGS']):
+            env['CRGFLAGS'] += ['-Z build-std=core,alloc,std,panic_abort']
+        env['CRGFLAGS'] += ['-p', out]
+
+        # build static library with Rust
+        lib = Env.rust_lib(env, gen, out, deps=deps, dir='src')
+        env.install(gen, outdir=env['RUSTLIBS'], input=lib)
+
         env['LINKFLAGS'] += ['-Wl,-z,muldefs']
         env['LIBPATH'] += [env['RUSTLIBS']]
         env['LINKFLAGS'] += ['-nodefaultlibs']
@@ -250,111 +262,42 @@ class M3Env(Env):
         clib = 'c' if std else 'simplec'
         libs = [clib, 'gem5', 'gcc', 'gcc_eh', out] + libs
 
+        # link it with gcc to an executable
         return env.m3_exe(gen, out, ins, libs, dir, True, ldscript, varAddr)
 
-    def m3_rust_tee_exe(self, gen, out, libs=[], dir='bin', ldscript='isr'):
-        env = self.clone()
-        env['LINKFLAGS'] += ['-nostartfiles']
-        env['CRGFLAGS'] += ['--target', env['TRIPLE'], '-Z build-std=core,alloc']
-
-        # add unimux as dependency
-        deps = env.rust_deps()
-        deps += [SourcePath.new(env, '../../unimux/Cargo.toml')]
-        deps += env.glob(gen, '../../unimux/**/*.rs')
-        env.add_rust_features()
-
-        lib = env.rust_exe(gen, out='lib' + out + '.a', deps=deps)
-        env.install(gen, env['LIBDIR'], lib)
-
-        return env.m3_rust_exe(
-            gen,
-            out,
-            libs=libs + ['isr-nostackswitch', 'unimux'],
-            dir=dir,
-            startup=None,
-            ldscript=ldscript,
-            varAddr=False,
-            cargo_ws=False,
-        )
-
-    def rust_exe(self, gen, out, deps=[]):
+    def rust_exe(self, gen, out, deps=[], dir=None):
         deps += env.glob(gen, '**/*.rs') + [SourcePath.new(self, 'Cargo.toml')]
-        cfg = SourcePath.new(self, '.cargo/config.toml')
-        if os.path.isfile(cfg):
-            deps += [cfg]
-        return Env.rust_exe(self, gen, out, deps=deps)
+        return Env.rust_exe(self, gen, out, deps=deps, dir=dir)
 
-    def m3_rust_lib(self, gen, features=[]):
-        global rustlibs, rustfeatures
+    def m3_rust_lib(self, gen):
+        global rustlibs
         rustlibs += [self.cur_dir]
-        rustfeatures += features
-
-    def add_rust_features(self):
-        if self['BUILD'] == 'bench':
-            self['CRGFLAGS'] += ['--features', 'base/bench']
-        if self['BUILD'] == 'coverage' and self['ISA'] == 'riscv64':
-            self['CRGFLAGS'] += ['--features', 'base/coverage']
-        self['CRGFLAGS'] += ['--features', 'base/' + self['TGT']]
 
     def rust_deps(self):
         global rustlibs
-        deps = [SourcePath('src/Cargo.toml'), SourcePath('src/.cargo/config.toml')]
-        deps += [SourcePath('rust-toolchain.toml')]
+        # global Rust deps
+        deps = [
+            SourcePath('src/Cargo.toml'),
+            SourcePath('src/build.rs'),
+            SourcePath('src/.cargo/config.toml'),
+            SourcePath('rust-toolchain.toml')
+        ]
+        # crate-specific Rust deps
+        deps += self.glob(gen, '**/*.rs') + [SourcePath.new(self, 'Cargo.toml')]
+        cfg = SourcePath.new(self, '.cargo/config.toml')
+        if os.path.isfile(cfg):
+            deps += [cfg]
+        buildrs = SourcePath.new(self, 'build.rs')
+        if os.path.isfile(buildrs):
+            deps += [buildrs]
+        # manifests
         if os.path.isfile('src/toolchain/rust/' + self['TRIPLE'] + '.json'):
             deps += [SourcePath('src/toolchain/rust/' + self['TRIPLE'] + '.json')]
+        # potentially used crates
         for cr in rustlibs:
             deps += [SourcePath(cr + '/Cargo.toml')]
             deps += env.glob(gen, SourcePath(cr + '/**/*.rs'))
         return deps
-
-    def m3_cargo(self, gen, out, featdeps=[]):
-        env = self.clone()
-        # QoL extensions for riscv32 to speed up simulation on gem5. also planned for the future hardware platforms.
-        if env['TGT'] in 'gem5' and env['ISA'] in 'riscv32':
-            extensions = "-extensions"
-        else:
-            extensions = ""
-        # better specify the path to the json file, because Rust seems to be picky about the triple
-        # name in some cases. For example, it doesn't like riscv32-linux-m3-muslsf for some reason.
-        # if we specify a path, Rust doesn't seem to care.
-        tgtspec = os.path.abspath('src/toolchain/rust/' + env['TRIPLE'] + extensions + '.json')
-        env['CRGFLAGS'] += ['--target', tgtspec]
-        env['CRGFLAGS'] += ['-Z build-std=core,alloc,std,panic_abort']
-        for f in rustfeatures:
-            if f.split('/')[0] in featdeps:
-                env['CRGFLAGS'] += ['--features', f]
-        env.add_rust_features()
-        return env.rust_exe(gen, out, self.rust_deps())
-
-    def m3_cargo_ws(self, gen):
-        global rustapps, rustfeatures
-        env = self.clone()
-
-        outs = []
-        deps = self.rust_deps()
-        for cr in rustapps:
-            deps += [SourcePath(cr + '/Cargo.toml')] + env.glob(gen, SourcePath(cr + '/**/*.rs'))
-            crate_name = os.path.basename(cr)
-            outs.append('lib' + crate_name + '.a')
-            # specify crates explicitly, because some crates are only supported by some targets
-            env['CRGFLAGS'] += ['-p', crate_name]
-
-        # QoL extensions for riscv32 to speed up simulation on gem5. also planned for the future hardware platforms.
-        if env['TGT'] in 'gem5' and env['ISA'] in 'riscv32':
-            extensions = "-extensions"
-        else:
-            extensions = ""
-        tgtspec = os.path.abspath('src/toolchain/rust/' + env['TRIPLE'] + extensions + '.json')
-        env['CRGFLAGS'] += ['--target', tgtspec]
-        env['CRGFLAGS'] += ['-Z build-std=core,alloc,std,panic_abort']
-        for f in rustfeatures:
-            env['CRGFLAGS'] += ['--features', f]
-        env.add_rust_features()
-
-        outs = env.rust(gen, outs, deps)
-        for o in outs:
-            env.install(gen, outdir=env['RUSTLIBS'], input=o)
-        return outs
 
     def lx_exe(self, gen, out, ins, libs=[], dir='bin'):
         env = self.clone()
@@ -365,22 +308,17 @@ class M3Env(Env):
         env.install(gen, env['RUSTBINS'], bin)
         return bin
 
-    def lx_cargo_ws(self, gen, outs):
+    def lx_rust_exe(self, gen, out):
         env = self.clone()
 
         deps = env.rust_deps()
-        deps += [SourcePath.new(env, 'Cargo.toml'), SourcePath.new(env, '.cargo/config.toml')]
-        for o in outs:
-            deps += [SourcePath.new(env, o + '/Cargo.toml')]
-            deps += env.glob(gen, SourcePath.new(env, o + '/**/*.rs'))
+        deps += [SourcePath('src/m3lx/apps/Cargo.toml')]
 
         env['CRGFLAGS'] += ['--target', env['TRIPLE']]
-        env.add_rust_features()
 
-        outs = env.rust(gen, outs, deps)
-        for o in outs:
-            env.install(gen, outdir=env['RUSTBINS'], input=o)
-        return outs
+        bin = env.rust_exe(gen, out, deps)
+        env.install(gen, outdir=env['RUSTBINS'], input=bin)
+        return bin
 
     def build_fs(self, gen, out, dir, blocks, inodes):
         deps = [BuildPath(self['TOOLDIR'] + '/mkm3fs')]

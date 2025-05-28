@@ -34,11 +34,6 @@ default-features = false
 
 [features]
 default = []
-bench = []
 coverage = ['dep:minicov']
 linux = []
-gem5 = []
-hw = []
-hw22 = []
-hw23 = []
 rot = []

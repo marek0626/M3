@@ -65,7 +65,7 @@ impl IndexedTile {
         });
     }
 
-    #[cfg(feature = "gem5")]
+    #[cfg(M3_TARGET = "gem5")]
     pub fn config_ep<CFG>(&self, ep: tcu::EpId, cfg: CFG)
     where
         CFG: FnOnce(&mut [tcu::Reg]),

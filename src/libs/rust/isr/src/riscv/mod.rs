@@ -125,9 +125,9 @@ impl fmt::Debug for RISCVState {
     }
 }
 
-#[cfg(feature = "gem5")]
+#[cfg(M3_TARGET = "gem5")]
 const CLINT_MSIP: *mut u64 = 0x0800_0000 as *mut u64;
-#[cfg(not(feature = "gem5"))]
+#[cfg(not(M3_TARGET = "gem5"))]
 const CLINT_MSIP: *mut u64 = 0x0200_0000 as *mut u64;
 
 mod plic {

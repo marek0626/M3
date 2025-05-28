@@ -265,9 +265,9 @@ fn write_kenv(
     *mem_offset += total_env_size as GlobOff;
     let kenv_end = *mem_offset;
     *mem_offset = round_up(*mem_offset, cfg::PAGE_SIZE as GlobOff);
-    #[cfg(feature = "gem5")]
+    #[cfg(M3_TARGET = "gem5")]
     let keps_offset = *mem_offset;
-    #[cfg(not(feature = "gem5"))]
+    #[cfg(not(M3_TARGET = "gem5"))]
     let keps_offset = 0;
     *mem_offset += (m3.kernel.eps_num as usize * EP_REGS_SIZE) as GlobOff;
     let kernel_offset = *mem_offset;
@@ -300,7 +300,7 @@ fn write_kenv(
     (kenv_offset, keps_offset, kernel_offset)
 }
 
-#[cfg(feature = "gem5")]
+#[cfg(M3_TARGET = "gem5")]
 fn init_kernel_eps(
     m3: &rot::cert::M3Payload<'_>,
     mem_tile: IndexedTile,
@@ -357,7 +357,7 @@ fn prepare_for_rots(our_tile: IndexedTile, root_tile: IndexedTile) {
     });
 
     // configure exclusive region for the environment, accessible only from the root tile
-    #[cfg(feature = "gem5")]
+    #[cfg(M3_TARGET = "gem5")]
     if let Some((cmd, arg1)) = TCU::build_exreg_cmd(
         our_tile.id(),
         root_tile.id(),
@@ -428,7 +428,7 @@ pub fn main() -> ! {
         mods: BTreeMap::new(),
         pub_key: Hex::new_zeroed(),
     };
-    if !cfg!(feature = "gem5") {
+    if !cfg!(M3_TARGET = "gem5") {
         m3.kernel.eps_num = 0; // hw23 does not have virteps
     }
 
@@ -503,7 +503,7 @@ pub fn main() -> ! {
     ktile.init(Perm::RW);
 
     // Setup memory region for kernel endpoints
-    #[cfg(feature = "gem5")]
+    #[cfg(M3_TARGET = "gem5")]
     init_kernel_eps(&m3, mem_tile, ktile, keps_offset, kernel_offset);
 
     let root_tile = determine_root_tile(&m3, ktile);

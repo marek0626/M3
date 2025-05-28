@@ -53,7 +53,7 @@ pub enum ExtCmdOpCode {
 }
 
 cfg_if! {
-    if #[cfg(feature = "hw22")] {
+    if #[cfg(M3_TARGET = "hw22")] {
         /// The external registers
         #[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
         #[repr(u64)]
@@ -64,7 +64,7 @@ cfg_if! {
             ExtCmd,
         }
     }
-    else if #[cfg(feature = "hw23")] {
+    else if #[cfg(M3_TARGET = "hw23")] {
         /// The external registers
         #[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
         #[repr(u64)]
@@ -177,7 +177,7 @@ impl TCU {
         msg_ord: u32,
         reply_eps: Option<EpId>,
     ) {
-        #[cfg(any(feature = "hw22", feature = "hw23"))]
+        #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
         {
             regs[0] = (EpType::Receive as Reg)
                 | ((act as Reg) << 3)
@@ -187,7 +187,7 @@ impl TCU {
             regs[1] = buf.as_raw() as Reg;
             regs[2] = 0;
         }
-        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
+        #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
         {
             regs[0] = (EpType::Receive as Reg)
                 | ((act as Reg) << 3)
@@ -211,7 +211,7 @@ impl TCU {
         msg_order: u32,
         credits: u32,
     ) {
-        #[cfg(any(feature = "hw22", feature = "hw23"))]
+        #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
         {
             regs[0] = (EpType::Send as Reg)
                 | ((act as Reg) << 3)
@@ -221,7 +221,7 @@ impl TCU {
             regs[1] = (dst_ep as Reg) | ((Self::tileid_to_nocid(tile) as Reg) << 16);
             regs[2] = lbl as Reg;
         }
-        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
+        #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
         {
             regs[0] = (EpType::Send as Reg)
                 | ((act as Reg) << 3)
@@ -272,7 +272,7 @@ impl TCU {
             | ((gen as Reg) << 37);
         regs[1] = addr as Reg;
         regs[2] = size as Reg;
-        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
+        #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
         {
             regs[3] = 0;
         }
@@ -285,7 +285,7 @@ impl TCU {
         }
         regs[1] = 0;
         regs[2] = 0;
-        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
+        #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
         {
             regs[3] = 0;
         }
@@ -315,10 +315,10 @@ impl TCU {
         perm: kif::Perm,
         locked: bool,
     ) -> Option<(Reg, Reg)> {
-        #[cfg(not(feature = "gem5"))]
+        #[cfg(not(M3_TARGET = "gem5"))]
         return None;
 
-        #[cfg(feature = "gem5")]
+        #[cfg(M3_TARGET = "gem5")]
         {
             let mut cfg = (user_tile_gen as Reg) << 18 | (user_tile.raw() as Reg) << 4 | 1;
             if locked {
@@ -341,9 +341,9 @@ impl TCU {
 
     /// Returns the value for the `ExtCmd` register for given opcode and argument.
     pub fn build_ext_cmd(cmd: ExtCmdOpCode, arg: u64) -> Reg {
-        #[cfg(any(feature = "hw22", feature = "hw23"))]
+        #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
         return (cmd as Reg) | (arg << 9);
-        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
+        #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
         return (cmd as Reg) | (arg << 10);
     }
 

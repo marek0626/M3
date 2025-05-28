@@ -6,5 +6,4 @@ def build(gen, env):
         dir=None,
         ldscript='isr',
         varAddr=False,
-        features=["vmtest/" + env['TGT']],
     )

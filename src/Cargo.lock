@@ -62,12 +62,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "blau"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "lang",
+ "riscv-rt",
+ "rot",
+]
+
+[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "brom"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "lang",
+ "riscv-rt",
+ "rot",
 ]
 
 [[package]]
@@ -103,6 +123,12 @@ checksum = "53fe5e26ff1b7aef8bca9c6080520cfb8d9333c7568e1829cef191a9723e5504"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "critical-section"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
 
 [[package]]
 name = "crypto-common"
@@ -205,6 +231,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-hal"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "361a90feb7004eca4019fb28352a9465666b24f840f5c3cddf0ff13920590b89"
+
+[[package]]
 name = "facever"
 version = "0.1.0"
 dependencies = [
@@ -279,6 +311,14 @@ dependencies = [
 
 [[package]]
 name = "heap"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "bitflags 2.5.0",
+]
+
+[[package]]
+name = "heapsimple"
 version = "0.1.0"
 dependencies = [
  "base",
@@ -379,6 +419,16 @@ name = "libc"
 version = "0.2.155"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
+
+[[package]]
+name = "lock_api"
+version = "0.4.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96936507f153605bddfcda068dd804796c84324ed2510809e5b2a624c81da765"
+dependencies = [
+ "autocfg",
+ "scopeguard",
+]
 
 [[package]]
 name = "log"
@@ -639,6 +689,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "riscv"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f5c1b8bf41ea746266cdee443d1d1e9125c86ce1447e1a2615abd34330d33a9"
+dependencies = [
+ "critical-section",
+ "embedded-hal",
+]
+
+[[package]]
+name = "riscv-rt"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0d35e32cf1383183e8885d8a9aa4402a087fd094dc34c2cb6df6687d0229dfe"
+dependencies = [
+ "riscv",
+ "riscv-rt-macros",
+]
+
+[[package]]
+name = "riscv-rt-macros"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30f19a85fe107b65031e0ba8ec60c34c2494069fe910d6c297f5e7cb5a6f76d0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.66",
+]
+
+[[package]]
 name = "root"
 version = "0.1.0"
 dependencies = [
@@ -646,6 +727,18 @@ dependencies = [
  "m3",
  "resmng",
  "thread",
+]
+
+[[package]]
+name = "rosa"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "kecacc",
+ "lang",
+ "riscv-rt",
+ "rot",
+ "talc",
 ]
 
 [[package]]
@@ -658,6 +751,19 @@ dependencies = [
  "hex 0.4.3",
  "kecacc",
  "serde_json",
+]
+
+[[package]]
+name = "rots"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "heapsimple",
+ "kecacc",
+ "lang",
+ "m3core",
+ "rot",
+ "unimux",
 ]
 
 [[package]]
@@ -774,6 +880,12 @@ checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
 ]
+
+[[package]]
+name = "scopeguard"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "semver"
@@ -904,6 +1016,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "straccmux"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "lang",
+]
+
+[[package]]
 name = "subtle"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -932,11 +1052,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "talc"
+version = "4.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fcad3be1cfe36eb7d716a04791eba36a197da9d9b6ea1e28e64ac569da3701d"
+dependencies = [
+ "lock_api",
+]
+
+[[package]]
+name = "teetest"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "heapsimple",
+ "m3core",
+ "unimux",
+]
+
+[[package]]
 name = "thread"
 version = "0.1.0"
 dependencies = [
  "base",
  "bitflags 2.5.0",
+]
+
+[[package]]
+name = "tilemux"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "heap",
+ "isr",
+ "mux",
+ "num-traits",
+ "num_enum",
+ "paging",
 ]
 
 [[package]]

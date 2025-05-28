@@ -172,16 +172,17 @@ pub fn init(tile_id: TileId, name: &str, color: LogColor) {
     LOG_READY.set(true);
     Log::get().unwrap().init(tile_id, name, color);
 
-    #[cfg(not(feature = "bench"))]
-    // set log flags afterwards so that we can properly print errors during parsing
-    if let Some(log) = crate::env::boot_var("LOG") {
-        let flags = log
-            .split(',')
-            .map(|flag| {
-                flag.parse()
-                    .unwrap_or_else(|_| panic!("Unable to decode log-flag '{}'", flag))
-            })
-            .collect();
-        LOG_FLAGS.set(flags);
+    if env!("M3_BUILD") != "bench" {
+        // set log flags afterwards so that we can properly print errors during parsing
+        if let Some(log) = crate::env::boot_var("LOG") {
+            let flags = log
+                .split(',')
+                .map(|flag| {
+                    flag.parse()
+                        .unwrap_or_else(|_| panic!("Unable to decode log-flag '{}'", flag))
+                })
+                .collect();
+            LOG_FLAGS.set(flags);
+        }
     }
 }

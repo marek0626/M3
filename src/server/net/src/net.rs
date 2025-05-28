@@ -321,9 +321,9 @@ pub fn main() -> Result<(), Error> {
         )
     }
     else {
-        #[cfg(feature = "gem5")]
+        #[cfg(M3_TARGET = "gem5")]
         let device = driver::E1000Device::new().expect("Failed to create E1000 driver");
-        #[cfg(not(feature = "gem5"))]
+        #[cfg(not(M3_TARGET = "gem5"))]
         let device = driver::AXIEthDevice::new().expect("Failed to create AXI ethernet driver");
         driver::DriverInterface::Eth(
             InterfaceBuilder::new(device, Vec::with_capacity(MAX_SOCKETS))

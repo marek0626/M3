@@ -16,8 +16,10 @@ use std::env;
 
 fn main() {
     let work_dir = env::current_dir().unwrap();
+    let target = env::var("M3_TARGET").unwrap();
     println!("cargo:rustc-link-search={}", work_dir.display());
     println!("cargo:rerun-if-changed=memory.ld");
     println!("cargo:rerun-if-changed=../gp.ld");
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo::rustc-cfg=M3_TARGET=\"{}\"", target);
 }

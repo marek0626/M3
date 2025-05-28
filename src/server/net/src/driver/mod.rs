@@ -15,11 +15,11 @@
  */
 
 /// Conditional include of the driver
-#[cfg(feature = "gem5")]
+#[cfg(M3_TARGET = "gem5")]
 #[path = "gem5/mod.rs"]
 mod inner;
 
-#[cfg(not(feature = "gem5"))]
+#[cfg(not(M3_TARGET = "gem5"))]
 #[path = "hw/mod.rs"]
 mod inner;
 
@@ -31,9 +31,9 @@ use smoltcp::time::{Duration, Instant};
 
 pub enum DriverInterface<'a> {
     Lo(Interface<'a, smoltcp::phy::Loopback>),
-    #[cfg(feature = "gem5")]
+    #[cfg(M3_TARGET = "gem5")]
     Eth(Interface<'a, E1000Device>),
-    #[cfg(not(feature = "gem5"))]
+    #[cfg(not(M3_TARGET = "gem5"))]
     Eth(Interface<'a, AXIEthDevice>),
 }
 

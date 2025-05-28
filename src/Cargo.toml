@@ -39,8 +39,14 @@ members = [
     "apps/rustunittests/rustmisctests",
     "apps/rustunittests/rustvfstests",
     "apps/spammer",
+    "apps/straccmux",
+    "apps/teetest",
     "kernel",
     "unimux",
+    "rot/brom",
+    "rot/blau",
+    "rot/rosa",
+    "rot/rots",
     "server/crypto/hashmux",
     "server/disk",
     "server/m3fs",
@@ -49,12 +55,9 @@ members = [
     "server/pipes",
     "server/root",
     "server/vterm",
+    "tilemux",
 ]
 exclude = [
-    "apps/straccmux",
-    "apps/teetest",
-    "rot",
-    "tilemux",
     "libs/rust/heapsimple",
     "libs/rust/vtermcli",
 ]

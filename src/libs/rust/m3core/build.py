@@ -1,2 +1,2 @@
 def build(gen, env):
-    env.m3_rust_lib(gen, features=["m3core/" + env['TGT']])
+    env.m3_rust_lib(gen)

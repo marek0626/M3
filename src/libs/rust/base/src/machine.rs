@@ -93,7 +93,7 @@ pub fn write_coverage(_act: u64) {
 
 pub fn write(buf: &[u8]) -> usize {
     let amount = tcu::TCU::print(buf);
-    #[cfg(all(feature = "linux", feature = "gem5"))]
+    #[cfg(all(feature = "linux", M3_TARGET = "gem5"))]
     unsafe {
         libc::write(1, buf.as_ptr() as *const libc::c_void, buf.len())
     };
@@ -126,9 +126,9 @@ pub fn write(buf: &[u8]) -> usize {
 /// at least 512 KiB large.
 pub unsafe fn flush_cache() {
     // * 2 just to be sure (this code is also touching memory)
-    #[cfg(any(feature = "hw", feature = "hw22", feature = "hw23"))]
+    #[cfg(any(M3_TARGET = "hw", M3_TARGET = "hw22", M3_TARGET = "hw23"))]
     let (cacheline_size, cache_size) = (64, 512 * 1024 * 2);
-    #[cfg(not(any(feature = "hw", feature = "hw22", feature = "hw23")))]
+    #[cfg(not(any(M3_TARGET = "hw", M3_TARGET = "hw22", M3_TARGET = "hw23")))]
     let (cacheline_size, cache_size) = (64, (32 + 256) * 1024 * 2);
 
     // ensure that we replace all cachelines in cache
@@ -143,7 +143,7 @@ pub unsafe fn flush_cache() {
 
     #[cfg(all(
         not(target_arch = "riscv32"),
-        any(feature = "hw", feature = "hw22", feature = "hw23")
+        any(M3_TARGET = "hw", M3_TARGET = "hw22", M3_TARGET = "hw23")
     ))]
     unsafe {
         core::arch::asm!("fence.i");
