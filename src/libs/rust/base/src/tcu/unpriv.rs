@@ -401,7 +401,7 @@ impl TCU {
     ///
     /// Returns `Some((<address>, <slot-size>, <slots>, <reply-EPs>))` if the EP is a receive EP or
     /// `None` otherwise.
-    pub fn recv_info(ep: EpId) -> Option<(PhysAddrRaw, u32, u32, EpId)> {
+    pub fn unpack_recv_ep(ep: EpId) -> Option<(PhysAddrRaw, u32, u32, EpId)> {
         let r0 = Self::read_ep_reg(ep, 0);
         let r1 = Self::read_ep_reg(ep, 1);
 
@@ -439,7 +439,7 @@ impl TCU {
         buf_size: usize,
         replies: bool,
     ) -> Result<(), Error> {
-        let rinfo = TCU::recv_info(ep).ok_or_else(|| Error::new(Code::KernelBroken))?;
+        let rinfo = TCU::unpack_recv_ep(ep).ok_or_else(|| Error::new(Code::KernelBroken))?;
         // check if the physical address and the buffer size is as expected (otherwise the
         // kernel could send us messages to overwrite specific areas of memory).
         if PhysAddr::new_raw(env::boot().tile_desc(), rinfo.0) != buf_addr {
