@@ -1,3 +1,5 @@
+use std::ptr::null;
+
 use crate::cfg;
 use crate::kif;
 use crate::mem::VirtAddr;
@@ -16,7 +18,7 @@ fn ioctl(magic_number: u64) {
     unsafe {
         let res = libc::ioctl(tcu_fd(), magic_number);
         if res != 0 {
-            libc::perror(0 as *const u8);
+            libc::perror(null::<u8>());
             panic!("ioctl call {} failed with error {}", magic_number, res);
         }
     }
@@ -27,7 +29,7 @@ fn ioctl_read<T: Default>(magic_number: u64) -> T {
     unsafe {
         let res = libc::ioctl(tcu_fd(), magic_number, &mut arg as *mut _);
         if res != 0 {
-            libc::perror(0 as *const u8);
+            libc::perror(null::<u8>());
             panic!("ioctl call {} failed with error {}", magic_number, res);
         }
     }
@@ -38,7 +40,7 @@ fn ioctl_plain(magic_number: u64, arg: usize) {
     unsafe {
         let res = libc::ioctl(tcu_fd(), magic_number, arg);
         if res != 0 {
-            libc::perror(0 as *const u8);
+            libc::perror(null::<u8>());
             panic!("ioctl call {} failed with error {}", magic_number, res);
         }
     }
