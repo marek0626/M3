@@ -437,6 +437,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
 
 [[package]]
+name = "lxrustbenchs"
+version = "0.1.0"
+dependencies = [
+ "m3core",
+ "m3files",
+]
+
+[[package]]
 name = "m3"
 version = "0.1.0"
 dependencies = [
@@ -990,6 +998,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "starter"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "libc",
+]
+
+[[package]]
 name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1058,6 +1074,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3fcad3be1cfe36eb7d716a04791eba36a197da9d9b6ea1e28e64ac569da3701d"
 dependencies = [
  "lock_api",
+]
+
+[[package]]
+name = "tcutest"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "m3core",
 ]
 
 [[package]]
@@ -1151,6 +1175,14 @@ name = "vterm"
 version = "0.1.0"
 dependencies = [
  "m3",
+]
+
+[[package]]
+name = "vtermcli"
+version = "0.1.0"
+dependencies = [
+ "m3core",
+ "m3files",
 ]
 
 [[package]]

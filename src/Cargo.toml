@@ -42,6 +42,25 @@ members = [
     "apps/straccmux",
     "apps/teetest",
     "kernel",
+    "libs/rust/accel",
+    "libs/rust/base",
+    "libs/rust/heap",
+    "libs/rust/heapsimple",
+    "libs/rust/isr",
+    "libs/rust/lang",
+    "libs/rust/m3",
+    "libs/rust/m3core",
+    "libs/rust/m3files",
+    "libs/rust/mux",
+    "libs/rust/paging",
+    "libs/rust/pci",
+    "libs/rust/pipecli",
+    "libs/rust/resmng",
+    "libs/rust/thread",
+    "libs/rust/vtermcli",
+    "m3lx/apps/lxrustbenchs",
+    "m3lx/apps/starter",
+    "m3lx/apps/tcutest",
     "unimux",
     "rot/brom",
     "rot/blau",
@@ -56,10 +75,6 @@ members = [
     "server/root",
     "server/vterm",
     "tilemux",
-]
-exclude = [
-    "libs/rust/heapsimple",
-    "libs/rust/vtermcli",
 ]
 resolver = "2"
 
