@@ -355,7 +355,7 @@ class M3Env(Env):
 
         deps = env.rust_deps_global()
         deps += env.rust_deps_crate()
-        deps += [SourcePath('src/m3lx/apps/Cargo.toml')]
+        deps += [SourcePath('src/m3lx/apps/.cargo/config.toml')]
 
         env['CRGFLAGS'] += ['--target', env['TRIPLE']]
 
