@@ -465,12 +465,10 @@ pub fn read_ep_remote(tile: TileId, ep: EpId, regs: &mut [Reg]) -> anyhow::Resul
 }
 
 pub fn write_ep_remote(tile: TileId, ep: EpId, regs: &[Reg]) -> anyhow::Result<()> {
-    #[cfg(M3_TARGET = "gem5")]
-    {
+    if env!("M3_TARGET") == "gem5" {
         try_write_slice(tile, TCU::ep_regs_addr(ep).as_goff(), regs)
     }
-    #[cfg(not(M3_TARGET = "gem5"))]
-    {
+    else {
         for (i, r) in regs.iter().enumerate() {
             try_write_slice(tile, (TCU::ep_regs_addr(ep) + i * 8).as_goff(), &[*r])?;
         }

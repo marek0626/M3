@@ -126,10 +126,10 @@ pub fn write(buf: &[u8]) -> usize {
 /// at least 512 KiB large.
 pub unsafe fn flush_cache() {
     // * 2 just to be sure (this code is also touching memory)
-    #[cfg(any(M3_TARGET = "hw", M3_TARGET = "hw22", M3_TARGET = "hw23"))]
-    let (cacheline_size, cache_size) = (64, 512 * 1024 * 2);
-    #[cfg(not(any(M3_TARGET = "hw", M3_TARGET = "hw22", M3_TARGET = "hw23")))]
-    let (cacheline_size, cache_size) = (64, (32 + 256) * 1024 * 2);
+    let (cacheline_size, cache_size) = match env!("M3_TARGET") {
+        "hw" | "hw22" | "hw23" => (64, 512 * 1024 * 2),
+        _ => (64, (32 + 256) * 1024 * 2),
+    };
 
     // ensure that we replace all cachelines in cache
     let mut addr = cfg::TILE_MEM_BASE.as_ptr::<u64>();

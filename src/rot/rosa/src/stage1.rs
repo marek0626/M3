@@ -265,10 +265,10 @@ fn write_kenv(
     *mem_offset += total_env_size as GlobOff;
     let kenv_end = *mem_offset;
     *mem_offset = round_up(*mem_offset, cfg::PAGE_SIZE as GlobOff);
-    #[cfg(M3_TARGET = "gem5")]
-    let keps_offset = *mem_offset;
-    #[cfg(not(M3_TARGET = "gem5"))]
-    let keps_offset = 0;
+    let keps_offset = match env!("M3_TARGET") {
+        "gem5" => *mem_offset,
+        _ => 0,
+    };
     *mem_offset += (m3.kernel.eps_num as usize * EP_REGS_SIZE) as GlobOff;
     let kernel_offset = *mem_offset;
     *mem_offset += m3.kernel.mem_size as GlobOff;
@@ -428,7 +428,7 @@ pub fn main() -> ! {
         mods: BTreeMap::new(),
         pub_key: Hex::new_zeroed(),
     };
-    if !cfg!(M3_TARGET = "gem5") {
+    if env!("M3_TARGET") != "gem5" {
         m3.kernel.eps_num = 0; // hw23 does not have virteps
     }
 

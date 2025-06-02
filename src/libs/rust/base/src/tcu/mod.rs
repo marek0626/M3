@@ -223,26 +223,26 @@ pub struct TCU {}
 impl TCU {
     /// Returns all MMIO areas that need to be mapped
     pub fn mmio_areas() -> [(VirtAddr, usize, PageFlags); 3] {
-        #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
-        return [
-            (MMIO_ADDR, cfg::PAGE_SIZE * 2, PageFlags::U | PageFlags::RW),
-            (
-                MMIO_PRIV_ADDR,
-                cfg::PAGE_SIZE * 2,
-                PageFlags::U | PageFlags::RW,
-            ),
-            (VirtAddr::null(), 0, PageFlags::empty()),
-        ];
-        #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
-        return [
-            (MMIO_ADDR, MMIO_SIZE, PageFlags::U | PageFlags::RW),
-            (MMIO_PRIV_ADDR, MMIO_PRIV_SIZE, PageFlags::U | PageFlags::RW),
-            (
-                MMIO_EPS_ADDR,
-                Self::endpoints_size(),
-                PageFlags::U | PageFlags::R,
-            ),
-        ];
+        match env!("M3_TARGET") {
+            "hw22" | "hw23" => [
+                (MMIO_ADDR, cfg::PAGE_SIZE * 2, PageFlags::U | PageFlags::RW),
+                (
+                    MMIO_PRIV_ADDR,
+                    cfg::PAGE_SIZE * 2,
+                    PageFlags::U | PageFlags::RW,
+                ),
+                (VirtAddr::null(), 0, PageFlags::empty()),
+            ],
+            _ => [
+                (MMIO_ADDR, MMIO_SIZE, PageFlags::U | PageFlags::RW),
+                (MMIO_PRIV_ADDR, MMIO_PRIV_SIZE, PageFlags::U | PageFlags::RW),
+                (
+                    MMIO_EPS_ADDR,
+                    Self::endpoints_size(),
+                    PageFlags::U | PageFlags::R,
+                ),
+            ],
+        }
     }
 
     /// Returns the size of the endpoints region (according to the EPS_SIZE register)

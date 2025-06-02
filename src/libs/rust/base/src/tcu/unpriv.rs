@@ -322,10 +322,10 @@ impl TCU {
     /// Assuming that `ep` is a receive EP, the function returns whether there are unread messages.
     #[inline(always)]
     pub fn has_msgs(ep: EpId) -> bool {
-        #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
-        let unread = Self::read_ep_reg(ep, 2) >> 32;
-        #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
-        let unread = Self::read_ep_reg(ep, 3);
+        let unread = match env!("M3_TARGET") {
+            "hw22" | "hw23" => Self::read_ep_reg(ep, 2) >> 32,
+            _ => Self::read_ep_reg(ep, 3),
+        };
         unread != 0
     }
 
@@ -361,14 +361,10 @@ impl TCU {
         if (r0 & 0x7) != EpType::Send.into() {
             return None;
         }
-        #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
-        let cur = (r0 >> 19) & 0x3F;
-        #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
-        let cur = (r0 >> 19) & 0x7F;
-        #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
-        let max = (r0 >> 25) & 0x3F;
-        #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
-        let max = (r0 >> 26) & 0x7F;
+        let (cur, max) = match env!("M3_TARGET") {
+            "hw22" | "hw23" => ((r0 >> 19) & 0x3F, (r0 >> 25) & 0x3F),
+            _ => ((r0 >> 19) & 0x7F, (r0 >> 26) & 0x7F),
+        };
         Some((cur, max))
     }
 
@@ -490,10 +486,10 @@ impl TCU {
         loop {
             let cmd = Self::read_unpriv_reg(UnprivReg::Command);
             if (cmd & 0xF) == CmdOpCode::Idle.into() {
-                #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
-                let err = (cmd >> 20) & 0x1F;
-                #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
-                let err = (cmd >> 20) & 0x3F;
+                let err = match env!("M3_TARGET") {
+                    "hw22" | "hw23" => (cmd >> 20) & 0x1F,
+                    _ => (cmd >> 20) & 0x3F,
+                };
                 return Result::from(Code::try_from(err as u32).unwrap());
             }
         }
@@ -529,24 +525,20 @@ impl TCU {
     pub fn drop_msgs_with(buf_addr: VirtAddr, ep: EpId, label: Label) {
         // we assume that the one that used the label can no longer send messages. thus, if there
         // are no messages yet, we are done.
-        #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
-        let unread = Self::read_ep_reg(ep, 3) >> 32;
-        #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
-        let unread = Self::read_ep_reg(ep, 3);
+        let unread = match env!("M3_TARGET") {
+            "hw22" | "hw23" => Self::read_ep_reg(ep, 3) >> 32,
+            _ => Self::read_ep_reg(ep, 3),
+        };
         if unread == 0 {
             return;
         }
 
         let r0 = Self::read_ep_reg(ep, 0);
-        #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
-        let buf_size = 1 << ((r0 >> 35) & 0x3F);
-        #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
-        let buf_size = 1 << ((r0 >> 35) & 0x7F);
+        let (buf_size, msg_size) = match env!("M3_TARGET") {
+            "hw22" | "hw23" => (1 << ((r0 >> 35) & 0x3F), (r0 >> 41) & 0x3F),
+            _ => (1 << ((r0 >> 35) & 0x7F), (r0 >> 42) & 0x3F),
+        };
 
-        #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
-        let msg_size = (r0 >> 41) & 0x3F;
-        #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
-        let msg_size = (r0 >> 42) & 0x3F;
         for i in 0..buf_size {
             if (unread & (1 << i)) != 0 {
                 let msg = Self::offset_to_msg(buf_addr, i << msg_size);
@@ -559,10 +551,10 @@ impl TCU {
 
     /// Prints the given message into the gem5 log
     pub fn print(s: &[u8]) -> usize {
-        #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
-        let regs = EXT_REGS + UNPRIV_REGS + (128 * super::EP_REGS) as usize;
-        #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
-        let regs = EXT_REGS + UNPRIV_REGS;
+        let regs = match env!("M3_TARGET") {
+            "hw22" | "hw23" => EXT_REGS + UNPRIV_REGS + (128 * super::EP_REGS),
+            _ => EXT_REGS + UNPRIV_REGS,
+        };
 
         let s = &s[0..cmp::min(s.len(), PRINT_REGS * mem::size_of::<Reg>() - 1)];
 
@@ -636,9 +628,9 @@ impl TCU {
     }
 
     fn build_cmd(ep: EpId, cmd: CmdOpCode, arg: Reg) -> Reg {
-        #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
-        return cmd as Reg | ((ep as Reg) << 4) | (arg << 25);
-        #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
-        return cmd as Reg | ((ep as Reg) << 4) | (arg << 26);
+        match env!("M3_TARGET") {
+            "hw22" | "hw23" => cmd as Reg | ((ep as Reg) << 4) | (arg << 25),
+            _ => cmd as Reg | ((ep as Reg) << 4) | (arg << 26),
+        }
     }
 }

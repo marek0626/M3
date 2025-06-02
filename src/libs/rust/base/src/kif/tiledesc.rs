@@ -366,12 +366,9 @@ impl TileDesc {
 
     /// Returns the starting address and size of the receive buffer space for the multiplexer
     pub fn rbuf_mux_space(self) -> (VirtAddr, usize) {
-        if self.isa() == TileISA::RISCV32 {
-            #[cfg(not(M3_TARGET = "gem5"))]
-            {
-                let std = self.rbuf_std_space();
-                return (VirtAddr::new(std.0.as_raw() + 0x400), std.1 - 0x400);
-            }
+        if self.isa() == TileISA::RISCV32 && env!("M3_TARGET") != "gem5" {
+            let std = self.rbuf_std_space();
+            return (VirtAddr::new(std.0.as_raw() + 0x400), std.1 - 0x400);
         }
 
         let (env_start, env_size) = self.env_space();
@@ -403,13 +400,9 @@ impl TileDesc {
             0x1000_0000 - cfg::RBUF_STD_SIZE
         }
         else if self.isa() == TileISA::RISCV32 {
-            #[cfg(M3_TARGET = "gem5")]
-            {
-                cfg::RBUF_STD_SIZE + 0xD000
-            }
-            #[cfg(not(M3_TARGET = "gem5"))]
-            {
-                cfg::RBUF_STD_SIZE + 0x400
+            match env!("M3_TARGET") {
+                "hw22" | "hw23" => cfg::RBUF_STD_SIZE + 0x400,
+                _ => cfg::RBUF_STD_SIZE + 0xD000,
             }
         }
         else {
