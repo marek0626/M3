@@ -417,18 +417,6 @@ impl TCU {
         ))
     }
 
-    /// Marks the given message for receive endpoint `ep` as read
-    #[inline(always)]
-    pub fn ack_msg(ep: EpId, msg_off: usize) -> Result<(), Error> {
-        // ensure that we are really done with the message before acking it
-        CPU::memory_barrier();
-        Self::write_unpriv_reg(
-            UnprivReg::Command,
-            Self::build_cmd(ep, CmdOpCode::AckMsg, msg_off as Reg),
-        );
-        Self::get_error()
-    }
-
     /// Checks whether the given receive EP is sane.
     ///
     /// The function ensures that it's actually a receive EP, that the buffer is as expected, and
@@ -470,6 +458,18 @@ impl TCU {
         Self::write_unpriv_reg(
             UnprivReg::Command,
             Self::build_cmd(ep, CmdOpCode::Unfreeze, 0),
+        );
+        Self::get_error()
+    }
+
+    /// Marks the given message for receive endpoint `ep` as read
+    #[inline(always)]
+    pub fn ack_msg(ep: EpId, msg_off: usize) -> Result<(), Error> {
+        // ensure that we are really done with the message before acking it
+        CPU::memory_barrier();
+        Self::write_unpriv_reg(
+            UnprivReg::Command,
+            Self::build_cmd(ep, CmdOpCode::AckMsg, msg_off as Reg),
         );
         Self::get_error()
     }
