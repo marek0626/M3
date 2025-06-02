@@ -4,5 +4,6 @@ def build(gen, env):
             gen,
             out='teetest',
             libs=['isr-nostackswitch', 'unimux'],
+            varAddr=False,
             ldscript='isr',
         )
