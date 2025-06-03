@@ -75,7 +75,6 @@ pub extern "C" fn abort() -> ! {
 #[no_mangle]
 pub extern "C" fn exit(_code: i32) -> ! {
     log!(LogFlags::Info, "Shutting down");
-    machine::write_coverage(0);
     machine::shutdown();
 }
 

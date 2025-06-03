@@ -351,9 +351,6 @@ build_params_gem5() {
         params=("${params[@]}" --pausetile="$M3_GEM5_PAUSE")
     fi
 
-    # remove all coverage files
-    rm -rf "$M3_OUT"/coverage-*-*.profraw
-
     export M5_PATH=$build
     builddir=build/gem5
     if [ "$DBG_GEM5" != "" ]; then

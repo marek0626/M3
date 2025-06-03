@@ -78,9 +78,6 @@ pub mod tcu;
 pub mod time;
 pub mod tmif;
 
-#[cfg(feature = "coverage")]
-pub use minicov;
-
 pub use serde;
 
 #[cfg(M3_LX = "1")]

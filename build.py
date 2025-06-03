@@ -44,10 +44,7 @@ class M3Env(Env):
         env['ISA'] = isa
 
         # cross compiler defines
-        if os.environ.get('M3_BUILD') == 'coverage':
-            rustabi = 'muslcov'
-        else:
-            rustabi = 'musl'
+        rustabi = 'musl'
         cross = isa + '-buildroot-linux-musl-'
         crossdir = os.path.abspath('build/cross-' + isa + '/host')
         crossver = '14.2.0'

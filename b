@@ -26,11 +26,8 @@ else
 fi
 
 if [ "$M3_BUILD" != "debug" ] && [ "$M3_BUILD" != "release" ] &&
-    [ "$M3_BUILD" != "bench" ] && [ "$M3_BUILD" != "coverage" ]; then
+    [ "$M3_BUILD" != "bench" ]; then
     echo "Build mode $M3_BUILD not supported." >&2 && exit 1
-fi
-if [ "$M3_BUILD" = "coverage" ] && [ "$M3_ISA" != "riscv64" ] && [ "$M3_ISA" != "x86_64" ]; then
-    echo "Coverage mode is only supported with M3_ISA=riscv64 and M3_ISA=x86_64." >&2 && exit 1
 fi
 
 export M3_BUILD M3_TARGET M3_ISA M3_OUT
@@ -40,11 +37,6 @@ root=$(readlink -f .)
 crossdir="./build/cross-$M3_ISA/host"
 crossname="$M3_ISA-buildroot-linux-musl-"
 crossprefix="$crossdir/bin/$crossname"
-if [ "$M3_BUILD" = "coverage" ]; then
-    rustabi='muslcov'
-else
-    rustabi='musl'
-fi
 
 build=build/$M3_TARGET-$M3_ISA-$M3_BUILD
 bindir=$build/bin/
@@ -57,35 +49,13 @@ rusttoolchain="$root/src/toolchain/rust"
 rustbuild="$root/$build/rust"
 rustgeneric="$root/build/rust"
 rustisa="$M3_ISA"
-export RUST_TARGET=$rustisa-linux-m3-$rustabi
+export RUST_TARGET=$rustisa-linux-m3-musl
 export RUST_TARGET_PATH=$rusttoolchain
 rust_host_args=(--target-dir "$rustbuild")
 rust_target_args=(
     --target "$RUST_TARGET" --target-dir "$rustbuild"
     -Z "build-std=core,alloc,std,panic_abort"
 )
-
-# configure TARGET_CFLAGS for llvmprofile within minicov (only used with RISC-V)
-if [[ "$M3_ISA" =~ riscv* && "$M3_BUILD" = "coverage" ]]; then
-    if [ "$M3_ISA" = "riscv64" ]; then
-        flags="-march=rv64imafdc -mabi=lp64d"
-    else
-        flags="-march=rv32imafdc -mabi=ilp32d"
-    fi
-    # add C include paths to ensure that these instead of the include paths for the clang host
-    # compiler will be used
-    paths=(
-        "src/include"
-        "src/libs/musl/arch/$rustisa"
-        "src/libs/musl/arch/generic"
-        "src/libs/musl/m3/include/$M3_ISA"
-        "src/libs/musl/include"
-    )
-    for p in "${paths[@]}"; do
-        flags="$flags -I$(readlink -f "$p")"
-    done
-    export TARGET_CFLAGS="$flags"
-fi
 
 help() {
     echo "Usage: $1 [-n] [<cmd> <arg>]"
@@ -94,7 +64,7 @@ help() {
     echo "and running the specified command afterwards. The most important environment"
     echo "variables that influence its behaviour are M3_TARGET=(gem5|hw|hw22|hw23),"
     echo "M3_ISA=(x86_64|riscv32|riscv64) [on gem5 only], and"
-    echo "M3_BUILD=(debug|release|bench|coverage)."
+    echo "M3_BUILD=(debug|release|bench)."
     echo ""
     echo "The flag -n skips the build and executes the given command directly. This"
     echo "can be handy if, for example, the build is currently broken."
@@ -183,14 +153,13 @@ help() {
     echo "    M3_ISA:                  the ISA to use. On gem5, ''riscv32', 'riscv64',"
     echo "                             and 'x86_64' is supported. On other targets, it is"
     echo "                             ignored."
-    echo "    M3_BUILD:                the build type is 'debug', 'release', 'bench' or"
-    echo "                             'coverage'. In debug mode optimizations are disabled,"
+    echo "    M3_BUILD:                the build type is 'debug', 'release', or 'bench'".
+    echo "                             In debug mode optimizations are disabled,"
     echo "                             debug infos are available, and assertions are active."
     echo "                             In release mode all that is disabled. In bench, all"
     echo "                             logging is hardcoded to Info,Error in contrast to all"
     echo "                             other modes where it is defined by the environment"
-    echo "                             variable LOG (see M3_LOG). The coverage is mode is only"
-    echo "                             used for code coverage. The default mode is release."
+    echo "                             variable LOG (see M3_LOG). The default mode is release."
     echo "    M3_REM_HOST:             if set, the build is performed on this host in"
     echo "                             M3_REM_DIR. All source files are synced to the remote"
     echo "                             host before the build and the build files are synced"

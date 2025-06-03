@@ -54,7 +54,6 @@ pub extern "C" fn abort() {
 
 #[no_mangle]
 pub extern "C" fn exit(_code: i32) {
-    machine::write_coverage(0);
     machine::shutdown();
 }
 
