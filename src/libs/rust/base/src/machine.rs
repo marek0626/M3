@@ -34,7 +34,7 @@ impl minicov::CoverageWriter for Gem5CovWriter {
 }
 
 #[cfg(all(
-    not(feature = "linux"),
+    not(M3_LX = "1"),
     not(target_arch = "riscv64"),
     not(target_arch = "riscv32")
 ))]
@@ -44,7 +44,7 @@ extern "C" {
 }
 
 #[cfg(all(
-    not(feature = "linux"),
+    not(M3_LX = "1"),
     any(target_arch = "riscv64", target_arch = "riscv32")
 ))]
 unsafe fn gem5_writefile(src: *const u8, len: u64, offset: u64, file: u64) -> u64 {
@@ -66,7 +66,7 @@ unsafe fn gem5_writefile(src: *const u8, len: u64, offset: u64, file: u64) -> u6
 }
 
 #[cfg(all(
-    not(feature = "linux"),
+    not(M3_LX = "1"),
     any(target_arch = "riscv64", target_arch = "riscv32")
 ))]
 unsafe fn gem5_shutdown(delay: u64) -> ! {
@@ -93,11 +93,11 @@ pub fn write_coverage(_act: u64) {
 
 pub fn write(buf: &[u8]) -> usize {
     let amount = tcu::TCU::print(buf);
-    #[cfg(all(feature = "linux", M3_TARGET = "gem5"))]
+    #[cfg(all(M3_LX = "1", M3_TARGET = "gem5"))]
     unsafe {
         libc::write(1, buf.as_ptr() as *const libc::c_void, buf.len())
     };
-    #[cfg(not(feature = "linux"))]
+    #[cfg(not(M3_LX = "1"))]
     {
         use crate::cpu::{CPUOps, CPU};
         if env::boot().platform == env::Platform::Gem5 {
@@ -152,7 +152,7 @@ pub unsafe fn flush_cache() {
 
 pub fn shutdown() -> ! {
     if env::boot().platform == env::Platform::Gem5 {
-        #[cfg(not(feature = "linux"))]
+        #[cfg(not(M3_LX = "1"))]
         unsafe {
             gem5_shutdown(0)
         };

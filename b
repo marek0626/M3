@@ -394,9 +394,11 @@ get_cross_prefix() {
 
 run_clippy() {
     target=()
+    env=()
     if [[ "$1" = tools/* ]]; then
         target=("${rust_host_args[@]}")
     elif [[ "$1" = src/m3lx/* ]]; then
+        env=(M3_LX)
         target=(--target riscv64gc-unknown-linux-gnu
             --target-dir "$rustbuild"
             -Z "build-std=core,alloc,std,panic_abort")
@@ -410,13 +412,18 @@ run_clippy() {
         target=("${rust_target_args[@]}")
     fi
     echo "Running clippy for $(dirname "$1")..."
-    (cd "$(dirname "$1")" && cargo clippy "${target[@]}" -- \
-        -D warnings \
-        -A clippy::identity_op \
-        -A clippy::manual_range_contains \
-        -A clippy::assertions_on_constants \
-        -A clippy::upper_case_acronyms \
-        -A clippy::empty_loop)
+    (
+        for e in "${env[@]}"; do
+            export "$e=1"
+        done
+        cd "$(dirname "$1")" && cargo clippy "${target[@]}" -- \
+            -D warnings \
+            -A clippy::identity_op \
+            -A clippy::manual_range_contains \
+            -A clippy::assertions_on_constants \
+            -A clippy::upper_case_acronyms \
+            -A clippy::empty_loop
+    )
 }
 
 # run the specified command, if any

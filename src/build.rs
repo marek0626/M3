@@ -1,12 +1,11 @@
 use std::env;
 
 fn main() {
-    let build = env::var("M3_BUILD").unwrap();
-    let target = env::var("M3_TARGET").unwrap();
-    println!("cargo::rerun-if-env-changed=M3_BUILD");
-    println!("cargo::rerun-if-env-changed=M3_TARGET");
-    println!("cargo::rustc-env=M3_BUILD={}", build);
-    println!("cargo::rustc-cfg=M3_BUILD=\"{}\"", build);
-    println!("cargo::rustc-env=M3_TARGET={}", target);
-    println!("cargo::rustc-cfg=M3_TARGET=\"{}\"", target);
+    for e in ["M3_BUILD", "M3_TARGET", "M3_LX"] {
+        println!("cargo::rerun-if-env-changed={}", e);
+        if let Ok(val) = env::var(e) {
+            println!("cargo::rustc-env={}={}", e, val);
+            println!("cargo::rustc-cfg={}=\"{}\"", e, val);
+        }
+    }
 }

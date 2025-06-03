@@ -99,7 +99,7 @@ cfg_if! {
         mod isa;
 
         pub type CPU = crate::arch::isa::cpu::X86CPU;
-        #[cfg(not(feature = "linux"))]
+        #[cfg(not(M3_LX = "1"))]
         pub type TMABI = crate::arch::isa::tmabi::X86TMABI;
     }
     else {
@@ -107,10 +107,10 @@ cfg_if! {
         mod isa;
 
         pub type CPU = crate::arch::isa::cpu::RISCVCPU;
-        #[cfg(not(feature = "linux"))]
+        #[cfg(not(M3_LX = "1"))]
         pub type TMABI = crate::arch::isa::tmabi::RISCVTMABI;
     }
 }
 
-#[cfg(feature = "linux")]
+#[cfg(M3_LX = "1")]
 pub mod linux;

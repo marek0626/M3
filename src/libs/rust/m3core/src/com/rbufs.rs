@@ -114,7 +114,7 @@ fn map_rbuf(addr: VirtAddr, size: usize) -> Result<MemGate, Error> {
         (size / cfg::PAGE_SIZE) as Selector,
         Perm::R,
     )?;
-    #[cfg(feature = "linux")]
+    #[cfg(M3_LX = "1")]
     base::linux::mmap::mmap_tcu(
         base::linux::tcu_fd(),
         addr,
@@ -127,7 +127,7 @@ fn map_rbuf(addr: VirtAddr, size: usize) -> Result<MemGate, Error> {
 
 /// Frees the given receive buffer
 pub(crate) fn free_rbuf(rbuf: &RecvBuf) {
-    #[cfg(feature = "linux")]
+    #[cfg(M3_LX = "1")]
     base::linux::mmap::munmap(rbuf.addr(), rbuf.size());
     BUFS.borrow_mut().free(rbuf.addr.as_local(), rbuf.size);
 }

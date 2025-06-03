@@ -358,6 +358,7 @@ class M3Env(Env):
         deps += [SourcePath('src/m3lx/apps/.cargo/config.toml')]
 
         env['CRGFLAGS'] += ['--target', env['TRIPLE']]
+        env['CRGENV']['M3_LX'] = '1'
 
         bin = env.rust_exe(gen, out, deps)
         env.install(gen, outdir=env['RUSTBINS'], input=bin)

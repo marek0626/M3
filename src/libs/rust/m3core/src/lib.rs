@@ -16,7 +16,7 @@
  * General Public License version 2 for more details.
  */
 
-#![cfg_attr(not(feature = "linux"), no_std)]
+#![cfg_attr(not(M3_LX = "1"), no_std)]
 
 #[macro_use]
 pub mod io;
@@ -38,7 +38,7 @@ pub use base::sync;
 
 pub mod cap;
 pub mod client;
-#[cfg(not(feature = "linux"))]
+#[cfg(not(M3_LX = "1"))]
 pub mod compat;
 pub mod env;
 pub mod server;
@@ -48,5 +48,5 @@ pub mod test;
 pub mod tiles;
 pub mod vfs;
 
-#[cfg(feature = "linux")]
+#[cfg(M3_LX = "1")]
 pub use base::linux;

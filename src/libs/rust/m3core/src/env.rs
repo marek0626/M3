@@ -287,7 +287,7 @@ extern "Rust" {
 }
 
 pub fn init() {
-    #[cfg(feature = "linux")]
+    #[cfg(M3_LX = "1")]
     crate::linux::init();
     crate::cap::init();
     crate::syscalls::init();
@@ -296,7 +296,7 @@ pub fn init() {
     crate::io::init();
     crate::com::init();
 
-    #[cfg(feature = "linux")]
+    #[cfg(M3_LX = "1")]
     if let Some(cl) = crate::env::get().load_closure() {
         OwnActivity::exit(cl());
     }

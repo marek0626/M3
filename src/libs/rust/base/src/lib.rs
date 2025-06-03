@@ -22,7 +22,7 @@
 #![feature(maybe_uninit_write_slice)]
 #![feature(linked_list_cursors)]
 #![default_lib_allocator]
-#![cfg_attr(not(feature = "linux"), no_std)]
+#![cfg_attr(not(M3_LX = "1"), no_std)]
 
 pub extern crate alloc;
 
@@ -83,5 +83,5 @@ pub use minicov;
 
 pub use serde;
 
-#[cfg(feature = "linux")]
+#[cfg(M3_LX = "1")]
 pub use arch::linux;
