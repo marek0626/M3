@@ -372,6 +372,9 @@ run_clippy() {
             --target-dir "$rustbuild"
             -Z "build-std=core,alloc,std,panic_abort")
     elif [[ "$1" == src/rot/* ]]; then
+        if [[ "$1" == src/rot/rots/* ]]; then
+            env=(M3_ROTS)
+        fi
         target=(
             --target riscv64imc-unknown-none-elf
             --target-dir "$rustbuild"

@@ -14,4 +14,4 @@ rot = { path = "../../libs/crypto/rot" }
 kecacc = { path = "../../libs/crypto/kecacc" }
 heapsimple = { path = "../../libs/rust/heapsimple" }
 m3core = { path = "../../libs/rust/m3core" }
-unimux = { path = "../../unimux", features = ["rots"] }
+unimux = { path = "../../unimux" }

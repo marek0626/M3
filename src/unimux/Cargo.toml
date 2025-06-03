@@ -15,10 +15,6 @@ mux = { path = "../libs/rust/mux" }
 paging = { path = "../libs/rust/paging" }
 num_enum = { version = "0.6.1", default-features = false }
 
-[features]
-default = []
-rots = []
-
 [dependencies.num-traits]
 version = "0.2.15"
 default-features = false
