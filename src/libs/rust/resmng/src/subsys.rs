@@ -736,7 +736,16 @@ impl Subsystem {
             }
 
             let mut child = childs.remove(idx);
-            starter.start_async(reqs, res, &mut child)?;
+            // add new workloop thread for the child's start and to handle its requests
+            // NOTE: this assumes that start_async does not do an async call *after* the child has
+            // started, because otherwise we might not have enough threads.
+            childmng.add_workloop_thread();
+
+            if let Err(e) = starter.start_async(reqs, res, &mut child) {
+                childmng.remove_workloop_thread();
+                return Err(e);
+            }
+
             childmng.add(child);
             new_wait = true;
         }

@@ -28,7 +28,7 @@ use m3::format;
 use m3::io::LogFlags;
 use m3::kif::{self, CapRngDesc, CapType, Perm};
 use m3::log;
-use m3::mem::{GlobOff, MsgBuf};
+use m3::mem::{GlobOff, MsgBuf, VirtAddr};
 use m3::println;
 use m3::quota::{Id as QuotaId, Quota};
 use m3::rc::Rc;
@@ -1081,6 +1081,7 @@ bitflags! {
 pub struct ChildManager {
     flags: Flags,
     childs: Treap<Id, Box<dyn Child>>,
+    workloop_args: Option<(VirtAddr, usize)>,
     ids: Vec<Id>,
     next_id: Id,
     daemons: usize,
@@ -1089,9 +1090,10 @@ pub struct ChildManager {
 
 impl Default for ChildManager {
     fn default() -> Self {
-        ChildManager {
+        Self {
             flags: Flags::STARTING,
             childs: Treap::new(),
+            workloop_args: None,
             ids: Vec::new(),
             next_id: 0,
             daemons: 0,
@@ -1128,6 +1130,28 @@ impl ChildManager {
         let id = self.next_id;
         self.next_id += 1;
         id
+    }
+
+    /// Sets the address of the workloop function and its argument
+    ///
+    /// As a side effect, calling this method will automatically create and remove threads when
+    /// childs are added and removed, respectively.
+    pub fn set_workloop(&mut self, addr: VirtAddr, arg: usize) {
+        self.workloop_args = Some((addr, arg));
+    }
+
+    pub fn add_workloop_thread(&mut self) {
+        if let Some((addr, arg)) = self.workloop_args {
+            // create new workloop thread to be prepared for one more client
+            #[cfg_attr(dylint_lib = "m3_lints", allow(async_alias))]
+            thread::add_thread(addr, arg);
+        }
+    }
+
+    pub fn remove_workloop_thread(&mut self) {
+        if self.workloop_args.is_some() {
+            thread::remove_thread();
+        }
     }
 
     pub fn add(&mut self, child: Box<dyn Child>) {
@@ -1462,6 +1486,7 @@ impl ChildManager {
 
         child.res_mut().childs.push((nid, act_sel));
         self.add(nchild);
+        self.add_workloop_thread();
         Ok(nid)
     }
 
@@ -1537,6 +1562,7 @@ impl ChildManager {
             if child.foreign() {
                 self.foreigns -= 1;
             }
+            self.remove_workloop_thread();
 
             log!(LogFlags::ResMngChild, "Removed child '{}'", child.name());
 

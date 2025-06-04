@@ -346,14 +346,10 @@ pub fn main() -> Result<(), Error> {
     };
 
     thread::init();
-    for _ in 0..args.max_clients {
-        #[cfg_attr(dylint_lib = "m3_lints", allow(async_alias))]
-        thread::add_thread(
-            VirtAddr::from(workloop_async as *const ()),
-            &mut wargs as *mut _ as usize,
-        );
-    }
-
+    let arg_addr = &mut wargs as *mut _ as usize;
+    wargs
+        .childmng
+        .set_workloop(VirtAddr::from(workloop_async as *const ()), arg_addr);
     wargs.childmng.start_waiting(1);
 
     workloop_async(&mut wargs);

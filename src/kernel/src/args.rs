@@ -17,6 +17,8 @@ use base::cell::{LazyStaticRefCell, Ref};
 use base::cfg;
 use base::col::Vec;
 use base::env;
+use base::io::LogFlags;
+use base::log;
 use base::tcu::TileId;
 use base::util::parse;
 
@@ -54,24 +56,28 @@ pub fn parse() {
 
     let mut i = 1;
     let argv: Vec<&str> = env::args().collect();
+    log!(LogFlags::Info, "Kernel arguments: {:?}", argv);
     while i < argv.len() {
-        if argv[i] == "-m" {
+        if argv[i] == "--kmem" {
             let kmem = get_size_arg(&argv, &mut i);
             if kmem <= cfg::FIXED_KMEM {
                 usage();
             }
             args.kmem = kmem;
         }
-        else if argv[i] == "-r:eps" {
+        else if argv[i] == "--root-eps" {
             let ep_count = get_size_arg(&argv, &mut i);
             if ep_count == 0 {
                 usage();
             }
             args.root_eps = ep_count;
         }
-        else if argv[i] == "--root" {
+        else if argv[i] == "--root-tile" {
             let tile_id = get_size_arg(&argv, &mut i) as u16;
             args.root_tile = Some(TileId::new_from_raw(tile_id));
+        }
+        else {
+            panic!("Unknown kernel argument: {}", argv[i]);
         }
         i += 1;
     }
@@ -81,8 +87,10 @@ pub fn parse() {
 
 fn usage() -> ! {
     panic!(
-        "\nUsage: {} [-m <kmem>]
-          -m: the kernel memory size (> FIXED_KMEM)",
+        "\nUsage: {} [--kmem <kmem>] [--root-eps <count>] [--root-tile <tile>]
+          --kmem: the kernel memory size (> FIXED_KMEM)
+          --root-eps: the number of EPs for root
+          --root-tile: the tile for root as a raw TileId (e.g., 3)",
         env::args().next().unwrap()
     );
 }

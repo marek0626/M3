@@ -303,7 +303,7 @@ class M3Env(Env):
                 env.install(gen, outdir=env['RUSTLIBS'], input=lib)
 
     def rust_exe(self, gen, out, deps=[], dir=None):
-        deps += env.glob(gen, '**/*.rs') + [SourcePath.new(self, 'Cargo.toml')]
+        deps += self.glob(gen, '**/*.rs') + [SourcePath.new(self, 'Cargo.toml')]
         return Env.rust_exe(self, gen, out, deps=deps, dir=dir)
 
     def m3_rust_lib(self, gen):
@@ -324,7 +324,7 @@ class M3Env(Env):
         # potentially used crates
         for cr in rustlibs:
             deps += [SourcePath(cr + '/Cargo.toml')]
-            deps += env.glob(gen, SourcePath(cr + '/**/*.rs'))
+            deps += self.glob(gen, SourcePath(cr + '/**/*.rs'))
         return deps
 
     def rust_deps_crate(self, glob=True):

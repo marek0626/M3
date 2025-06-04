@@ -191,7 +191,7 @@ get_kernel() {
         xmllint --xpath "//config/dom/app/@*" "$1" | gawk 'match($0, /(\S+?)="(.*?)"/, m) {
             if (m[1] != "args") {
                 if (m[1] == "eps")
-                    printf(" -r:%s %s", m[1], m[2])
+                    printf(" --root-eps %s", m[2])
                 else {
                     print("Unsupported argument for root:", m[1]) > "/dev/stderr"
                     exit 1

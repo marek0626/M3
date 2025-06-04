@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <config>
-    <kernel args="kernel -m 16M"/>
+    <kernel args="kernel --kmem 16M"/>
     <dom>
         <app args="root">
             <dom>
