@@ -17,6 +17,8 @@ use base::cell::{LazyStaticRefCell, Ref};
 use base::cfg;
 use base::col::Vec;
 use base::env;
+use base::io::LogFlags;
+use base::log;
 use base::tcu::TileId;
 use base::util::parse;
 
@@ -54,6 +56,7 @@ pub fn parse() {
 
     let mut i = 1;
     let argv: Vec<&str> = env::args().collect();
+    log!(LogFlags::Info, "Kernel arguments: {:?}", argv);
     while i < argv.len() {
         if argv[i] == "--kmem" {
             let kmem = get_size_arg(&argv, &mut i);
