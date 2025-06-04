@@ -73,6 +73,9 @@ pub fn parse() {
             let tile_id = get_size_arg(&argv, &mut i) as u16;
             args.root_tile = Some(TileId::new_from_raw(tile_id));
         }
+        else {
+            panic!("Unknown kernel argument: {}", argv[i]);
+        }
         i += 1;
     }
 
