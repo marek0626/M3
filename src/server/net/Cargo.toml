@@ -3,6 +3,7 @@ name = "net"
 version = "0.1.0"
 authors = ["Tendsin Mende <tendsin@protonmail.com>"]
 edition = "2021"
+build = "../../build.rs"
 
 [lib]
 path = "src/net.rs"
