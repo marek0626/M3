@@ -135,9 +135,9 @@ fn load_kernel_env(ctx: &crate::RosaPrivateLayerCtx, cfg: &rot::RosaLayerCfg) {
     let mut env_off = mem::size_of::<BootEnv>() as GlobOff;
     let kernel_cmdline = util::cstr_slice_to_str(&cfg.data.kernel_cmdline);
 
-    // append "--root <root-tile>" to the arguments
+    // append "--root-tile <root-tile>" to the arguments
     let mut kargs = kernel_cmdline.split(' ').collect::<Vec<_>>();
-    kargs.push("--root");
+    kargs.push("--root-tile");
     let root_tile_arg = format!("{}", ctx.data.root_tile.id().raw());
     kargs.push(&root_tile_arg);
 
