@@ -30,7 +30,6 @@ use base::errors::{Code, Error};
 use base::io::{self, LogFlags};
 use base::kif;
 use base::log;
-use base::machine;
 use base::mem::{MsgBuf, VirtAddr, VirtAddrRaw};
 use base::serialize::{Deserialize, M3Deserializer};
 use base::tcu;
@@ -47,7 +46,6 @@ pub extern "C" fn abort() {
 
 #[no_mangle]
 pub extern "C" fn exit(_code: i32) -> ! {
-    machine::write_coverage(0);
     loop {
         tcu::TCU::sleep().unwrap();
     }

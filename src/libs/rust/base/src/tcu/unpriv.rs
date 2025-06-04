@@ -68,7 +68,7 @@ pub enum CmdOpCode {
 }
 
 cfg_if! {
-    if #[cfg(feature = "hw22")] {
+    if #[cfg(M3_TARGET = "hw22")] {
         /// The unprivileged registers
         #[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
         #[repr(u64)]
@@ -322,10 +322,10 @@ impl TCU {
     /// Assuming that `ep` is a receive EP, the function returns whether there are unread messages.
     #[inline(always)]
     pub fn has_msgs(ep: EpId) -> bool {
-        #[cfg(any(feature = "hw22", feature = "hw23"))]
-        let unread = Self::read_ep_reg(ep, 2) >> 32;
-        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
-        let unread = Self::read_ep_reg(ep, 3);
+        let unread = match env!("M3_TARGET") {
+            "hw22" | "hw23" => Self::read_ep_reg(ep, 2) >> 32,
+            _ => Self::read_ep_reg(ep, 3),
+        };
         unread != 0
     }
 
@@ -361,14 +361,10 @@ impl TCU {
         if (r0 & 0x7) != EpType::Send.into() {
             return None;
         }
-        #[cfg(any(feature = "hw22", feature = "hw23"))]
-        let cur = (r0 >> 19) & 0x3F;
-        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
-        let cur = (r0 >> 19) & 0x7F;
-        #[cfg(any(feature = "hw22", feature = "hw23"))]
-        let max = (r0 >> 25) & 0x3F;
-        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
-        let max = (r0 >> 26) & 0x7F;
+        let (cur, max) = match env!("M3_TARGET") {
+            "hw22" | "hw23" => ((r0 >> 19) & 0x3F, (r0 >> 25) & 0x3F),
+            _ => ((r0 >> 19) & 0x7F, (r0 >> 26) & 0x7F),
+        };
         Some((cur, max))
     }
 
@@ -401,7 +397,7 @@ impl TCU {
     ///
     /// Returns `Some((<address>, <slot-size>, <slots>, <reply-EPs>))` if the EP is a receive EP or
     /// `None` otherwise.
-    pub fn recv_info(ep: EpId) -> Option<(PhysAddrRaw, u32, u32, EpId)> {
+    pub fn unpack_recv_ep(ep: EpId) -> Option<(PhysAddrRaw, u32, u32, EpId)> {
         let r0 = Self::read_ep_reg(ep, 0);
         let r1 = Self::read_ep_reg(ep, 1);
 
@@ -417,18 +413,6 @@ impl TCU {
         ))
     }
 
-    /// Marks the given message for receive endpoint `ep` as read
-    #[inline(always)]
-    pub fn ack_msg(ep: EpId, msg_off: usize) -> Result<(), Error> {
-        // ensure that we are really done with the message before acking it
-        CPU::memory_barrier();
-        Self::write_unpriv_reg(
-            UnprivReg::Command,
-            Self::build_cmd(ep, CmdOpCode::AckMsg, msg_off as Reg),
-        );
-        Self::get_error()
-    }
-
     /// Checks whether the given receive EP is sane.
     ///
     /// The function ensures that it's actually a receive EP, that the buffer is as expected, and
@@ -439,7 +423,7 @@ impl TCU {
         buf_size: usize,
         replies: bool,
     ) -> Result<(), Error> {
-        let rinfo = TCU::recv_info(ep).ok_or_else(|| Error::new(Code::KernelBroken))?;
+        let rinfo = TCU::unpack_recv_ep(ep).ok_or_else(|| Error::new(Code::KernelBroken))?;
         // check if the physical address and the buffer size is as expected (otherwise the
         // kernel could send us messages to overwrite specific areas of memory).
         if PhysAddr::new_raw(env::boot().tile_desc(), rinfo.0) != buf_addr {
@@ -474,6 +458,18 @@ impl TCU {
         Self::get_error()
     }
 
+    /// Marks the given message for receive endpoint `ep` as read
+    #[inline(always)]
+    pub fn ack_msg(ep: EpId, msg_off: usize) -> Result<(), Error> {
+        // ensure that we are really done with the message before acking it
+        CPU::memory_barrier();
+        Self::write_unpriv_reg(
+            UnprivReg::Command,
+            Self::build_cmd(ep, CmdOpCode::AckMsg, msg_off as Reg),
+        );
+        Self::get_error()
+    }
+
     /// Makes an endpoint dynamic.
     ///
     /// Dynamic EPs are not frozen if the TCU is locked and can therefore be freely changed by the
@@ -490,10 +486,10 @@ impl TCU {
         loop {
             let cmd = Self::read_unpriv_reg(UnprivReg::Command);
             if (cmd & 0xF) == CmdOpCode::Idle.into() {
-                #[cfg(any(feature = "hw22", feature = "hw23"))]
-                let err = (cmd >> 20) & 0x1F;
-                #[cfg(not(any(feature = "hw22", feature = "hw23")))]
-                let err = (cmd >> 20) & 0x3F;
+                let err = match env!("M3_TARGET") {
+                    "hw22" | "hw23" => (cmd >> 20) & 0x1F,
+                    _ => (cmd >> 20) & 0x3F,
+                };
                 return Result::from(Code::try_from(err as u32).unwrap());
             }
         }
@@ -529,24 +525,20 @@ impl TCU {
     pub fn drop_msgs_with(buf_addr: VirtAddr, ep: EpId, label: Label) {
         // we assume that the one that used the label can no longer send messages. thus, if there
         // are no messages yet, we are done.
-        #[cfg(any(feature = "hw22", feature = "hw23"))]
-        let unread = Self::read_ep_reg(ep, 3) >> 32;
-        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
-        let unread = Self::read_ep_reg(ep, 3);
+        let unread = match env!("M3_TARGET") {
+            "hw22" | "hw23" => Self::read_ep_reg(ep, 3) >> 32,
+            _ => Self::read_ep_reg(ep, 3),
+        };
         if unread == 0 {
             return;
         }
 
         let r0 = Self::read_ep_reg(ep, 0);
-        #[cfg(any(feature = "hw22", feature = "hw23"))]
-        let buf_size = 1 << ((r0 >> 35) & 0x3F);
-        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
-        let buf_size = 1 << ((r0 >> 35) & 0x7F);
+        let (buf_size, msg_size) = match env!("M3_TARGET") {
+            "hw22" | "hw23" => (1 << ((r0 >> 35) & 0x3F), (r0 >> 41) & 0x3F),
+            _ => (1 << ((r0 >> 35) & 0x7F), (r0 >> 42) & 0x3F),
+        };
 
-        #[cfg(any(feature = "hw22", feature = "hw23"))]
-        let msg_size = (r0 >> 41) & 0x3F;
-        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
-        let msg_size = (r0 >> 42) & 0x3F;
         for i in 0..buf_size {
             if (unread & (1 << i)) != 0 {
                 let msg = Self::offset_to_msg(buf_addr, i << msg_size);
@@ -559,10 +551,10 @@ impl TCU {
 
     /// Prints the given message into the gem5 log
     pub fn print(s: &[u8]) -> usize {
-        #[cfg(any(feature = "hw22", feature = "hw23"))]
-        let regs = EXT_REGS + UNPRIV_REGS + (128 * super::EP_REGS) as usize;
-        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
-        let regs = EXT_REGS + UNPRIV_REGS;
+        let regs = match env!("M3_TARGET") {
+            "hw22" | "hw23" => EXT_REGS + UNPRIV_REGS + (128 * super::EP_REGS),
+            _ => EXT_REGS + UNPRIV_REGS,
+        };
 
         let s = &s[0..cmp::min(s.len(), PRINT_REGS * mem::size_of::<Reg>() - 1)];
 
@@ -636,9 +628,9 @@ impl TCU {
     }
 
     fn build_cmd(ep: EpId, cmd: CmdOpCode, arg: Reg) -> Reg {
-        #[cfg(any(feature = "hw22", feature = "hw23"))]
-        return cmd as Reg | ((ep as Reg) << 4) | (arg << 25);
-        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
-        return cmd as Reg | ((ep as Reg) << 4) | (arg << 26);
+        match env!("M3_TARGET") {
+            "hw22" | "hw23" => cmd as Reg | ((ep as Reg) << 4) | (arg << 25),
+            _ => cmd as Reg | ((ep as Reg) << 4) | (arg << 26),
+        }
     }
 }

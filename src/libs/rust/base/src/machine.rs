@@ -22,19 +22,8 @@ use crate::cfg;
 use crate::env;
 use crate::tcu;
 
-#[cfg(feature = "coverage")]
-struct Gem5CovWriter(u64);
-
-#[cfg(feature = "coverage")]
-impl minicov::CoverageWriter for Gem5CovWriter {
-    fn write(&mut self, data: &[u8]) -> Result<(), minicov::CoverageWriteError> {
-        tcu::TCU::write_coverage(data, self.0);
-        Ok(())
-    }
-}
-
 #[cfg(all(
-    not(feature = "linux"),
+    not(M3_LX = "1"),
     not(target_arch = "riscv64"),
     not(target_arch = "riscv32")
 ))]
@@ -44,7 +33,7 @@ extern "C" {
 }
 
 #[cfg(all(
-    not(feature = "linux"),
+    not(M3_LX = "1"),
     any(target_arch = "riscv64", target_arch = "riscv32")
 ))]
 unsafe fn gem5_writefile(src: *const u8, len: u64, offset: u64, file: u64) -> u64 {
@@ -66,7 +55,7 @@ unsafe fn gem5_writefile(src: *const u8, len: u64, offset: u64, file: u64) -> u6
 }
 
 #[cfg(all(
-    not(feature = "linux"),
+    not(M3_LX = "1"),
     any(target_arch = "riscv64", target_arch = "riscv32")
 ))]
 unsafe fn gem5_shutdown(delay: u64) -> ! {
@@ -81,23 +70,13 @@ unsafe fn gem5_shutdown(delay: u64) -> ! {
     loop {}
 }
 
-pub fn write_coverage(_act: u64) {
-    #[cfg(feature = "coverage")]
-    if env::boot().platform == env::Platform::Gem5 {
-        // safety: the function is not thread-safe, but we are always single threaded.
-        unsafe {
-            minicov::capture_coverage(&mut Gem5CovWriter(_act)).unwrap();
-        }
-    }
-}
-
 pub fn write(buf: &[u8]) -> usize {
     let amount = tcu::TCU::print(buf);
-    #[cfg(all(feature = "linux", feature = "gem5"))]
+    #[cfg(all(M3_LX = "1", M3_TARGET = "gem5"))]
     unsafe {
         libc::write(1, buf.as_ptr() as *const libc::c_void, buf.len())
     };
-    #[cfg(not(feature = "linux"))]
+    #[cfg(not(M3_LX = "1"))]
     {
         use crate::cpu::{CPUOps, CPU};
         if env::boot().platform == env::Platform::Gem5 {
@@ -126,10 +105,10 @@ pub fn write(buf: &[u8]) -> usize {
 /// at least 512 KiB large.
 pub unsafe fn flush_cache() {
     // * 2 just to be sure (this code is also touching memory)
-    #[cfg(any(feature = "hw", feature = "hw22", feature = "hw23"))]
-    let (cacheline_size, cache_size) = (64, 512 * 1024 * 2);
-    #[cfg(not(any(feature = "hw", feature = "hw22", feature = "hw23")))]
-    let (cacheline_size, cache_size) = (64, (32 + 256) * 1024 * 2);
+    let (cacheline_size, cache_size) = match env!("M3_TARGET") {
+        "hw" | "hw22" | "hw23" => (64, 512 * 1024 * 2),
+        _ => (64, (32 + 256) * 1024 * 2),
+    };
 
     // ensure that we replace all cachelines in cache
     let mut addr = cfg::TILE_MEM_BASE.as_ptr::<u64>();
@@ -143,7 +122,7 @@ pub unsafe fn flush_cache() {
 
     #[cfg(all(
         not(target_arch = "riscv32"),
-        any(feature = "hw", feature = "hw22", feature = "hw23")
+        any(M3_TARGET = "hw", M3_TARGET = "hw22", M3_TARGET = "hw23")
     ))]
     unsafe {
         core::arch::asm!("fence.i");
@@ -152,7 +131,7 @@ pub unsafe fn flush_cache() {
 
 pub fn shutdown() -> ! {
     if env::boot().platform == env::Platform::Gem5 {
-        #[cfg(not(feature = "linux"))]
+        #[cfg(not(M3_LX = "1"))]
         unsafe {
             gem5_shutdown(0)
         };

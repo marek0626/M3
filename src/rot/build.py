@@ -1,13 +1,4 @@
-from ninjapie import BuildPath, SourcePath
-
-outs = [
-    "blau",
-    "brom",
-    "rosa",
-]
-dirs = [
-    "rots",
-]
+from ninjapie import Env, BuildPath
 
 
 def build(gen, env):
@@ -33,45 +24,56 @@ def build(gen, env):
         env['CRGFLAGS'] += ['--release']
 
     # riscv64imac-unknown-none-elf works too and is a standard Rust target
-    env['TRIPLE'] = env['ISA'] + 'imc-unknown-none-elf'
-    if env['TRIPLE'] == env['ISA'] + 'imc-unknown-none-elf':
-        # Non-standard target, need to build the standard library ourselves
-        env['CRGFLAGS'] += ['-Z build-std=core,alloc']
-        # Can be used to completely remove panic messages from the binary
-        # env['CRGFLAGS'] += ['-Z build-std-features=panic_immediate_abort']
+    if env['ISA'] == 'riscv64':
+        env['TRIPLE'] = 'riscv64imc-unknown-none-elf'
+    else:
+        env['TRIPLE'] = 'riscv32imc-unknown-none-elf'
 
-    # clang wants the --target to be specified without the RISC-V extensions
-    # (i.e. riscv64-... instead of riscv64imac-...). Currently, the cc Rust
-    # crate (used by minicov) only handles this for riscv64gc, but not other
-    # variants such as riscv64imac. Override the clang target explicitly to
-    # avoid "unknown target triple 'riscv64imac-unknown-none-elf'".
-    # https://github.com/rust-lang/cc-rs/blob/2447a2ba5f455c00b1563193e125b60eebbd8ebe/src/lib.rs#L1885-L1892
-    if 'TARGET_CFLAGS' in env['CRGENV']:
-        env['CRGENV']['TARGET_CFLAGS'] += ' --target=' + env['ISA'] + '-unknown-none-elf'
+    # Non-standard target, need to build the standard library ourselves
+    env['CRGFLAGS'] += ['-Z build-std=core,alloc']
+    # Can be used to completely remove panic messages from the binary
+    # env['CRGFLAGS'] += ['-Z build-std-features=panic_immediate_abort']
 
-    for d in dirs:
-        env.sub_build(gen, d)
-    env['CRGFLAGS'] += ['--features', 'rosa/' + env['TGT']]
-    cargo_ws(env, gen, outs=outs)
+    env.sub_build(gen, "rots")
 
-
-def cargo_ws(env, gen, outs):
-    env = env.clone()
-
-    deps = env.rust_deps()
-    deps += [SourcePath.new(env, '.cargo/config.toml'), SourcePath.new(env, 'Cargo.lock')]
-    deps += env.glob(gen, '**/Cargo.toml')
-    deps += env.glob(gen, '**/*.rs')
-    deps += env.glob(gen, '**/*.ld')
-
-    env['CRGFLAGS'] += ['--target', env['TRIPLE']]
-    env.add_rust_features()
-
-    outs = env.rust(gen, outs, deps)
-    for o in outs:
+    early = []
+    # TODO note that cannot build multiple packages at once when specifying RUSTCFLAGS, because the
+    # rustc command of cargo does not support that.
+    for o in ["brom", "blau", "rosa"]:
+        early.append(early_stage(env, gen, o))
+    for o in early:
         env.install(gen, outdir=env['BINDIR'], input=o)
         # Install as raw binary as well for the RoT layers
         bin = env.objcopy(gen, BuildPath.with_file_ext(env, o, 'bin'), o, type='binary')
         env.install(gen, env['BUILDDIR'] + '/rotbin', bin)
-    env.install(gen, outdir=env['BUILDDIR'] + '/rotbin', input=outs[1])
-    return outs
+    env.install(gen, outdir=env['BUILDDIR'] + '/rotbin', input=early[0])
+
+
+def early_stage(env, gen, out):
+    env = env.clone()
+
+    width = '64' if env['ISA'] == 'riscv64' else '32'
+    env['RUSTCFLAGS'] += [
+        "-C", "link-arg=-Tmemory-" + width + ".ld",
+        "-C", "link-arg=-Tlink.x",
+        "-C", "link-arg=-T../gp.ld",
+        # Avoid unneeded 4K alignment of sections
+        "-C", "link-arg=-n",
+        # Needed for backtraces, can be removed to save space
+        "-C", "force-frame-pointers=y",
+        "-Z", "llvm_module_flag=SmallDataLimit:u32:0:error",
+        # The curve25519-dalek crate has two backends: one using 32-bit operations and one using
+        # 64-bit operations. Normally this is auto-detected, but this does not seem to work for
+        # custom targets/toolchains.
+        "--cfg", '\'curve25519_dalek_bits="64"\'',
+    ]
+
+    env['CRGFLAGS'] += ['-p', out]
+    env['CRGFLAGS'] += ['--target', env['TRIPLE']]
+
+    deps = env.rust_deps_global()
+    deps += env.glob(gen, out + '/**/Cargo.toml')
+    deps += env.glob(gen, out + '/**/*.rs')
+    deps += env.glob(gen, out + '/**/*.ld')
+
+    return Env.rust_exe(env, gen, out=out, deps=deps, dir='src')

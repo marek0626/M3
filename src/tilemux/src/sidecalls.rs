@@ -215,8 +215,6 @@ fn reset_stats(_msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
 fn shutdown(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     log!(LogFlags::MuxSideCalls, "sidecall::shutdown()",);
 
-    base::machine::write_coverage(0);
-
     let mut reply_buf = MsgBuf::borrow_def();
     base::build_vmsg!(reply_buf, Code::Success, kif::tilemux::Response {
         val1: 0,

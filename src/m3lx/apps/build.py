@@ -1,3 +1,11 @@
+dirs = [
+    "lxcppbenchs",
+    "lxrustbenchs",
+    "starter",
+    "tcutest",
+]
+
+
 def build(gen, env):
-    env.lx_cargo_ws(gen, outs=['lxrustbenchs', 'starter', 'tcutest'])
-    env.sub_build(gen, 'lxcppbenchs')
+    for d in dirs:
+        env.sub_build(gen, d)

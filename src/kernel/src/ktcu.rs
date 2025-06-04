@@ -372,9 +372,9 @@ pub fn deprivilege_tile(tile: TileId) -> anyhow::Result<()> {
 
 #[allow(unused_variables)]
 pub fn get_ep_count(tile: TileId) -> anyhow::Result<usize> {
-    #[cfg(any(feature = "hw22", feature = "hw23"))]
+    #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
     return Ok(128);
-    #[cfg(not(any(feature = "hw22", feature = "hw23")))]
+    #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
     {
         let size: Reg = try_read_obj(tile, TCU::ext_reg_addr(ExtReg::EpsSize).as_goff())?;
         Ok(size as usize / (EP_REGS * mem::size_of::<Reg>()))
@@ -383,9 +383,9 @@ pub fn get_ep_count(tile: TileId) -> anyhow::Result<usize> {
 
 #[allow(unused_variables)]
 pub fn set_eps_region(tile: TileId, addr: GlobAddr, size: GlobOff) -> anyhow::Result<()> {
-    #[cfg(any(feature = "hw22", feature = "hw23"))]
+    #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
     return Err(kerrno(Code::NotSup));
-    #[cfg(not(any(feature = "hw22", feature = "hw23")))]
+    #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
     {
         // clear this region to ensure that all endpoints are invalid
         clear(addr.tile(), addr.offset(), size as usize)?;
@@ -465,12 +465,10 @@ pub fn read_ep_remote(tile: TileId, ep: EpId, regs: &mut [Reg]) -> anyhow::Resul
 }
 
 pub fn write_ep_remote(tile: TileId, ep: EpId, regs: &[Reg]) -> anyhow::Result<()> {
-    #[cfg(feature = "gem5")]
-    {
+    if env!("M3_TARGET") == "gem5" {
         try_write_slice(tile, TCU::ep_regs_addr(ep).as_goff(), regs)
     }
-    #[cfg(not(feature = "gem5"))]
-    {
+    else {
         for (i, r) in regs.iter().enumerate() {
             try_write_slice(tile, (TCU::ep_regs_addr(ep) + i * 8).as_goff(), &[*r])?;
         }
@@ -488,10 +486,10 @@ pub fn set_excl_region(
     perm: kif::Perm,
     locked: bool,
 ) -> anyhow::Result<()> {
-    #[cfg(not(feature = "gem5"))]
+    #[cfg(not(M3_TARGET = "gem5"))]
     return Ok(());
 
-    #[cfg(feature = "gem5")]
+    #[cfg(M3_TARGET = "gem5")]
     {
         let (cmd, arg1) = TCU::build_exreg_cmd(
             mem_tile,
@@ -512,10 +510,10 @@ pub fn set_excl_region(
 
 #[allow(unused)]
 pub fn invalidate_excl_region(mem_tile: TileId, idx: usize) -> anyhow::Result<()> {
-    #[cfg(not(feature = "gem5"))]
+    #[cfg(not(M3_TARGET = "gem5"))]
     return Ok(());
 
-    #[cfg(feature = "gem5")]
+    #[cfg(M3_TARGET = "gem5")]
     {
         let reg = TCU::build_ext_cmd(ExtCmdOpCode::InvExcl, idx as u64);
         do_ext_cmd(mem_tile, reg).map(|_| ())

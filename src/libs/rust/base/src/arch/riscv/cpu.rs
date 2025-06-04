@@ -74,7 +74,7 @@ impl CPUOps for RISCVCPU {
         addr.read_volatile()
     }
 
-    #[cfg(all(target_arch = "riscv32", feature = "gem5"))]
+    #[cfg(all(target_arch = "riscv32", M3_TARGET = "gem5"))]
     unsafe fn write8b(addr: *mut u64, val: u64) {
         // ensure that we write the upper half first as the lower half might trigger an action
         // (e.g., the command register)
@@ -84,7 +84,7 @@ impl CPUOps for RISCVCPU {
         addr.write_volatile((val & 0xFFFF_FFFF) as u32);
     }
 
-    #[cfg(all(target_arch = "riscv32", not(feature = "gem5")))]
+    #[cfg(all(target_arch = "riscv32", not(M3_TARGET = "gem5")))]
     unsafe fn write8b(addr: *mut u64, val: u64) {
         // same as above, but no fence here as the PicoRV32 does not support it
         let addr = addr as *mut u32;
@@ -98,7 +98,7 @@ impl CPUOps for RISCVCPU {
     }
 
     fn memory_barrier() {
-        #[cfg(any(not(target_arch = "riscv32"), feature = "gem5"))]
+        #[cfg(any(not(target_arch = "riscv32"), M3_TARGET = "gem5"))]
         core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
     }
 

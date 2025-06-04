@@ -24,7 +24,6 @@ use core::ops::Deref;
 use crate::cap::{CapFlags, Capability};
 use crate::cell::{RefCell, RefMut};
 use crate::client::ResMng;
-use crate::env;
 use crate::errors::{Code, Error};
 use crate::kif;
 use crate::rc::Rc;
@@ -78,7 +77,6 @@ impl OwnActivity {
 
     /// Exits with an unspecified error without deinitialization
     pub fn abort() -> ! {
-        base::machine::write_coverage(env::get().activity_id() as u64 + 1);
         tmif::exit(Code::Unspecified);
     }
 
@@ -94,7 +92,6 @@ impl OwnActivity {
     // Deinitializes all data structures and exits with given error
     pub fn exit_with(err: Code) -> ! {
         crate::env::deinit();
-        base::machine::write_coverage(env::get().activity_id() as u64 + 1);
         tmif::exit(err);
     }
 

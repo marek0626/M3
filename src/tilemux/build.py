@@ -6,16 +6,10 @@ def build(gen, env):
 
     # use our own start file (Entry.S)
     env['LINKFLAGS'] += ['-nostartfiles']
-
     dir = env['ISA'] if not env['ISA'].startswith('riscv') else 'riscv'
     entry_file = 'src/arch/' + dir + '/Entry.S'
     entry = env.asm(gen, out=entry_file[:-2] + '.o', ins=[entry_file])
 
-    # build tilemux outside of the workspace to use a different target spec that enables soft-float
-    lib = env.m3_cargo(gen, out='libtilemux.a', featdeps=['base', 'isr'])
-    env.install(gen, outdir=env['RUSTLIBS'], input=lib)
-
-    # link it as usual
     env.m3_rust_exe(
         gen,
         out='tilemux',
@@ -24,5 +18,4 @@ def build(gen, env):
         ldscript='isr',
         startup=entry,
         varAddr=False,
-        cargo_ws=False,
     )

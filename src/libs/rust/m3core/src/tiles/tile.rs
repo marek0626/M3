@@ -223,7 +223,7 @@ impl Tile {
                     // new Linux instance. This takes simply too long to do that dynamically, IMO.
                     // Therefore, the most sensible way to handle "clone" on m3lx is to let it
                     // always fail. Meaning, applications should provide "own" as a fallback.
-                    #[cfg(not(feature = "linux"))]
+                    #[cfg(not(M3_LX = "1"))]
                     {
                         if let Ok(tile) = Self::new_with(own.desc(), args) {
                             return Ok(tile);
@@ -232,7 +232,7 @@ impl Tile {
                 },
                 "compat" => {
                     // same as for "clone"
-                    #[cfg(not(feature = "linux"))]
+                    #[cfg(not(M3_LX = "1"))]
                     {
                         let type_isa = TileDesc::new(own.desc().tile_type(), own.desc().isa(), 0);
                         if let Ok(tile) = Self::new_with(type_isa, args) {

@@ -2,9 +2,10 @@
 name = "blau"
 version = "0.1.0"
 edition = "2021"
+build = "../build-layer.rs"
 
 [dependencies]
-base.workspace = true
-lang.workspace = true
-rot.workspace = true
-riscv-rt.workspace = true
+base = { path = "../../libs/rust/base", features = ["rot"] }
+lang = { path = "../../libs/rust/lang" }
+rot = { path = "../../libs/crypto/rot" }
+riscv-rt = { version = "0.12.0", features = ["single-hart"] }

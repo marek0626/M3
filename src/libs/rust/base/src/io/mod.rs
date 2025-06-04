@@ -67,11 +67,12 @@ macro_rules! log {
 /// logging flags are set in the environment variable LOG.
 #[inline(always)]
 pub fn should_log(flag: LogFlags) -> bool {
-    #[cfg(feature = "bench")]
-    let res = flag == LogFlags::Info || flag == LogFlags::Error;
-    #[cfg(not(feature = "bench"))]
-    let res = log::flags().contains(flag);
-    res
+    if env!("M3_BUILD") == "bench" {
+        flag == LogFlags::Info || flag == LogFlags::Error
+    }
+    else {
+        log::flags().contains(flag)
+    }
 }
 
 /// Helper for the log macro to keep the amount of additional code for logging at a minimum

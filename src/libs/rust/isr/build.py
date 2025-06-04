@@ -15,4 +15,4 @@ def build(gen, env):
                                    str(sf) + '-nostackswitch', ins=files)
             env2.install_as(gen, env['LIBDIR'] + '/libisr-nostackswitch.a', lib2)
 
-    env.m3_rust_lib(gen, features=["isr/" + env['TGT']])
+    env.m3_rust_lib(gen)

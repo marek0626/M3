@@ -48,18 +48,18 @@ pub type Reg = u64;
 /// An endpoint id
 pub type EpId = u16;
 /// A TCU label used in send EPs
-#[cfg(feature = "hw22")]
+#[cfg(M3_TARGET = "hw22")]
 pub type Label = u32;
-#[cfg(not(feature = "hw22"))]
+#[cfg(not(M3_TARGET = "hw22"))]
 pub type Label = u64;
 /// A activity id
 pub type ActId = u16;
 /// A tile-generation id
 pub type GenId = u16;
 
-#[cfg(feature = "gem5")]
+#[cfg(M3_TARGET = "gem5")]
 pub const EXREG_REGS: usize = 16;
-#[cfg(not(feature = "gem5"))]
+#[cfg(not(M3_TARGET = "gem5"))]
 pub const EXREG_REGS: usize = 0;
 pub const PMEM_PROT_EPS: usize = 4;
 pub const TILEMUX_EPS: usize = 4;
@@ -106,13 +106,13 @@ pub const MMIO_PRIV_SIZE: usize = cfg::PAGE_SIZE;
 /// The number of PRINT registers
 pub const PRINT_REGS: usize = 32;
 cfg_if! {
-    if #[cfg(feature = "hw22")] {
+    if #[cfg(M3_TARGET = "hw22")] {
         /// The number of external registers
         pub const EXT_REGS: usize = 2;
         /// The number of unprivileged registers
         pub const UNPRIV_REGS: usize = 5;
     }
-    else if #[cfg(feature = "hw23")] {
+    else if #[cfg(M3_TARGET = "hw23")] {
         /// The number of external registers
         pub const EXT_REGS: usize = 3;
         /// The number of unprivileged registers
@@ -126,7 +126,7 @@ cfg_if! {
     }
 }
 cfg_if! {
-    if #[cfg(any(feature = "hw22", feature = "hw23"))] {
+    if #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))] {
         /// The number of registers per EP
         pub const EP_REGS: usize = 3;
 
@@ -223,33 +223,33 @@ pub struct TCU {}
 impl TCU {
     /// Returns all MMIO areas that need to be mapped
     pub fn mmio_areas() -> [(VirtAddr, usize, PageFlags); 3] {
-        #[cfg(any(feature = "hw22", feature = "hw23"))]
-        return [
-            (MMIO_ADDR, cfg::PAGE_SIZE * 2, PageFlags::U | PageFlags::RW),
-            (
-                MMIO_PRIV_ADDR,
-                cfg::PAGE_SIZE * 2,
-                PageFlags::U | PageFlags::RW,
-            ),
-            (VirtAddr::null(), 0, PageFlags::empty()),
-        ];
-        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
-        return [
-            (MMIO_ADDR, MMIO_SIZE, PageFlags::U | PageFlags::RW),
-            (MMIO_PRIV_ADDR, MMIO_PRIV_SIZE, PageFlags::U | PageFlags::RW),
-            (
-                MMIO_EPS_ADDR,
-                Self::endpoints_size(),
-                PageFlags::U | PageFlags::R,
-            ),
-        ];
+        match env!("M3_TARGET") {
+            "hw22" | "hw23" => [
+                (MMIO_ADDR, cfg::PAGE_SIZE * 2, PageFlags::U | PageFlags::RW),
+                (
+                    MMIO_PRIV_ADDR,
+                    cfg::PAGE_SIZE * 2,
+                    PageFlags::U | PageFlags::RW,
+                ),
+                (VirtAddr::null(), 0, PageFlags::empty()),
+            ],
+            _ => [
+                (MMIO_ADDR, MMIO_SIZE, PageFlags::U | PageFlags::RW),
+                (MMIO_PRIV_ADDR, MMIO_PRIV_SIZE, PageFlags::U | PageFlags::RW),
+                (
+                    MMIO_EPS_ADDR,
+                    Self::endpoints_size(),
+                    PageFlags::U | PageFlags::R,
+                ),
+            ],
+        }
     }
 
     /// Returns the size of the endpoints region (according to the EPS_SIZE register)
     pub fn endpoints_size() -> usize {
-        #[cfg(any(feature = "hw22", feature = "hw23"))]
+        #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
         return 128 * EP_REGS * mem::size_of::<Reg>();
-        #[cfg(not(any(feature = "hw22", feature = "hw23")))]
+        #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
         return Self::read_reg(ExtReg::EpsSize as usize) as usize;
     }
 
@@ -270,12 +270,12 @@ impl TCU {
 
     /// Writes the given address and size into the Data register
     pub fn write_data(addr: VirtAddr, size: usize) {
-        #[cfg(feature = "hw22")]
+        #[cfg(M3_TARGET = "hw22")]
         Self::write_unpriv_reg(
             UnprivReg::Data,
             (size as Reg) << 32 | addr.as_local() as Reg,
         );
-        #[cfg(not(feature = "hw22"))]
+        #[cfg(not(M3_TARGET = "hw22"))]
         {
             Self::write_unpriv_reg(UnprivReg::DataAddr, addr.as_local() as Reg);
             Self::write_unpriv_reg(UnprivReg::DataSize, size as Reg);
@@ -284,12 +284,12 @@ impl TCU {
 
     /// Returns the contents of the Data register (address and size)
     pub fn read_data() -> (usize, usize) {
-        #[cfg(feature = "hw22")]
+        #[cfg(M3_TARGET = "hw22")]
         {
             let data = Self::read_unpriv_reg(UnprivReg::Data);
             ((data & 0xFFFF_FFFF) as usize, (data >> 32) as usize)
         }
-        #[cfg(not(feature = "hw22"))]
+        #[cfg(not(M3_TARGET = "hw22"))]
         {
             (
                 Self::read_unpriv_reg(UnprivReg::DataAddr) as usize,

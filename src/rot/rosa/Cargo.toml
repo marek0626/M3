@@ -2,18 +2,12 @@
 name = "rosa"
 version = "0.1.0"
 edition = "2021"
+build = "../build-layer.rs"
 
 [dependencies]
-base.workspace = true
-lang.workspace = true
-rot.workspace = true
-kecacc.workspace = true
-riscv-rt.workspace = true
-talc.workspace = true
-
-[features]
-default = []
-gem5 = ["base/gem5"]
-hw = ["base/hw"]
-hw22 = ["base/hw22"]
-hw23 = ["base/hw23"]
+base = { path = "../../libs/rust/base", features = ["rot"] }
+lang = { path = "../../libs/rust/lang" }
+rot = { path = "../../libs/crypto/rot" }
+kecacc = { path = "../../libs/crypto/kecacc" }
+riscv-rt = { version = "0.12.0", features = ["single-hart"] }
+talc = { version = "4.2.0", default-features = false, features = ["lock_api"] }

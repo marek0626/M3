@@ -222,7 +222,7 @@ pub extern "C" fn tmcall(state: &mut arch::State) -> *mut libc::c_void {
 #[no_mangle]
 pub extern "C" fn init() -> usize {
     // copy the environment from earlier stages if we are the RoT
-    #[cfg(feature = "rots")]
+    #[cfg(M3_ROTS = "1")]
     {
         let rot_env: &BootEnv = unsafe { &*(cfg::ENV_START_ROT.as_ptr()) };
         let rots_env: &mut BootEnv = unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) };

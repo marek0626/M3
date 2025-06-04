@@ -56,7 +56,7 @@ pub enum PrivCmdOpCode {
 }
 
 cfg_if! {
-    if #[cfg(feature = "hw22")] {
+    if #[cfg(M3_TARGET = "hw22")] {
         pub const CU_REQ_TYPE_MASK: Reg = 0x3;
 
         #[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
@@ -120,9 +120,9 @@ impl CUReq {
     pub fn new_foreign_receive(req: Reg) -> Self {
         Self::ForeignReceive {
             act: (req >> 48) as u16,
-            #[cfg(feature = "hw22")]
+            #[cfg(M3_TARGET = "hw22")]
             ep: ((req >> 2) & 0xFFFF) as EpId,
-            #[cfg(not(feature = "hw22"))]
+            #[cfg(not(M3_TARGET = "hw22"))]
             ep: ((req >> 3) & 0xFFFF) as EpId,
         }
     }
@@ -171,7 +171,7 @@ impl TCU {
 
     /// Enables CU requests in case of PMP failures
     pub fn enable_pmp_cureqs() {
-        #[cfg(not(feature = "hw22"))]
+        #[cfg(not(M3_TARGET = "hw22"))]
         Self::write_priv_reg(PrivReg::PrivCtrl, PrivCtrl::PMP_FAILURES.bits());
     }
 
@@ -237,14 +237,16 @@ impl TCU {
     /// Error type here, because that causes a heap allocation in debug mode and is used in the
     /// paging code.
     pub fn invalidate_page_unchecked(asid: u16, virt: VirtAddr) {
-        #[cfg(feature = "hw22")]
-        let val = ((asid as Reg) << 41)
-            | ((virt.as_local() as Reg) << 9)
-            | (PrivCmdOpCode::InvPage as Reg);
-        #[cfg(not(feature = "hw22"))]
-        let val = {
-            Self::write_priv_reg(PrivReg::PrivCmdArg, virt.as_local() as Reg);
-            ((asid as Reg) << 9) | (PrivCmdOpCode::InvPage as Reg)
+        let val = match env!("M3_TARGET") {
+            "hw22" => {
+                ((asid as Reg) << 41)
+                    | ((virt.as_local() as Reg) << 9)
+                    | (PrivCmdOpCode::InvPage as Reg)
+            },
+            _ => {
+                Self::write_priv_reg(PrivReg::PrivCmdArg, virt.as_local() as Reg);
+                ((asid as Reg) << 9) | (PrivCmdOpCode::InvPage as Reg)
+            },
         };
 
         Self::write_priv_reg(PrivReg::PrivCmd, val);
@@ -258,21 +260,21 @@ impl TCU {
         phys: PhysAddr,
         flags: PageFlags,
     ) -> Result<(), Error> {
-        #[cfg(feature = "hw22")]
-        let tlb_flags = flags.bits() as Reg;
-        #[cfg(not(feature = "hw22"))]
-        let tlb_flags = {
-            let mut tlb_flags = 0 as Reg;
-            if flags.contains(PageFlags::R) {
-                tlb_flags |= 1;
-            }
-            if flags.contains(PageFlags::W) {
-                tlb_flags |= 2;
-            }
-            if flags.contains(PageFlags::FIXED) {
-                tlb_flags |= 4;
-            }
-            tlb_flags
+        let tlb_flags = match env!("M3_TARGET") {
+            "hw22" => flags.bits() as Reg,
+            _ => {
+                let mut tlb_flags = 0 as Reg;
+                if flags.contains(PageFlags::R) {
+                    tlb_flags |= 1;
+                }
+                if flags.contains(PageFlags::W) {
+                    tlb_flags |= 2;
+                }
+                if flags.contains(PageFlags::FIXED) {
+                    tlb_flags |= 4;
+                }
+                tlb_flags
+            },
         };
 
         let phys = if flags.contains(PageFlags::L) {
@@ -283,10 +285,10 @@ impl TCU {
             phys.as_raw()
         };
 
-        #[cfg(feature = "hw22")]
-        let (arg_addr, cmd_addr) = (phys, virt.as_local());
-        #[cfg(not(feature = "hw22"))]
-        let (arg_addr, cmd_addr) = (virt.as_local(), phys);
+        let (arg_addr, cmd_addr) = match env!("M3_TARGET") {
+            "hw22" => (phys as usize, virt.as_local()),
+            _ => (virt.as_local(), phys as usize),
+        };
 
         Self::write_priv_reg(PrivReg::PrivCmdArg, arg_addr as Reg);
         CPU::memory_barrier();

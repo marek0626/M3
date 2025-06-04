@@ -37,13 +37,13 @@ pub struct Header {
     reply_ep: u16,
     reply_label: Label,
     label: Label,
-    #[cfg(feature = "hw23")]
+    #[cfg(M3_TARGET = "hw23")]
     _pad: u64,
-    #[cfg(any(feature = "hw", feature = "gem5"))]
+    #[cfg(any(M3_TARGET = "hw", M3_TARGET = "gem5"))]
     sgen: u16,
-    #[cfg(any(feature = "hw", feature = "gem5"))]
+    #[cfg(any(M3_TARGET = "hw", M3_TARGET = "gem5"))]
     rgen: u16,
-    #[cfg(any(feature = "hw", feature = "gem5"))]
+    #[cfg(any(M3_TARGET = "hw", M3_TARGET = "gem5"))]
     _pad: u32,
 }
 

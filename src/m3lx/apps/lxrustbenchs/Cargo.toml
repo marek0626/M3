@@ -8,5 +8,5 @@ name = "lxrustbenchs"
 path = "src/lxrustbenchs.rs"
 
 [dependencies]
-m3core = { path = "../../../libs/rust/m3core", features = ["linux"] }
-m3files = { path = "../../../libs/rust/m3files", features = ["linux"] }
+m3core = { path = "../../../libs/rust/m3core" }
+m3files = { path = "../../../libs/rust/m3files" }

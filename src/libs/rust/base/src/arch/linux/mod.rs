@@ -84,7 +84,7 @@ pub fn init() {
     )
     .expect("Unable to map TCU MMIO region");
 
-    #[cfg(not(any(feature = "hw22", feature = "hw23")))]
+    #[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
     mmap::mmap_tcu(
         tcu_fd(),
         tcu::MMIO_EPS_ADDR,

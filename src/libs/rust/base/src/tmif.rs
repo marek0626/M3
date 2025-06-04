@@ -60,7 +60,7 @@ pub(crate) fn get_result(res: usize) -> Result<(), Error> {
 }
 
 cfg_if! {
-    if #[cfg(feature = "linux")] {
+    if #[cfg(M3_LX = "1")] {
         use libc;
 
         #[inline(always)]
