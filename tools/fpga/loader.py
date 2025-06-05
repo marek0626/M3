@@ -30,22 +30,27 @@ class Loader:
 
     def init(self, tiles: list[pm], dram: memory, kernels: list[str],
              mods: list[str], logflags: str):
+        gp_tiles = [i for i in range(0, len(tiles)) if tiles[i].type == TileType.ROCKET]
+        if len(kernels) > len(gp_tiles):
+            msg = "Insufficient general-purpose tiles (need {}, have {})".format(len(kernels),
+                                                                                 len(gp_tiles))
+            raise ValueError(msg)
+
         # load boot info into DRAM
-        kernel_tiles = kernels[0:len(tiles)]
         if self.vm:
-            mods_addr = PMP_ADDR + (len(kernel_tiles) * self.pmp_size)
+            mods_addr = PMP_ADDR + (len(kernels) * self.pmp_size)
         else:
             mods_addr = PMP_ADDR + (len(tiles) * self.pmp_size)
         self._load_boot_info(tiles, dram, mods, mods_addr)
 
         # init all tiles
+        loaded_tiles = gp_tiles[0:len(kernels)]
         for i, tile in enumerate(tiles, 0):
-            self._init_tile(dram, tile, i, i < len(kernel_tiles))
+            self._init_tile(dram, tile, i, i in loaded_tiles)
 
         # load kernels on tiles (only for Rocket cores)
-        for i, pargs in enumerate(kernel_tiles, 0):
-            if tiles[i].type == TileType.ROCKET:
-                self._load_prog(tiles, dram, i, pargs.split(' '), logflags)
+        for i, pargs in enumerate(kernels, 0):
+            self._load_prog(tiles, dram, gp_tiles[i], pargs.split(' '), logflags)
 
     def start(self, tiles: list[pm], debug: int):
         # start kernel tiles (only for Rocket cores)
