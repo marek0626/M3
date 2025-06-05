@@ -14,30 +14,27 @@
 
 MEMORY
 {
-    ROM_START (rx) : ORIGIN = 0x0b000000, LENGTH = 4K
-    ROM (rx) : ORIGIN = 0x0b002000, LENGTH = 56K
-    STACK : ORIGIN = 0x10000000, LENGTH = 8K
-    BSS : ORIGIN = 0x10002000, LENGTH = 4K
+#if __riscv_xlen == 32
+    STACK : ORIGIN = 0x0, LENGTH = 16K
+    BSS : ORIGIN = 0x4000, LENGTH = 80K
+    RAM : ORIGIN = 0x20000, LENGTH = 220K
+#else
+    STACK : ORIGIN = 0x10000000, LENGTH = 16K
+    BSS : ORIGIN = 0x10004000, LENGTH = 80K
+    RAM : ORIGIN = 0x10018000, LENGTH = 156K
+#endif
 }
 
-REGION_ALIAS("REGION_TEXT", ROM);
-REGION_ALIAS("REGION_RODATA", ROM);
-REGION_ALIAS("REGION_DATA", BSS); /* Copied from ROM at startup */
+REGION_ALIAS("REGION_TEXT", RAM);
+REGION_ALIAS("REGION_RODATA", RAM);
+REGION_ALIAS("REGION_DATA", BSS); /* Copied from RAM at startup */
 REGION_ALIAS("REGION_BSS", BSS);
 REGION_ALIAS("REGION_HEAP", BSS);
 REGION_ALIAS("REGION_STACK", STACK);
 
 /*
- * No secrets should end up in the BSS, so it should be sufficient to clear
- * the stack (_sstack). However, the BSS is quite small, so we just clear
- * everything to be sure.
+ * Secrets are cleared between stage1 and stage2 where rosa is re-entered.
+ * The initialization routine in riscv-rt copies .data and clears .bss,
+ * so there is no need to clear it again before the switch.
  */
-PROVIDE(_eclear = _ebss);
-
-SECTIONS {
-    .text.reset :
-    {
-        KEEP(*(.init.reset));
-    } > ROM_START
-}
-ENTRY(_reset);
+PROVIDE(_eclear = _sstack);

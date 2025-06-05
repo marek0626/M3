@@ -52,9 +52,9 @@ def build(gen, env):
 def early_stage(env, gen, out):
     env = env.clone()
 
-    width = '64' if env['ISA'] == 'riscv64' else '32'
+    ldconf = env.cpp(gen, out='memory-' + out + '.ld', input=out + '/memory.ld')
     env['RUSTCFLAGS'] += [
-        "-C", "link-arg=-Tmemory-" + width + ".ld",
+        "-C", "link-arg=-T" + os.path.abspath(ldconf),
         "-C", "link-arg=-Tlink.x",
         "-C", "link-arg=-T../gp.ld",
         # Avoid unneeded 4K alignment of sections
@@ -74,6 +74,6 @@ def early_stage(env, gen, out):
     deps = env.rust_deps_global()
     deps += env.glob(gen, out + '/**/Cargo.toml')
     deps += env.glob(gen, out + '/**/*.rs')
-    deps += env.glob(gen, out + '/**/*.ld')
+    deps += [ldconf]
 
     return Env.rust_exe(env, gen, out=out, deps=deps, dir='src')
