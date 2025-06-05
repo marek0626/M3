@@ -193,8 +193,12 @@ class M3Env(Env):
             libs = baselibs + m3libs + libs + ['c']
 
         if env['ISA'].startswith('riscv'):
-            crts0 = ['crt0.o', 'crtbegin.o']
-            crtsn = ['crtend.o']
+            crts0 = ['crt0.o']
+            crtsn = []
+            # crt{begin,end} are build for double float
+            if env['LIBDIR'].endswith('-hf'):
+                crts0 += ['crtbegin.o']
+                crtsn += ['crtend.o']
         else:
             crts0 = ['crt0.o', 'crt1.o', 'crtbegin.o']
             crtsn = ['crtend.o', 'crtn.o']
