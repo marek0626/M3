@@ -1,15 +1,16 @@
 def build(gen, env):
     if 'riscv' in env['ISA']:
-        dir = 'riscv' if 'riscv' in env['ISA'] else env['ISA']
-        for sf in [True, False]:
-            env = env.new(env['ISA'], sf)
-            # use our own start file (Entry.S)
-            env['LINKFLAGS'] += ['-nostartfiles']
+        for isa in ['riscv32', 'riscv64']:
+            for sf in [True, False]:
+                env = env.new(isa, sf)
+                # use our own start file (Entry.S)
+                env['LINKFLAGS'] += ['-nostartfiles']
 
-            entry_file = 'src/arch/' + dir + '/Entry.S'
-            entry = env.asm(gen, out=entry_file[:-2] + '-' + str(sf) + '.o', ins=[entry_file])
+                entry_file = 'src/arch/riscv/Entry.S'
+                suffix = '-' + isa + '-' + str(sf)
 
-            lib = env.static_lib(gen, out='unimux-' + str(sf), ins=[entry])
-            env.install_as(gen, env['LIBDIR'] + '/libunimux.a', lib)
+                entry = env.asm(gen, out=entry_file[:-2] + suffix + '.o', ins=[entry_file])
+                lib = env.static_lib(gen, out='unimux' + suffix, ins=[entry])
+                env.install_as(gen, env['LIBDIR'] + '/libunimux.a', lib)
 
         env.m3_rust_lib(gen)
