@@ -1,5 +1,4 @@
-from ninjapie import Env, BuildPath
-import os
+from ninjapie import BuildPath
 
 
 def build(gen, env):
@@ -41,46 +40,36 @@ def build(gen, env):
     # Can be used to completely remove panic messages from the binary
     # env['CRGFLAGS'] += ['-Z build-std-features=panic_immediate_abort']
 
-    env.sub_build(gen, "rots")
-
-    early = []
-    # TODO note that cannot build multiple packages at once when specifying RUSTCFLAGS, because the
-    # rustc command of cargo does not support that.
-    for o in ["brom", "blau", "rosa"]:
-        early.append(early_stage(env, gen, o))
-    for o in early:
-        env.install(gen, outdir=env['BINDIR'], input=o)
-        # Install as raw binary as well for the RoT layers
-        bin = env.objcopy(gen, BuildPath.with_file_ext(env, o, 'bin'), o, type='binary')
-        env.install(gen, env['BUILDDIR'] + '/rotbin', bin)
-    env.install(gen, outdir=env['BUILDDIR'] + '/rotbin', input=early[0])
+    for o in ["brom", "blau", "rosa", "rots"]:
+        old_cwd = env.cur_dir
+        env._cwd.path += '/' + o
+        build_stage(gen, env, o)
+        env._cwd.path = old_cwd
 
 
-def early_stage(env, gen, out):
+def build_stage(gen, env, out):
     env = env.clone()
 
-    ldconf = env.cpp(gen, out='memory-' + out + '.ld', input=out + '/memory.ld')
-    env['RUSTCFLAGS'] += [
-        "-C", "link-arg=-T" + os.path.abspath(ldconf),
-        "-C", "link-arg=-Tlink.x",
-        "-C", "link-arg=-T../gp.ld",
-        # Avoid unneeded 4K alignment of sections
-        "-C", "link-arg=-n",
-        # Needed for backtraces, can be removed to save space
-        "-C", "force-frame-pointers=y",
-        "-Z", "llvm_module_flag=SmallDataLimit:u32:0:error",
-        # The curve25519-dalek crate has two backends: one using 32-bit operations and one using
-        # 64-bit operations. Normally this is auto-detected, but this does not seem to work for
-        # custom targets/toolchains.
-        "--cfg", '\'curve25519_dalek_bits="64"\'',
-    ]
+    env['CPPFLAGS'] += ['-D__' + out + '__']
+    ldconf = env.cpp(gen, out='ld.conf', input='../ld.conf')
+    env.install_as(gen, env['LDDIR'] + '/ld-' + out + '.conf', ldconf)
 
-    env['CRGFLAGS'] += ['-p', out]
-    env['CRGFLAGS'] += ['--target', env['TRIPLE']]
+    if out == 'rots':
+        env['CRGENV']['M3_ROTS'] = '1'
+        libs = ['kecacc-xkcp', 'isr-nostackswitch', 'unimux']
+        env['LINKFLAGS'] += ['-nostartfiles']
+    else:
+        libs = []
 
-    deps = env.rust_deps_global()
-    deps += env.glob(gen, out + '/**/Cargo.toml')
-    deps += env.glob(gen, out + '/**/*.rs')
-    deps += [ldconf]
-
-    return Env.rust_exe(env, gen, out=out, deps=deps, dir='src')
+    exe = env.m3_rust_exe(
+        gen,
+        out=out,
+        libs=libs,
+        ldscript=out,
+        dir=None,
+        varAddr=False,
+    )
+    if out == 'brom':
+        env.install(gen, outdir=env['BUILDDIR'] + '/rotbin', input=exe)
+    bin = env.objcopy(gen, BuildPath.with_file_ext(env, exe, 'bin'), exe, type='binary')
+    env.install(gen, env['BUILDDIR'] + '/rotbin', bin)

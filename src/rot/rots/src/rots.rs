@@ -20,6 +20,7 @@ extern crate unimux;
 #[allow(unused_extern_crates)]
 extern crate lang;
 
+use core::arch::global_asm;
 use core::cmp::min;
 
 use base::env::{self, BaseEnv, BootEnv};
@@ -47,6 +48,13 @@ use m3core::time::{TimeDuration, TimeInstant};
 use m3core::{build_vmsg, const_assert, log, reply_vmsg};
 use rot::ed25519::Signer;
 use rot::{ed25519, Hex, OpaqueKMacKey, Secret};
+
+global_asm!(
+    ".section .init.reset, \"ax\"",
+    ".global _reset",
+    "_reset:",
+    "j      _start",
+);
 
 create_heap!(8 * 1024);
 

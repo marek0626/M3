@@ -15,7 +15,7 @@
 #![no_std]
 #![no_main]
 
-use riscv_rt::entry;
+use core::arch::global_asm;
 
 use base::io::log::LogColor;
 use base::io::{log, LogFlags};
@@ -26,14 +26,26 @@ use rot::cert::{BinaryPayload, SignaturePayload};
 use rot::ed25519::{SecretKey, Signer, SigningKey};
 use rot::{Hex, Secret};
 
+global_asm!(
+    ".section .init.reset, \"ax\"",
+    ".global _reset",
+    "_reset:",
+    "j      _start",
+);
+
 #[no_mangle]
 pub extern "C" fn exit(_code: i32) -> ! {
     log!(LogFlags::Info, "Shutting down");
     machine::shutdown();
 }
 
-#[entry]
-fn main() -> ! {
+#[no_mangle]
+pub extern "C" fn abort() {
+    exit(1);
+}
+
+#[no_mangle]
+pub extern "C" fn env_run() -> ! {
     log::init(env::boot().tile_id(), "blau", LogColor::BrightBlue);
     log!(LogFlags::RoTBoot, "Hello World");
 

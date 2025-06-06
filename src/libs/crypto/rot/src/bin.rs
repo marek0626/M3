@@ -18,16 +18,15 @@ use base::log;
 use base::mem::GlobOff;
 use base::tcu::TCU;
 
-pub const BROM_NEXT_ADDR: usize = MEM_OFFSET + 0x3000;
+pub const BROM_NEXT_ADDR: usize = MEM_OFFSET + 0x4000;
 #[cfg(target_arch = "riscv32")]
-pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x20000;
+pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x28000;
 #[cfg(target_arch = "riscv64")]
-pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x18000;
-#[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
+pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x17000;
 #[cfg(target_arch = "riscv32")]
-pub const ROSA_NEXT_ADDR: usize = BLAU_NEXT_ADDR + 0x37000; // 0x3_7000 is approx rosa text+bss
+pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x6C000;
 #[cfg(target_arch = "riscv64")]
-pub const ROSA_NEXT_ADDR: usize = BLAU_NEXT_ADDR + 0x30000; // 0x3_0000 is approx rosa text+bss
+pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x48000;
 
 /// Load a binary from flash into memory.
 ///

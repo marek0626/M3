@@ -16,8 +16,6 @@
 #![no_main]
 #![feature(asm_const)]
 
-use riscv_rt::entry;
-
 use base::io::log::LogColor;
 use base::io::{log, LogFlags};
 use base::tcu::TCU;
@@ -40,8 +38,13 @@ pub extern "C" fn exit(_code: i32) -> ! {
     machine::shutdown();
 }
 
-#[entry]
-fn main() -> ! {
+#[no_mangle]
+pub extern "C" fn abort() {
+    exit(1);
+}
+
+#[no_mangle]
+pub extern "C" fn env_run() -> ! {
     log::init(env::boot().tile_id(), "brom", LogColor::BrightRed);
     log!(LogFlags::RoTBoot, "Hello World!");
 

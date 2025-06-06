@@ -22,10 +22,11 @@ use base::kif::TileDesc;
 use base::mem::{self, AlignedBuf, GlobAddr, GlobOff};
 use base::tcu::{self, EpId, TCU};
 use base::{cfg, log, machine};
+use core::arch::global_asm;
 use core::cmp::min;
 #[allow(unused_imports)]
 use lang as _;
-use riscv_rt::entry;
+use rot::CtxData;
 
 mod idxtile;
 mod stage1;
@@ -46,6 +47,13 @@ pub struct RosaPrivateCtx {
     kernel_tile_desc: TileDesc,
     kenv_addr: GlobAddr,
 }
+
+impl CtxData for RosaPrivateCtx {
+    // Should be different from RosaCtx::MAGIC
+    const MAGIC: rot::Magic = rot::encode_magic(b"RosaCtx", 0);
+}
+
+pub type RosaPrivateLayerCtx = rot::LayerCtx<RosaPrivateCtx>;
 
 const HEAP_SIZE: usize = 32 * 1024;
 const COPY_BUF_SIZE: usize = 4 * 1024;
@@ -87,14 +95,26 @@ where
     TCU::set_ep_regs(ep, &regs);
 }
 
+global_asm!(
+    ".section .init.reset, \"ax\"",
+    ".global _reset",
+    "_reset:",
+    "j      _start",
+);
+
 #[no_mangle]
 pub extern "C" fn exit(_code: i32) -> ! {
     log!(LogFlags::Info, "Shutting down");
     machine::shutdown();
 }
 
-#[entry]
-fn main() -> ! {
+#[no_mangle]
+pub extern "C" fn abort() {
+    exit(1);
+}
+
+#[no_mangle]
+pub extern "C" fn env_run() -> ! {
     // Initialize heap allocator
     unsafe { ALLOCATOR.lock().claim(core::ptr::addr_of!(HEAP).into()) }.unwrap();
 
