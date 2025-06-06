@@ -389,7 +389,7 @@ fn lock_tile(our_tile: IndexedTile) {
         .expect("failed to write slice");
 }
 
-pub fn main() -> ! {
+pub fn run() -> crate::RosaPrivateCtx {
     log::init(env::boot().tile_id(), "rosa", LogColor::BrightMagenta);
     log!(LogFlags::RoTBoot, "Hello World");
 
@@ -538,14 +538,12 @@ pub fn main() -> ! {
     prepare_for_rots(our_tile, root_tile);
     lock_tile(our_tile);
 
-    // Continue loading in second stage after clearing secrets
-    let next_ctx = rot::LayerCtx::new(rot::ROSA_ADDR, crate::RosaPrivateCtx {
+    crate::RosaPrivateCtx {
         next: next_ctx,
         our_tile,
         kernel_tile: ktile,
         root_tile,
         kernel_tile_desc: m3.tiles[ktile.index()],
         kenv_addr: GlobAddr::new_with(mem_tile.id(), kenv_offset),
-    });
-    unsafe { next_ctx.switch() }
+    }
 }

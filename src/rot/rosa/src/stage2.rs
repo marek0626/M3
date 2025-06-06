@@ -18,15 +18,13 @@ use core::mem::size_of_val;
 use base::elf::{ElfHeaderCommon, PHType};
 use base::env::BootEnv;
 use base::errors::Error;
-use base::io::log::LogColor;
-use base::io::{log, LogFlags, Read};
+use base::io::{LogFlags, Read};
 use base::kif::Perm;
 use base::mem::{GlobOff, VirtAddr};
 use base::tcu::TCU;
 use base::util::math::round_up;
 use base::vec::Vec;
 use base::{env, format, log, mem, tcu, util};
-use rot::{self, CtxData, RosaCtx};
 
 fn write_args<S, I>(args: I, env_off: &mut GlobOff) -> (VirtAddr, usize)
 where
@@ -130,7 +128,7 @@ fn load_kernel_elf() {
     }
 }
 
-fn load_kernel_env(ctx: &crate::RosaPrivateLayerCtx, cfg: &rot::RosaLayerCfg) {
+fn load_kernel_env(ctx: &crate::RosaPrivateCtx, cfg: &rot::RosaLayerCfg) {
     // Copy kernel arguments and environment variables
     let mut env_off = mem::size_of::<BootEnv>() as GlobOff;
     let kernel_cmdline = util::cstr_slice_to_str(&cfg.data.kernel_cmdline);
@@ -138,7 +136,7 @@ fn load_kernel_env(ctx: &crate::RosaPrivateLayerCtx, cfg: &rot::RosaLayerCfg) {
     // append "--root-tile <root-tile>" to the arguments
     let mut kargs = kernel_cmdline.split(' ').collect::<Vec<_>>();
     kargs.push("--root-tile");
-    let root_tile_arg = format!("{}", ctx.data.root_tile.id().raw());
+    let root_tile_arg = format!("{}", ctx.root_tile.id().raw());
     kargs.push(&root_tile_arg);
 
     let (argv, argc) = write_args(kargs.iter(), &mut env_off);
@@ -146,12 +144,12 @@ fn load_kernel_env(ctx: &crate::RosaPrivateLayerCtx, cfg: &rot::RosaLayerCfg) {
 
     let env = BootEnv {
         platform: env::boot().platform,
-        tile_id: ctx.data.kernel_tile.id().raw() as u64,
-        tile_desc: ctx.data.kernel_tile_desc.value(),
+        tile_id: ctx.kernel_tile.id().raw() as u64,
+        tile_desc: ctx.kernel_tile_desc.value(),
         argc: argc as u64,
         argv: argv.as_raw(),
         envp: envp.as_raw(),
-        kenv: ctx.data.kenv_addr.raw(),
+        kenv: ctx.kenv_addr.raw(),
         raw_tile_count: env::boot().raw_tile_count,
         raw_tile_ids: env::boot().raw_tile_ids,
     };
@@ -159,47 +157,39 @@ fn load_kernel_env(ctx: &crate::RosaPrivateLayerCtx, cfg: &rot::RosaLayerCfg) {
     TCU::write_obj(crate::ENV_EP, &env, 0).expect("Failed to write BootEnv to kernel tile");
 }
 
-pub fn main() -> ! {
-    log::init(env::boot().tile_id(), "rosa2", LogColor::Magenta);
-    log!(LogFlags::RoTBoot, "Hello World");
-
-    let ctx = unsafe { crate::RosaPrivateLayerCtx::get() };
+pub fn run(ctx: crate::RosaPrivateCtx) -> ! {
     log!(LogFlags::RoTDbg, "{:#x?}", ctx);
     let cfg = unsafe { rot::RosaLayerCfg::get() };
 
+    // load kernel
     load_kernel_elf();
-    load_kernel_env(ctx, cfg);
+    load_kernel_env(&ctx, cfg);
 
+    // load RoTs
     log!(LogFlags::RoTDbg, "loading rots");
-    // Load ROTS
-    let _ = unsafe { rot::load_bin(rot::ROSA_ROTS_NEXT_ADDR, &cfg.data.next_layer) };
-    // Fixup context
-    ctx.entry_addr = rot::ROSA_NEXT_ADDR; // NMG This is where we load RoTS
-    ctx.magic = RosaCtx::MAGIC;
+    let _ = unsafe { rot::load_bin(rot::ROSA_NEXT_ADDR, &cfg.data.next_layer) };
 
     // invalidate all no-longer needed EPs
-    ctx.data.our_tile.invalidate_ep(rot::FLASH_EP).unwrap();
-    ctx.data.our_tile.invalidate_ep(crate::MEM_EP).unwrap();
-    ctx.data.our_tile.invalidate_ep(crate::COPY_EP).unwrap();
-    ctx.data.our_tile.invalidate_ep(crate::ENV_EP).unwrap();
-    ctx.data.our_tile.invalidate_ep(crate::SELF_EP).unwrap();
+    ctx.our_tile.invalidate_ep(rot::FLASH_EP).unwrap();
+    ctx.our_tile.invalidate_ep(crate::MEM_EP).unwrap();
+    ctx.our_tile.invalidate_ep(crate::COPY_EP).unwrap();
+    ctx.our_tile.invalidate_ep(crate::ENV_EP).unwrap();
+    ctx.our_tile.invalidate_ep(crate::SELF_EP).unwrap();
 
     log!(LogFlags::RoTBoot, "Resetting kernel tile");
-    ctx.data
-        .kernel_tile
+    ctx.kernel_tile
         .ext_cmd(tcu::TCU::build_ext_cmd(tcu::ExtCmdOpCode::Reset, 1))
         .expect("Failed to reset kernel tile");
 
     // reduce our TCU-MMIO-area permission to read-only
-    ctx.data.our_tile.init(Perm::R);
-    ctx.data.kernel_tile.init(Perm::R);
+    ctx.our_tile.init(Perm::R);
+    ctx.kernel_tile.init(Perm::R);
 
     log!(LogFlags::RoTDbg, "switch to rots");
-    let next_ctx = rot::LayerCtx::new(rot::ROSA_ROTS_NEXT_ADDR, rot::RotsCtx {
-        derived_private_key: ctx.data.next.derived_private_key.clone(),
-        kmac_cdi: ctx.data.next.kmac_cdi.clone(),
-        occupied_eps: ctx.data.next.occupied_eps,
+    let next_ctx = rot::LayerCtx::new(rot::ROSA_NEXT_ADDR, rot::RotsCtx {
+        derived_private_key: ctx.next.derived_private_key.clone(),
+        kmac_cdi: ctx.next.kmac_cdi.clone(),
+        occupied_eps: ctx.next.occupied_eps,
     });
-    // NMG Switch directly to RoTS instead of waiting for the kernel to reset/wake us.
     unsafe { next_ctx.switch() }
 }

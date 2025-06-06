@@ -26,7 +26,6 @@ use core::cmp::min;
 #[allow(unused_imports)]
 use lang as _;
 use riscv_rt::entry;
-use rot::CtxData;
 
 mod idxtile;
 mod stage1;
@@ -47,13 +46,6 @@ pub struct RosaPrivateCtx {
     kernel_tile_desc: TileDesc,
     kenv_addr: GlobAddr,
 }
-
-impl CtxData for RosaPrivateCtx {
-    // Should be different from RosaCtx::MAGIC
-    const MAGIC: rot::Magic = rot::encode_magic(b"RosaCtx", 0);
-}
-
-pub type RosaPrivateLayerCtx = rot::LayerCtx<RosaPrivateCtx>;
 
 const HEAP_SIZE: usize = 32 * 1024;
 const COPY_BUF_SIZE: usize = 4 * 1024;
@@ -106,11 +98,6 @@ fn main() -> ! {
     // Initialize heap allocator
     unsafe { ALLOCATOR.lock().claim(core::ptr::addr_of!(HEAP).into()) }.unwrap();
 
-    let ctx = unsafe { rot::LayerCtx::<()>::get() };
-    if ctx.magic == RosaPrivateCtx::MAGIC {
-        stage2::main();
-    }
-    else {
-        stage1::main()
-    }
+    let ctx = stage1::run();
+    stage2::run(ctx)
 }

@@ -24,16 +24,10 @@ pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x20000;
 #[cfg(target_arch = "riscv64")]
 pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x18000;
 #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-pub const ROSA_ADDR: usize = BLAU_NEXT_ADDR;
 #[cfg(target_arch = "riscv32")]
-pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x12000; // TileMux
+pub const ROSA_NEXT_ADDR: usize = BLAU_NEXT_ADDR + 0x37000; // 0x3_7000 is approx rosa text+bss
 #[cfg(target_arch = "riscv64")]
-pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x3000; // TileMux
-
-#[cfg(target_arch = "riscv32")]
-pub const ROSA_ROTS_NEXT_ADDR: usize = ROSA_ADDR + 0x37000; // 0x3_7000 is approx rosa text+bss
-#[cfg(target_arch = "riscv64")]
-pub const ROSA_ROTS_NEXT_ADDR: usize = ROSA_ADDR + 0x30000; // 0x3_0000 is approx rosa text+bss
+pub const ROSA_NEXT_ADDR: usize = BLAU_NEXT_ADDR + 0x30000; // 0x3_0000 is approx rosa text+bss
 
 /// Load a binary from flash into memory.
 ///
