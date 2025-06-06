@@ -42,9 +42,10 @@ pub unsafe fn load_bin(addr: usize, bin: &crate::SimpleBinaryCfg) -> &'static [u
     TCU::read(crate::FLASH_EP, ptr, size, bin.flash_offset as GlobOff)
         .expect("Failed to load RoT binary");
     log!(
-        LogFlags::RoTBoot,
-        "Loaded binary for next layer: {} bytes",
-        size
+        LogFlags::Info,
+        "Loaded binary for next layer to {:#x} .. {:#x}",
+        addr,
+        addr + size,
     );
     core::slice::from_raw_parts(ptr, size)
 }
