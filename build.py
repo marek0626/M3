@@ -16,6 +16,7 @@ bins = {
 rustapps = []
 rustlibs = []
 cargo_outs = {}
+cargo_cnt = 0
 nextenvid = 1
 if isa == 'riscv64':
     link_addr = 0x11000000
@@ -237,7 +238,7 @@ class M3Env(Env):
 
     def m3_rust_exe(self, gen, out, libs=[], dir='bin', startup=None, ldscript='default',
                     varAddr=True, std=False):
-        global cargo_outs
+        global cargo_outs, cargo_cnt
         env = self.clone()
 
         if env['TGT'] in 'gem5' and env['TRIPLE'] == 'riscv32-linux-m3-musl':
@@ -250,8 +251,12 @@ class M3Env(Env):
         # internal parallel build
         key = tgtspec
         key += '-' + ';'.join(env['CRGFLAGS'])
-        key += '-' + ';'.join(env['RUSTCFLAGS'])
         key += '-' + ';'.join(env['CRGENV'])
+        # workaround cargo limitation that "cargo rustc" does not support to build multiple packages
+        # with one command. thus, we assign a different key to every user of RUSTCFLAGS
+        if len(env['RUSTCFLAGS']) > 0:
+            key += '-' + str(cargo_cnt)
+            cargo_cnt += 1
         if key not in cargo_outs:
             cargo_outs[key] = {
                 'tgtspec': tgtspec,
