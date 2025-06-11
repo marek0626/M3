@@ -55,7 +55,7 @@ impl CtxData for RosaPrivateCtx {
 
 pub type RosaPrivateLayerCtx = rot::LayerCtx<RosaPrivateCtx>;
 
-const HEAP_SIZE: usize = 32 * 1024;
+const HEAP_SIZE: usize = 8 * 1024;
 const COPY_BUF_SIZE: usize = 4 * 1024;
 
 pub const EP_REGS_SIZE: usize = tcu::EP_REGS * mem::size_of::<tcu::Reg>();
