@@ -16,6 +16,8 @@
 #![no_main]
 #![feature(asm_const)]
 
+use core::arch::global_asm;
+
 use base::io::log::LogColor;
 use base::io::{log, LogFlags};
 use base::tcu::TCU;
@@ -30,7 +32,12 @@ static UDS: Secret<[u8; UDS_SIZE]> = Secret::new_zeroed(); // Dummy UDS (all zer
 
 const KMAC_KEY_PAD_UDS: &str = "UDS";
 
-mod asm;
+global_asm!(
+    ".section .init.reset, \"ax\"",
+    ".global _reset",
+    "_reset:",
+    "j      _start",
+);
 
 #[no_mangle]
 pub extern "C" fn exit(_code: i32) -> ! {
