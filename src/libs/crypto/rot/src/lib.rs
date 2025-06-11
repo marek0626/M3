@@ -14,9 +14,6 @@
 
 #![no_std]
 
-#[cfg(not(target_arch = "x86_64"))]
-use base::mem::{VirtAddr, VirtAddrRaw};
-
 pub use {ed25519_dalek as ed25519, serde_json as json};
 
 pub use bin::*;
@@ -35,11 +32,6 @@ pub const QUICK_BOOT: bool = false;
 pub const MEM_OFFSET: usize = 0x1000_0000;
 #[cfg(any(target_arch = "riscv32", target_arch = "x86_64"))]
 pub const MEM_OFFSET: usize = 0;
-
-#[cfg(target_arch = "riscv64")]
-pub const MEM_ENV_START: VirtAddr = VirtAddr::new((MEM_OFFSET + 0x1000) as VirtAddrRaw);
-#[cfg(target_arch = "riscv32")]
-pub const MEM_ENV_START: VirtAddr = VirtAddr::new((MEM_OFFSET + 0x1_0000) as VirtAddrRaw);
 
 pub type Magic = u64;
 

@@ -19,19 +19,20 @@ use base::elf::{ElfHeaderCommon, PHType};
 use base::env::BootEnv;
 use base::errors::Error;
 use base::io::{LogFlags, Read};
-use base::kif::Perm;
+use base::kif::{Perm, TileDesc, TileISA};
 use base::mem::{GlobOff, VirtAddr};
 use base::tcu::TCU;
 use base::util::math::round_up;
 use base::vec::Vec;
 use base::{env, format, log, mem, tcu, util};
 
-fn write_args<S, I>(args: I, env_off: &mut GlobOff) -> (VirtAddr, usize)
+fn write_args<S, I>(tile_desc: TileDesc, args: I, env_off: &mut GlobOff) -> (VirtAddr, usize)
 where
     S: AsRef<str>,
     I: IntoIterator<Item = S>,
 {
-    let (arg_buf, arg_ptrs, _) = env::collect_args(args, rot::MEM_ENV_START + *env_off);
+    let env_start = crate::mem_env_start(tile_desc);
+    let (arg_buf, arg_ptrs, _) = env::collect_args(args, env_start + *env_off);
     TCU::write_slice(crate::ENV_EP, &arg_buf[..], *env_off)
         .expect("Failed to write arguments to kernel tile");
     *env_off = round_up(
@@ -40,7 +41,7 @@ where
     );
     TCU::write_slice(crate::ENV_EP, &arg_ptrs[..], *env_off)
         .expect("Failed to write argument pointers to kernel tile");
-    let argp = rot::MEM_ENV_START + *env_off;
+    let argp = env_start + *env_off;
     *env_off += mem::size_of_val(&arg_ptrs[..]) as GlobOff;
     (argp, arg_ptrs.len() - 1)
 }
@@ -63,7 +64,7 @@ impl Read for TCUReader {
     }
 }
 
-fn load_kernel_elf() {
+fn load_kernel_elf(ctx: &crate::RosaPrivateCtx) {
     let mut rd = TCUReader { off: 0 };
 
     log!(LogFlags::RoTBoot, "Loading kernel");
@@ -94,7 +95,7 @@ fn load_kernel_elf() {
         assert!(phdr.mem_size() >= phdr.file_size());
 
         let mut size = phdr.mem_size();
-        let mut off = (phdr.phys_addr() - rot::MEM_OFFSET) as GlobOff;
+        let mut off = (phdr.phys_addr() - ctx.kernel_tile_desc.mem_offset()) as GlobOff;
         if phdr.file_size() > 0 {
             let mut copy = min(size, phdr.file_size());
             size -= copy;
@@ -117,14 +118,17 @@ fn load_kernel_elf() {
     }
 
     // for RISCV32 the execution starts at 0 and we need to jump to the actual entrypoint
-    #[cfg(target_arch = "riscv32")]
-    {
+    if ctx.kernel_tile_desc.isa() == TileISA::RISCV32 {
         let trampoline: [u32; 2] = [
             0x0001_22b7, // lui t0, 0x12 = 0x12000
             0x0000_8282, // jr  t0
         ];
-        TCU::write_slice(crate::MEM_EP, &trampoline, rot::MEM_OFFSET as GlobOff)
-            .expect("Failed to write kernel trampoline");
+        TCU::write_slice(
+            crate::MEM_EP,
+            &trampoline,
+            ctx.kernel_tile_desc.mem_offset() as GlobOff,
+        )
+        .expect("Failed to write kernel trampoline");
     }
 }
 
@@ -139,8 +143,8 @@ fn load_kernel_env(ctx: &crate::RosaPrivateCtx, cfg: &rot::RosaLayerCfg) {
     let root_tile_arg = format!("{}", ctx.root_tile.id().raw());
     kargs.push(&root_tile_arg);
 
-    let (argv, argc) = write_args(kargs.iter(), &mut env_off);
-    let (envp, _) = write_args(env::Vars::default(), &mut env_off);
+    let (argv, argc) = write_args(ctx.kernel_tile_desc, kargs.iter(), &mut env_off);
+    let (envp, _) = write_args(ctx.kernel_tile_desc, env::Vars::default(), &mut env_off);
 
     let env = BootEnv {
         platform: env::boot().platform,
@@ -162,7 +166,7 @@ pub fn run(ctx: crate::RosaPrivateCtx) -> ! {
     let cfg = unsafe { rot::RosaLayerCfg::get() };
 
     // load kernel
-    load_kernel_elf();
+    load_kernel_elf(&ctx);
     load_kernel_env(&ctx, cfg);
 
     // load RoTs

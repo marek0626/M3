@@ -18,8 +18,8 @@
 use base::cell::StaticUnsafeCell;
 use base::errors::Error;
 use base::io::LogFlags;
-use base::kif::TileDesc;
-use base::mem::{self, AlignedBuf, GlobAddr, GlobOff};
+use base::kif::{TileDesc, TileISA};
+use base::mem::{self, AlignedBuf, GlobAddr, GlobOff, VirtAddr};
 use base::tcu::{self, EpId, TCU};
 use base::{cfg, log, machine};
 use core::arch::global_asm;
@@ -75,6 +75,15 @@ static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
 #[global_allocator]
 static ALLOCATOR: talc::Talck<talc::locking::AssumeUnlockable, talc::ErrOnOom> =
     talc::Talc::new(talc::ErrOnOom).lock();
+
+pub fn mem_env_start(ktile: TileDesc) -> VirtAddr {
+    let off = match ktile.isa() {
+        TileISA::RISCV32 => 0x1_0000,
+        TileISA::RISCV64 => 0x1000,
+        _ => unimplemented!(),
+    };
+    VirtAddr::from(ktile.mem_offset() + off)
+}
 
 pub fn clear_mem(mut off: GlobOff, mut size: usize) -> Result<(), Error> {
     while size > 0 {

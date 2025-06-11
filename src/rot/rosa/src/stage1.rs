@@ -516,7 +516,7 @@ pub fn run() -> crate::RosaPrivateCtx {
             rot::TCU_ACT_ID,
             ktile.id(),
             0,
-            rot::MEM_OFFSET as GlobOff,
+            m3.tiles[ktile.index()].mem_offset() as GlobOff,
             m3.kernel.mem_size as usize,
             Perm::W,
         )
@@ -528,7 +528,7 @@ pub fn run() -> crate::RosaPrivateCtx {
             rot::TCU_ACT_ID,
             ktile.id(),
             0,
-            rot::MEM_ENV_START.as_goff(),
+            crate::mem_env_start(m3.tiles[ktile.index()]).as_goff(),
             cfg::ENV_SIZE,
             Perm::W,
         )
