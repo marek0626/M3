@@ -432,7 +432,7 @@ impl ChildActivity {
         closure: Option<VirtAddr>,
         entry: VirtAddr,
     ) -> Result<(), Error> {
-        let (env_start, env_size) = env::boot().tile_desc().env_space();
+        let (env_start, env_size) = self.tile_desc().env_space();
         let mem = self.get_mem(env_start, env_size as GlobOff, kif::Perm::RW)?;
 
         // build child environment
