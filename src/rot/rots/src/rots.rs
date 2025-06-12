@@ -96,20 +96,20 @@ fn check_std_endpoints() {
 
 #[no_mangle]
 pub extern "C" fn env_run() -> ! {
-    let rom_env: &BootEnv = unsafe { &*(cfg::ENV_START_ROT.as_ptr()) };
     let rots_env_src: &BaseEnv =
         unsafe { &*((cfg::ENV_START.as_local() + cfg::ENV_SIZE / 2) as *const _) };
     let rots_env: &mut BaseEnv = unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) };
 
-    // overwrite everything with default values
-    *rots_env = BaseEnv::default();
-
-    // copy boot env from previous stages
-    rots_env.boot = *rom_env;
+    // initialize the non-boot fields
+    *rots_env = env::BaseEnv {
+        boot: rots_env.boot,
+        ..Default::default()
+    };
 
     // hard code the arguments here
     rots_env.boot.argc = 1;
     rots_env.boot.argv = (cfg::ENV_START.as_local() + size_of::<BaseEnv>()) as u64;
+    rots_env.boot.envp = rots_env_src.boot.envp;
     let argv = rots_env.boot.argv as *mut *const u8;
     unsafe {
         *argv = b"rots\0".as_ptr();
