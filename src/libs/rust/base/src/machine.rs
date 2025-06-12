@@ -137,10 +137,11 @@ pub fn shutdown() -> ! {
         };
     }
     else {
-        #[cfg(target_arch = "riscv64")]
+        // wfi is actually not supported, but it makes the instruction trace stop
+        #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
         unsafe {
-            core::arch::asm!("1: j 1b")
-        };
+            core::arch::asm!("1: wfi", "j 1b");
+        }
     }
     unreachable!();
 }
