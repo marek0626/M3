@@ -38,13 +38,13 @@ pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x48000;
 pub unsafe fn load_bin(addr: usize, bin: &crate::SimpleBinaryCfg) -> &'static [u8] {
     let size = bin.size as usize;
     let ptr = addr as *mut u8;
-    TCU::read(crate::FLASH_EP, ptr, size, bin.flash_offset as GlobOff)
-        .expect("Failed to load RoT binary");
     log!(
         LogFlags::Info,
         "Loaded binary for next layer to {:#x} .. {:#x}",
         addr,
         addr + size,
     );
+    TCU::read(crate::FLASH_EP, ptr, size, bin.flash_offset as GlobOff)
+        .expect("Failed to load RoT binary");
     core::slice::from_raw_parts(ptr, size)
 }
