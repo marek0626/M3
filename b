@@ -355,7 +355,7 @@ get_isa() {
     elif [[ "$file" = *64-bit*RISC-V* ]]; then
         isa="riscv64"
     else
-        isa="unknown"
+        isa="$M3_ISA"
     fi
     echo $isa
 }
