@@ -144,7 +144,7 @@ static CTX: LazyReadOnlyCell<RotsCtx> = LazyReadOnlyCell::default();
 
 /// Size of the two SRAMs used as temporary buffer for TCU transfers
 /// and the accelerator.
-const BUFFER_SIZE: usize = 8 * 1024; // 8 KiB
+const BUFFER_SIZE: usize = 4 * 1024; // 4 KiB
 
 /// Maximum number of sessions the multiplexer allows.
 const MAX_SESSIONS: usize = 32;
