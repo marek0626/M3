@@ -19,7 +19,7 @@ use base::elf::{ElfHeaderCommon, PHType};
 use base::env::BootEnv;
 use base::errors::Error;
 use base::io::{LogFlags, Read};
-use base::kif::{Perm, TileDesc, TileISA};
+use base::kif::{Perm, TileDesc};
 use base::mem::{GlobOff, VirtAddr};
 use base::tcu::TCU;
 use base::util::math::round_up;
@@ -31,7 +31,7 @@ where
     S: AsRef<str>,
     I: IntoIterator<Item = S>,
 {
-    let env_start = crate::mem_env_start(tile_desc);
+    let env_start = tile_desc.env_space().0;
     let (arg_buf, arg_ptrs, _) = env::collect_args(args, env_start + *env_off);
     TCU::write_slice(crate::ENV_EP, &arg_buf[..], *env_off)
         .expect("Failed to write arguments to kernel tile");
@@ -117,19 +117,8 @@ fn load_kernel_elf(ctx: &crate::RosaPrivateCtx) {
         crate::clear_mem(off, size).expect("Failed to write BSS to kernel tile");
     }
 
-    // for RISCV32 the execution starts at 0 and we need to jump to the actual entrypoint
-    if ctx.kernel_tile_desc.isa() == TileISA::RISCV32 {
-        let trampoline: [u32; 2] = [
-            0x0001_22b7, // lui t0, 0x12 = 0x12000
-            0x0000_8282, // jr  t0
-        ];
-        TCU::write_slice(
-            crate::MEM_EP,
-            &trampoline,
-            ctx.kernel_tile_desc.mem_offset() as GlobOff,
-        )
-        .expect("Failed to write kernel trampoline");
-    }
+    let trampoline: u32 = 0x6f + (hdr.entry() - ctx.kernel_tile_desc.mem_offset()) as u32;
+    TCU::write_slice(crate::MEM_EP, &[trampoline], 0).expect("Failed to write kernel trampoline");
 }
 
 fn load_kernel_env(ctx: &crate::RosaPrivateCtx, cfg: &rot::RosaLayerCfg) {
@@ -181,9 +170,17 @@ pub fn run(ctx: crate::RosaPrivateCtx) -> ! {
     ctx.our_tile.invalidate_ep(crate::SELF_EP).unwrap();
 
     log!(LogFlags::RoTBoot, "Resetting kernel tile");
-    ctx.kernel_tile
-        .ext_cmd(tcu::TCU::build_ext_cmd(tcu::ExtCmdOpCode::Reset, 1))
-        .expect("Failed to reset kernel tile");
+    if env!("M3_TARGET") == "gem5" {
+        ctx.kernel_tile
+            .ext_cmd(tcu::TCU::build_ext_cmd(tcu::ExtCmdOpCode::Reset, 1))
+            .expect("Failed to reset kernel tile");
+    }
+    else {
+        // start rocket core
+        ctx.kernel_tile
+            .write_tcu(&[1u64], tcu::MMIO_ADDR.as_goff() + 0x3030)
+            .expect("Failed to start kernel rocket core");
+    }
 
     // reduce our TCU-MMIO-area permission to read-only
     ctx.our_tile.init(Perm::R);

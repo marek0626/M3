@@ -691,6 +691,7 @@ name = "rot"
 version = "0.1.0"
 dependencies = [
  "base",
+ "cfg-if",
  "cshake",
  "ed25519-dalek",
  "hex 0.4.3",

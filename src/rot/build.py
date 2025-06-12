@@ -61,6 +61,9 @@ def build_stage(gen, env, out):
     else:
         libs = []
 
+    if env['TGT'] == 'hw23':
+        env['RUSTCFLAGS'] += ['-C', 'opt-level=z']
+
     exe = env.m3_rust_exe(
         gen,
         out=out,

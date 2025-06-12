@@ -17,16 +17,21 @@ use base::io::LogFlags;
 use base::log;
 use base::mem::GlobOff;
 use base::tcu::TCU;
+use cfg_if::cfg_if;
 
-pub const BROM_NEXT_ADDR: usize = MEM_OFFSET + 0x4000;
-#[cfg(target_arch = "riscv32")]
-pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x28000;
-#[cfg(target_arch = "riscv64")]
-pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x17000;
-#[cfg(target_arch = "riscv32")]
-pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x6C000;
-#[cfg(target_arch = "riscv64")]
-pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x48000;
+cfg_if! {
+    // note: needs to be in sync with the memory areas in ld.conf
+    if #[cfg(M3_TARGET = "hw23")] {
+        pub const BROM_NEXT_ADDR: usize = MEM_OFFSET + 0x10000;
+        pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x4A000;
+        pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x6000;
+    }
+    else {
+        pub const BROM_NEXT_ADDR: usize = MEM_OFFSET + 0x5000;
+        pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x29000;
+        pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x67000;
+    }
+}
 
 /// Load a binary from flash into memory.
 ///

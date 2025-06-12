@@ -15,8 +15,6 @@
 #![no_std]
 #![no_main]
 
-use core::arch::global_asm;
-
 use base::io::log::LogColor;
 use base::io::{log, LogFlags};
 use base::{env, log, machine};
@@ -26,12 +24,7 @@ use rot::cert::{BinaryPayload, SignaturePayload};
 use rot::ed25519::{SecretKey, Signer, SigningKey};
 use rot::{Hex, Secret};
 
-global_asm!(
-    ".section .init.reset, \"ax\"",
-    ".global _reset",
-    "_reset:",
-    "j      _start",
-);
+rot::generate_entry!();
 
 #[no_mangle]
 pub extern "C" fn exit(_code: i32) -> ! {

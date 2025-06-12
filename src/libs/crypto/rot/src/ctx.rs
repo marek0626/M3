@@ -100,13 +100,8 @@ impl CtxData for () {
 
 impl<Data: CtxData> LayerCtx<Data> {
     pub const BROM_HDR_MAGIC: Magic = encode_magic(b"BromHdr", 1);
-    // Context is placed at start of SRAM, but we leave one page space to ensure it's not 0)
-    #[cfg(target_arch = "riscv32")]
-    pub const CTX_OFFSET: usize = crate::MEM_OFFSET + base::cfg::PAGE_SIZE;
-    #[cfg(target_arch = "riscv64")]
+    // context is placed at the beginning of memory
     pub const CTX_OFFSET: usize = crate::MEM_OFFSET;
-    #[cfg(target_arch = "x86_64")]
-    pub const CTX_OFFSET: usize = 0;
 
     pub fn new(entry_addr: usize, data: Data) -> Self {
         Self {

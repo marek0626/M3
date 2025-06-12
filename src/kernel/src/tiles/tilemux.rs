@@ -16,10 +16,9 @@
 use base::build_vmsg;
 use base::cell::RefMut;
 use base::col::{BitArray, Vec};
-use base::env;
 use base::errors::Code;
 use base::io::LogFlags;
-use base::kif::{self, Perm, TileAttr, TileISA};
+use base::kif::{self, Perm, TileAttr};
 use base::log;
 use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, VirtAddr};
 use base::quota;
@@ -341,25 +340,14 @@ impl TileMux {
                         }
                     }
 
-                    if env::boot().platform == env::Platform::Hw {
-                        if platform::tile_desc(tile_id).isa() != TileISA::RISCV32 {
-                            // write trampoline to 0x1000_0000 to jump to TileMux's entry point
-                            let trampoline: u64 = 0x0000_0000_0000_306f; // j _start (+0x3000)
-                            ktcu::write_slice(mux_tile_id, mux_offset, &[trampoline]);
-                        }
-                    }
                     // accelerators with co-processors run straccmux and don't do the jump, because
                     // everything is tightly packed at the beginning of the SPM
-                    else if platform::tile_desc(tile_id).isa() == TileISA::RISCV32
-                        && !platform::tile_desc(tile_id)
-                            .attr()
-                            .contains(TileAttr::COREACC)
+                    if !platform::tile_desc(tile_id)
+                        .attr()
+                        .contains(TileAttr::COREACC)
                     {
-                        let trampoline: [u32; 2] = [
-                            0x0001_22b7, // lui t0, 0x12 = 0x12000
-                            0x0000_8282, // jr  t0
-                        ];
-                        ktcu::write_slice(mux_tile_id, mux_offset, &trampoline);
+                        let trampoline: u64 = 0x0000_0000_0000_406f; // j _start (+0x4000)
+                        ktcu::write_slice(mux_tile_id, mux_offset, &[trampoline]);
                     }
                 }
 

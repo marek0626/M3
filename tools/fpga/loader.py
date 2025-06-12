@@ -6,13 +6,12 @@ from elftools.elf.elffile import ELFFile
 import memory
 import pm
 from tcu import EP, MemEP, Flags, TCUExtReg
-from tile import TileType
+from tile import Tile, TileType
 
 import utils
 
 DRAM_SIZE = 2 * 1024 * 1024 * 1024
 DRAM_OFF = 0x10000000
-ENV = 0x10001000
 MEM_TILE = 8
 
 KENV_ADDR = 0
@@ -29,36 +28,94 @@ class Loader:
         self.vm = vm
 
     def init(self, tiles: list[pm], dram: memory, kernels: list[str],
-             mods: list[str], logflags: str):
-        gp_tiles = [i for i in range(0, len(tiles)) if tiles[i].type == TileType.ROCKET]
-        if len(kernels) > len(gp_tiles):
-            msg = "Insufficient general-purpose tiles (need {}, have {})".format(len(kernels),
-                                                                                 len(gp_tiles))
+             rot_layers: list[str], mods: list[str], logflags: str) -> list[int]:
+        if rot_layers is None:
+            ktiles = [i for i in range(0, len(tiles)) if tiles[i].type == TileType.ROCKET]
+            # load kernel info into DRAM
+            if self.vm:
+                mods_addr = PMP_ADDR + (len(kernels) * self.pmp_size)
+            else:
+                mods_addr = PMP_ADDR + (len(tiles) * self.pmp_size)
+            self._load_kernel_info(tiles, dram, mods, mods_addr)
+        else:
+            ktiles = [i for i in range(0, len(tiles))
+                      if tiles[i].type == TileType.ACC and "ACC-Hash" in tiles[i].desc.attrs()]
+            # load RoT info into memory
+            self._load_rot_info(dram, ktiles[0], rot_layers, mods)
+
+        if len(kernels) > len(ktiles):
+            msg = "Insufficient kernel tiles (need {}, have {})".format(len(kernels),
+                                                                        len(ktiles))
             raise ValueError(msg)
 
-        # load boot info into DRAM
-        if self.vm:
-            mods_addr = PMP_ADDR + (len(kernels) * self.pmp_size)
-        else:
-            mods_addr = PMP_ADDR + (len(tiles) * self.pmp_size)
-        self._load_boot_info(tiles, dram, mods, mods_addr)
-
         # init all tiles
-        loaded_tiles = gp_tiles[0:len(kernels)]
+        loaded_tiles = ktiles[0:len(kernels)]
         for i, tile in enumerate(tiles, 0):
             self._init_tile(dram, tile, i, i in loaded_tiles)
 
         # load kernels on tiles (only for Rocket cores)
         for i, pargs in enumerate(kernels, 0):
-            self._load_prog(tiles, dram, gp_tiles[i], pargs.split(' '), logflags)
+            self._load_prog(tiles, dram, ktiles[i], pargs.split(' '), logflags)
 
-    def start(self, tiles: list[pm], debug: int):
-        # start kernel tiles (only for Rocket cores)
+        return loaded_tiles
+
+    def start(self, tiles: list[pm], loaded: list[int], debug: int):
+        # start kernel tiles
         debug_tile = len(tiles) if debug is None else debug
         for i, tile in enumerate(tiles, 0):
-            if tiles[i].type == TileType.ROCKET and i != debug_tile:
+            if i == debug_tile or i not in loaded:
+                continue
+            print("Starting tile {}: {}".format(i, tiles[i].name))
+            sys.stdout.flush()
+            if tiles[i].type == TileType.ROCKET:
                 # start core (via interrupt 0)
                 tiles[i].inst.rocket_start()
+            elif tiles[i].type == TileType.ACC:
+                tiles[i].inst.asm_enable()
+                tiles[i].inst.acc_enable()
+
+    def _load_rot_info(self, dram: memory, rot_tile: int, rot_layers: list[str], mods: list[str]):
+        cfg_off = PMP_ADDR + rot_tile * self.pmp_size
+
+        # load next layers into memory
+        rot_off = cfg_off + 0x1000
+        layers = []
+        for layer in rot_layers[1:]:
+            path = os.path.basename(layer)
+            size = os.path.getsize(layer)
+            self._write_file(dram, path, rot_off)
+            layers.append((rot_off - cfg_off, size))
+            rot_off = (rot_off + size + 4096 - 1) & ~(4096 - 1)
+
+        # write config into memory
+        cfg_off = PMP_ADDR + rot_tile * self.pmp_size
+        # brom
+        utils.write_u64(dram, cfg_off + 0 * 8, 0x42726f6d43666701)        # brom.magic
+        brom = layers[0]
+        utils.write_u64(dram, cfg_off + 1 * 8, brom[0] | brom[1] << 32)   # brom.next_layer
+        # blau
+        utils.write_u64(dram, cfg_off + 2 * 8, 0x426c617543666701)        # blau.magic
+        blau = layers[1]
+        utils.write_u64(dram, cfg_off + 3 * 8, blau[0] | blau[1] << 32)   # blau.next_layer
+        # rosa
+        utils.write_u64(dram, cfg_off + 4 * 8, 0x526f736143666702)        # rosa.magic
+        utils.write_u64(dram, cfg_off + 5 * 8, 16 * 1024 * 1024)          # rosa.kernel_mem_size
+        # utils.write_u64(dram, cfg_off + 6 * 8, 0)                       # rosa.kernel_eps_pages
+        kmod = next(m for m in mods if m.startswith("kernel"))
+        (kmod_name, _) = kmod.split("=")
+        utils.write_str(dram, kmod_name, cfg_off + 6 * 8 + 1)
+        # mods
+        mods_desc = cfg_off + 6 * 8 + 48
+        mods_addr = rot_off
+        for m in mods:
+            mod_size = self._add_mod(dram, mods_addr, m, mods_desc)
+            mods_addr = (mods_addr + mod_size + 4096 - 1) & ~(4096 - 1)
+            mods_desc += 80
+        # null-terminate mods array
+        utils.write_u64(dram, mods_desc + 8, 0)
+        rosa = layers[2]
+        next_off = cfg_off + 6 * 8 + 48 + 25 * 80
+        utils.write_u64(dram, next_off, rosa[0] | rosa[1] << 32)          # rosa.next_layer
 
     def _init_tile(self, dram: memory, tile: pm, tile_idx: int, loaded: bool):
         # reset TCU (clear command log and reset registers except FEATURES and EPs)
@@ -92,7 +149,7 @@ class Loader:
             pmp_ep.set_size(mem_size)
             tile.tcu_set_ep(0, pmp_ep)
 
-    def _load_boot_info(self, tiles: list[pm], dram: memory, mods: list[str], mods_addr: int):
+    def _load_kernel_info(self, tiles: list[pm], dram: memory, mods: list[str], mods_addr: int):
         # boot info
         kenv_off = KENV_ADDR
         utils.write_u64(dram, kenv_off + 0 * 8, len(mods))    # mod_count
@@ -124,7 +181,20 @@ class Loader:
         pm = tiles[tile_idx]
 
         # start core
-        pm.inst.start()
+        env_off = 0x1000
+        if pm.type == TileType.ROCKET:
+            entry = 0x10004000
+            mem_tile = dram
+            mem_off = PMP_ADDR + tile_idx * self.pmp_size
+            mem_begin = mem_off - DRAM_OFF
+            env = 0x10001000
+            pm.inst.start()
+        else:
+            entry = 0x4000
+            mem_tile = pm
+            mem_off = 0
+            mem_begin = 0
+            env = 0x1000
 
         print("%s: loading %s..." % (pm.name, args[0]))
         sys.stdout.flush()
@@ -132,44 +202,44 @@ class Loader:
         # verify entrypoint, because inject a jump instruction below that jumps to that address
         with open(args[0], 'rb') as f:
             elf = ELFFile(f)
-            if elf.header['e_entry'] != 0x10003000:
-                sys.exit("error: {} has entry {:#x}, not 0x10003000.".format(
-                    args[0], elf.header['e_entry']))
-
-        mem_begin = PMP_ADDR + tile_idx * self.pmp_size
+            if elf.header['e_entry'] != entry:
+                sys.exit("error: {} has entry {:#x}, not {:#x}.".format(
+                    args[0], elf.header['e_entry'], entry))
 
         # load ELF file
-        dram.mem.write_elf(args[0], mem_begin - DRAM_OFF)
+        mem_tile.mem.write_elf(args[0], mem_begin)
         sys.stdout.flush()
 
         desc = self._tile_desc(tiles, tile_idx)
         kenv = utils.glob_addr(MEM_TILE, KENV_ADDR) if tile_idx == 0 else 0
 
         # write arguments and env vars
-        argv = ENV + 0x400
-        envp = self._write_args(dram, args, argv, mem_begin)
+        argv = env + 0x400
+        args_end = env + 0x800
+        envp = self._write_args(mem_tile, args, argv, mem_begin, args_end)
         if logflags:
-            self._write_args(dram, ["LOG=" + logflags], envp, mem_begin)
+            self._write_args(mem_tile, ["LOG=" + logflags], envp, mem_begin, args_end)
         else:
             envp = 0
 
         # init environment
-        dram_env = ENV + mem_begin - DRAM_OFF
-        utils.write_u64(dram, dram_env - 0x1000, 0x0000306f)  # j _start (+0x3000)
-        utils.write_u64(dram, dram_env + 0, 1)           # platform = HW
-        utils.write_u64(dram, dram_env + 8, tile_idx)    # chip, tile
-        utils.write_u64(dram, dram_env + 16, desc)       # tile_desc
-        utils.write_u64(dram, dram_env + 24, len(args))  # argc
-        utils.write_u64(dram, dram_env + 32, argv)       # argv
-        utils.write_u64(dram, dram_env + 40, envp)       # envp
-        utils.write_u64(dram, dram_env + 48, kenv)       # kenv
-        utils.write_u64(dram, dram_env + 56, len(tiles) + 1)  # raw tile count
+        mem_env = env_off + mem_off
+        jump = 0x6f + (entry & 0x0FFFFFFF)
+        utils.write_u64(mem_tile, mem_off, jump)            # j _start
+        utils.write_u64(mem_tile, mem_env + 0, 1)           # platform = HW
+        utils.write_u64(mem_tile, mem_env + 8, tile_idx)    # chip, tile
+        utils.write_u64(mem_tile, mem_env + 16, desc)       # tile_desc
+        utils.write_u64(mem_tile, mem_env + 24, len(args))  # argc
+        utils.write_u64(mem_tile, mem_env + 32, argv)       # argv
+        utils.write_u64(mem_tile, mem_env + 40, envp)       # envp
+        utils.write_u64(mem_tile, mem_env + 48, kenv)       # kenv
+        utils.write_u64(mem_tile, mem_env + 56, len(tiles) + 1)  # raw tile count
         # tile ids
         env_off = 64
         for tile in tiles:
-            utils.write_u64(dram, dram_env + env_off, tile.nocid[0] << 8 | tile.nocid[1])
+            utils.write_u64(mem_tile, mem_env + env_off, tile.nocid[0] << 8 | tile.nocid[1])
             env_off += 8
-        utils.write_u64(dram, dram_env + env_off, dram.nocid[0] << 8 | dram.nocid[1])
+        utils.write_u64(mem_tile, mem_env + env_off, dram.nocid[0] << 8 | dram.nocid[1])
 
         sys.stdout.flush()
 
@@ -192,19 +262,20 @@ class Loader:
             content = f.read()
         dram.mem.write_bytes_checked(offset, content, True)
 
-    def _write_args(self, dram: memory, args: list[str], argv: int, mem_begin: int) -> int:
+    def _write_args(self, mem: Tile, args: list[str], argv: int,
+                    mem_begin: int, args_end: int) -> int:
         argc = len(args)
         args_addr = argv + (argc + 1) * 8
         for (idx, a) in enumerate(args, 0):
             # write pointer
-            utils.write_u64(dram, argv + (mem_begin - DRAM_OFF) + idx * 8, args_addr)
+            utils.write_u64(mem, argv + mem_begin + idx * 8, args_addr)
             # write string
-            utils.write_str(dram, a, args_addr + mem_begin - DRAM_OFF)
+            utils.write_str(mem, a, args_addr + mem_begin)
             args_addr += (len(a) + 1 + 7) & ~7
-            if args_addr > ENV + 0x800:
+            if args_addr > args_end:
                 sys.exit("Not enough space for arguments")
         # null termination
-        utils.write_u64(dram, argv + (mem_begin - DRAM_OFF) + argc * 8, 0)
+        utils.write_u64(mem, argv + mem_begin + argc * 8, 0)
         return args_addr
 
     def _tile_desc(self, tiles: list[pm], tile_idx: int):
@@ -222,9 +293,9 @@ class Loader:
             desc |= (1 << 5) << 11  # IEPS
 
         # TODO manually set RV32 until the HW reports that correctly
-        if self.tcu_version == (2, 0, 1) and (tile_idx == 3 or tile_idx == 4):
-            desc &= ~(0x1FF << 6)
-            desc |= 2 << 6          # RV32
-            desc |= (1 << 7) << 11  # COREACC
+        # if self.tcu_version == (2, 0, 1) and (tile_idx == 3 or tile_idx == 4):
+        #     desc &= ~(0x1FF << 6)
+        #     desc |= 2 << 6          # RV32
+        #     desc |= (1 << 7) << 11  # COREACC
 
         return desc

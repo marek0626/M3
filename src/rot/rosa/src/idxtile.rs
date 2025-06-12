@@ -65,15 +65,23 @@ impl IndexedTile {
         });
     }
 
-    #[cfg(M3_TARGET = "gem5")]
     pub fn config_ep<CFG>(&self, ep: tcu::EpId, cfg: CFG)
     where
         CFG: FnOnce(&mut [tcu::Reg]),
     {
         let mut regs = [0; tcu::EP_REGS];
         cfg(&mut regs);
-        self.write_tcu(&regs[..], TCU::ep_regs_addr(ep).as_goff())
-            .expect("Failed to configure remote TCU endpoint");
+
+        if env!("M3_TARGET") == "gem5" {
+            self.write_tcu(&regs[..], TCU::ep_regs_addr(ep).as_goff())
+                .expect("Failed to configure remote TCU endpoint");
+        }
+        else {
+            for (i, r) in regs.iter().enumerate() {
+                self.write_tcu(&[*r], (TCU::ep_regs_addr(ep) + i * 8).as_goff())
+                    .expect("Failed to configure remote TCU endpoint");
+            }
+        }
     }
 
     pub fn invalidate_ep(&self, ep: tcu::EpId) -> Result<(), Error> {

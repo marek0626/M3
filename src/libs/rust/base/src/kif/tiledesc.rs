@@ -352,7 +352,7 @@ impl TileDesc {
     /// Returns the starting address and size of the environment
     pub fn env_space(self) -> (VirtAddr, usize) {
         let start = match self.isa() {
-            TileISA::RISCV32 => VirtAddr::new(0x1_0000),
+            TileISA::RISCV32 => VirtAddr::new(0x1000),
             TileISA::RISCV64 => VirtAddr::new((self.mem_offset() + cfg::PAGE_SIZE) as VirtAddrRaw),
             _ => VirtAddr::new((self.mem_offset() + 0x1F_E000) as VirtAddrRaw),
         };

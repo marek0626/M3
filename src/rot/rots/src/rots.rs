@@ -20,10 +20,9 @@ extern crate unimux;
 #[allow(unused_extern_crates)]
 extern crate lang;
 
-use core::arch::global_asm;
 use core::cmp::min;
 
-use base::env::{self, BaseEnv, BootEnv};
+use base::env::{self, BaseEnv};
 use base::mem::PhysAddrRaw;
 use base::{cfg, tcu};
 use heapsimple::create_heap;
@@ -49,12 +48,7 @@ use m3core::{build_vmsg, const_assert, log, reply_vmsg};
 use rot::ed25519::Signer;
 use rot::{ed25519, Hex, OpaqueKMacKey, Secret};
 
-global_asm!(
-    ".section .init.reset, \"ax\"",
-    ".global _reset",
-    "_reset:",
-    "j      _start",
-);
+rot::generate_entry!();
 
 create_heap!(8 * 1024);
 
@@ -88,10 +82,12 @@ fn check_std_endpoints() {
     .expect("DEF_REP_OFF not sane");
 
     // now unfreeze all the standard EPs created by the kernel
-    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_SEP_OFF).unwrap();
-    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF).unwrap();
-    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::UPCALL_REP_OFF).unwrap();
-    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::DEF_REP_OFF).unwrap();
+    if env!("M3_TARGET") == "gem5" {
+        TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_SEP_OFF).unwrap();
+        TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF).unwrap();
+        TCU::unfreeze(tcu::FIRST_USER_EP + tcu::UPCALL_REP_OFF).unwrap();
+        TCU::unfreeze(tcu::FIRST_USER_EP + tcu::DEF_REP_OFF).unwrap();
+    }
 }
 
 #[no_mangle]

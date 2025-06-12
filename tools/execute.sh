@@ -378,6 +378,22 @@ build_params_hw() {
     kernels=$(get_kernel "$1")
     mods="$(get_mods "$1" "hw"),tilemux=$bindir/tilemux" || exit 1
 
+    rot_layers="$(get_rot_layers "$1")"
+    if [ -n "$rot_layers" ]; then
+        kernel="${kernels%,}"
+        # Strip the path from the kernel binary and save cmdline arguments
+        kernels="$(basename "$kernel")"
+        kernel="${kernel%% *}"
+        if [ ! -f "$kernel" ]; then
+            echo "Kernel '$kernel' does not exist." >&2
+            echo "At the moment the RoT only supports a single kernel." >&2
+            exit 1
+        fi
+        # Make the kernel a boot module that can be loaded by the RoT
+        mods="$mods,kernel=$kernel"
+        print_module_hashes "$rot_layers,$mods"
+    fi
+
     if [ "$M3_TARGET" = "hw22" ]; then
         args="--version 0"
     elif [ "$M3_TARGET" = "hw23" ]; then
@@ -400,11 +416,22 @@ build_params_hw() {
     files=("$M3_OUT/boot.xml")
     IFS=','
     c=0
-    for karg in $kernels; do
-        args="$args --tile '$(basename "$karg")'"
-        files=("${files[@]}" "${karg%% *}")
+    if [ "$rot_layers" != "" ]; then
+        first_layer=${rot_layers%%,*}
+        args="$args --tile '$(basename "$first_layer")'"
+        files=("${files[@]}" "$first_layer")
         c=$((c + 1))
-    done
+        for layer in $rot_layers; do
+            args="$args --rotlayer '$(basename "$layer")'"
+            files=("${files[@]}" "$layer")
+        done
+    else
+        for karg in $kernels; do
+            args="$args --tile '$(basename "$karg")'"
+            files=("${files[@]}" "${karg%% *}")
+            c=$((c + 1))
+        done
+    fi
     for mod in $mods; do
         args="$args --mod '$mod'"
         files=("${files[@]}" "${mod#*=}")
