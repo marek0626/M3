@@ -59,10 +59,6 @@ pub fn init_state(state: &mut State, entry: usize, sp: usize) {
     state.status = set_fpu_mode(state.status, FSMode::CLEAN);
 }
 
-fn halt() {
-    loop {}
-}
-
 pub fn init_fpu() {
     // enable FPU so that we can save/restore the FPU registers
     write_csr!("sstatus", set_fpu_mode(read_csr!("sstatus"), FSMode::CLEAN));

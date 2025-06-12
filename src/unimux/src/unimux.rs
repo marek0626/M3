@@ -117,19 +117,13 @@ pub fn reg_timer_reprogram() {
     NEED_TIMER.set(true);
 }
 
-fn halt() {
-    loop {}
-}
-
 pub extern "C" fn unexpected_irq(state: &mut arch::State) -> *mut libc::c_void {
     log!(
         LogFlags::Error,
         "Unexpected IRQ with user state:\n{:?}",
         state
     );
-    halt();
-
-    leave(state)
+    exit(1);
 }
 
 pub extern "C" fn ext_irq(state: &mut arch::State) -> *mut libc::c_void {

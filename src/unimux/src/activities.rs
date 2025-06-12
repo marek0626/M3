@@ -187,7 +187,6 @@ pub fn our() -> ActivityRef<'static> {
 
 fn block(mut act: Box<Activity>) {
     act.state = ActivityState::BLOCKED;
-    //BLK.borrow_mut().push_back(act);
 }
 
 pub fn set_cur(next: Id) {
@@ -314,14 +313,8 @@ impl Activity {
     }
 }
 
-fn halt() {
-    loop {}
-}
-
 impl Drop for Activity {
     fn drop(&mut self) {
         log!(LogFlags::MuxActs, "Destroyed Activity {}", self.id());
-
-        halt();
     }
 }
