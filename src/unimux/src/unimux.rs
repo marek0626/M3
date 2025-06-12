@@ -43,6 +43,7 @@ use isr::{ISRArch, ISR};
 
 extern "C" {
     fn __m3_init_libc(argc: i32, argv: *const *const u8, envp: *const *const u8, tls: bool);
+    fn _shutdown() -> !;
     fn sleep();
     fn sleep_once();
 }
@@ -76,8 +77,10 @@ pub extern "C" fn abort() {
 }
 
 #[no_mangle]
-pub extern "C" fn exit(_code: i32) {
-    machine::shutdown();
+pub extern "C" fn exit(_code: i32) -> ! {
+    unsafe {
+        _shutdown();
+    }
 }
 
 static NEED_TIMER: StaticCell<bool> = StaticCell::new(true);
@@ -91,26 +94,11 @@ fn leave(state: &mut arch::State) -> *mut libc::c_void {
         timer::reprogram();
     }
 
-    if (activities::user_is_some() && activities::user().is_blocked()) {
+    if activities::user_is_some() && activities::user().is_blocked() {
         idle();
     }
 
-    // NMG After this point, using the logger is dangerous because user code
-    // could get pre-empted in the middle and result in a double-borrow
-    // situation.
-    let state = if NEED_SWITCH.replace(false) {
-        let mut user = activities::user();
-        let old = tcu::TCU::xchg_activity(user.activity_reg()).unwrap();
-        user.user_state_addr().as_mut_ptr()
-    }
-    else if activities::user_is_some() && activities::user().is_ready() {
-        crate::switch_user().as_mut_ptr()
-    }
-    else {
-        state as *mut _ as *mut libc::c_void
-    };
-
-    state
+    state as *mut _ as *mut libc::c_void
 }
 
 pub fn reg_timer_reprogram() {
@@ -155,24 +143,6 @@ extern "Rust" {
     fn env_run() -> !;
 }
 
-pub fn switch_user() -> mem::VirtAddr {
-    // NMG This may be a double-init of libc. We'll just have to see what happens here.
-    // When we switch into the target we need to switch our activity ID, too, so that our EPs work as expected.
-    let old = tcu::TCU::xchg_activity(activities::user().activity_reg()).unwrap();
-    let mut user = activities::user();
-    crate::arch::init_fpu();
-    activities::set_cur(user.activity_reg());
-    ISR::set_entry_sp(user.user_state_addr() + mem::size_of::<arch::State>());
-    log!(
-        LogFlags::Debug,
-        "switching to user and starting up: reg {} user_state_addr {}",
-        user.activity_reg(),
-        user.user_state_addr()
-    );
-    user.started();
-    user.user_state_addr()
-}
-
 fn wait_for_init() -> Result<(), Error> {
     // This first time we know the activity register always contanins 'our'
     let old = tcu::TCU::xchg_activity(activities::idle().activity_reg()).unwrap();
@@ -183,6 +153,7 @@ fn wait_for_init() -> Result<(), Error> {
         if activities::user_is_some() && activities::user().is_ready() {
             break;
         }
+        #[cfg(M3_TARGET = "gem5")]
         unsafe {
             sleep_once();
         }
@@ -214,9 +185,10 @@ pub extern "C" fn tmcall(state: &mut arch::State) -> *mut libc::c_void {
 }
 
 #[no_mangle]
-pub extern "C" fn init() -> usize {
+pub extern "C" fn init() -> ! {
     // copy the environment from earlier stages if we are the RoT
-    #[cfg(M3_ROTS = "1")]
+    // (on hw the environment is already at the right place)
+    #[cfg(all(M3_TARGET = "gem5", M3_ROTS = "1"))]
     {
         let rot_env: &BootEnv = unsafe { &*(cfg::ENV_START_ROT.as_ptr()) };
         let rots_env: &mut BootEnv = unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) };
@@ -258,35 +230,58 @@ pub extern "C" fn init() -> usize {
     mux::init(crate::pex_env());
     activities::init();
 
-    let state_top = {
+    {
         let mut idle = activities::idle();
         idle.start();
+    }
+
+    // the Pico core does not support CSW, user mode, etc.
+    #[cfg(any(M3_TARGET = "gem5", target_arch = "riscv64"))]
+    {
+        let mut idle = activities::idle();
         let state = idle.user_state();
         ISR::init(state);
-        state as *const _ as usize + mem::size_of::<arch::State>()
-    };
 
-    // All IRQs start unexpected
-    isr::reg_all(unexpected_irq);
-    // Handle the mux calls, e.g. wait, exit, yield
-    ISR::reg_tm_calls(tmcall);
-    // Handle the (very important) message receive as well as PMP failures
-    ISR::reg_cu_reqs(ext_irq);
-    // Handle timer interrupts, simple
-    ISR::reg_timer(ext_irq);
-    // Handle other external IRQs by number, particularly things in the Event space.
-    ISR::reg_external(ext_irq);
+        // All IRQs start unexpected
+        isr::reg_all(unexpected_irq);
+        // Handle the mux calls, e.g. wait, exit, yield
+        ISR::reg_tm_calls(tmcall);
+        // Handle the (very important) message receive as well as PMP failures
+        ISR::reg_cu_reqs(ext_irq);
+        // Handle timer interrupts, simple
+        ISR::reg_timer(ext_irq);
+        // Handle other external IRQs by number, particularly things in the Event space.
+        ISR::reg_external(ext_irq);
+    }
 
     sidecalls::basic_handlers_init();
 
-    // NMG After this returns we have switched to the user task mid-interrupt,
-    // and when we return we should be working on the new user stack.
     wait_for_init();
 
+    #[cfg(any(M3_TARGET = "gem5", target_arch = "riscv64"))]
     ISR::enable_irqs();
+
+    // switch to user activity
+    {
+        let mut user = activities::user();
+        activities::set_cur(user.activity_reg());
+        tcu::TCU::xchg_activity(user.activity_reg()).unwrap();
+        #[cfg(any(M3_TARGET = "gem5", target_arch = "riscv64"))]
+        {
+            crate::arch::init_fpu();
+            ISR::set_entry_sp(user.user_state_addr() + mem::size_of::<arch::State>());
+        }
+        log!(
+            LogFlags::Debug,
+            "switching to user and starting up: reg {} user_state_addr {}",
+            user.activity_reg(),
+            user.user_state_addr()
+        );
+        user.started();
+    }
+
     unsafe {
         env_run();
     }
-
-    state_top
+    exit(0);
 }

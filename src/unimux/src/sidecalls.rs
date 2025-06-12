@@ -201,8 +201,8 @@ fn handle_sidecall(msg: &'static tcu::Message) {
     reply_msg(msg, &reply_buf);
 }
 
-#[inline(never)]
-fn handle_sidecalls(mut our: activities::ActivityRef<'_>) {
+pub fn check() {
+    let mut our = activities::our();
     let _cmd_saved = helper::TCUGuard::new();
 
     loop {
@@ -215,6 +215,7 @@ fn handle_sidecalls(mut our: activities::ActivityRef<'_>) {
         // if the SEP is still frozen, it means that the kernel just initialized our tile and these
         // EPs, so unfreeze them. Note that the kernel does not configure TMSIDE_REP (rosa did that)
         // and thus it does not need to be unfrozen.
+        #[cfg(M3_TARGET = "gem5")]
         if TCU::is_frozen(tcu::KPEX_REP) {
             let tile_desc = crate::pex_env().tile_desc;
             TCU::check_recv_ep(
@@ -246,16 +247,6 @@ fn handle_sidecalls(mut our: activities::ActivityRef<'_>) {
             break;
         }
     }
-}
-
-#[inline(always)]
-pub fn check() {
-    let our = activities::our();
-    if !our.has_msgs() {
-        return;
-    }
-
-    handle_sidecalls(our);
 }
 
 pub fn basic_handlers_init() {

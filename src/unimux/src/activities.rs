@@ -17,10 +17,11 @@ use base::boxed::Box;
 use base::cell::{LazyStaticUnsafeCell, StaticCell, StaticRefCell, StaticUnsafeCell};
 use base::cfg;
 use base::col::{BoxList, Vec};
+use base::env::Platform;
 use base::errors::Error;
 use base::impl_boxitem;
 use base::io::LogFlags;
-use base::kif;
+use base::kif::{self, TileISA};
 use base::log;
 use base::mem::{GlobAddr, GlobOff, MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
 use base::tcu;
@@ -138,6 +139,7 @@ pub fn init() {
         .unwrap();
     }
 
+    #[cfg(any(M3_TARGET = "gem5", target_arch = "riscv64"))]
     Paging::disable();
 }
 
@@ -301,9 +303,13 @@ impl Activity {
                 unsafe { core::ptr::addr_of!(baremetal_stack) as usize },
             );
             crate::app_env().boot.tile_desc = pex_env().tile_desc.value();
-            arch::init_state(&mut self.user_state, entry as usize, unsafe {
-                core::ptr::addr_of!(baremetal_stack) as usize
-            });
+
+            #[cfg(any(M3_TARGET = "gem5", target_arch = "riscv64"))]
+            {
+                arch::init_state(&mut self.user_state, entry as usize, unsafe {
+                    core::ptr::addr_of!(baremetal_stack) as usize
+                });
+            }
         }
         self.user_state_addr = VirtAddr::from(&self.user_state as *const _);
         self.state = ActivityState::READY;
