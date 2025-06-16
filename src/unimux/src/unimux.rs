@@ -14,38 +14,29 @@
  */
 
 #![no_std]
-#![allow(warnings)]
 
-mod activities;
-mod arch;
-mod cureq;
+#[cfg(any(M3_TARGET = "gem5", target_arch = "riscv64"))]
+#[path = "preempt/mod.rs"]
+mod hdl;
+
+#[cfg(not(any(M3_TARGET = "gem5", target_arch = "riscv64")))]
+#[path = "nopreempt/mod.rs"]
+mod hdl;
+
 mod sidecalls;
-mod timer;
-mod tmcalls;
 
-use base::cell::{Ref, StaticCell, StaticRefCell};
+use base::cell::{Ref, StaticRefCell};
 use base::cfg;
-use base::env::{self, BootEnv};
-use base::errors::{Code, Error};
-use base::io::{self, LogFlags};
+use base::env;
+use base::io;
 use base::kif::{self, TileAttr};
-use base::libc;
-use base::log;
-use base::machine;
-use base::mem;
-use base::serialize::{Deserialize, Serialize};
 use base::tcu::{self, TCU};
-use mux::{helper, sendqueue};
 
 use core::ptr;
-
-use isr::{ISRArch, ISR};
 
 extern "C" {
     fn __m3_init_libc(argc: i32, argv: *const *const u8, envp: *const *const u8, tls: bool);
     fn _shutdown() -> !;
-    fn sleep();
-    fn sleep_once();
 }
 
 static TM_ENV: StaticRefCell<mux::TMEnv> = StaticRefCell::new(mux::TMEnv {
@@ -63,14 +54,6 @@ pub fn app_env() -> &'static mut env::BaseEnv {
     unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) }
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(crate = "base::serde")]
-pub struct PagefaultMessage {
-    pub op: u64,
-    pub virt: mem::VirtAddr,
-    pub access: u64,
-}
-
 #[no_mangle]
 pub extern "C" fn abort() {
     exit(1);
@@ -83,105 +66,8 @@ pub extern "C" fn exit(_code: i32) -> ! {
     }
 }
 
-static NEED_TIMER: StaticCell<bool> = StaticCell::new(true);
-static NEED_SWITCH: StaticCell<bool> = StaticCell::new(false);
-
-#[inline]
-fn leave(state: &mut arch::State) -> *mut libc::c_void {
-    sidecalls::check();
-
-    if NEED_TIMER.replace(false) {
-        timer::reprogram();
-    }
-
-    if activities::user_is_some() && activities::user().is_blocked() {
-        idle();
-    }
-
-    state as *mut _ as *mut libc::c_void
-}
-
-pub fn reg_timer_reprogram() {
-    NEED_TIMER.set(true);
-}
-
-pub extern "C" fn unexpected_irq(state: &mut arch::State) -> *mut libc::c_void {
-    log!(
-        LogFlags::Error,
-        "Unexpected IRQ with user state:\n{:?}",
-        state
-    );
-    exit(1);
-}
-
-pub extern "C" fn ext_irq(state: &mut arch::State) -> *mut libc::c_void {
-    match ISR::fetch_irq() {
-        isr::IRQSource::TCU(tcu::IRQ::Timer) => {
-            let mut user = activities::user();
-            ISR::set_entry_sp(user.user_state_addr() + mem::size_of::<arch::State>());
-            user.set_blocked(false);
-            timer::trigger();
-            NEED_SWITCH.set(true);
-        },
-
-        isr::IRQSource::TCU(tcu::IRQ::CUReq) => {
-            if let Some(r) = tcu::TCU::get_cu_req() {
-                log!(LogFlags::MuxCUReqs, "Got {:x?}", r);
-                cureq::handle(r);
-            }
-        },
-
-        isr::IRQSource::Ext(id) => {
-            panic!("Unexpected external IRQ: {}!", id);
-        },
-    };
-
-    leave(state)
-}
-
 extern "Rust" {
     fn env_run() -> !;
-}
-
-fn wait_for_init() -> Result<(), Error> {
-    // This first time we know the activity register always contanins 'our'
-    let old = tcu::TCU::xchg_activity(activities::idle().activity_reg()).unwrap();
-    activities::our().set_activity_reg(old);
-    activities::set_cur(activities::idle().activity_reg());
-    loop {
-        sidecalls::check();
-        if activities::user_is_some() && activities::user().is_ready() {
-            break;
-        }
-        #[cfg(M3_TARGET = "gem5")]
-        unsafe {
-            sleep_once();
-        }
-    }
-    Ok(())
-}
-
-fn idle() {
-    activities::set_cur(activities::idle().activity_reg());
-    let old = tcu::TCU::xchg_activity(activities::idle().activity_reg()).unwrap();
-    // NMG Have to switch the stack so we don't clobber stuff on nested IRQs (?)
-    ISR::set_entry_sp(activities::idle().user_state_addr() + mem::size_of::<arch::State>());
-    activities::get_mut(old).unwrap().set_activity_reg(old);
-    sidecalls::check();
-    ISR::enable_irqs();
-    loop {
-        unsafe {
-            // NMG sleep_once knows whether we are on hardware (thus capable of wfi)
-            sleep_once();
-        }
-    }
-}
-
-pub extern "C" fn tmcall(state: &mut arch::State) -> *mut libc::c_void {
-    log!(LogFlags::MuxCalls, "received irq for tmcall");
-    tmcalls::handle_call(state);
-
-    leave(state)
 }
 
 #[no_mangle]
@@ -190,8 +76,8 @@ pub extern "C" fn init() -> ! {
     // (on hw the environment is already at the right place)
     #[cfg(all(M3_TARGET = "gem5", M3_ROTS = "1"))]
     {
-        let rot_env: &BootEnv = unsafe { &*(cfg::ENV_START_ROT.as_ptr()) };
-        let rots_env: &mut BootEnv = unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) };
+        let rot_env: &env::BootEnv = unsafe { &*(cfg::ENV_START_ROT.as_ptr()) };
+        let rots_env: &mut env::BootEnv = unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) };
         *rots_env = *rot_env;
     }
 
@@ -228,60 +114,22 @@ pub extern "C" fn init() -> ! {
     );
 
     mux::init(crate::pex_env());
-    activities::init();
-
-    {
-        let mut idle = activities::idle();
-        idle.start();
-    }
-
-    // the Pico core does not support CSW, user mode, etc.
-    #[cfg(any(M3_TARGET = "gem5", target_arch = "riscv64"))]
-    {
-        let mut idle = activities::idle();
-        let state = idle.user_state();
-        ISR::init(state);
-
-        // All IRQs start unexpected
-        isr::reg_all(unexpected_irq);
-        // Handle the mux calls, e.g. wait, exit, yield
-        ISR::reg_tm_calls(tmcall);
-        // Handle the (very important) message receive as well as PMP failures
-        ISR::reg_cu_reqs(ext_irq);
-        // Handle timer interrupts, simple
-        ISR::reg_timer(ext_irq);
-        // Handle other external IRQs by number, particularly things in the Event space.
-        ISR::reg_external(ext_irq);
-    }
+    hdl::init();
 
     sidecalls::basic_handlers_init();
 
-    wait_for_init();
-
-    #[cfg(any(M3_TARGET = "gem5", target_arch = "riscv64"))]
-    ISR::enable_irqs();
-
-    // switch to user activity
-    {
-        let mut user = activities::user();
-        activities::set_cur(user.activity_reg());
-        tcu::TCU::xchg_activity(user.activity_reg()).unwrap();
-        #[cfg(any(M3_TARGET = "gem5", target_arch = "riscv64"))]
-        {
-            crate::arch::init_fpu();
-            ISR::set_entry_sp(user.user_state_addr() + mem::size_of::<arch::State>());
+    // wait for sidecalls from the kernel until the user activity was started
+    loop {
+        sidecalls::check();
+        if hdl::user_ready_or_sleep() {
+            break;
         }
-        log!(
-            LogFlags::Debug,
-            "switching to user and starting up: reg {} user_state_addr {}",
-            user.activity_reg(),
-            user.user_state_addr()
-        );
-        user.started();
     }
+
+    // pass correct tile description to user (see above)
+    crate::app_env().boot.tile_desc = pex_env().tile_desc.value();
 
     unsafe {
         env_run();
     }
-    exit(0);
 }
