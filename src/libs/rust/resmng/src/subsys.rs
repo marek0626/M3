@@ -163,28 +163,24 @@ impl Subsystem {
         log!(LogFlags::Info, "Available memory:");
         for (i, mem) in self.mems().iter().enumerate() {
             let mem_cap = self.get_mem(i);
-            let mem_tile = res
-                .tiles()
-                .find_by_id(
-                    mem_cap
-                        .region()
-                        .map_err(|e| rerror(e).context("MemGate region"))?
-                        .0
-                        .tile(),
-                )
-                // we don't find the memory tile if we don't start any TEEs, because in this case
-                // our parent does not give us access to them. that's fine, because we also only
-                // need them in this case.
-                .ok();
-            let mem_mod = Rc::new(memory::MemMod::new(
-                mem_cap,
-                mem_tile,
-                mem.addr(),
-                mem.size(),
-                mem.reserved(),
-            ));
-            log!(LogFlags::Info, "  {:?}", mem_mod);
-            res.memory_mut().add(mem_mod);
+            if let Ok(region) = mem_cap.region() {
+                let mem_tile = res
+                    .tiles()
+                    .find_by_id(region.0.tile())
+                    // we don't find the memory tile if we don't start any TEEs, because in this case
+                    // our parent does not give us access to them. that's fine, because we also only
+                    // need them in this case.
+                    .ok();
+                let mem_mod = Rc::new(memory::MemMod::new(
+                    mem_cap,
+                    mem_tile,
+                    mem.addr(),
+                    mem.size(),
+                    mem.reserved(),
+                ));
+                log!(LogFlags::Info, "  {:?}", mem_mod);
+                res.memory_mut().add(mem_mod);
+            }
         }
 
         if !self.services().is_empty() {
