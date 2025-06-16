@@ -12,7 +12,6 @@ import utils
 
 DRAM_SIZE = 2 * 1024 * 1024 * 1024
 DRAM_OFF = 0x10000000
-MEM_TILE = 8
 
 KENV_ADDR = 0
 KENV_SIZE = 4 * 1024
@@ -21,13 +20,19 @@ SERIAL_SIZE = 4 * 1024
 PMP_ADDR = SERIAL_ADDR + SERIAL_SIZE
 
 
+def dram_tile(dram: memory) -> int:
+    if dram.name == "DRAM1":
+        return 8
+    return 9
+
+
 class Loader:
     def __init__(self, tcu_version: (int, int, int), pmp_size: int, vm: bool):
         self.tcu_version = tcu_version
         self.pmp_size = pmp_size
         self.vm = vm
 
-    def init(self, tiles: list[pm], dram: memory, kernels: list[str],
+    def init(self, tiles: list[pm], drams: list[memory], dram: memory, kernels: list[str],
              rot_layers: list[str], mods: list[str], logflags: str) -> list[int]:
         if rot_layers is None:
             ktiles = [i for i in range(0, len(tiles)) if tiles[i].type == TileType.ROCKET]
@@ -36,7 +41,7 @@ class Loader:
                 mods_addr = PMP_ADDR + (len(kernels) * self.pmp_size)
             else:
                 mods_addr = PMP_ADDR + (len(tiles) * self.pmp_size)
-            self._load_kernel_info(tiles, dram, mods, mods_addr)
+            self._load_kernel_info(tiles, drams, dram, mods, mods_addr)
         else:
             ktiles = [i for i in range(0, len(tiles))
                       if tiles[i].type == TileType.ACC and "ACC-Hash" in tiles[i].desc.attrs()]
@@ -55,7 +60,7 @@ class Loader:
 
         # load kernels on tiles (only for Rocket cores)
         for i, pargs in enumerate(kernels, 0):
-            self._load_prog(tiles, dram, ktiles[i], pargs.split(' '), logflags)
+            self._load_prog(tiles, drams, dram, ktiles[i], pargs.split(' '), logflags)
 
         return loaded_tiles
 
@@ -149,13 +154,14 @@ class Loader:
             pmp_ep.set_size(mem_size)
             tile.tcu_set_ep(0, pmp_ep)
 
-    def _load_kernel_info(self, tiles: list[pm], dram: memory, mods: list[str], mods_addr: int):
+    def _load_kernel_info(self, tiles: list[pm], drams: list[memory], dram: memory,
+                          mods: list[str], mods_addr: int):
         # boot info
         kenv_off = KENV_ADDR
-        utils.write_u64(dram, kenv_off + 0 * 8, len(mods))    # mod_count
-        utils.write_u64(dram, kenv_off + 1 * 8, len(tiles) + 1)  # tile_count
-        utils.write_u64(dram, kenv_off + 2 * 8, 1)            # mem_count
-        utils.write_u64(dram, kenv_off + 3 * 8, 0)            # serv_count
+        utils.write_u64(dram, kenv_off + 0 * 8, len(mods))                      # mod_count
+        utils.write_u64(dram, kenv_off + 1 * 8, len(tiles) + 1)                 # tile_count
+        utils.write_u64(dram, kenv_off + 2 * 8, len(drams))                     # mem_count
+        utils.write_u64(dram, kenv_off + 3 * 8, 0)                              # serv_count
         kenv_off += 8 * 4
 
         # mods
@@ -166,18 +172,25 @@ class Loader:
 
         # tile descriptors
         for x in range(0, len(tiles)):
-            utils.write_u64(dram, kenv_off, self._tile_desc(tiles, x))         # PM
+            utils.write_u64(dram, kenv_off, self._tile_desc(tiles, x))          # PM
             kenv_off += 8
-        utils.write_u64(dram, kenv_off, self._tile_desc(tiles, len(tiles)))    # dram1
+        utils.write_u64(dram, kenv_off, self._tile_desc(tiles, len(tiles)))     # dram1
         kenv_off += 8
 
         # mems
         mem_start = mods_addr
-        utils.write_u64(dram, kenv_off + 0, utils.glob_addr(MEM_TILE, mem_start))  # addr
-        utils.write_u64(dram, kenv_off + 8, DRAM_SIZE - mem_start)          # size
+        for d in drams:
+            addr = utils.glob_addr(d.nocid[1], 0)
+            size = DRAM_SIZE
+            if dram.nocid == d.nocid:
+                addr += mem_start
+                size -= mem_start
+            utils.write_u64(dram, kenv_off + 0, addr)                           # addr
+            utils.write_u64(dram, kenv_off + 8, size)                           # size
+            kenv_off += 16
 
-    def _load_prog(self, tiles: list[pm], dram: memory, tile_idx: int,
-                   args: list[str], logflags: str):
+    def _load_prog(self, tiles: list[pm], drams: list[memory], dram: memory,
+                   tile_idx: int, args: list[str], logflags: str):
         pm = tiles[tile_idx]
 
         # start core
@@ -211,7 +224,7 @@ class Loader:
         sys.stdout.flush()
 
         desc = self._tile_desc(tiles, tile_idx)
-        kenv = utils.glob_addr(MEM_TILE, KENV_ADDR) if tile_idx == 0 else 0
+        kenv = utils.glob_addr(dram_tile(mem_tile), KENV_ADDR) if tile_idx == 0 else 0
 
         # write arguments and env vars
         argv = env + 0x400
@@ -233,13 +246,15 @@ class Loader:
         utils.write_u64(mem_tile, mem_env + 32, argv)       # argv
         utils.write_u64(mem_tile, mem_env + 40, envp)       # envp
         utils.write_u64(mem_tile, mem_env + 48, kenv)       # kenv
-        utils.write_u64(mem_tile, mem_env + 56, len(tiles) + 1)  # raw tile count
+        utils.write_u64(mem_tile, mem_env + 56, len(tiles) + len(drams))  # raw tile count
         # tile ids
         env_off = 64
         for tile in tiles:
             utils.write_u64(mem_tile, mem_env + env_off, tile.nocid[0] << 8 | tile.nocid[1])
             env_off += 8
-        utils.write_u64(mem_tile, mem_env + env_off, dram.nocid[0] << 8 | dram.nocid[1])
+        for d in drams:
+            utils.write_u64(mem_tile, mem_env + env_off, d.nocid[0] << 8 | d.nocid[1])
+            env_off += 8
 
         sys.stdout.flush()
 
@@ -247,7 +262,7 @@ class Loader:
         (name, path) = mod.split('=')
         path = os.path.basename(path)
         size = os.path.getsize(path)
-        utils.write_u64(dram, offset + 0x0, utils.glob_addr(MEM_TILE, addr))
+        utils.write_u64(dram, offset + 0x0, utils.glob_addr(dram_tile(dram), addr))
         utils.write_u64(dram, offset + 0x8, size)
         utils.write_str(dram, name, offset + 16)
         self._write_file(dram, path, addr)

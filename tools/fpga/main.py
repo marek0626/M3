@@ -205,7 +205,9 @@ def main():
     # disable NoC ARQ for program upload
     fpga_inst.set_arq_enable(False)
 
-    loaded = ld.init(fpga_inst.pmTiles, fpga_inst.dram1, args.tile,
+    drams = [fpga_inst.dram1, fpga_inst.dram2]
+    dram = drams[1] if args.rotlayer is not None else drams[0]
+    loaded = ld.init(fpga_inst.pmTiles, drams, dram, args.tile,
                      args.rotlayer, mods, args.logflags)
 
     # enable NoC ARQ when cores are running
