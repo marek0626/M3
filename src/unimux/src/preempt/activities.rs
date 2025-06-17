@@ -22,7 +22,6 @@ use base::log;
 use base::mem::{MsgBuf, VirtAddr};
 use base::tcu;
 use core::ops::{Deref, DerefMut};
-use mux::sendqueue;
 use paging::ArchPaging;
 
 pub type Id = paging::ActId;
@@ -170,12 +169,7 @@ pub fn stop_activity(status: Code) {
 
     tcu::TCU::xchg_activity(our().activity_reg()).unwrap();
 
-    let mut msg_buf = MsgBuf::borrow_def();
-    base::build_vmsg!(msg_buf, kif::tilemux::Calls::Exit, kif::tilemux::Exit {
-        act_id: user().id() as tcu::ActId,
-        status,
-    });
-    sendqueue::send(&msg_buf).unwrap();
+    crate::send_exit(user().id() as tcu::ActId, status);
 }
 
 impl Activity {

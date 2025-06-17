@@ -91,7 +91,7 @@ fn check_std_endpoints() {
 }
 
 #[no_mangle]
-pub extern "C" fn env_run() -> ! {
+pub extern "C" fn env_run() {
     let rots_env_src: &BaseEnv =
         unsafe { &*((cfg::ENV_START.as_local() + cfg::ENV_SIZE / 2) as *const _) };
     let rots_env: &mut BaseEnv = unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) };
@@ -1073,6 +1073,10 @@ pub fn main() -> Result<(), Error> {
     QUEUE.set(VecDeque::with_capacity(MAX_SESSIONS));
 
     server_loop(|| {
+        // explicitly check for sidecalls on hw23, as we don't get interrupts
+        #[cfg(M3_TARGET = "hw23")]
+        unimux::check_sidecalls();
+
         recv.handle_messages()?;
 
         // The QUEUE is mutably borrowed to pop a session and again later while
@@ -1097,5 +1101,10 @@ pub fn main() -> Result<(), Error> {
     })
     .ok();
 
+    // we cannot exit normally on hw23 as tmcalls are not supported
+    #[cfg(M3_TARGET = "hw23")]
+    unimux::exit(Code::Success as u32);
+
+    #[cfg(not(M3_TARGET = "hw23"))]
     Ok(())
 }

@@ -22,7 +22,6 @@ use base::tcu;
 
 use isr::{ISRArch, ISR};
 
-use crate::exit;
 use crate::hdl::activities;
 use crate::hdl::cureq;
 use crate::hdl::sleep_once;
@@ -99,7 +98,7 @@ extern "C" fn unexpected_irq(state: &mut state::State) -> *mut libc::c_void {
         "Unexpected IRQ with user state:\n{:?}",
         state
     );
-    exit(1);
+    crate::abort();
 }
 
 extern "C" fn ext_irq(state: &mut state::State) -> *mut libc::c_void {

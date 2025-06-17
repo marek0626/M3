@@ -28,9 +28,12 @@ mod sidecalls;
 use base::cell::{Ref, StaticRefCell};
 use base::cfg;
 use base::env;
+use base::errors::Code;
 use base::io;
 use base::kif::{self, TileAttr};
+use base::mem::MsgBuf;
 use base::tcu::{self, TCU};
+use mux::sendqueue;
 
 use core::ptr;
 
@@ -54,16 +57,35 @@ pub fn app_env() -> &'static mut env::BaseEnv {
     unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) }
 }
 
-#[no_mangle]
-pub extern "C" fn abort() {
-    exit(1);
+pub fn send_exit(act_id: tcu::ActId, status: Code) {
+    let mut msg_buf = MsgBuf::borrow_def();
+    base::build_vmsg!(msg_buf, kif::tilemux::Calls::Exit, kif::tilemux::Exit {
+        act_id,
+        status,
+    });
+    sendqueue::send(&msg_buf).unwrap();
 }
 
 #[no_mangle]
-pub extern "C" fn exit(_code: i32) -> ! {
+pub extern "C" fn abort() -> ! {
     unsafe {
         _shutdown();
     }
+}
+
+#[no_mangle]
+pub extern "C" fn exit(code: u32) -> ! {
+    if let Some(act_id) = hdl::user_id() {
+        send_exit(act_id, Code::try_from(code).unwrap());
+    }
+
+    loop {
+        sidecalls::check();
+    }
+}
+
+pub fn check_sidecalls() {
+    sidecalls::check();
 }
 
 extern "Rust" {
@@ -126,10 +148,7 @@ pub extern "C" fn init() -> ! {
         }
     }
 
-    // pass correct tile description to user (see above)
-    crate::app_env().boot.tile_desc = pex_env().tile_desc.value();
-
-    unsafe {
-        env_run();
-    }
+    // note that we only get here in no-preempt mode; in preempt mode we will directly return to
+    // the application from the interrupt we received due to the start sidecall
+    hdl::run_to_completion();
 }

@@ -17,6 +17,15 @@ pub fn init() {
     entry::init();
 }
 
+pub fn user_id() -> Option<tcu::ActId> {
+    if activities::user_is_some() {
+        Some(activities::user().id() as tcu::ActId)
+    }
+    else {
+        None
+    }
+}
+
 pub fn user_init(id: u64) {
     activities::set_user(id);
 }
@@ -61,4 +70,9 @@ pub fn handle_sidecalls<F: FnMut() -> bool>(mut handle: F) {
             break;
         }
     }
+}
+
+pub fn run_to_completion() -> ! {
+    // not used
+    unreachable!();
 }
