@@ -17,17 +17,14 @@ use base::errors::{Code, Error};
 use base::io::LogFlags;
 use base::kif;
 use base::log;
-use base::mem::{GlobAddr, GlobAddrRaw, VirtAddr};
-use base::tcu::{EpId, INVALID_EP, IRQ, TCU};
+use base::mem::VirtAddr;
+use base::tcu::TCU;
 use base::time::TimeDuration;
 use base::tmif;
 
-use isr::{ISRArch, ISR};
+use crate::hdl::{activities, entry, state, timer};
 
-use crate::{activities, arch, timer};
-use mux::helper;
-
-fn tmcall_stop(state: &mut arch::State) -> Result<(), Error> {
+fn tmcall_stop(state: &mut state::State) -> Result<(), Error> {
     let code = Code::try_from(state.r[isr::TMC_ARG1] as u32)?;
 
     log!(LogFlags::MuxCalls, "tmcall::stop(code={:?})", code);
@@ -37,7 +34,7 @@ fn tmcall_stop(state: &mut arch::State) -> Result<(), Error> {
     Ok(())
 }
 
-fn tmcall_translate(state: &mut arch::State) -> Result<(), Error> {
+fn tmcall_translate(state: &mut state::State) -> Result<(), Error> {
     let virt = VirtAddr::from(state.r[isr::TMC_ARG1]);
 
     log!(LogFlags::MuxCalls, "tmcall::translate(virt={})", virt);
@@ -46,7 +43,7 @@ fn tmcall_translate(state: &mut arch::State) -> Result<(), Error> {
     Ok(())
 }
 
-fn tmcall_transl_fault(state: &mut arch::State) -> Result<(), Error> {
+fn tmcall_transl_fault(state: &mut state::State) -> Result<(), Error> {
     let virt = VirtAddr::from(state.r[isr::TMC_ARG1]);
     let access = kif::Perm::from_bits_truncate(state.r[isr::TMC_ARG2] as u32);
     let flags = kif::PageFlags::from(access) & kif::PageFlags::RW;
@@ -69,7 +66,7 @@ fn tmcall_transl_fault(state: &mut arch::State) -> Result<(), Error> {
     Ok(())
 }
 
-fn tmcall_wait(state: &mut arch::State) -> Result<(), Error> {
+fn tmcall_wait(state: &mut state::State) -> Result<(), Error> {
     let timeout = match state.r[isr::TMC_ARG4] {
         usize::MAX => None,
         t => Some(TimeDuration::from_nanos(t as u64)),
@@ -78,12 +75,12 @@ fn tmcall_wait(state: &mut arch::State) -> Result<(), Error> {
     if let Some(t) = timeout {
         activities::user().set_blocked(true);
         timer::set_timeout(t);
-        crate::reg_timer_reprogram();
+        entry::reg_timer_reprogram();
     }
     Ok(())
 }
 
-pub fn handle_call(state: &mut arch::State) {
+pub fn handle_call(state: &mut state::State) {
     let opcode = state.r[isr::TMC_ARG0];
 
     let res = match opcode {

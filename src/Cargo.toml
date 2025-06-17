@@ -66,7 +66,6 @@ members = [
     "rot/blau",
     "rot/rosa",
     "rot/rots",
-    "server/crypto/hashmux",
     "server/disk",
     "server/m3fs",
     "server/net",

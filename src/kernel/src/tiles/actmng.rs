@@ -330,8 +330,26 @@ impl ActivityMng {
                 let mgate_obj = MGateObject::new(alloc, kif::Perm::RWX, true);
 
                 // we currently assume that we have enough protection EPs for all user memory regions
-                assert!(mem_ep < tcu::PMEM_PROT_EPS as tcu::EpId);
-                assert!(mgate_obj.size() < (1 << 30));
+                if mem_ep >= tcu::PMEM_PROT_EPS as tcu::EpId {
+                    log!(
+                        LogFlags::Error,
+                        "\x1B[37;41mNot enough PMP EPs: ignoring memory {} .. {}\x1B[0m",
+                        m.addr(),
+                        m.addr() + m.capacity()
+                    );
+                    sel += 1;
+                    continue;
+                }
+                if mgate_obj.size() >= (1 << 30) {
+                    log!(
+                        LogFlags::Error,
+                        "\x1B[37;41mMemory too large: ignoring memory {} .. {}\x1B[0m",
+                        m.addr(),
+                        m.addr() + m.capacity()
+                    );
+                    sel += 1;
+                    continue;
+                }
 
                 // configure physical memory protection EP
                 tilemng::tilemux(tile_id)

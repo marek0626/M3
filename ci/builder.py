@@ -267,7 +267,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
     # build M³Linux for riscv64
     if 'riscv64' in isas:
         t = BuildTask(name='build/m3lx',
-                      deps=TARGET_DEPS + ['src/m3lx'],
+                      deps=TARGET_DEPS + ['src/m3lx/linux', 'src/m3lx/build.sh'],
                       out_path='build/linux',
                       cache_dir=cache_dir,
                       cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mklx -n',
@@ -286,7 +286,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
     # build bbl separately as it has a different out_path
     if 'riscv64' in isas:
         t = BuildTask(name='build/riscv-pk',
-                      deps=TARGET_DEPS + ['src/m3lx/riscv-pk'],
+                      deps=TARGET_DEPS + ['src/m3lx/riscv-pk', 'src/m3lx/build.sh'],
                       out_path='build/riscv-pk',
                       cache_dir=cache_dir,
                       cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mkbbl -n',

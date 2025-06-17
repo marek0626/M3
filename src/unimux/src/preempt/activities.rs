@@ -14,31 +14,20 @@
  */
 
 use base::boxed::Box;
-use base::cell::{LazyStaticUnsafeCell, StaticCell, StaticRefCell, StaticUnsafeCell};
-use base::cfg;
-use base::col::{BoxList, Vec};
-use base::errors::Error;
-use base::impl_boxitem;
+use base::cell::{LazyStaticUnsafeCell, StaticCell};
+use base::errors::Code;
 use base::io::LogFlags;
 use base::kif;
 use base::log;
-use base::mem::{GlobAddr, GlobOff, MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
+use base::mem::{MsgBuf, VirtAddr};
 use base::tcu;
-use base::time::TimeInstant;
-use base::tmif;
-use base::util::math;
 use core::ops::{Deref, DerefMut};
-use core::ptr::NonNull;
+use paging::ArchPaging;
 
-use paging::{ArchPaging, Paging};
 pub type Id = paging::ActId;
 
-use crate::arch;
+use crate::hdl::state;
 use crate::pex_env;
-use crate::Code;
-use mux::{helper, sendqueue};
-
-use isr::{ISRArch, ISR};
 
 #[derive(PartialEq)]
 enum ActivityState {
@@ -50,18 +39,9 @@ enum ActivityState {
 
 pub struct Activity {
     state: ActivityState,
-    prev: Option<NonNull<Activity>>,
-    next: Option<NonNull<Activity>>,
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "riscv32",
-        target_arch = "x86_64"
-    ))]
-    user_state: arch::State,
+    user_state: state::State,
     user_state_addr: VirtAddr,
     act_reg: tcu::Reg,
-    eps_start: tcu::EpId,
-    cmd: helper::TCUCmdState,
     has_refs: bool,
 }
 
@@ -99,8 +79,6 @@ impl DerefMut for ActivityRef<'_> {
     }
 }
 
-impl_boxitem!(Activity);
-
 static OUR: LazyStaticUnsafeCell<Box<Activity>> = LazyStaticUnsafeCell::default();
 static IDLE: LazyStaticUnsafeCell<Box<Activity>> = LazyStaticUnsafeCell::default();
 static USER: LazyStaticUnsafeCell<Box<Activity>> = LazyStaticUnsafeCell::default();
@@ -111,10 +89,6 @@ pub fn try_cur() -> Option<Id> {
     CUR.get()
 }
 
-pub fn cur() -> Id {
-    try_cur().unwrap()
-}
-
 pub fn init() {
     extern "C" {
         static _bss_end: usize;
@@ -122,8 +96,8 @@ pub fn init() {
 
     // safety: there are no other references to IDLE or OUR yet
     unsafe {
-        OUR.set(Box::new(Activity::new(kif::tilemux::ACT_ID, 0)));
-        IDLE.set(Box::new(Activity::new(kif::tilemux::IDLE_ID, 0)));
+        OUR.set(Box::new(Activity::new(kif::tilemux::ACT_ID)));
+        IDLE.set(Box::new(Activity::new(kif::tilemux::IDLE_ID)));
     }
 
     if pex_env().org_tile_desc.has_virtmem() {
@@ -138,14 +112,14 @@ pub fn init() {
         .unwrap();
     }
 
-    Paging::disable();
+    paging::Paging::disable();
 }
 
-pub fn set_user(id: u64, eps_start: tcu::EpId) {
+pub fn set_user(id: u64) {
     // As a 'unimux' we shouldn't be receiving multiple activity starts.
     assert!(!USER.is_some());
     unsafe {
-        USER.set(Box::new(Activity::new(id, eps_start)));
+        USER.set(Box::new(Activity::new(id)));
     }
 }
 
@@ -170,13 +144,11 @@ pub fn get_mut(id: Id) -> Option<ActivityRef<'static>> {
     else if act_id == kif::tilemux::IDLE_ID as tcu::ActId {
         Some(idle())
     }
+    else if USER.is_some() {
+        Some(user())
+    }
     else {
-        if USER.is_some() {
-            Some(user())
-        }
-        else {
-            None
-        }
+        None
     }
 }
 
@@ -185,18 +157,8 @@ pub fn our() -> ActivityRef<'static> {
     ActivityRef::new(unsafe { OUR.get_mut() })
 }
 
-fn block(mut act: Box<Activity>) {
-    act.state = ActivityState::BLOCKED;
-    //BLK.borrow_mut().push_back(act);
-}
-
 pub fn set_cur(next: Id) {
     CUR.set(Some(next));
-}
-
-pub fn update_our_activity() {
-    let act = tcu::TCU::get_cur_activity();
-    our().set_activity_reg(act);
 }
 
 pub fn stop_activity(status: Code) {
@@ -205,27 +167,18 @@ pub fn stop_activity(status: Code) {
     let act = tcu::TCU::get_cur_activity();
     user().set_activity_reg(act);
 
-    let old = tcu::TCU::xchg_activity(our().activity_reg()).unwrap();
+    tcu::TCU::xchg_activity(our().activity_reg()).unwrap();
 
-    let mut msg_buf = MsgBuf::borrow_def();
-    base::build_vmsg!(msg_buf, kif::tilemux::Calls::Exit, kif::tilemux::Exit {
-        act_id: user().id() as tcu::ActId,
-        status,
-    });
-    sendqueue::send(&msg_buf).unwrap();
+    crate::send_exit(user().id() as tcu::ActId, status);
 }
 
 impl Activity {
-    pub fn new(id: Id, eps_start: tcu::EpId) -> Self {
+    pub fn new(id: Id) -> Self {
         Activity {
-            prev: None,
-            next: None,
             act_reg: id,
             state: ActivityState::UNREADY,
-            user_state: arch::State::default(),
+            user_state: state::State::default(),
             user_state_addr: VirtAddr::null(),
-            eps_start,
-            cmd: helper::TCUCmdState::new(),
             has_refs: false,
         }
     }
@@ -254,12 +207,7 @@ impl Activity {
         self.act_reg += 1 << 16;
     }
 
-    pub fn rem_msgs(&mut self, count: u16) {
-        assert!(self.msgs() >= count);
-        self.act_reg -= (count as u64) << 16;
-    }
-
-    pub fn user_state(&mut self) -> &mut arch::State {
+    pub fn user_state(&mut self) -> &mut state::State {
         &mut self.user_state
     }
 
@@ -301,27 +249,19 @@ impl Activity {
                 entry as usize,
                 unsafe { core::ptr::addr_of!(baremetal_stack) as usize },
             );
+
             crate::app_env().boot.tile_desc = pex_env().tile_desc.value();
-            arch::init_state(&mut self.user_state, entry as usize, unsafe {
+            state::init_state(&mut self.user_state, entry as usize, unsafe {
                 core::ptr::addr_of!(baremetal_stack) as usize
             });
         }
         self.user_state_addr = VirtAddr::from(&self.user_state as *const _);
         self.state = ActivityState::READY;
     }
-
-    pub fn switch_to(&self) {
-    }
-}
-
-fn halt() {
-    loop {}
 }
 
 impl Drop for Activity {
     fn drop(&mut self) {
         log!(LogFlags::MuxActs, "Destroyed Activity {}", self.id());
-
-        halt();
     }
 }

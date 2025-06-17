@@ -16,7 +16,7 @@ use base::col::{BTreeMap, BTreeMapEntry, Vec};
 use base::io::log::LogColor;
 use base::io::{log, LogFlags};
 use base::kif::boot::{Info, Mem, Mod};
-use base::kif::{tilemux, Perm, TileAttr, TileType};
+use base::kif::{tilemux, Perm, TileAttr, TileDesc, TileType};
 use base::mem::{GlobAddr, GlobOff};
 use base::tcu::{ActId, TCU};
 use base::util::math::round_up;
@@ -300,7 +300,7 @@ fn write_kenv(
     (kenv_offset, keps_offset, kernel_offset)
 }
 
-#[cfg(M3_TARGET = "gem5")]
+#[allow(unused_variables)]
 fn init_kernel_eps(
     m3: &rot::cert::M3Payload<'_>,
     mem_tile: IndexedTile,
@@ -308,22 +308,25 @@ fn init_kernel_eps(
     keps_offset: GlobOff,
     kernel_offset: GlobOff,
 ) {
-    crate::clear_mem(keps_offset, (kernel_offset - keps_offset) as usize)
-        .expect("Failed to clear kernel endpoint region");
+    #[cfg(M3_TARGET = "gem5")]
+    {
+        crate::clear_mem(keps_offset, (kernel_offset - keps_offset) as usize)
+            .expect("Failed to clear kernel endpoint region");
 
-    const _: () = assert!(
-        tcu::ExtReg::EpsAddr as u64 + 1 == tcu::ExtReg::EpsSize as u64,
-        "EpsAddr and EpsSize must be consecutive registers (or code needs changes)"
-    );
+        const _: () = assert!(
+            tcu::ExtReg::EpsAddr as u64 + 1 == tcu::ExtReg::EpsSize as u64,
+            "EpsAddr and EpsSize must be consecutive registers (or code needs changes)"
+        );
 
-    let eps_addr =
-        ((TCU::tileid_to_nocid(mem_tile.id()) as tcu::Reg) << 50) | keps_offset as tcu::Reg;
-    ktile
-        .write_tcu(
-            &[eps_addr, kernel_offset - keps_offset],
-            TCU::ext_reg_addr(tcu::ExtReg::EpsAddr).as_goff(),
-        )
-        .expect("Failed to configure endpoint memory region in kernel tile TCU");
+        let eps_addr =
+            ((TCU::tileid_to_nocid(mem_tile.id()) as tcu::Reg) << 50) | keps_offset as tcu::Reg;
+        ktile
+            .write_tcu(
+                &[eps_addr, kernel_offset - keps_offset],
+                TCU::ext_reg_addr(tcu::ExtReg::EpsAddr).as_goff(),
+            )
+            .expect("Failed to configure endpoint memory region in kernel tile TCU");
+    }
 
     // Configure kernel's first PMP EP
     ktile.config_ep(0, |regs| {
@@ -374,6 +377,7 @@ fn prepare_for_rots(our_tile: IndexedTile, root_tile: IndexedTile) {
     }
 }
 
+#[cfg(M3_TARGET = "gem5")]
 fn lock_tile(our_tile: IndexedTile) {
     // get the address of the register
     let reg_addr = TCU::ext_reg_addr(tcu::ExtReg::Features).as_goff();
@@ -389,7 +393,7 @@ fn lock_tile(our_tile: IndexedTile) {
         .expect("failed to write slice");
 }
 
-pub fn main() -> ! {
+pub fn run() -> crate::RosaPrivateCtx {
     log::init(env::boot().tile_id(), "rosa", LogColor::BrightMagenta);
     log!(LogFlags::RoTBoot, "Hello World");
 
@@ -412,8 +416,21 @@ pub fn main() -> ! {
             tile.init(perm);
 
             // read out tile description
-            tile.read_tcu_obj(TCU::ext_reg_addr(tcu::ExtReg::TileDesc).as_goff())
-                .expect("Failed to read tile desc")
+            let desc: TileDesc = tile
+                .read_tcu_obj(TCU::ext_reg_addr(tcu::ExtReg::TileDesc).as_goff())
+                .expect("Failed to read tile desc");
+            if env!("M3_TARGET") == "hw23" {
+                // TODO the hardware platform does not specify the IEPS flag yet
+                let mut attr = desc.attr() | TileAttr::IEPS;
+                // TODO the RoT tile is also missing the KECACC flag
+                if desc.attr().contains(TileAttr::ROT) {
+                    attr |= TileAttr::KECACC;
+                }
+                TileDesc::new_with_attr(desc.tile_type(), desc.isa(), desc.mem_size(), attr)
+            }
+            else {
+                desc
+            }
         })
         .collect();
     log!(LogFlags::RoTDbg, "Tiles: {:#?}", tiles);
@@ -469,7 +486,6 @@ pub fn main() -> ! {
     mem_offset = round_up(mem_offset, cfg::PAGE_SIZE as GlobOff);
 
     // write kernel environment
-    #[allow(unused)]
     let (kenv_offset, keps_offset, kernel_offset) = write_kenv(
         &m3,
         &mods[..],
@@ -503,11 +519,17 @@ pub fn main() -> ! {
     ktile.init(Perm::RW);
 
     // Setup memory region for kernel endpoints
-    #[cfg(M3_TARGET = "gem5")]
     init_kernel_eps(&m3, mem_tile, ktile, keps_offset, kernel_offset);
 
     let root_tile = determine_root_tile(&m3, ktile);
     let our_tile = determine_our_tile(&m3);
+
+    // enable tile to allow memory transfers
+    if env!("M3_TARGET") == "hw23" {
+        ktile
+            .write_tcu(&[1u64], tcu::MMIO_ADDR.as_goff() + 0x3028)
+            .expect("Failed to start kernel tile");
+    }
 
     // Configure endpoint used to load kernel ELF
     config_local_ep(crate::MEM_EP, |regs| {
@@ -516,7 +538,7 @@ pub fn main() -> ! {
             rot::TCU_ACT_ID,
             ktile.id(),
             0,
-            rot::MEM_OFFSET as GlobOff,
+            m3.tiles[ktile.index()].mem_offset() as GlobOff,
             m3.kernel.mem_size as usize,
             Perm::W,
         )
@@ -528,7 +550,7 @@ pub fn main() -> ! {
             rot::TCU_ACT_ID,
             ktile.id(),
             0,
-            rot::MEM_ENV_START.as_goff(),
+            m3.tiles[ktile.index()].env_space().0.as_goff(),
             cfg::ENV_SIZE,
             Perm::W,
         )
@@ -536,16 +558,15 @@ pub fn main() -> ! {
 
     // prepare execution of rots/unimux and lock tile as we're about to start the kernel
     prepare_for_rots(our_tile, root_tile);
+    #[cfg(M3_TARGET = "gem5")]
     lock_tile(our_tile);
 
-    // Continue loading in second stage after clearing secrets
-    let next_ctx = rot::LayerCtx::new(rot::ROSA_ADDR, crate::RosaPrivateCtx {
+    crate::RosaPrivateCtx {
         next: next_ctx,
         our_tile,
         kernel_tile: ktile,
         root_tile,
         kernel_tile_desc: m3.tiles[ktile.index()],
         kenv_addr: GlobAddr::new_with(mem_tile.id(), kenv_offset),
-    });
-    unsafe { next_ctx.switch() }
+    }
 }

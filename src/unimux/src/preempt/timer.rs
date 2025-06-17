@@ -14,22 +14,13 @@
  */
 
 use base::cell::StaticCell;
-use base::col::Vec;
 use base::io::LogFlags;
-use base::kif;
 use base::log;
 use base::tcu;
-use base::time::{TimeDuration, TimeInstant};
-use core::cmp;
+use base::time::TimeDuration;
 
-use crate::activities;
+use crate::hdl::entry;
 
-struct Timeout {
-    end: TimeInstant,
-    act: activities::Id,
-}
-
-static STANDARD_TICK: TimeDuration = TimeDuration::from_millis(10);
 static TIMEOUT: StaticCell<TimeDuration> = StaticCell::new(TimeDuration::ZERO);
 
 pub fn set_timeout(time: TimeDuration) {
@@ -49,5 +40,5 @@ pub fn reprogram() {
 }
 
 pub fn trigger() {
-    crate::reg_timer_reprogram();
+    entry::reg_timer_reprogram();
 }

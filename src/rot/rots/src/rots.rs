@@ -22,7 +22,7 @@ extern crate lang;
 
 use core::cmp::min;
 
-use base::env::{self, BaseEnv, BootEnv};
+use base::env::{self, BaseEnv};
 use base::mem::PhysAddrRaw;
 use base::{cfg, tcu};
 use heapsimple::create_heap;
@@ -47,6 +47,8 @@ use m3core::time::{TimeDuration, TimeInstant};
 use m3core::{build_vmsg, const_assert, log, reply_vmsg};
 use rot::ed25519::Signer;
 use rot::{ed25519, Hex, OpaqueKMacKey, Secret};
+
+rot::generate_entry!();
 
 create_heap!(8 * 1024);
 
@@ -80,28 +82,30 @@ fn check_std_endpoints() {
     .expect("DEF_REP_OFF not sane");
 
     // now unfreeze all the standard EPs created by the kernel
-    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_SEP_OFF).unwrap();
-    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF).unwrap();
-    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::UPCALL_REP_OFF).unwrap();
-    TCU::unfreeze(tcu::FIRST_USER_EP + tcu::DEF_REP_OFF).unwrap();
+    if env!("M3_TARGET") == "gem5" {
+        TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_SEP_OFF).unwrap();
+        TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF).unwrap();
+        TCU::unfreeze(tcu::FIRST_USER_EP + tcu::UPCALL_REP_OFF).unwrap();
+        TCU::unfreeze(tcu::FIRST_USER_EP + tcu::DEF_REP_OFF).unwrap();
+    }
 }
 
 #[no_mangle]
-pub extern "C" fn env_run() -> ! {
-    let rom_env: &BootEnv = unsafe { &*(cfg::ENV_START_ROT.as_ptr()) };
+pub extern "C" fn env_run() {
     let rots_env_src: &BaseEnv =
         unsafe { &*((cfg::ENV_START.as_local() + cfg::ENV_SIZE / 2) as *const _) };
     let rots_env: &mut BaseEnv = unsafe { &mut *(cfg::ENV_START.as_mut_ptr()) };
 
-    // overwrite everything with default values
-    *rots_env = BaseEnv::default();
-
-    // copy boot env from previous stages
-    rots_env.boot = *rom_env;
+    // initialize the non-boot fields
+    *rots_env = env::BaseEnv {
+        boot: rots_env.boot,
+        ..Default::default()
+    };
 
     // hard code the arguments here
     rots_env.boot.argc = 1;
     rots_env.boot.argv = (cfg::ENV_START.as_local() + size_of::<BaseEnv>()) as u64;
+    rots_env.boot.envp = rots_env_src.boot.envp;
     let argv = rots_env.boot.argv as *mut *const u8;
     unsafe {
         *argv = b"rots\0".as_ptr();
@@ -136,7 +140,7 @@ static CTX: LazyReadOnlyCell<RotsCtx> = LazyReadOnlyCell::default();
 
 /// Size of the two SRAMs used as temporary buffer for TCU transfers
 /// and the accelerator.
-const BUFFER_SIZE: usize = 8 * 1024; // 8 KiB
+const BUFFER_SIZE: usize = 4 * 1024; // 4 KiB
 
 /// Maximum number of sessions the multiplexer allows.
 const MAX_SESSIONS: usize = 32;
@@ -1069,6 +1073,10 @@ pub fn main() -> Result<(), Error> {
     QUEUE.set(VecDeque::with_capacity(MAX_SESSIONS));
 
     server_loop(|| {
+        // explicitly check for sidecalls on hw23, as we don't get interrupts
+        #[cfg(M3_TARGET = "hw23")]
+        unimux::check_sidecalls();
+
         recv.handle_messages()?;
 
         // The QUEUE is mutably borrowed to pop a session and again later while
@@ -1093,5 +1101,10 @@ pub fn main() -> Result<(), Error> {
     })
     .ok();
 
+    // we cannot exit normally on hw23 as tmcalls are not supported
+    #[cfg(M3_TARGET = "hw23")]
+    unimux::exit(Code::Success as u32);
+
+    #[cfg(not(M3_TARGET = "hw23"))]
     Ok(())
 }

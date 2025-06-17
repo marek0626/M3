@@ -17,23 +17,21 @@ use base::io::LogFlags;
 use base::log;
 use base::mem::GlobOff;
 use base::tcu::TCU;
+use cfg_if::cfg_if;
 
-pub const BROM_NEXT_ADDR: usize = MEM_OFFSET + 0x3000;
-#[cfg(target_arch = "riscv32")]
-pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x20000;
-#[cfg(target_arch = "riscv64")]
-pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x18000;
-#[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-pub const ROSA_ADDR: usize = BLAU_NEXT_ADDR;
-#[cfg(target_arch = "riscv32")]
-pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x12000; // TileMux
-#[cfg(target_arch = "riscv64")]
-pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x3000; // TileMux
-
-#[cfg(target_arch = "riscv32")]
-pub const ROSA_ROTS_NEXT_ADDR: usize = ROSA_ADDR + 0x37000; // 0x3_7000 is approx rosa text+bss
-#[cfg(target_arch = "riscv64")]
-pub const ROSA_ROTS_NEXT_ADDR: usize = ROSA_ADDR + 0x30000; // 0x3_0000 is approx rosa text+bss
+cfg_if! {
+    // note: needs to be in sync with the memory areas in ld.conf
+    if #[cfg(M3_TARGET = "hw23")] {
+        pub const BROM_NEXT_ADDR: usize = MEM_OFFSET + 0x10000;
+        pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x4A000;
+        pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x6000;
+    }
+    else {
+        pub const BROM_NEXT_ADDR: usize = MEM_OFFSET + 0x5000;
+        pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x29000;
+        pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x67000;
+    }
+}
 
 /// Load a binary from flash into memory.
 ///
@@ -45,12 +43,13 @@ pub const ROSA_ROTS_NEXT_ADDR: usize = ROSA_ADDR + 0x30000; // 0x3_0000 is appro
 pub unsafe fn load_bin(addr: usize, bin: &crate::SimpleBinaryCfg) -> &'static [u8] {
     let size = bin.size as usize;
     let ptr = addr as *mut u8;
+    log!(
+        LogFlags::Info,
+        "Loaded binary for next layer to {:#x} .. {:#x}",
+        addr,
+        addr + size,
+    );
     TCU::read(crate::FLASH_EP, ptr, size, bin.flash_offset as GlobOff)
         .expect("Failed to load RoT binary");
-    log!(
-        LogFlags::RoTBoot,
-        "Loaded binary for next layer: {} bytes",
-        size
-    );
     core::slice::from_raw_parts(ptr, size)
 }

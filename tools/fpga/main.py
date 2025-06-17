@@ -148,16 +148,20 @@ def extract_instr_trace(tile, no: int):
         tile.inst.asm_disable()
 
 
-def stop_tiles(fpga_inst, timed_out):
+def stop_tiles(fpga_inst, extract, timed_out):
     print("Stopping all tiles...")
     for i, tile in enumerate(fpga_inst.pmTiles, 0):
-        extract_tcu_stats(tile, i)
-        if timed_out:
-            extract_tcu_log(tile, i)
-        extract_instr_trace(tile, i)
+        if extract:
+            extract_tcu_stats(tile, i)
+            if timed_out:
+                extract_tcu_log(tile, i)
+            extract_instr_trace(tile, i)
 
         if tile.type == TileType.ROCKET:
             tile.inst.stop()
+        elif tile.type == TileType.ACC:
+            tile.inst.asm_disable()
+            tile.inst.acc_disable()
 
 
 def main():
@@ -168,6 +172,7 @@ def main():
     parser.add_argument('--debug', type=int)
     parser.add_argument('--tile', action='append')
     parser.add_argument('--mod', action='append')
+    parser.add_argument('--rotlayer', action='append')
     parser.add_argument('--vm', action='store_true')
     parser.add_argument('--serial')
     parser.add_argument('--logflags')
@@ -181,10 +186,8 @@ def main():
     # connect to FPGA
     fpga_inst = fpga_top.FPGA_TOP(args.version, args.fpga, args.reset)
 
-    # stop all tiles (only Rocket cores)
-    for tile in fpga_inst.pmTiles:
-        if tile.type == TileType.ROCKET:
-            tile.inst.stop()
+    # stop all tiles
+    stop_tiles(fpga_inst, False, False)
 
     # check TCU versions
     for tile in fpga_inst.pmTiles:
@@ -202,12 +205,15 @@ def main():
     # disable NoC ARQ for program upload
     fpga_inst.set_arq_enable(False)
 
-    ld.init(fpga_inst.pmTiles, fpga_inst.dram1, args.tile, mods, args.logflags)
+    drams = [fpga_inst.dram1, fpga_inst.dram2]
+    dram = drams[1] if args.rotlayer is not None else drams[0]
+    loaded = ld.init(fpga_inst.pmTiles, drams, dram, args.tile,
+                     args.rotlayer, mods, args.logflags)
 
     # enable NoC ARQ when cores are running
     fpga_inst.set_arq_enable(True)
 
-    ld.start(fpga_inst.pmTiles, args.debug)
+    ld.start(fpga_inst.pmTiles, loaded, args.debug)
 
     # signal run.sh that everything has been loaded
     if args.debug is not None:
@@ -223,7 +229,7 @@ def main():
     # disable NoC ARQ again for post-processing
     fpga_inst.set_arq_enable(False)
 
-    stop_tiles(fpga_inst, timed_out)
+    stop_tiles(fpga_inst, True, timed_out)
 
 
 try:

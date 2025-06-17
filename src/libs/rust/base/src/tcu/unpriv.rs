@@ -405,10 +405,14 @@ impl TCU {
             return None;
         }
 
+        let (msg_order, slots) = match env!("M3_TARGET") {
+            "hw22" | "hw23" => ((r0 >> 41) & 0x3F, (r0 >> 35) & 0x3F),
+            _ => ((r0 >> 42) & 0x3F, (r0 >> 35) & 0x7F),
+        };
         Some((
             r1 as PhysAddrRaw,
-            ((r0 >> 42) & 0x3F) as u32,
-            ((r0 >> 35) & 0x7F) as u32,
+            msg_order as u32,
+            slots as u32,
             ((r0 >> 19) & 0xFFFF) as EpId,
         ))
     }

@@ -22,7 +22,7 @@ build_bbl() {
     bblbuild="build/riscv-pk"
     mkdir -p "$bblbuild"
 
-    args=("--with-mem-start=0x10003000")
+    args=("--with-mem-start=0x10004000")
 
     (
         cd "$bblbuild" \

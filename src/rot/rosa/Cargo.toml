@@ -2,12 +2,15 @@
 name = "rosa"
 version = "0.1.0"
 edition = "2021"
-build = "../build-layer.rs"
+build = "../../build.rs"
+
+[lib]
+path = "src/rosa.rs"
+crate-type = ["staticlib"]
 
 [dependencies]
 base = { path = "../../libs/rust/base", features = ["rot"] }
 lang = { path = "../../libs/rust/lang" }
 rot = { path = "../../libs/crypto/rot" }
 kecacc = { path = "../../libs/crypto/kecacc" }
-riscv-rt = { version = "0.12.0", features = ["single-hart"] }
 talc = { version = "4.2.0", default-features = false, features = ["lock_api"] }

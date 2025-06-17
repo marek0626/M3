@@ -55,12 +55,15 @@ pub const TILE_MEM_BASE: VirtAddr = VirtAddr::new(0xE000_0000);
 pub const MEM_CAP_END: VirtAddr = RBUF_STD_ADDR;
 
 #[cfg(target_arch = "riscv32")]
-pub const ENV_START_DEF: VirtAddr = VirtAddr::new(0x1_0000);
+pub const ENV_START_DEF: VirtAddr = VirtAddr::new(0x1000);
 #[cfg(target_arch = "riscv64")]
 pub const ENV_START_DEF: VirtAddr = VirtAddr::new(0x1000_1000);
 #[cfg(target_arch = "x86_64")]
 pub const ENV_START_DEF: VirtAddr = VirtAddr::new(0x1F_E000);
+#[cfg(M3_TARGET = "gem5")]
 pub const ENV_START_ROT: VirtAddr = VirtAddr::new(0x0b00_1000);
+#[cfg(any(M3_TARGET = "hw23", M3_TARGET = "hw22", M3_TARGET = "hw"))]
+pub const ENV_START_ROT: VirtAddr = VirtAddr::new(0x0000_1000);
 
 #[cfg(feature = "rot")]
 pub const ENV_START: VirtAddr = ENV_START_ROT;

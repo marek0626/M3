@@ -352,7 +352,7 @@ impl TileDesc {
     /// Returns the starting address and size of the environment
     pub fn env_space(self) -> (VirtAddr, usize) {
         let start = match self.isa() {
-            TileISA::RISCV32 => VirtAddr::new(0x1_0000),
+            TileISA::RISCV32 => VirtAddr::new(0x1000),
             TileISA::RISCV64 => VirtAddr::new((self.mem_offset() + cfg::PAGE_SIZE) as VirtAddrRaw),
             _ => VirtAddr::new((self.mem_offset() + 0x1F_E000) as VirtAddrRaw),
         };
@@ -401,7 +401,7 @@ impl TileDesc {
         }
         else if self.isa() == TileISA::RISCV32 {
             match env!("M3_TARGET") {
-                "hw22" | "hw23" => cfg::RBUF_STD_SIZE + 0x400,
+                "hw22" | "hw23" => cfg::RBUF_STD_SIZE + 0x1000,
                 _ => cfg::RBUF_STD_SIZE + 0xD000,
             }
         }
@@ -413,7 +413,14 @@ impl TileDesc {
             cfg::RBUF_STD_ADDR
         }
         else {
-            VirtAddr::from(self.mem_offset() + self.mem_size() - size)
+            let end = if self.attr().contains(TileAttr::ROT) {
+                // don't use the last 4k that's owned by the hash accelerator
+                self.mem_offset() + self.mem_size() - 0x1000
+            }
+            else {
+                self.mem_offset() + self.mem_size()
+            };
+            VirtAddr::from(end - size)
         };
 
         (addr, size)

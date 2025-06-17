@@ -63,7 +63,6 @@ impl CfgData for BlauCfg {
 }
 
 #[repr(C)]
-#[derive(Debug)]
 pub struct RosaCfg {
     pub kernel_mem_size: GlobOff,
     pub kernel_ep_pages: u8,
@@ -78,6 +77,19 @@ impl RosaCfg {
 
     pub fn mod_count(&self) -> usize {
         self.mods.iter().take_while(|&m| m.size != 0).count()
+    }
+}
+
+impl Debug for RosaCfg {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("RosaCfg")
+            .field("kernel_mem_size", &self.kernel_mem_size)
+            .field("kernel_ep_pages", &self.kernel_ep_pages)
+            .field("kernel_cmdline", &self.kernel_cmdline)
+            // don't print beyond the initialized modules
+            .field("mods", &&self.mods[..self.mod_count()])
+            .field("next_layer", &self.next_layer)
+            .finish()
     }
 }
 
@@ -138,7 +150,8 @@ impl<Prev: CheckMagic, Data: CfgData> LayerCfg<Prev, Data> {
 fn reserved_addr() -> usize {
     let desc = TileDesc::new_from(env::boot().tile_desc);
     assert!(desc.attr().contains(TileAttr::IMEM));
-    MEM_OFFSET + desc.mem_size() - RESERVED_SIZE
+    // TODO the 0x1000 is a hack to not use the additional 4K for the hash accelerator
+    MEM_OFFSET + desc.mem_size() - 0x1000 - RESERVED_SIZE
 }
 
 /// Get a mutable reference to the reserved memory area.

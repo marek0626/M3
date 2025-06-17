@@ -15,11 +15,10 @@
 
 use base::errors::Code;
 use base::io::LogFlags;
-use base::kif;
 use base::log;
 use base::tcu;
 
-use crate::activities;
+use crate::hdl::activities;
 
 pub fn handle(req: tcu::CUReq) {
     match req {
@@ -30,7 +29,7 @@ pub fn handle(req: tcu::CUReq) {
     tcu::TCU::set_cu_resp();
 }
 
-fn handle_foreign_recv(act: u16, ep: tcu::EpId) {
+fn handle_foreign_recv(act: u16, _ep: tcu::EpId) {
     // add message to activity
     if let Some(mut v) = activities::get_mut(act as activities::Id) {
         // if this activity is currently running, we have to update the CUR_ACT register

@@ -15,8 +15,6 @@
 #![no_std]
 #![no_main]
 
-use riscv_rt::entry;
-
 use base::io::log::LogColor;
 use base::io::{log, LogFlags};
 use base::{env, log, machine};
@@ -26,14 +24,21 @@ use rot::cert::{BinaryPayload, SignaturePayload};
 use rot::ed25519::{SecretKey, Signer, SigningKey};
 use rot::{Hex, Secret};
 
+rot::generate_entry!();
+
 #[no_mangle]
 pub extern "C" fn exit(_code: i32) -> ! {
     log!(LogFlags::Info, "Shutting down");
     machine::shutdown();
 }
 
-#[entry]
-fn main() -> ! {
+#[no_mangle]
+pub extern "C" fn abort() {
+    exit(1);
+}
+
+#[no_mangle]
+pub extern "C" fn env_run() -> ! {
     log::init(env::boot().tile_id(), "blau", LogColor::BrightBlue);
     log!(LogFlags::RoTBoot, "Hello World");
 

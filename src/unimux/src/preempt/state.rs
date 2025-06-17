@@ -13,21 +13,9 @@
  * General Public License version 2 for more details.
  */
 
-use base::cell::StaticCell;
-use base::errors::Code;
-use base::io::LogFlags;
-use base::kif::tilemux;
-use base::libc;
-use base::mem::{size_of, MaybeUninit};
-use base::{log, read_csr, write_csr};
+use base::{read_csr, write_csr};
 
 use num_enum::{FromPrimitive, IntoPrimitive};
-
-use crate::activities;
-
-extern "C" {
-    fn sleep_once();
-}
 
 pub type State = isr::State;
 
@@ -39,10 +27,6 @@ enum FSMode {
     INITIAL = 1,
     CLEAN   = 2,
     DIRTY   = 3,
-}
-
-fn get_fpu_mode(status: usize) -> FSMode {
-    FSMode::from((status >> 13) & 0x3)
 }
 
 fn set_fpu_mode(mut status: usize, mode: FSMode) -> usize {
@@ -57,10 +41,6 @@ pub fn init_state(state: &mut State, entry: usize, sp: usize) {
     state.status &= !(1 << 8); // user mode
     state.status |= 1 << 5; // interrupts enabled
     state.status = set_fpu_mode(state.status, FSMode::CLEAN);
-}
-
-fn halt() {
-    loop {}
 }
 
 pub fn init_fpu() {

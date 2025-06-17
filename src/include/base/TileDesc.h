@@ -178,7 +178,7 @@ struct TileDesc {
      */
     std::pair<uintptr_t, size_t> env_space() const {
         auto offset = isa() == TileISA::RISCV64 ? PAGE_SIZE : 0x1F'E000;
-        auto start = isa() == TileISA::RISCV32 ? 0x1'0000 : mem_offset() + offset;
+        auto start = isa() == TileISA::RISCV32 ? 0x1000 : mem_offset() + offset;
         return std::make_pair(start, PAGE_SIZE);
     }
 
@@ -223,7 +223,7 @@ private:
 #if defined(__gem5__)
             size = RBUF_STD_SIZE + 0xD000;
 #else
-            size = RBUF_STD_SIZE + 0x400;
+            size = RBUF_STD_SIZE + 0x1000;
 #endif
         }
         else
@@ -232,7 +232,12 @@ private:
         if(has_virtmem())
             addr = RBUF_STD_ADDR;
         else {
-            addr = mem_offset() + mem_size() - size;
+            uintptr_t end;
+            if(attr() & TileAttr::ROT)
+                end = mem_offset() + mem_size() - 0x1000;
+            else
+                end = mem_offset() + mem_size();
+            addr = end - size;
         }
 
         return std::make_pair(addr, size);

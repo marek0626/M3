@@ -27,20 +27,9 @@
 BEGIN_FUNC(_start)
     la      sp, isr_stack
     call    init
-
-    // return to user mode
-    li      a0, 1 << 8
-    csrc    sstatus, a0
-    // enable interrupts
-    li      a0, 1 << 5
-    csrs    sstatus, a0
-
-    // jump to sleep function
-    la      a0, sleep
-    csrw    sepc, a0
-
-    // go!
-    sret
+    // stay here
+1:
+    j       1b
 END_FUNC(_start)
 
 // fn _shutdown()
@@ -57,17 +46,6 @@ END_FUNC(_shutdown)
 
 
 .section .user_text
-
-BEGIN_FUNC(sleep)
-    la      a0, ENV_START
-    // load platform from environment
-    lmw     a0, 0(a0)
-    // skip wfi on hw (TODO why does that not work?)
-1:  bnez    a0, 2f
-    wfi
-2:
-    j       1b
-END_FUNC(sleep)
 
 BEGIN_FUNC(sleep_once)
     csrsi   sstatus, 2

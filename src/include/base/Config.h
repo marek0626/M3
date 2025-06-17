@@ -97,7 +97,7 @@
 #define RBUF_SIZE_SPM 0xE000
 
 #if defined(__riscv) && __riscv_xlen == 32
-#    define ENV_START 0x10000
+#    define ENV_START 0x1000
 #elif defined(__riscv) && __riscv_xlen == 64
 #    define ENV_START 0x10001000
 #elif defined(__x86_64__)
@@ -106,7 +106,7 @@
 #define ENV_SIZE           0x1000
 
 #define TILEMUX_RBUF_SIZE  0x1000
-#define TILEMUX_CODE_START (ENV_START + ENV_SIZE + TILEMUX_RBUF_SIZE)
+#define TILEMUX_CODE_START (ENV_START + ENV_SIZE + TILEMUX_RBUF_SIZE + 0x1000)
 
 #define KPEX_RBUF_ORDER    6
 #define KPEX_RBUF_SIZE     (1 << KPEX_RBUF_ORDER)

@@ -25,7 +25,6 @@ use base::{cfg, log, machine};
 use core::cmp::min;
 #[allow(unused_imports)]
 use lang as _;
-use riscv_rt::entry;
 use rot::CtxData;
 
 mod idxtile;
@@ -55,7 +54,7 @@ impl CtxData for RosaPrivateCtx {
 
 pub type RosaPrivateLayerCtx = rot::LayerCtx<RosaPrivateCtx>;
 
-const HEAP_SIZE: usize = 32 * 1024;
+const HEAP_SIZE: usize = 8 * 1024;
 const COPY_BUF_SIZE: usize = 4 * 1024;
 
 pub const EP_REGS_SIZE: usize = tcu::EP_REGS * mem::size_of::<tcu::Reg>();
@@ -95,22 +94,24 @@ where
     TCU::set_ep_regs(ep, &regs);
 }
 
+rot::generate_entry!();
+
 #[no_mangle]
 pub extern "C" fn exit(_code: i32) -> ! {
     log!(LogFlags::Info, "Shutting down");
     machine::shutdown();
 }
 
-#[entry]
-fn main() -> ! {
+#[no_mangle]
+pub extern "C" fn abort() {
+    exit(1);
+}
+
+#[no_mangle]
+pub extern "C" fn env_run() -> ! {
     // Initialize heap allocator
     unsafe { ALLOCATOR.lock().claim(core::ptr::addr_of!(HEAP).into()) }.unwrap();
 
-    let ctx = unsafe { rot::LayerCtx::<()>::get() };
-    if ctx.magic == RosaPrivateCtx::MAGIC {
-        stage2::main();
-    }
-    else {
-        stage1::main()
-    }
+    let ctx = stage1::run();
+    stage2::run(ctx)
 }
