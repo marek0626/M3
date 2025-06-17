@@ -1,6 +1,5 @@
 dirs = [
     'arith',
-    'crypto',
     'disk',
     'm3fs',
     'net',

@@ -246,15 +246,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hashmux"
-version = "0.1.0"
-dependencies = [
- "base",
- "kecacc",
- "m3",
-]
-
-[[package]]
 name = "hashmuxbenchs"
 version = "0.1.0"
 dependencies = [
