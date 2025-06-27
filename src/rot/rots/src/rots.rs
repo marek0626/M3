@@ -179,7 +179,7 @@ const_assert!(MAX_DIRECT_SIZE <= BUFFER_SIZE);
 
 static CURRENT: StaticCell<Option<SessId>> = StaticCell::new(None);
 static QUEUE: LazyStaticRefCell<VecDeque<SessId>> = LazyStaticRefCell::default();
-static KECACC: KecAcc = KecAcc::new(0xF4200000);
+static KECACC: KecAcc = KecAcc::new();
 //
 
 #[derive(Debug)]

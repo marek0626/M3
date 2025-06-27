@@ -17,7 +17,17 @@
 // Choose between using hardware accelerator vs software fallback.
 // Currently this is a compile-time choice using Rust features.
 
-#[cfg(not(any(feature = "backend-xkcp", feature = "backend-rust")))]
+#[cfg(all(
+    M3_TARGET = "hw23",
+    not(any(feature = "backend-xkcp", feature = "backend-rust"))
+))]
+#[path = "kecacc-hw.rs"]
+mod kecacc;
+
+#[cfg(all(
+    not(M3_TARGET = "hw23"),
+    not(any(feature = "backend-xkcp", feature = "backend-rust"))
+))]
 mod kecacc;
 
 #[cfg(feature = "backend-xkcp")]
@@ -28,4 +38,4 @@ mod kecacc;
 #[path = "kecacc-rust.rs"]
 mod kecacc;
 
-pub use kecacc::{KecAcc, KecAccState};
+pub use kecacc::{init, KecAcc, KecAccState};

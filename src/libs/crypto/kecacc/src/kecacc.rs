@@ -40,6 +40,7 @@ impl Default for KecAccState {
     }
 }
 
+const KECACC_ADDR: usize = 0xF4200000;
 const MAX_ADDR: *const u8 = (1 << 30) as *const u8;
 const MAX_SIZE: usize = 1 << 30;
 
@@ -80,6 +81,9 @@ impl Cmd {
     }
 }
 
+pub fn init() {
+}
+
 /// A simple wrapper around the Keccak/SHA-3 accelerator ("KecAcc"), mapped
 /// to the specified memory address.
 ///
@@ -91,8 +95,9 @@ pub struct KecAcc {
 }
 
 impl KecAcc {
-    pub const fn new(addr: usize) -> Self {
-        KecAcc { addr }
+    #[allow(clippy::new_without_default)]
+    pub const fn new() -> Self {
+        KecAcc { addr: KECACC_ADDR }
     }
 
     pub fn supports_algo(&self, _hash_type: HashType) -> bool {

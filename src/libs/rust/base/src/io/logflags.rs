@@ -243,9 +243,22 @@ bitflags! {
         #[doc(hidden)]
         const __rot_start = Self::__pipe_start.bits() + 2;
 
+        /// rot: basic boot information
         const RoTBoot       = 1 << (Self::__rot_start.bits() + 0);
+        /// rot: requests to the RoT service
         const RoTReqs       = 1 << (Self::__rot_start.bits() + 1);
+        /// rot: more detailed information
         const RoTDbg        = 1 << (Self::__rot_start.bits() + 2);
+
+        #[doc(hidden)]
+        const __sha3_start = Self::__rot_start.bits() + 3;
+
+        /// sha3: register accesses
+        const SHA3Reg       = 1 << (Self::__sha3_start.bits() + 0);
+        /// sha3: accesses to the accelerator SPM
+        const SHA3Mem       = 1 << (Self::__sha3_start.bits() + 1);
+        /// sha3: accelerator commands
+        const SHA3Cmd       = 1 << (Self::__sha3_start.bits() + 2);
     }
 }
 

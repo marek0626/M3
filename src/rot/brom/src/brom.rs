@@ -23,7 +23,7 @@ use base::{env, log, machine};
 #[allow(unused_imports)]
 use lang as _;
 use rot::cshake::kmac;
-use rot::Secret;
+use rot::{kecacc, Secret};
 
 const UDS_SIZE: usize = 256 / u8::BITS as usize;
 static UDS: Secret<[u8; UDS_SIZE]> = Secret::new_zeroed(); // Dummy UDS (all zeroes)
@@ -54,6 +54,10 @@ pub extern "C" fn env_run() -> ! {
         TCU::read_slice(rot::FLASH_EP, reservation, 0).expect("Failed to read RoT config");
     }
     let cfg = unsafe { rot::BromLayerCfg::get() };
+
+    // init hash accelerator (create TCU EPs while we still can (privileged TCU) and before we need
+    // the accelerator for the first time)
+    kecacc::init();
 
     // Load binary for next layer
     let next = unsafe { rot::load_bin(rot::BROM_NEXT_ADDR, &cfg.data.next_layer) };
