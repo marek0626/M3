@@ -20,8 +20,10 @@ use cshake::kmac;
 use crate::{Secret, KECACC};
 
 // KMAC256
-const KMAC_HASH_TYPE: HashType = HashType::CSHAKE256;
-const KMAC_HASH_ALGO: &HashAlgorithm = &HashAlgorithm::CSHAKE256;
+// TODO use SHAKE256 instead of CSHAKE256 for now, because our hardware accelerator does not
+// support CSHAKE
+const KMAC_HASH_TYPE: HashType = HashType::SHAKE256;
+const KMAC_HASH_ALGO: &HashAlgorithm = &HashAlgorithm::SHAKE256;
 const KMAC_BLOCK_BYTES: usize = KMAC_HASH_ALGO.block_bytes;
 const KMAC_CUSTOM_CDI: &str = "DICE";
 const KMAC_KEY_PAD_CDI: &str = "CDI";

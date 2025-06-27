@@ -26,7 +26,8 @@ use base::serialize::{Deserialize, Serialize};
 use crate::ed25519;
 use crate::hex::Hex;
 
-pub const HASH_ALGO: &HashAlgorithm = &HashAlgorithm::SHA3_256;
+// TODO use SHA3_224 for now, because we run into buggy corner cases with SHA3_256.
+pub const HASH_ALGO: &HashAlgorithm = &HashAlgorithm::SHA3_224;
 pub const HASH_TYPE: HashType = HASH_ALGO.ty;
 
 pub type HashBuf = [u8; HASH_ALGO.output_bytes];
