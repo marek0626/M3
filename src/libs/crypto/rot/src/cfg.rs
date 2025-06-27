@@ -150,8 +150,7 @@ impl<Prev: CheckMagic, Data: CfgData> LayerCfg<Prev, Data> {
 fn reserved_addr() -> usize {
     let desc = TileDesc::new_from(env::boot().tile_desc);
     assert!(desc.attr().contains(TileAttr::IMEM));
-    // TODO the 0x1000 is a hack to not use the additional 4K for the hash accelerator
-    MEM_OFFSET + desc.mem_size() - 0x1000 - RESERVED_SIZE
+    MEM_OFFSET + desc.mem_size() - RESERVED_SIZE
 }
 
 /// Get a mutable reference to the reserved memory area.

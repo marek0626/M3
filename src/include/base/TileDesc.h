@@ -231,14 +231,8 @@ private:
 
         if(has_virtmem())
             addr = RBUF_STD_ADDR;
-        else {
-            uintptr_t end;
-            if(attr() & TileAttr::ROT)
-                end = mem_offset() + mem_size() - 0x1000;
-            else
-                end = mem_offset() + mem_size();
-            addr = end - size;
-        }
+        else
+            addr = (mem_offset() + mem_size()) - size;
 
         return std::make_pair(addr, size);
     }
