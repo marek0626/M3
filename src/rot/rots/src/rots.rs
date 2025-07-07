@@ -48,6 +48,8 @@ use m3core::{build_vmsg, const_assert, log, reply_vmsg};
 use rot::ed25519::Signer;
 use rot::{ed25519, Hex, OpaqueKMacKey, Secret};
 
+mod exregs;
+
 rot::generate_entry!();
 
 create_heap!(12 * 1024);
@@ -989,6 +991,11 @@ fn init_rot() -> Result<(MemCap, u64), Error> {
         Err(e) => return Err(e),
     };
     Ok((rot_cert_cap, rot_cert_size))
+}
+
+#[no_mangle]
+pub fn init_exregs() {
+    unimux::reg_exreg_handler(exregs::add, exregs::rem);
 }
 
 #[no_mangle]

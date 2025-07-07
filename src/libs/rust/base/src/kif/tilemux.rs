@@ -23,10 +23,10 @@ use num_enum::IntoPrimitive;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
 use crate::errors::Code;
-use crate::kif::PageFlags;
-use crate::mem::{GlobAddr, VirtAddr};
+use crate::kif::{PageFlags, Perm};
+use crate::mem::{GlobAddr, GlobOff, VirtAddr};
 use crate::serialize::{Deserialize, Serialize};
-use crate::tcu::{ActId, EpId};
+use crate::tcu::{ActId, EpId, GenId, TileId};
 
 /// The activity id of TileMux
 pub const ACT_ID: u64 = 0xFFFF;
@@ -49,6 +49,8 @@ pub enum Sidecalls {
     ReqEP,
     RemMsgs,
     EPInval,
+    ExRegAdd,
+    ExRegRem,
     // Acquire a new quota from an existing one (split off)
     DeriveQuota,
     // Report quota statistics: totals and remaining free.
@@ -125,6 +127,26 @@ pub struct RemMsgs {
 pub struct EpInval {
     pub act_id: u64,
     pub ep: EpId,
+}
+
+/// The add exclusive-region sidecall
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExRegAdd {
+    pub mtile: TileId,
+    pub idx: usize,
+    pub utile: TileId,
+    pub ugen: GenId,
+    pub addr: GlobOff,
+    pub size: GlobOff,
+    pub perm: Perm,
+    pub locked: bool,
+}
+
+/// The remove exclusive-region sidecall
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExRegRem {
+    pub mtile: TileId,
+    pub idx: usize,
 }
 
 /// The derive quota sidecall

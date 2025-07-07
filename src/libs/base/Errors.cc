@@ -54,9 +54,8 @@ static const char *errmsgs[] = {
     "No PMP endpoint",
     "No pending IRQ",
     "No permission for exclusive region",
-    "Exclusive region overlaps with another region",
+    "Only the manager has access to exclusive-region registers",
     /* 30 */
-    "Exclusive region exists",
     "Tile is locked",
     "Wrong tile generation",
     "EP is frozen",
@@ -66,8 +65,8 @@ static const char *errmsgs[] = {
     "Out of memory",
     "No such file or directory",
     "Not supported",
-    /* 40 */
     "No free/suitable tile",
+    /* 40 */
     "Invalid ELF file",
     "No space left",
     "Object does already exist",
@@ -77,8 +76,8 @@ static const char *errmsgs[] = {
     "Is no directory",
     "Endpoint is invalid",
     "End of file",
-    /* 50 */
     "Messages are waiting to be handled",
+    /* 50 */
     "Reply will be sent via upcall",
     "Commit failed",
     "Out of kernel memory",
@@ -88,14 +87,15 @@ static const char *errmsgs[] = {
     "Write failed",
     "UTF-8 error",
     "Bad file descriptor",
-    /* 60 */
     "Invalid seek",
+    /* 60 */
     "Unspecified error",
     "Invalid capability",
     "Deserialization failed",
     "Last cap would overflow",
     "Cap count too large",
     "Kernel broken",
+    "Exclusive region overlaps with others",
 
     /* Socket */
     "Invalid state",

@@ -32,8 +32,8 @@ use crate::mem::{self, GlobOff, PhysAddr, VirtAddr};
 use crate::{cfg, kif};
 
 use crate::tcu::{
-    ActId, EpId, EpType, GenId, Label, Reg, TileId, EP_REGS, MMIO_ADDR, MMIO_EPS_ADDR, NO_REPLIES,
-    TCU,
+    ActId, EpId, EpType, GenId, Label, Reg, TileId, EP_REGS, EXT_REGS, MMIO_ADDR, MMIO_EPS_ADDR,
+    NO_REPLIES, PRINT_REGS, TCU, UNPRIV_REGS,
 };
 
 /// The external commands
@@ -46,10 +46,6 @@ pub enum ExtCmdOpCode {
     InvEP,
     /// Reset the CU
     Reset,
-    /// Sets a specific exclusive memory region
-    SetExcl,
-    /// Invalidates a specific exclusive memory region
-    InvExcl,
 }
 
 cfg_if! {
@@ -94,6 +90,8 @@ cfg_if! {
             EpsAddr,
             /// The size of the EP region in bytes
             EpsSize,
+            /// The exclusive-region manager
+            ExRegMng,
         }
     }
 }
@@ -303,7 +301,7 @@ impl TCU {
     }
 
     #[allow(unused, clippy::too_many_arguments)]
-    pub fn build_exreg_cmd(
+    pub fn build_exreg(
         mem_tile: TileId,
         user_tile: TileId,
         user_tile_gen: GenId,
@@ -311,29 +309,24 @@ impl TCU {
         addr: GlobOff,
         size: GlobOff,
         perm: kif::Perm,
-        locked: bool,
     ) -> Option<(Reg, Reg)> {
         #[cfg(not(M3_TARGET = "gem5"))]
         return None;
 
         #[cfg(M3_TARGET = "gem5")]
         {
-            let mut cfg = (user_tile_gen as Reg) << 18 | (user_tile.raw() as Reg) << 4 | 1;
-            if locked {
-                cfg |= 1 << 1;
-            }
+            let mut cfg = (user_tile_gen as Reg) << 16 | (user_tile.raw() as Reg) << 2;
             if perm.contains(kif::Perm::R) {
-                cfg |= 1 << 2;
+                cfg |= 1 << 0;
             }
             if perm.contains(kif::Perm::W) {
-                cfg |= 1 << 3;
+                cfg |= 1 << 1;
             }
 
             assert!(((addr >> 3) & ((size >> 3) - 1)) == 0);
             assert!(size.is_power_of_two());
             let addr_size = (addr >> 2) | ((size >> 3) - 1);
-            let cmd = TCU::build_ext_cmd(ExtCmdOpCode::SetExcl, cfg | (idx as u64) << 34);
-            Some((cmd, addr_size))
+            Some((cfg, addr_size))
         }
     }
 
@@ -353,5 +346,10 @@ impl TCU {
     /// Returns the MMIO address of the given endpoint registers
     pub fn ep_regs_addr(ep: EpId) -> VirtAddr {
         MMIO_EPS_ADDR + (EP_REGS * ep as usize) * mem::size_of::<Reg>()
+    }
+
+    /// Returns the MMIO address of the given exclusive register
+    pub fn exreg_addr(reg: usize) -> VirtAddr {
+        MMIO_ADDR + (EXT_REGS + UNPRIV_REGS + PRINT_REGS + reg * 2) * mem::size_of::<Reg>()
     }
 }

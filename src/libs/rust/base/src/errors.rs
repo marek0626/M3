@@ -61,8 +61,7 @@ pub enum Code {
     NoPMPEP,
     NoIRQ,
     ExRegNoPerm,
-    ExRegOverlaps,
-    ExRegExists,
+    ExRegNoMng,
     TileLocked,
     WrongGen,
     EPFrozen,
@@ -103,6 +102,7 @@ pub enum Code {
     /// The provided count does not fit in the [`crate::kif::CapRngDesc`]
     CapCountTooLarge,
     KernelBroken,
+    ExRegOverlaps,
     // networking
     InvState,
     WouldBlock,

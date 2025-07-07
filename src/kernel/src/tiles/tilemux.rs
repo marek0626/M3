@@ -22,7 +22,7 @@ use base::kif::{self, Perm, TileAttr};
 use base::log;
 use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, VirtAddr};
 use base::quota;
-use base::tcu::{self, ActId, EpId, TileId};
+use base::tcu::{self, ActId, EpId, GenId, TileId};
 use base::util::math;
 use base::{cfg, format};
 
@@ -36,7 +36,7 @@ use crate::cap::{
 };
 use crate::mem;
 use crate::platform;
-use crate::tiles::{tilemng, Activity, INVAL_ID};
+use crate::tiles::{tilemng, Activity, ExRegs, INVAL_ID};
 use crate::{kerrno, kerror};
 use crate::{ktcu, thread_startup_async};
 
@@ -405,8 +405,10 @@ impl TileMux {
             drop(tilemux);
 
             // invalidate all exclusive regions for this user tile
-            for mtile in platform::user_tiles() {
-                tilemng::exregs(mtile).invalidate(tile_id);
+            for mtile in platform::all_tiles() {
+                if mtile != platform::kernel_tile() {
+                    ExRegs::invalidate_async(mtile, tile_id);
+                }
             }
         }
 
@@ -920,6 +922,48 @@ impl TileMux {
             true,
         )
         .map(|reply| GlobAddr::new(reply.val1 & !(PAGE_MASK as GlobOff)))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn exreg_add_async(
+        tilemux: RefMut<'_, Self>,
+        mtile: TileId,
+        idx: usize,
+        utile: TileId,
+        ugen: GenId,
+        addr: GlobOff,
+        size: GlobOff,
+        perm: Perm,
+        locked: bool,
+    ) -> anyhow::Result<()> {
+        let mut buf = MsgBuf::borrow_def();
+        let msg = kif::tilemux::ExRegAdd {
+            mtile,
+            idx,
+            utile,
+            ugen,
+            addr,
+            size,
+            perm,
+            locked,
+        };
+        build_vmsg!(buf, kif::tilemux::Sidecalls::ExRegAdd, &msg);
+
+        Self::send_receive_sidecall_async::<kif::tilemux::ExRegAdd>(tilemux, None, buf, &msg, true)
+            .map(|_| ())
+    }
+
+    pub fn exreg_rem_async(
+        tilemux: RefMut<'_, Self>,
+        mtile: TileId,
+        idx: usize,
+    ) -> anyhow::Result<()> {
+        let mut buf = MsgBuf::borrow_def();
+        let msg = kif::tilemux::ExRegRem { mtile, idx };
+        build_vmsg!(buf, kif::tilemux::Sidecalls::ExRegRem, &msg);
+
+        Self::send_receive_sidecall_async::<kif::tilemux::ExRegRem>(tilemux, None, buf, &msg, true)
+            .map(|_| ())
     }
 
     pub fn notify_invalidate(&mut self, act: ActId, ep: EpId) -> anyhow::Result<()> {

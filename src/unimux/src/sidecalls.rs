@@ -13,18 +13,25 @@
  * General Public License version 2 for more details.
  */
 
+use base::cell::StaticCell;
 use base::cfg;
 use base::errors::{Code, Error};
 use base::io::LogFlags;
 use base::kif;
 use base::log;
-use base::mem::{GlobAddr, MsgBuf, VirtAddr, VirtAddrRaw};
+use base::mem::{GlobAddr, GlobOff, MsgBuf, VirtAddr, VirtAddrRaw};
 use base::serialize::M3Deserializer;
-use base::tcu;
+use base::tcu::{self, GenId, TileId};
 use mux::sendqueue;
 use mux::sidecalls;
 
 use crate::{_shutdown, hdl, pex_env};
+
+pub type AddExRegHandler =
+    fn(TileId, usize, TileId, GenId, GlobOff, GlobOff, kif::Perm, bool) -> Result<(), Error>;
+pub type RemExRegHandler = fn(TileId, usize) -> Result<(), Error>;
+
+static EXREG_HDL: StaticCell<Option<(AddExRegHandler, RemExRegHandler)>> = StaticCell::new(None);
 
 fn side_rbuf_addr() -> VirtAddr {
     crate::pex_env().tile_desc.rbuf_mux_space().0 + cfg::KPEX_RBUF_SIZE as VirtAddrRaw
@@ -154,6 +161,48 @@ fn translate(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     }
 }
 
+fn exreg_add(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
+    let r: kif::tilemux::ExRegAdd = sidecalls::get_request(msg)?;
+
+    log!(
+        LogFlags::MuxSideCalls,
+        "sidecall::exreg_add(mtile={}, idx={}, utile={}, ugen={}, addr={:#x}, size={:#x}, perm={:?}, locked={})",
+        r.mtile,
+        r.idx,
+        r.utile,
+        r.ugen,
+        r.addr,
+        r.size,
+        r.perm,
+        r.locked,
+    );
+
+    if let Some((hdl, _)) = EXREG_HDL.get() {
+        hdl(
+            r.mtile, r.idx, r.utile, r.ugen, r.addr, r.size, r.perm, r.locked,
+        )?;
+    }
+
+    Ok((0, 0))
+}
+
+fn exreg_rem(msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
+    let r: kif::tilemux::ExRegRem = sidecalls::get_request(msg)?;
+
+    log!(
+        LogFlags::MuxSideCalls,
+        "sidecall::exreg_rem(mtile={}, idx={})",
+        r.mtile,
+        r.idx
+    );
+
+    if let Some((_, hdl)) = EXREG_HDL.get() {
+        hdl(r.mtile, r.idx)?;
+    }
+
+    Ok((0, 0))
+}
+
 fn go_away(_msg: &'static tcu::Message) -> Result<(u64, u64), Error> {
     log!(LogFlags::MuxSideCalls, "Not supported! Go away kernel!");
     Ok((0, 0))
@@ -234,11 +283,17 @@ pub fn basic_handlers_init() {
     register_sidecall_handler(kif::tilemux::Sidecalls::ActCtrl, activity_ctrl).ok();
     register_sidecall_handler(kif::tilemux::Sidecalls::RemMsgs, go_away).ok();
     register_sidecall_handler(kif::tilemux::Sidecalls::EPInval, go_away).ok();
+    register_sidecall_handler(kif::tilemux::Sidecalls::ExRegAdd, exreg_add).ok();
+    register_sidecall_handler(kif::tilemux::Sidecalls::ExRegRem, exreg_rem).ok();
     register_sidecall_handler(kif::tilemux::Sidecalls::Shutdown, shutdown).ok();
     register_sidecall_handler(kif::tilemux::Sidecalls::Translate, translate).ok();
     register_sidecall_handler(kif::tilemux::Sidecalls::Info, info).ok();
-
     register_sidecall_handler(kif::tilemux::Sidecalls::GetQuota, get_quota).ok();
     register_sidecall_handler(kif::tilemux::Sidecalls::SetQuota, set_quota).ok();
     register_sidecall_handler(kif::tilemux::Sidecalls::DeriveQuota, derive_quota).ok();
+}
+
+pub fn reg_exreg_handler(add: AddExRegHandler, remove: RemExRegHandler) {
+    assert!(EXREG_HDL.get().is_none());
+    EXREG_HDL.set(Some((add, remove)));
 }

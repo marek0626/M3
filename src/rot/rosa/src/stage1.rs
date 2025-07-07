@@ -360,7 +360,7 @@ fn prepare_for_rots(our_tile: IndexedTile, root_tile: IndexedTile) {
 
     // configure exclusive region for the environment, accessible only from the root tile
     #[cfg(M3_TARGET = "gem5")]
-    if let Some((cmd, arg1)) = TCU::build_exreg_cmd(
+    if let Some((cfg, arg1)) = TCU::build_exreg(
         our_tile.id(),
         root_tile.id(),
         0,
@@ -368,11 +368,9 @@ fn prepare_for_rots(our_tile: IndexedTile, root_tile: IndexedTile) {
         cfg::ENV_START_DEF.as_goff() + (cfg::ENV_SIZE as GlobOff) / 2,
         (cfg::ENV_SIZE / 2) as GlobOff,
         Perm::W,
-        true,
     ) {
-        let arg_addr = TCU::ext_reg_addr(tcu::ExtReg::ExtArg1).as_goff();
-        our_tile.write_tcu(&[arg1], arg_addr).unwrap();
-        our_tile.ext_cmd(cmd).unwrap();
+        let exreg_addr = TCU::exreg_addr(0).as_goff();
+        our_tile.write_tcu(&[cfg, arg1], exreg_addr).unwrap();
     }
 }
 
@@ -406,13 +404,15 @@ pub fn run() -> crate::RosaPrivateCtx {
         .map(|(idx, id)| {
             // configure EP to access the remote TCU's MMIO region
             let tile = IndexedTile::new(TCU::nocid_to_tileid(*id as u16), idx);
-            let perm = if tile.id() == env::boot().tile_id() {
-                Perm::RW
+            tile.init(Perm::RW, 0);
+
+            // set us as the exclusive-region manager
+            #[cfg(M3_TARGET = "gem5")]
+            {
+                let value = env::boot().tile_id().raw() as tcu::Reg;
+                tile.write_tcu(&[value], TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff())
+                    .unwrap();
             }
-            else {
-                Perm::R
-            };
-            tile.init(perm, 0);
 
             // read out tile description
             let desc: TileDesc = tile
@@ -514,8 +514,6 @@ pub fn run() -> crate::RosaPrivateCtx {
 
     let ktile = determine_kernel_tile(&m3);
     assert_ne!(ktile.id(), env::boot().tile_id());
-    // we need write access to the kernel EPs
-    ktile.init(Perm::RW, 0);
 
     // Setup memory region for kernel endpoints
     init_kernel_eps(&m3, mem_tile, ktile, keps_offset, kernel_offset);

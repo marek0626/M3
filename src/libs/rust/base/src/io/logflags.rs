@@ -249,9 +249,11 @@ bitflags! {
         const RoTReqs       = 1 << (Self::__rot_start.bits() + 1);
         /// rot: more detailed information
         const RoTDbg        = 1 << (Self::__rot_start.bits() + 2);
+        /// rot: exclusive regions
+        const RoTExRegs     = 1 << (Self::__rot_start.bits() + 3);
 
         #[doc(hidden)]
-        const __sha3_start = Self::__rot_start.bits() + 3;
+        const __sha3_start = Self::__rot_start.bits() + 4;
 
         /// sha3: register accesses
         const SHA3Reg       = 1 << (Self::__sha3_start.bits() + 0);

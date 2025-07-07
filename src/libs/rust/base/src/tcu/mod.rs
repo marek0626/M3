@@ -120,7 +120,7 @@ cfg_if! {
     }
     else {
         /// The number of external registers
-        pub const EXT_REGS: usize = 6;
+        pub const EXT_REGS: usize = 7;
         /// The number of unprivileged registers
         pub const UNPRIV_REGS: usize = 6;
     }

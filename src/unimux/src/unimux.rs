@@ -88,6 +88,10 @@ pub fn check_sidecalls() {
     sidecalls::check();
 }
 
+pub fn reg_exreg_handler(add: sidecalls::AddExRegHandler, remove: sidecalls::RemExRegHandler) {
+    sidecalls::reg_exreg_handler(add, remove);
+}
+
 extern "Rust" {
     fn env_run() -> !;
 }
@@ -139,6 +143,14 @@ pub extern "C" fn init() -> ! {
     hdl::init();
 
     sidecalls::basic_handlers_init();
+    #[cfg(M3_ROTS = "1")]
+    {
+        // register the handlers for exclusive regions
+        extern "Rust" {
+            fn init_exregs();
+        }
+        unsafe { init_exregs() };
+    }
 
     // check once in case we've already received a sidecall
     sidecalls::check();

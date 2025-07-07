@@ -25,7 +25,7 @@ use thread::{Downgradable, TempRc, Upgradable};
 use crate::cap::{Capability, MGateObject, TileObject};
 use crate::kerrno;
 use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
-use crate::tiles::{tilemng, Activity, TileMux, INVAL_ID};
+use crate::tiles::{tilemng, Activity, ExRegs, TileMux, INVAL_ID};
 use crate::{ktcu, platform};
 
 #[inline(never)]
@@ -294,7 +294,7 @@ pub fn tile_mem(act: &TempRc<Activity>) -> anyhow::Result<()> {
 }
 
 #[inline(never)]
-pub fn tile_lock(act: &TempRc<Activity>) -> anyhow::Result<()> {
+pub fn tile_lock_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::TileLock = get_request(&msg)?;
     drop(msg);
@@ -318,16 +318,20 @@ pub fn tile_lock(act: &TempRc<Activity>) -> anyhow::Result<()> {
     drop(tilemux);
 
     let tile_id = tile.tile();
-    if let Some(eps_region) = eps_region {
+    let act = if let Some(eps_region) = eps_region {
+        let act_weak = act.downgrade_asyn();
         let epmtile = tilemng::ep_mem_tile();
-        let mut exregs = tilemng::exregs(epmtile.tile());
-        exregs.add(eps_region, epmtile, &tile, true)?;
+        ExRegs::add_async(eps_region, epmtile, tile, true)?;
+        try_upgrade_kobj(act_weak, kif::INVALID_SEL)?
     }
+    else {
+        act
+    };
 
-    let mut tilemux = tilemng::tilemux(tile.tile());
+    let mut tilemux = tilemng::tilemux(tile_id);
     tilemux.lock();
     ktcu::lock_tile(tile_id).unwrap();
 
-    reply_success(act);
+    reply_success(&act);
     Ok(())
 }
