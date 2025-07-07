@@ -183,8 +183,8 @@ pub fn run(ctx: crate::RosaPrivateCtx) -> ! {
     }
 
     // reduce our TCU-MMIO-area permission to read-only
-    ctx.our_tile.init(Perm::R);
-    ctx.kernel_tile.init(Perm::R);
+    ctx.our_tile.init(Perm::R, 0);
+    ctx.kernel_tile.init(Perm::R, 0);
 
     log!(LogFlags::RoTDbg, "switch to rots");
     let next_ctx = rot::LayerCtx::new(rot::ROSA_NEXT_ADDR, rot::RotsCtx {

@@ -153,8 +153,8 @@ pub fn init() {
         0,
         env::boot().tile_id(),
         0,
-        tcu::MMIO_ADDR.as_goff(),
-        0x4000,
+        0,
+        0xFFFF_FFFF,
         Perm::RW,
     );
     TCU::set_ep_regs(MMIO_EP, &regs);
@@ -329,8 +329,7 @@ impl KecAcc {
 
     fn read_reg(&self, reg: KeccakReg) -> Reg {
         let addr = self.addr + (reg as usize) * size_of::<Reg>();
-        let val: Reg =
-            TCU::read_obj(MMIO_EP, (addr - tcu::MMIO_ADDR.as_local()) as GlobOff).unwrap();
+        let val: Reg = TCU::read_obj(MMIO_EP, addr as GlobOff).unwrap();
         log!(LogFlags::SHA3Reg, "SHA3::read_reg({:?}) -> {:#x}", reg, val);
         val
     }
@@ -343,11 +342,6 @@ impl KecAcc {
             value
         );
         let addr = self.addr + (reg as usize) * size_of::<Reg>();
-        TCU::write_obj(
-            MMIO_EP,
-            &value,
-            (addr - tcu::MMIO_ADDR.as_local()) as GlobOff,
-        )
-        .unwrap();
+        TCU::write_obj(MMIO_EP, &value, addr as GlobOff).unwrap();
     }
 }

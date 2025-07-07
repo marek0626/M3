@@ -23,10 +23,9 @@ use base::util::math::round_up;
 use base::{cfg, env, log, mem, tcu, util};
 use rot::cert::{HashBuf, M3RawCertificate};
 use rot::ed25519::{Signer, SigningKey};
-use rot::{Hex, Secret};
+use rot::{Hex, IndexedTile, Secret};
 
-use crate::idxtile::{self, IndexedTile};
-use crate::{config_local_ep, EPS_PER_PAGE, EP_REGS_SIZE};
+use crate::{EPS_PER_PAGE, EP_REGS_SIZE};
 
 /// Helper macro to find the best position in an iterator that satisfies a condition.
 /// The base condition must always be satisfied, the preferred conditions are tried
@@ -131,7 +130,7 @@ fn load_modules<'p, 'c: 'p>(
         assert_ne!(m.addr().tile(), env::boot().tile_id());
 
         let mut hash: Hex<HashBuf> = Hex::new_zeroed();
-        config_local_ep(crate::COPY_EP, |regs| {
+        rot::config_local_ep(crate::COPY_EP, |regs| {
             TCU::config_mem(
                 regs,
                 rot::TCU_ACT_ID,
@@ -348,7 +347,7 @@ fn prepare_for_rots(our_tile: IndexedTile, root_tile: IndexedTile) {
     let desc = env::boot().tile_desc();
     let mut rbuf = desc.rbuf_mux_space().0.as_phys(desc);
     rbuf += 1 << cfg::KPEX_RBUF_ORD;
-    config_local_ep(tcu::TMSIDE_REP, |regs| {
+    rot::config_local_ep(tcu::TMSIDE_REP, |regs| {
         TCU::config_recv(
             regs,
             tilemux::ACT_ID as ActId,
@@ -413,7 +412,7 @@ pub fn run() -> crate::RosaPrivateCtx {
             else {
                 Perm::R
             };
-            tile.init(perm);
+            tile.init(perm, 0);
 
             // read out tile description
             let desc: TileDesc = tile
@@ -452,7 +451,7 @@ pub fn run() -> crate::RosaPrivateCtx {
     let mem_tile = determine_mem_tile(&m3);
 
     // Configure memory endpoint that spans the entire memory tile
-    config_local_ep(crate::MEM_EP, |regs| {
+    rot::config_local_ep(crate::MEM_EP, |regs| {
         TCU::config_mem(
             regs,
             rot::TCU_ACT_ID,
@@ -473,7 +472,7 @@ pub fn run() -> crate::RosaPrivateCtx {
     let mut next_ctx = rot::RosaCtx {
         kmac_cdi: Secret::new_zeroed(),
         derived_private_key: Secret::new_zeroed(),
-        occupied_eps: (idxtile::TILE_TCU_EP_START, m3.tiles.len()),
+        occupied_eps: (rot::TILE_TCU_EP_START, m3.tiles.len()),
     };
     derive_cdi(&ctx, &m3, &mut next_ctx);
     m3.pub_key = derive_public_key(&mut next_ctx);
@@ -501,7 +500,7 @@ pub fn run() -> crate::RosaPrivateCtx {
         .expect("Failed to find kernel mod");
     log!(LogFlags::RoTBoot, "Found kernel: {:?}", kmod);
 
-    config_local_ep(crate::COPY_EP, |regs| {
+    rot::config_local_ep(crate::COPY_EP, |regs| {
         TCU::config_mem(
             regs,
             rot::TCU_ACT_ID,
@@ -516,7 +515,7 @@ pub fn run() -> crate::RosaPrivateCtx {
     let ktile = determine_kernel_tile(&m3);
     assert_ne!(ktile.id(), env::boot().tile_id());
     // we need write access to the kernel EPs
-    ktile.init(Perm::RW);
+    ktile.init(Perm::RW, 0);
 
     // Setup memory region for kernel endpoints
     init_kernel_eps(&m3, mem_tile, ktile, keps_offset, kernel_offset);
@@ -532,7 +531,7 @@ pub fn run() -> crate::RosaPrivateCtx {
     }
 
     // Configure endpoint used to load kernel ELF
-    config_local_ep(crate::MEM_EP, |regs| {
+    rot::config_local_ep(crate::MEM_EP, |regs| {
         TCU::config_mem(
             regs,
             rot::TCU_ACT_ID,
@@ -544,7 +543,7 @@ pub fn run() -> crate::RosaPrivateCtx {
         )
     });
     // Configure endpoint used to load kernel environment
-    config_local_ep(crate::ENV_EP, |regs| {
+    rot::config_local_ep(crate::ENV_EP, |regs| {
         TCU::config_mem(
             regs,
             rot::TCU_ACT_ID,
