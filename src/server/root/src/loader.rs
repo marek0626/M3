@@ -31,7 +31,6 @@ use m3::rc::Rc;
 use m3::syscalls;
 use m3::tiles::ChildActivity;
 use m3::tiles::Mapper;
-use m3::tiles::Tile;
 use m3::util::math;
 use m3::vec;
 use m3::vfs;
@@ -155,7 +154,6 @@ pub struct BootMapper {
     mem_sel: Selector,
     has_virtmem: bool,
     tee: bool,
-    tile: Rc<Tile>,
     mem_pool: Rc<RefCell<memory::MemPool>>,
     allocs: Vec<memory::Allocation>,
     buf: Vec<u8>,
@@ -167,7 +165,6 @@ impl BootMapper {
         mem_sel: Selector,
         has_virtmem: bool,
         tee: bool,
-        tile: Rc<Tile>,
         mem_pool: Rc<RefCell<memory::MemPool>>,
     ) -> anyhow::Result<Self> {
         Ok(BootMapper {
@@ -175,7 +172,6 @@ impl BootMapper {
             mem_sel,
             has_virtmem,
             tee,
-            tile,
             mem_pool,
             allocs: Vec::new(),
             buf: vec![0u8; 4096],
@@ -284,17 +280,5 @@ impl Mapper for BootMapper {
             let mgate = act.get_mem(virt, size as GlobOff, Perm::RW)?;
             self.clear(&mgate, 0, mem_size)
         }
-    }
-
-    fn finished(&mut self) -> Result<(), Error> {
-        if self.tee {
-            self.mem_pool
-                .borrow_mut()
-                .make_exclusive_for(&self.tile)
-                .map_err(|e| e.downcast::<Error>().unwrap())?;
-
-            self.tile.lock()?;
-        }
-        Ok(())
     }
 }

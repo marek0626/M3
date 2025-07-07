@@ -23,7 +23,7 @@ use m3::kif::Perm;
 use m3::mem::{GlobOff, VirtAddr};
 use m3::rc::Rc;
 use m3::syscalls;
-use m3::tiles::{ChildActivity, DefaultMapper, Mapper, Tile};
+use m3::tiles::{ChildActivity, DefaultMapper, Mapper};
 use m3::util::math;
 use m3::vec;
 use m3::vec::Vec;
@@ -38,7 +38,6 @@ pub(crate) struct ChildMapper<'a> {
     act_sel: Selector,
     def_mapper: DefaultMapper,
     tee: bool,
-    tile: Rc<Tile>,
     mem_pool: Rc<RefCell<memory::MemPool>>,
     allocs: Vec<memory::Allocation>,
     buf: Vec<u8>,
@@ -50,7 +49,6 @@ impl<'a> ChildMapper<'a> {
         has_virtmem: bool,
         act_sel: Selector,
         tee: bool,
-        tile: Rc<Tile>,
         mem_pool: Rc<RefCell<memory::MemPool>>,
     ) -> Self {
         ChildMapper {
@@ -59,7 +57,6 @@ impl<'a> ChildMapper<'a> {
             act_sel,
             def_mapper: DefaultMapper::new(has_virtmem),
             tee,
-            tile,
             mem_pool,
             allocs: Vec::new(),
             buf: vec![0u8; 4096],
@@ -168,17 +165,5 @@ impl Mapper for ChildMapper<'_> {
             self.def_mapper
                 .map_anon(act, virt, file_size, mem_size, perm, flags)
         }
-    }
-
-    fn finished(&mut self) -> Result<(), Error> {
-        if self.tee {
-            self.mem_pool
-                .borrow_mut()
-                .make_exclusive_for(&self.tile)
-                .map_err(|e| e.downcast::<Error>().unwrap())?;
-
-            self.tile.lock()?;
-        }
-        Ok(())
     }
 }

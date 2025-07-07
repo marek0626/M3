@@ -178,7 +178,6 @@ impl subsys::ChildStarter for PagedChildStarter {
                 act.tile_desc().has_virtmem(),
                 act.sel(),
                 child.tee(),
-                child.our_tile().tile_obj().clone(),
                 child.mem().pool().clone(),
             );
 
@@ -199,11 +198,15 @@ impl subsys::ChildStarter for PagedChildStarter {
                 }
             }
 
-            act.exec_file(Some((&mut mapper, file.into_generic())), child.arguments())
-                .map_err(|e| rerror(e).context(format!("execute {}", child.name())))?
+            act.exec_file(
+                Some((&mut mapper, file.into_generic())),
+                child.arguments(),
+                || child.finish_load(),
+            )
+            .map_err(|e| rerror(e).context(format!("execute {}", child.name())))?
         }
         else {
-            act.exec_file(None, child.arguments())
+            act.exec_file(None, child.arguments(), || child.finish_load())
                 .map_err(|e| rerror(e).context("start Activity"))?
         };
 

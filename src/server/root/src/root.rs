@@ -160,7 +160,6 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
                 bmod.0.sel(),
                 act.tile_desc().has_virtmem(),
                 child.tee(),
-                child.our_tile().tile_obj().clone(),
                 child.mem().pool().clone(),
             )?;
             let bmod_gate = bmod
@@ -177,6 +176,7 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
                 .exec_file(
                     Some((&mut bmapper, FileRef::new_owned(fd))),
                     child.arguments(),
+                    || child.finish_load(),
                 )
                 .map_err(|e| {
                     rerror(e).context(format!("Unable to execute boot module {}", child.name()))
@@ -189,7 +189,7 @@ impl resmng::subsys::ChildStarter for RootChildStarter {
             run
         }
         else {
-            act.exec_file(None, child.arguments())
+            act.exec_file(None, child.arguments(), || child.finish_load())
                 .map_err(|e| rerror(e).context("execute activity"))?
         };
 
