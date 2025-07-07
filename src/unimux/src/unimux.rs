@@ -140,9 +140,10 @@ pub extern "C" fn init() -> ! {
 
     sidecalls::basic_handlers_init();
 
+    // check once in case we've already received a sidecall
+    sidecalls::check();
     // wait for sidecalls from the kernel until the user activity was started
     loop {
-        sidecalls::check();
         if hdl::user_ready_or_sleep() {
             break;
         }

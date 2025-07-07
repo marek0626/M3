@@ -137,6 +137,7 @@ pub fn init() {
     let mut idle = activities::idle();
     let state = idle.user_state();
     ISR::init(state);
+    ISR::enable_irqs();
     idle.start();
 
     let old = tcu::TCU::xchg_activity(idle.activity_reg()).unwrap();

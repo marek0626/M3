@@ -23,6 +23,7 @@ pub fn user_block() {
 }
 
 pub fn user_ready_or_sleep() -> bool {
+    crate::sidecalls::check();
     STARTED.get()
 }
 
