@@ -423,6 +423,24 @@ impl<T> Awaitable for WeakRc<T> {
     }
 }
 
+impl<T: fmt::Display> fmt::Display for WeakRc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.upgrade() {
+            Some(inner) => inner.fmt(f),
+            None => write!(f, "None"),
+        }
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for WeakRc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.upgrade() {
+            Some(inner) => inner.fmt(f),
+            None => write!(f, "None"),
+        }
+    }
+}
+
 impl<T> Default for WeakRc<T> {
     #[inline(always)]
     fn default() -> Self {
