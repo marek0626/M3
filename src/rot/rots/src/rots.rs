@@ -50,7 +50,7 @@ use rot::{ed25519, Hex, OpaqueKMacKey, Secret};
 
 rot::generate_entry!();
 
-create_heap!(8 * 1024);
+create_heap!(12 * 1024);
 
 fn check_std_endpoints() {
     let tile_desc = env::boot().tile_desc();
