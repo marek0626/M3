@@ -148,7 +148,10 @@ impl TCU {
     ///
     /// This notifies the TCU that the next IRQ can be triggered, if any.
     pub fn fetch_irq() -> Result<IRQ, Error> {
-        Self::write_priv_reg(PrivReg::PrivCmd, PrivCmdOpCode::FetchIRQ as Reg);
+        Self::write_priv_reg(
+            PrivReg::PrivCmd,
+            Self::build_priv_cmd(PrivCmdOpCode::FetchIRQ, 0),
+        );
         Self::get_priv_error()?;
         IRQ::try_from(Self::read_priv_reg(PrivReg::PrivCmdArg))
             .map_err(|_| Error::new(Code::InvArgs))
@@ -187,16 +190,18 @@ impl TCU {
         let cmd_reg = Self::read_unpriv_reg(UnprivReg::Command);
         // ensure that we read the command register before the abort has been executed
         CPU::memory_barrier();
-        Self::write_priv_reg(PrivReg::PrivCmd, PrivCmdOpCode::AbortCmd.into());
+        Self::write_priv_reg(
+            PrivReg::PrivCmd,
+            Self::build_priv_cmd(PrivCmdOpCode::AbortCmd, 0),
+        );
 
         loop {
-            let cmd = Self::read_priv_reg(PrivReg::PrivCmd);
-            if (cmd & 0xF) == PrivCmdOpCode::Idle.into() {
-                let err = (cmd >> 4) & 0x1F;
-                if err != 0 {
-                    break Err(Error::new(Code::try_from(err as u32).unwrap()));
+            let (cmd, err, arg) = Self::decode_priv_cmd(Self::read_priv_reg(PrivReg::PrivCmd));
+            if cmd == PrivCmdOpCode::Idle.into() {
+                if err != Code::Success {
+                    break Err(Error::new(err));
                 }
-                else if (cmd >> 9) == 0 {
+                else if arg == 0 {
                     // if the command was finished successfully, use the current command register
                     // to ensure that we don't forget the error code
                     break Ok(Self::read_unpriv_reg(UnprivReg::Command));
@@ -213,7 +218,7 @@ impl TCU {
     pub fn xchg_activity(nact: Reg) -> Result<Reg, Error> {
         Self::write_priv_reg(
             PrivReg::PrivCmd,
-            PrivCmdOpCode::XchgAct as Reg | (nact << 9),
+            Self::build_priv_cmd(PrivCmdOpCode::XchgAct, nact),
         );
         Self::get_priv_error()?;
         Ok(Self::read_priv_reg(PrivReg::PrivCmdArg))
@@ -221,7 +226,10 @@ impl TCU {
 
     /// Invalidates the TCU's TLB
     pub fn invalidate_tlb() {
-        Self::write_priv_reg(PrivReg::PrivCmd, PrivCmdOpCode::InvTLB.into());
+        Self::write_priv_reg(
+            PrivReg::PrivCmd,
+            Self::build_priv_cmd(PrivCmdOpCode::InvTLB, 0),
+        );
         Self::wait_priv_cmd();
     }
 
@@ -238,14 +246,13 @@ impl TCU {
     /// paging code.
     pub fn invalidate_page_unchecked(asid: u16, virt: VirtAddr) {
         let val = match env!("M3_TARGET") {
-            "hw22" => {
-                ((asid as Reg) << 41)
-                    | ((virt.as_local() as Reg) << 9)
-                    | (PrivCmdOpCode::InvPage as Reg)
-            },
+            "hw22" => Self::build_priv_cmd(
+                PrivCmdOpCode::InvPage,
+                (virt.as_local() as Reg) | ((asid as Reg) << 32),
+            ),
             _ => {
                 Self::write_priv_reg(PrivReg::PrivCmdArg, virt.as_local() as Reg);
-                ((asid as Reg) << 9) | (PrivCmdOpCode::InvPage as Reg)
+                Self::build_priv_cmd(PrivCmdOpCode::InvPage, asid as Reg)
             },
         };
 
@@ -292,10 +299,10 @@ impl TCU {
 
         Self::write_priv_reg(PrivReg::PrivCmdArg, arg_addr as Reg);
         CPU::memory_barrier();
-        let cmd = ((asid as Reg) << 41)
-            | (((cmd_addr as Reg) & !(cfg::PAGE_MASK as Reg)) << 9)
-            | (tlb_flags << 9)
-            | PrivCmdOpCode::InsTLB as Reg;
+        let cmd = Self::build_priv_cmd(
+            PrivCmdOpCode::InsTLB,
+            ((asid as Reg) << 32) | ((cmd_addr as Reg) & !(cfg::PAGE_MASK as Reg)) | tlb_flags,
+        );
         Self::write_priv_reg(PrivReg::PrivCmd, cmd);
         Self::get_priv_error()
     }
@@ -305,7 +312,7 @@ impl TCU {
     pub fn set_timer(delay_ns: u64) -> Result<(), Error> {
         Self::write_priv_reg(
             PrivReg::PrivCmd,
-            PrivCmdOpCode::SetTimer as Reg | (delay_ns << 9),
+            Self::build_priv_cmd(PrivCmdOpCode::SetTimer, delay_ns),
         );
         Self::get_priv_error()
     }
@@ -320,11 +327,34 @@ impl TCU {
     #[inline(always)]
     fn wait_priv_cmd() -> Code {
         loop {
-            let cmd = Self::read_priv_reg(PrivReg::PrivCmd);
-            if (cmd & 0xF) == PrivCmdOpCode::Idle.into() {
-                return Code::try_from(((cmd >> 4) & 0x1F) as u32).unwrap();
+            let (op, err, _arg) = Self::decode_priv_cmd(Self::read_priv_reg(PrivReg::PrivCmd));
+            if op == PrivCmdOpCode::Idle.into() {
+                return err;
             }
         }
+    }
+
+    fn build_priv_cmd(op: PrivCmdOpCode, arg: Reg) -> Reg {
+        let mut cmd: Reg = op.into();
+        if cfg!(M3_TARGET = "gem5") {
+            cmd |= arg << 10;
+        }
+        else {
+            cmd |= arg << 9;
+        }
+        cmd
+    }
+
+    fn decode_priv_cmd(cmd: Reg) -> (Reg, Code, Reg) {
+        let op = cmd & 0xF;
+        let (err, arg) = if cfg!(M3_TARGET = "gem5") {
+            ((cmd >> 4) & 0x3F, cmd >> 10)
+        }
+        else {
+            ((cmd >> 4) & 0x1F, cmd >> 9)
+        };
+        let code = Code::try_from(err as u32).unwrap();
+        (op, code, arg)
     }
 
     fn read_priv_reg(reg: PrivReg) -> Reg {
