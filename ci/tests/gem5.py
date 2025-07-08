@@ -57,7 +57,8 @@ fstrace_tests = ["find", "tar", "untar", "sqlite", "leveldb", "sha256sum", "sort
 pipe_tests = ["cat_awk", "cat_wc", "grep_awk", "grep_wc"]
 rots_tests = [
     "rots-raser", "rots-hello", "rots-evidence-test",
-    "hashmux-benchs", "hashmux-tests", "bench-hashpipe-tee"
+    "hashmux-benchs", "hashmux-tests", "bench-hashpipe-tee",
+    "tee-msgchan"
 ]
 
 if len(args.tests) == 0:
