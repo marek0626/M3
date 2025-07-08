@@ -55,7 +55,7 @@ pub type Label = u64;
 /// A activity id
 pub type ActId = u16;
 /// A tile-generation id
-pub type GenId = u16;
+pub type GenId = u8;
 
 #[cfg(M3_TARGET = "gem5")]
 pub const EXREG_REGS: usize = 16;

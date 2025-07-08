@@ -179,7 +179,7 @@ class TCU {
     }
 
 public:
-    typedef uint16_t genid_t;
+    typedef uint8_t genid_t;
     typedef uint64_t reg_t;
 #if defined(__hw22__) || defined(__hw23__)
     typedef uint32_t rep_bitmask_t;
@@ -341,8 +341,9 @@ public:
 #    if defined(__hw23__)
         uint64_t : 64;
 #    else
-        uint16_t sgen;
-        uint16_t rgen;
+        uint8_t sgen;
+        uint8_t rgen;
+        uint16_t : 16;
         uint32_t : 32;
 #    endif
 #endif
