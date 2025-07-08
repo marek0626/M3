@@ -153,17 +153,18 @@ fn load_modules<'p, 'c: 'p>(
         log!(LogFlags::RoTBoot, "Hash: {}", hash);
 
         match m3.mods.entry(mname) {
-            BTreeMapEntry::Vacant(e) => e.insert(hash),
+            BTreeMapEntry::Vacant(e) => {
+                e.insert(hash);
+            },
             BTreeMapEntry::Occupied(entry) => {
                 log!(
                     LogFlags::Error,
-                    "Duplicate module {} with previous hash: {:?}. Skipping.",
+                    "Duplicate module {} with previous hash: {:?}. Ignoring.",
                     mname,
                     entry.get()
                 );
-                continue;
             },
-        };
+        }
 
         let new_addr = GlobAddr::new_with(mem_tile.id(), mem_offset);
         mods.push(Mod::new(new_addr, m.size, mname));
