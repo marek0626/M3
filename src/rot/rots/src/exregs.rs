@@ -22,6 +22,7 @@ struct ExReg {
 }
 
 static REGS: StaticRefCell<Vec<ExReg>> = StaticRefCell::new(vec![]);
+static BUF: StaticRefCell<[u8; 1024]> = StaticRefCell::new([0u8; 1024]);
 
 #[allow(clippy::too_many_arguments, clippy::absurd_extreme_comparisons)]
 pub fn add(
@@ -150,10 +151,9 @@ pub fn rem(mtile: TileId, idx: usize) -> Result<(), Error> {
 }
 
 fn clear_mem(ep: tcu::EpId, mut off: GlobOff, mut size: GlobOff) -> Result<(), Error> {
-    let empty = vec![0u8; 2048];
     while size > 0 {
-        let len = min(size, empty.len() as GlobOff);
-        TCU::write(ep, empty.as_ptr(), len as usize, off)?;
+        let len = min(size, BUF.borrow().len() as GlobOff);
+        TCU::write(ep, BUF.borrow().as_ptr(), len as usize, off)?;
         off += len;
         size -= len;
     }
