@@ -48,6 +48,8 @@ use m3core::{build_vmsg, const_assert, log, reply_vmsg};
 use rot::ed25519::Signer;
 use rot::{ed25519, Hex, OpaqueKMacKey, Secret};
 
+mod exregs;
+
 rot::generate_entry!();
 
 create_heap!(8 * 1024);
@@ -179,7 +181,7 @@ const_assert!(MAX_DIRECT_SIZE <= BUFFER_SIZE);
 
 static CURRENT: StaticCell<Option<SessId>> = StaticCell::new(None);
 static QUEUE: LazyStaticRefCell<VecDeque<SessId>> = LazyStaticRefCell::default();
-static KECACC: KecAcc = KecAcc::new(0xF4200000);
+static KECACC: KecAcc = KecAcc::new();
 //
 
 #[derive(Debug)]
@@ -989,6 +991,11 @@ fn init_rot() -> Result<(MemCap, u64), Error> {
         Err(e) => return Err(e),
     };
     Ok((rot_cert_cap, rot_cert_size))
+}
+
+#[no_mangle]
+pub fn init_exregs() {
+    unimux::reg_exreg_handler(exregs::add, exregs::rem);
 }
 
 #[no_mangle]

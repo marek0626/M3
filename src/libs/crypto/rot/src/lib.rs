@@ -22,6 +22,7 @@ pub use cfg::*;
 pub use ctx::*;
 pub use hex::*;
 pub use hw::*;
+pub use idxtile::*;
 pub use secret::*;
 pub use {cshake, kecacc};
 
@@ -49,4 +50,5 @@ mod cfg;
 mod ctx;
 mod hex;
 mod hw;
+mod idxtile;
 mod secret;

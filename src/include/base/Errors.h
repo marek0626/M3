@@ -58,8 +58,7 @@ struct Errors {
         NO_PMP_EP,
         NO_IRQ,
         EXREG_NO_PERM,
-        EXREG_OVERLAPS,
-        EXREG_EXISTS,
+        EXREG_NO_MNG,
         TILE_LOCKED,
         WRONG_GEN,
         EP_FROZEN,
@@ -97,6 +96,7 @@ struct Errors {
         LAST_CAP_OVERFLOW,
         CAP_COUNT_TOO_LARGE,
         KERNEL_BROKEN,
+        EXREG_OVERLAPS,
         // networking
         INV_STATE,
         WOULD_BLOCK,

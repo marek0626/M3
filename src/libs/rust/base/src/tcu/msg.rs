@@ -40,11 +40,13 @@ pub struct Header {
     #[cfg(M3_TARGET = "hw23")]
     _pad: u64,
     #[cfg(any(M3_TARGET = "hw", M3_TARGET = "gem5"))]
-    sgen: u16,
+    sgen: u8,
     #[cfg(any(M3_TARGET = "hw", M3_TARGET = "gem5"))]
-    rgen: u16,
+    rgen: u8,
     #[cfg(any(M3_TARGET = "hw", M3_TARGET = "gem5"))]
-    _pad: u32,
+    _pad1: u16,
+    #[cfg(any(M3_TARGET = "hw", M3_TARGET = "gem5"))]
+    _pad2: u32,
 }
 
 impl Header {

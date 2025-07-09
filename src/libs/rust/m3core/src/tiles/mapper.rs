@@ -61,11 +61,6 @@ pub trait Mapper {
         flags: MapFlags,
     ) -> Result<(), Error>;
 
-    /// Gets called if program loading is finished
-    fn finished(&mut self) -> Result<(), Error> {
-        Ok(())
-    }
-
     fn init(
         &mut self,
         mem: &MemGate,

@@ -476,50 +476,6 @@ pub fn write_ep_remote(tile: TileId, ep: EpId, regs: &[Reg]) -> anyhow::Result<(
     }
 }
 
-#[allow(unused)]
-pub fn set_excl_region(
-    mem_tile: TileId,
-    user_tile: TileId,
-    idx: usize,
-    addr: GlobOff,
-    size: GlobOff,
-    perm: kif::Perm,
-    locked: bool,
-) -> anyhow::Result<()> {
-    #[cfg(not(M3_TARGET = "gem5"))]
-    return Ok(());
-
-    #[cfg(M3_TARGET = "gem5")]
-    {
-        let (cmd, arg1) = TCU::build_exreg_cmd(
-            mem_tile,
-            user_tile,
-            tilemng::tilegen(user_tile),
-            idx,
-            addr,
-            size,
-            perm,
-            locked,
-        )
-        .unwrap();
-        let arg_addr = TCU::ext_reg_addr(ExtReg::ExtArg1).as_goff();
-        try_write_slice(mem_tile, arg_addr, &[arg1])?;
-        do_ext_cmd(mem_tile, cmd).map(|_| ())
-    }
-}
-
-#[allow(unused)]
-pub fn invalidate_excl_region(mem_tile: TileId, idx: usize) -> anyhow::Result<()> {
-    #[cfg(not(M3_TARGET = "gem5"))]
-    return Ok(());
-
-    #[cfg(M3_TARGET = "gem5")]
-    {
-        let reg = TCU::build_ext_cmd(ExtCmdOpCode::InvExcl, idx as u64);
-        do_ext_cmd(mem_tile, reg).map(|_| ())
-    }
-}
-
 pub fn invalidate_ep_remote(tile: TileId, ep: EpId, force: bool) -> anyhow::Result<u32> {
     log!(LogFlags::KernEPs, "{}:EP{} = invalid", tile, ep);
 

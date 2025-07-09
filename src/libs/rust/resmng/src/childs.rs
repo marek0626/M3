@@ -23,7 +23,7 @@ use m3::cell::{Cell, RefCell};
 use m3::client::resmng;
 use m3::col::{String, ToString, Treap, Vec};
 use m3::com::{GateCap, MemCap, RecvGate, SGateArgs, SendCap};
-use m3::errors::Code;
+use m3::errors::{Code, Error};
 use m3::format;
 use m3::io::LogFlags;
 use m3::kif::{self, CapRngDesc, CapType, Perm};
@@ -796,6 +796,21 @@ impl OwnChild {
 
     pub fn set_hash(&mut self, hash: String) {
         self.hash = Some(hash);
+    }
+
+    pub fn finish_load(&self) -> Result<(), Error> {
+        if self.tee {
+            self.mem()
+                .pool()
+                .borrow_mut()
+                .make_exclusive_for(self.our_tile().tile_obj())
+                .map_err(|e| e.downcast::<Error>().unwrap())?;
+
+            self.our_tile().tile_obj().lock()
+        }
+        else {
+            Ok(())
+        }
     }
 
     pub fn set_running(&mut self, act: Box<dyn RunningActivity>) {

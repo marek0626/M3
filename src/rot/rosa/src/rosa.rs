@@ -27,7 +27,6 @@ use core::cmp::min;
 use lang as _;
 use rot::CtxData;
 
-mod idxtile;
 mod stage1;
 mod stage2;
 
@@ -40,9 +39,9 @@ pub const SELF_EP: EpId = tcu::FIRST_USER_EP + 3;
 #[derive(Debug)]
 pub struct RosaPrivateCtx {
     next: rot::RosaCtx,
-    our_tile: idxtile::IndexedTile,
-    kernel_tile: idxtile::IndexedTile,
-    root_tile: idxtile::IndexedTile,
+    our_tile: rot::IndexedTile,
+    kernel_tile: rot::IndexedTile,
+    root_tile: rot::IndexedTile,
     kernel_tile_desc: TileDesc,
     kenv_addr: GlobAddr,
 }
@@ -83,15 +82,6 @@ pub fn clear_mem(mut off: GlobOff, mut size: usize) -> Result<(), Error> {
         size -= len;
     }
     Ok(())
-}
-
-pub fn config_local_ep<CFG>(ep: tcu::EpId, cfg: CFG)
-where
-    CFG: FnOnce(&mut [tcu::Reg]),
-{
-    let mut regs = [0; tcu::EP_REGS];
-    cfg(&mut regs);
-    TCU::set_ep_regs(ep, &regs);
 }
 
 rot::generate_entry!();

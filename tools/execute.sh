@@ -255,7 +255,7 @@ get_rot_layers() {
 
 print_module_hashes() {
     if ! command -v openssl &>/dev/null; then
-        echo "NOTE: openssl is not installed. Cannot print SHA3-256 hashes of boot modules."
+        echo "NOTE: openssl is not installed. Cannot print SHA3-224 hashes of boot modules."
         return
     fi
 
@@ -267,8 +267,8 @@ print_module_hashes() {
             module_name="RoT layer"
             module_path="$module"
         fi
-        hash=$(openssl dgst -sha3-256 "$module_path" | awk '{print $2}')
-        echo "SHA3-256 hash of $module_name ($module_path): $hash"
+        hash=$(openssl dgst -sha3-224 "$module_path" | awk '{print $2}')
+        echo "SHA3-224 hash of $module_name ($module_path): $hash"
     done
 }
 

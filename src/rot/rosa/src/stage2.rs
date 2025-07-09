@@ -19,7 +19,7 @@ use base::elf::{ElfHeaderCommon, PHType};
 use base::env::BootEnv;
 use base::errors::Error;
 use base::io::{LogFlags, Read};
-use base::kif::{Perm, TileDesc};
+use base::kif::TileDesc;
 use base::mem::{GlobOff, VirtAddr};
 use base::tcu::TCU;
 use base::util::math::round_up;
@@ -181,10 +181,6 @@ pub fn run(ctx: crate::RosaPrivateCtx) -> ! {
             .write_tcu(&[1u64], tcu::MMIO_ADDR.as_goff() + 0x3030)
             .expect("Failed to start kernel rocket core");
     }
-
-    // reduce our TCU-MMIO-area permission to read-only
-    ctx.our_tile.init(Perm::R);
-    ctx.kernel_tile.init(Perm::R);
 
     log!(LogFlags::RoTDbg, "switch to rots");
     let next_ctx = rot::LayerCtx::new(rot::ROSA_NEXT_ADDR, rot::RotsCtx {

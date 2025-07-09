@@ -15,4 +15,5 @@ rot = { path = "../../libs/crypto/rot" }
 kecacc = { path = "../../libs/crypto/kecacc" }
 heapsimple = { path = "../../libs/rust/heapsimple" }
 m3core = { path = "../../libs/rust/m3core" }
+num_enum = { version = "0.6.1", default-features = false }
 unimux = { path = "../../unimux" }

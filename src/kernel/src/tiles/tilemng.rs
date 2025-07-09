@@ -16,7 +16,7 @@
 use base::cell::{LazyStaticRefCell, RefMut, StaticCell};
 use base::col::Vec;
 use base::kif::tilemux::QuotaId;
-use base::kif::{self, TileType};
+use base::kif::{self, TileAttr, TileType};
 use base::tcu::{GenId, TileId};
 use thread::{StrongRc, TempRc};
 
@@ -127,11 +127,23 @@ pub fn deinit_async() {
     assert_eq!(STATE.get(), State::RUNNING);
     STATE.set(State::DEINIT);
 
+    let mut rot_tile = None;
+
     for tile in platform::user_tiles() {
         // ignore the tiles that are already shut down
         if tilemux(tile).is_initialized() {
-            TileMux::reset_async(tile, None, None, None, false).unwrap();
+            // reset the RoT last
+            if platform::tile_desc(tile).attr().contains(TileAttr::ROT) {
+                rot_tile = Some(tile);
+            }
+            else {
+                TileMux::reset_async(tile, None, None, None, false).unwrap();
+            }
         }
+    }
+
+    if let Some(rot_tile) = rot_tile.take() {
+        TileMux::reset_async(rot_tile, None, None, None, false).unwrap();
     }
 
     STATE.set(State::SHUTDOWN);
@@ -206,6 +218,10 @@ pub fn find_tile(tiledesc: &kif::TileDesc) -> Option<TileId> {
 
 fn deprivilege_tiles() {
     for tile in platform::user_tiles() {
-        ktcu::deprivilege_tile(tile).expect("Unable to deprivilege tile");
+        // do not deprivilege the RoT (it needs to change its EPs to have access to TCUs after a
+        // tile was reset so that its generation changed)
+        if !platform::tile_desc(tile).attr().contains(TileAttr::ROT) {
+            ktcu::deprivilege_tile(tile).expect("Unable to deprivilege tile");
+        }
     }
 }

@@ -2,9 +2,11 @@
 name = "kecacc"
 version = "0.1.0"
 edition = "2021"
+build = "../../../build.rs"
 
 [dependencies]
 base = { path = "../../../libs/rust/base" }
+num_enum = { version = "0.6.1", default-features = false }
 sha3 = { version = "0.10.8", default-features = false, optional = true }
 
 [features]

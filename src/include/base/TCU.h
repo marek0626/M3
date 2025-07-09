@@ -179,7 +179,7 @@ class TCU {
     }
 
 public:
-    typedef uint16_t genid_t;
+    typedef uint8_t genid_t;
     typedef uint64_t reg_t;
 #if defined(__hw22__) || defined(__hw23__)
     typedef uint32_t rep_bitmask_t;
@@ -217,7 +217,7 @@ private:
     static const size_t UNPRIV_REGS = 6;
     static const size_t EP_REGS = 3;
 #else
-    static const size_t EXT_REGS = 6;
+    static const size_t EXT_REGS = 7;
     static const size_t UNPRIV_REGS = 6;
     static const size_t EP_REGS = 4;
 #endif
@@ -243,6 +243,7 @@ private:
         EXT_ARG1 = 3,
         EPS_ADDR = 4,
         EPS_SIZE = 5,
+        EXREG_MNG = 6,
 #endif
     };
 
@@ -340,8 +341,9 @@ public:
 #    if defined(__hw23__)
         uint64_t : 64;
 #    else
-        uint16_t sgen;
-        uint16_t rgen;
+        uint8_t sgen;
+        uint8_t rgen;
+        uint16_t : 16;
         uint32_t : 32;
 #    endif
 #endif

@@ -14,14 +14,22 @@
  * General Public License version 2 for more details.
  */
 
+use base::env;
 use base::errors::{Code, Error};
 use base::kif::Perm;
 use base::mem::GlobOff;
 use base::tcu::{self, TileId, TCU};
 
-use crate::{config_local_ep, EP_REGS_SIZE};
-
 pub const TILE_TCU_EP_START: tcu::EpId = 32;
+
+pub fn config_local_ep<CFG>(ep: tcu::EpId, cfg: CFG)
+where
+    CFG: FnOnce(&mut [tcu::Reg]),
+{
+    let mut regs = [0; tcu::EP_REGS];
+    cfg(&mut regs);
+    TCU::set_ep_regs(ep, &regs);
+}
 
 /// A tile indexed relative to its order in `env::boot().raw_tile_ids`
 ///
@@ -39,6 +47,13 @@ impl IndexedTile {
         Self { id, idx }
     }
 
+    pub fn new_from_env(id: TileId) -> Option<Self> {
+        let idx = env::boot().raw_tile_ids[0..env::boot().raw_tile_count as usize]
+            .iter()
+            .position(|raw_id| TCU::nocid_to_tileid(*raw_id as u16) == id)?;
+        Some(Self::new(id, idx))
+    }
+
     pub fn id(&self) -> TileId {
         self.id
     }
@@ -47,21 +62,13 @@ impl IndexedTile {
         self.idx
     }
 
-    fn ep(&self) -> tcu::EpId {
+    pub fn ep(&self) -> tcu::EpId {
         TILE_TCU_EP_START + self.idx as tcu::EpId
     }
 
-    pub fn init(&self, perm: Perm) {
+    pub fn init(&self, perm: Perm, gen: tcu::GenId) {
         config_local_ep(self.ep(), |regs| {
-            TCU::config_mem(
-                regs,
-                rot::TCU_ACT_ID,
-                self.id,
-                0,
-                tcu::MMIO_ADDR.as_goff(),
-                tcu::MMIO_SIZE + tcu::MMIO_PRIV_SIZE + (1 << 16) * EP_REGS_SIZE,
-                perm,
-            );
+            TCU::config_mem(regs, crate::TCU_ACT_ID, self.id, gen, 0, 0xFFFF_FFFF, perm);
         });
     }
 
@@ -90,11 +97,11 @@ impl IndexedTile {
     }
 
     pub fn read_tcu_obj<T>(&self, off: GlobOff) -> Result<T, Error> {
-        TCU::read_obj(self.ep(), off - tcu::MMIO_ADDR.as_goff())
+        TCU::read_obj(self.ep(), off)
     }
 
     pub fn write_tcu<T>(&self, regs: &[T], off: GlobOff) -> Result<(), Error> {
-        TCU::write_slice(self.ep(), regs, off - tcu::MMIO_ADDR.as_goff())
+        TCU::write_slice(self.ep(), regs, off)
     }
 
     pub fn ext_cmd(&self, cmd: tcu::Reg) -> Result<tcu::Reg, Error> {

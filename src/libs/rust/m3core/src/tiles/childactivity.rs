@@ -350,13 +350,14 @@ impl ChildActivity {
                     Some((&mut mapper, file.into_generic())),
                     &args,
                     Some(func_addr),
+                    || Ok(()),
                 )
             },
 
             // otherwise (e.g., for M³Linux) we simply don't load the program. In case of M³Linux,
             // this happens afterwards on Linux by performing a fork and exec with the arguments
             // from the environment.
-            _ => self.do_exec_file(None, &args, Some(func_addr)),
+            _ => self.do_exec_file(None, &args, Some(func_addr), || Ok(())),
         }
     }
 
@@ -364,15 +365,18 @@ impl ChildActivity {
     ///
     /// The method returns the [`RunningProgramActivity`] on success that can be used to wait for
     /// the program completeness or to stop it.
-    pub fn exec<S: AsRef<str>>(self, args: &[S]) -> Result<RunningProgramActivity, Error> {
+    pub fn exec<S>(self, args: &[S]) -> Result<RunningProgramActivity, Error>
+    where
+        S: AsRef<str>,
+    {
         match self.tile().mux_type()? {
             // same as for `run`
             MuxType::TileMux => {
                 let file = VFS::open(args[0].as_ref(), OpenFlags::RX | OpenFlags::NEW_SESS)?;
                 let mut mapper = DefaultMapper::new(self.tile_desc().has_virtmem());
-                self.exec_file(Some((&mut mapper, file.into_generic())), args)
+                self.exec_file(Some((&mut mapper, file.into_generic())), args, || Ok(()))
             },
-            _ => self.exec_file(None, args),
+            _ => self.exec_file(None, args, || Ok(())),
         }
     }
 
@@ -384,36 +388,44 @@ impl ChildActivity {
     ///
     /// The method returns the [`RunningProgramActivity`] on success that can be used to wait for
     /// the program completeness or to stop it.
-    pub fn exec_file<S: AsRef<str>>(
+    pub fn exec_file<S, F>(
         self,
         program: Option<(&mut dyn Mapper, FileRef<dyn File>)>,
         args: &[S],
-    ) -> Result<RunningProgramActivity, Error> {
-        self.do_exec_file(program, args, None)
+        before_start: F,
+    ) -> Result<RunningProgramActivity, Error>
+    where
+        S: AsRef<str>,
+        F: FnOnce() -> Result<(), Error>,
+    {
+        self.do_exec_file(program, args, None, before_start)
     }
 
-    fn do_exec_file<S: AsRef<str>>(
+    fn do_exec_file<S, F>(
         self,
         program: Option<(&mut dyn Mapper, FileRef<dyn File>)>,
         args: &[S],
         closure: Option<VirtAddr>,
-    ) -> Result<RunningProgramActivity, Error> {
+        before_start: F,
+    ) -> Result<RunningProgramActivity, Error>
+    where
+        S: AsRef<str>,
+        F: FnOnce() -> Result<(), Error>,
+    {
         self.obtain_files_and_mounts()?;
 
-        let (file, mapper, entry) = if let Some((mapper, file)) = program {
+        let (file, entry) = if let Some((mapper, file)) = program {
             let mut file = BufReader::new(file);
             let entry = loader::load_program(&self, mapper, &mut file)?;
-            (Some(file), Some(mapper), entry)
+            (Some(file), entry)
         }
         else {
-            (None, None, VirtAddr::null())
+            (None, VirtAddr::null())
         };
 
         self.load_environment(args, closure, entry)?;
 
-        if let Some(mapper) = mapper {
-            mapper.finished()?;
-        }
+        before_start()?;
 
         let act = RunningProgramActivity::new(self, file);
         act.start().map(|_| act)

@@ -413,14 +413,7 @@ impl TileDesc {
             cfg::RBUF_STD_ADDR
         }
         else {
-            let end = if self.attr().contains(TileAttr::ROT) {
-                // don't use the last 4k that's owned by the hash accelerator
-                self.mem_offset() + self.mem_size() - 0x1000
-            }
-            else {
-                self.mem_offset() + self.mem_size()
-            };
-            VirtAddr::from(end - size)
+            VirtAddr::from((self.mem_offset() + self.mem_size()) - size)
         };
 
         (addr, size)

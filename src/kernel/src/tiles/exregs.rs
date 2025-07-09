@@ -15,18 +15,20 @@
 
 use base::col::{BitArray, Vec};
 use base::errors::Code;
+use base::kif::TileAttr;
 use base::tcu::TileId;
 use base::util;
 use thread::{Downgradable, TempRc, Upgradable, WeakRc};
 
 use crate::cap::{MGateObject, TileObject};
 use crate::kerrno;
-use crate::{ktcu, platform};
+use crate::platform;
+use crate::tiles::{tilemng, TileMux};
 
+#[derive(Debug)]
 struct ExclRegion {
     idx: usize,
     utile_id: TileId,
-    mtile_id: TileId,
     mgate: WeakRc<MGateObject>,
     mtile: WeakRc<TileObject>,
 }
@@ -46,41 +48,65 @@ impl ExRegs {
         }
     }
 
-    pub fn add(
-        &mut self,
+    pub fn add_async(
         mgate: TempRc<MGateObject>,
         mem_tile: TempRc<TileObject>,
-        user_tile: &TempRc<TileObject>,
+        user_tile: TempRc<TileObject>,
         locked: bool,
     ) -> anyhow::Result<()> {
-        assert!(mem_tile.tile() == self.tile);
+        let Some(rot_tile) =
+            platform::user_tiles().find(|t| platform::tile_desc(*t).attr().contains(TileAttr::ROT))
+        else {
+            return Err(kerrno(Code::NotSup).context("No RoT"));
+        };
+
+        // not yet supported on hw
+        if cfg!(not(M3_TARGET = "gem5")) {
+            return Ok(());
+        }
+
+        let exregs = tilemng::exregs(mem_tile.tile());
+        assert!(mem_tile.tile() == exregs.tile);
 
         if mem_tile.exregs_quota().left() == 0 {
             return Err(kerrno(Code::NoSpace).context("Exclusive-region quota"));
         }
+
+        let idx = exregs.free.first_clear();
+
+        let mtile = mem_tile.tile();
+        let utile = user_tile.tile();
+        let ugen = tilemng::tilegen(utile);
+        let (addr, size, perms) = (mgate.offset(), mgate.size(), mgate.perms());
+
+        let mgate_weak = mgate.downgrade_asyn();
+        let mtile_weak = mem_tile.downgrade_asyn();
+        let utile_weak = user_tile.downgrade_asyn();
+        drop(exregs);
+
+        let tilemux = tilemng::tilemux(rot_tile);
+        TileMux::exreg_add_async(tilemux, mtile, idx, utile, ugen, addr, size, perms, locked)?;
+
+        let mgate = mgate_weak
+            .upgrade()
+            .ok_or_else(|| kerrno(Code::ObjectGone))?;
+        let utile = utile_weak
+            .upgrade()
+            .ok_or_else(|| kerrno(Code::ObjectGone))?;
+        let mtile = mtile_weak
+            .upgrade()
+            .ok_or_else(|| kerrno(Code::ObjectGone))?;
+
+        let mut exregs = tilemng::exregs(mtile.tile());
         mgate.make_exclusive();
-
-        let idx = self.free.first_clear();
-
-        ktcu::set_excl_region(
-            mem_tile.tile(),
-            user_tile.tile(),
+        mtile.alloc_exreg(1);
+        exregs.exregs.push(ExclRegion {
             idx,
-            mgate.offset(),
-            mgate.size(),
-            mgate.perms(),
-            locked,
-        )?;
-
-        mem_tile.alloc_exreg(1);
-        self.exregs.push(ExclRegion {
-            idx,
-            utile_id: user_tile.tile(),
-            mtile_id: mem_tile.tile(),
+            utile_id: utile.tile(),
             mgate: mgate.downgrade_store(),
-            mtile: mem_tile.downgrade_store(),
+            mtile: mtile.downgrade_store(),
         });
-        self.free.set(idx);
+        exregs.free.set(idx);
 
         Ok(())
     }
@@ -104,22 +130,41 @@ impl ExRegs {
         false
     }
 
-    pub fn invalidate(&mut self, tile: TileId) {
-        self.exregs.retain_mut(|e| {
-            if e.utile_id != tile {
-                return true;
-            }
+    pub fn invalidate_async(mtile: TileId, tile: TileId) {
+        let Some(rot_tile) =
+            platform::user_tiles().find(|t| platform::tile_desc(*t).attr().contains(TileAttr::ROT))
+        else {
+            return;
+        };
 
-            if let Some(mgate) = e.mgate.upgrade() {
-                mgate.inval_exclusive();
-            }
-            if let Some(mtile) = e.mtile.upgrade() {
-                mtile.free_exregs(1);
-            }
+        loop {
+            let mut exregs = tilemng::exregs(mtile);
 
-            ktcu::invalidate_excl_region(e.mtile_id, e.idx).unwrap();
+            if let Some(idx) = exregs.exregs.iter().position(|e| e.utile_id == tile) {
+                let e = &mut exregs.exregs[idx];
 
-            false
-        });
+                if let Some(mgate) = e.mgate.upgrade() {
+                    mgate.inval_exclusive();
+                }
+                if let Some(mtile) = e.mtile.upgrade() {
+                    mtile.free_exregs(1);
+                }
+
+                let exreg_idx = e.idx;
+                exregs.exregs.remove(idx);
+                drop(exregs);
+
+                let tilemux = tilemng::tilemux(rot_tile);
+                // if we've already "shutdown" the RoT tile, don't even try. note that this
+                // currently means that we will not get rid of exregs that are owned by the RoT as
+                // this tile is never reset so that we do not even consider removing its exregs.
+                if tilemux.is_initialized() {
+                    TileMux::exreg_rem_async(tilemux, mtile, exreg_idx).unwrap();
+                }
+            }
+            else {
+                break;
+            }
+        }
     }
 }

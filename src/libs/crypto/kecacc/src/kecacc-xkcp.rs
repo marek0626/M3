@@ -37,6 +37,9 @@ impl KecAccState {
     }
 }
 
+pub fn init() {
+}
+
 /// A simple wrapper around an emulated Keccak/SHA-3 accelerator ("KecAcc").
 /// Note that unlike the version in kecacc.rs this version does not actually
 /// make use of an accelerator. Instead, all the hash calculations are done
@@ -56,7 +59,8 @@ extern "C" {
 }
 
 impl KecAcc {
-    pub const fn new(_addr: usize) -> Self {
+    #[allow(clippy::new_without_default)]
+    pub const fn new() -> Self {
         KecAcc {
             state: StaticRefCell::new(KecAccState::new()),
         }

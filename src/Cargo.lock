@@ -353,6 +353,7 @@ name = "kecacc"
 version = "0.1.0"
 dependencies = [
  "base",
+ "num_enum",
  "sha3",
 ]
 
@@ -699,6 +700,7 @@ dependencies = [
  "kecacc",
  "lang",
  "m3core",
+ "num_enum",
  "rot",
  "unimux",
 ]

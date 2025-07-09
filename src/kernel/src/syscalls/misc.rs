@@ -29,7 +29,7 @@ use crate::cap::{
 use crate::ktcu;
 use crate::platform;
 use crate::syscalls::{get_request, reply_success, send_reply, try_upgrade_kobj};
-use crate::tiles::{tilemng, Activity, TileMux};
+use crate::tiles::{tilemng, Activity, ExRegs, TileMux};
 use crate::{kerrno, kerror};
 
 #[inline(never)]
@@ -157,7 +157,7 @@ pub fn mgate_region(act: &TempRc<Activity>) -> anyhow::Result<()> {
 }
 
 #[inline(never)]
-pub fn mgate_mkexcl(act: &TempRc<Activity>) -> anyhow::Result<()> {
+pub fn mgate_mkexcl_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     let msg = act.syscall();
     let r: syscalls::MGateMkExcl = get_request(&msg)?;
     drop(msg);
@@ -175,6 +175,7 @@ pub fn mgate_mkexcl(act: &TempRc<Activity>) -> anyhow::Result<()> {
     let mgate: TempRc<MGateObject> = act_caps.get_kobj(r.mgate)?;
     let mem_tile: TempRc<TileObject> = act_caps.get_kobj(r.mem_tile)?;
     let user_tile: TempRc<TileObject> = act_caps.get_kobj(r.user_tile)?;
+    drop(act_caps);
 
     if mem_tile.tile() != mgate.tile_id() {
         return Err(kerrno(Code::InvArgs).context("MGate needs to belong to the memory tile"));
@@ -189,10 +190,12 @@ pub fn mgate_mkexcl(act: &TempRc<Activity>) -> anyhow::Result<()> {
         return Err(kerrno(Code::InvArgs).context("Invalid address (need size-aligned)"));
     }
 
-    let mut exregs = tilemng::exregs(mem_tile.tile());
-    exregs.add(mgate, mem_tile, &user_tile, r.locked)?;
+    let act_weak = act.downgrade_asyn();
 
-    reply_success(act);
+    ExRegs::add_async(mgate, mem_tile, user_tile, r.locked)?;
+
+    let act = try_upgrade_kobj(act_weak, kif::INVALID_SEL)?;
+    reply_success(&act);
     Ok(())
 }
 
