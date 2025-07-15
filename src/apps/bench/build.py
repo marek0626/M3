@@ -1,6 +1,7 @@
 dirs = [
     'accelchain',
     'bench-apps',
+    'chancreate',
     'cppbenchs',
     'cppnetbenchs',
     'facever',

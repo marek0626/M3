@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<config>
+    <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py</env>
+    <rot layers="brom,blau.bin,rosa.bin,rots.bin"/>
+    <kernel args="kernel"/>
+    <dom>
+        <app args="root">
+            <dom tile="riscv64+kecacc+rot|riscv32+kecacc+rot">
+                <app args="rots" daemon="1">
+                    <serv name="rot"/>
+                    <mod name="rot-certificate.json" perm="r"/>
+                </app>
+            </dom>
+            <dom tile="perf|core" tee="1">
+                <app args="chancreate">
+                </app>
+            </dom>
+        </app>
+    </dom>
+</config>

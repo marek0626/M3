@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "apps/acceltest",
+    "apps/bench/chancreate",
     "apps/bench/facever",
     "apps/bench/fs",
     "apps/bench/hashmuxbenchs",
