@@ -41,6 +41,32 @@ pub struct RecvBuf {
 }
 
 impl RecvBuf {
+    /// Allocates a new receive buffer with given size
+    pub fn new(size: usize) -> Result<Self, Error> {
+        let vm = Activity::own().tile_desc().has_virtmem();
+        let align = if vm { cfg::PAGE_SIZE } else { 1 };
+        let addr = VirtAddr::from(
+            BUFS.borrow_mut()
+                .allocate(size, align)
+                .ok_or_else(|| Error::new(Code::OutOfMem))?,
+        );
+
+        let mgate = if vm {
+            match map_rbuf(addr, size) {
+                Ok(mgate) => Some(mgate),
+                Err(e) => {
+                    BUFS.borrow_mut().free(addr.as_local(), size);
+                    return Err(e);
+                },
+            }
+        }
+        else {
+            None
+        };
+
+        Ok(Self { addr, size, mgate })
+    }
+
     /// Returns the base address of the receive buffer
     pub fn addr(&self) -> VirtAddr {
         self.addr
@@ -65,6 +91,14 @@ impl RecvBuf {
     }
 }
 
+impl Drop for RecvBuf {
+    fn drop(&mut self) {
+        #[cfg(M3_LX = "1")]
+        base::linux::mmap::munmap(self.addr(), self.size());
+        BUFS.borrow_mut().free(self.addr.as_local(), self.size);
+    }
+}
+
 impl fmt::Debug for RecvBuf {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(
@@ -75,32 +109,6 @@ impl fmt::Debug for RecvBuf {
             self.mem()
         )
     }
-}
-
-/// Allocates a new receive buffer with given size
-pub(crate) fn alloc_rbuf(size: usize) -> Result<RecvBuf, Error> {
-    let vm = Activity::own().tile_desc().has_virtmem();
-    let align = if vm { cfg::PAGE_SIZE } else { 1 };
-    let addr = VirtAddr::from(
-        BUFS.borrow_mut()
-            .allocate(size, align)
-            .ok_or_else(|| Error::new(Code::OutOfMem))?,
-    );
-
-    let mgate = if vm {
-        match map_rbuf(addr, size) {
-            Ok(mgate) => Some(mgate),
-            Err(e) => {
-                BUFS.borrow_mut().free(addr.as_local(), size);
-                return Err(e);
-            },
-        }
-    }
-    else {
-        None
-    };
-
-    Ok(RecvBuf { addr, size, mgate })
 }
 
 fn map_rbuf(addr: VirtAddr, size: usize) -> Result<MemGate, Error> {
@@ -123,13 +131,6 @@ fn map_rbuf(addr: VirtAddr, size: usize) -> Result<MemGate, Error> {
         Perm::R,
     )?;
     Ok(mgate)
-}
-
-/// Frees the given receive buffer
-pub(crate) fn free_rbuf(rbuf: &RecvBuf) {
-    #[cfg(M3_LX = "1")]
-    base::linux::mmap::munmap(rbuf.addr(), rbuf.size());
-    BUFS.borrow_mut().free(rbuf.addr.as_local(), rbuf.size);
 }
 
 pub(crate) fn init() {
