@@ -11,7 +11,7 @@
                     <mod name="rot-certificate.json" perm="r"/>
                 </app>
             </dom>
-            <dom tile="perf|core" tee="0">
+            <dom tile="perf|core" tee="0" mux="chancreate">
                 <app args="chancreate">
                 </app>
             </dom>
