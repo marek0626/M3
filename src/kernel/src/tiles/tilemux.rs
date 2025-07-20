@@ -343,6 +343,9 @@ impl TileMux {
                     let trampoline: u64 = 0x0000_0000_0000_406f; // j _start (+0x4000)
                     ktcu::write_slice(mux_tile_id, mux_offset, &[trampoline]);
                 }
+                else {
+                    drop(mux_mem);
+                }
 
                 // the exit call is async and thus requires a dedicated thread for this tile. note
                 // that one thread is sufficient, because TileMux has only one credit and thus can
@@ -355,6 +358,7 @@ impl TileMux {
             }
             else {
                 drop(tile);
+                drop(mux_mem);
                 // to ensure that we don't send more requests to this tilemux instance (e.g., in
                 // other kernel threads), we mark it as shutdown and therefore not available.
                 tilemux.shutdown = true;
