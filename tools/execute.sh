@@ -399,7 +399,7 @@ build_params_hw() {
     elif [ "$M3_TARGET" = "hw23" ]; then
         args="--version 2"
     else
-        args="--version 3"
+        args="--version 4"
     fi
     args="$args --logflags $M3_LOG"
 
