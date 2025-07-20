@@ -250,7 +250,7 @@ pub extern "C" fn env_run() {
     RBUF_ADDR.set(side_rbuf_addr());
 
     log!(
-        LogFlags::Info,
+        LogFlags::Debug,
         "Hello from the stream accelerator multiplexer!"
     );
 
