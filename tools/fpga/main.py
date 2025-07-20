@@ -12,6 +12,10 @@ from noc import NoCmonitor
 from fpga_utils import FPGA_Error
 from tile import TileType
 
+from tcu import TCUExtReg
+import modids
+
+import utils
 import loader
 import term
 
@@ -89,14 +93,6 @@ def run_loop(fpga_inst, serial, timeout_ev):
 
 
 def extract_tcu_stats(tile, no: int):
-    try:
-        dropped_packets = tile.nocarq.get_arq_drop_packet_count()
-        total_packets = tile.nocarq.get_arq_packet_count()
-        print("PM{}: NoC dropped/total packets: {}/{} ({:.0f}%)".format(no,
-              dropped_packets, total_packets, dropped_packets/total_packets*100))
-    except Exception as e:
-        print("PM{}: unable to read number of dropped NoC packets: {}".format(no, e))
-
     try:
         print("PM{}: TCU dropped/error flits: {}/{}".format(no,
               tile.tcu_drop_flit_count(), tile.tcu_error_flit_count()))
@@ -202,16 +198,10 @@ def main():
 
     ld = loader.Loader(version, pmp_size, args.vm)
 
-    # disable NoC ARQ for program upload
-    fpga_inst.set_arq_enable(False)
-
     drams = [fpga_inst.dram1, fpga_inst.dram2]
     dram = drams[1] if args.rotlayer is not None else drams[0]
     loaded = ld.init(fpga_inst.pmTiles, drams, dram, args.tile,
                      args.rotlayer, mods, args.logflags)
-
-    # enable NoC ARQ when cores are running
-    fpga_inst.set_arq_enable(True)
 
     ld.start(fpga_inst.pmTiles, loaded, args.debug)
 
@@ -225,9 +215,6 @@ def main():
     started_ev.set()
 
     timed_out = run_loop(fpga_inst, args.serial, timeout_ev)
-
-    # disable NoC ARQ again for post-processing
-    fpga_inst.set_arq_enable(False)
 
     stop_tiles(fpga_inst, True, timed_out)
 
