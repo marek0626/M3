@@ -39,6 +39,8 @@ extern "C" {
     fn __m3_heap_set_area(begin: usize, end: usize);
 }
 
+static RBUF_ADDR: StaticCell<VirtAddr> = StaticCell::new(VirtAddr::null());
+
 #[no_mangle]
 pub extern "C" fn abort() {
     exit(1);
@@ -69,7 +71,7 @@ fn get_reply<'de, R: Deserialize<'de>>(msg: &'static tcu::Message) -> Result<R, 
 }
 
 fn reply_msg(msg: &'static tcu::Message, reply: &MsgBuf) {
-    let msg_off = tcu::TCU::msg_to_offset(side_rbuf_addr(), msg);
+    let msg_off = tcu::TCU::msg_to_offset(RBUF_ADDR.get(), msg);
     tcu::TCU::reply(tcu::TMSIDE_REP, reply, msg_off).unwrap();
 }
 
@@ -245,6 +247,7 @@ pub extern "C" fn env_run() {
     }
 
     io::init(env::boot().tile_id(), "saccmux");
+    RBUF_ADDR.set(side_rbuf_addr());
 
     log!(
         LogFlags::Info,
@@ -253,7 +256,7 @@ pub extern "C" fn env_run() {
 
     loop {
         if let Some(msg_off) = tcu::TCU::fetch_msg(tcu::TMSIDE_REP) {
-            let msg = tcu::TCU::offset_to_msg(side_rbuf_addr(), msg_off);
+            let msg = tcu::TCU::offset_to_msg(RBUF_ADDR.get(), msg_off);
             if handle_sidecall(msg) {
                 break;
             }
