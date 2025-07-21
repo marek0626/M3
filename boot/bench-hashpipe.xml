@@ -1,29 +1,39 @@
 <?xml version="1.0"?>
 <config>
     <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py</env>
-    <rot layers="brom,blau.bin,rosa.bin"/>
+    <mods>
+        <mod name="fs" file="bench.img"/>
+    </mods>
+    <rot layers="brom,blau.bin,rosa.bin,rots.bin"/>
     <kernel args="kernel"/>
     <dom>
-        <app args="root shmem=inpipe:16K shmem=outpipe:16K">
+        <app args="root shmem=inpipe:16K:unlocked shmem=outpipe:16K:unlocked">
+            <dom tile="riscv64+kecacc+rot|riscv32+kecacc+rot">
+                <shmem name="inpipe"/>
+                <shmem name="outpipe"/>
+                <app args="rots" daemon="1">
+                    <serv name="rot"/>
+                    <mod name="rot-certificate.json" perm="r"/>
+                </app>
+            </dom>
             <dom>
                 <app args="pipes" daemon="1">
                     <serv name="pipes"/>
                 </app>
             </dom>
-            <dom tile="core+kecacc" mux="rots" tee="1">
-                <shmem name="inpipe"/>
-                <shmem name="outpipe"/>
-                <app args="rots" daemon="1">
-                    <serv name="rot"/>
+            <dom>
+                <app args="m3fs mem" daemon="1">
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
                 </app>
             </dom>
             <dom>
-                <shmem name="inpipe"/>
-                <shmem name="outpipe"/>
-                <app args="hashpipe">
+                <app args="repeater -m 5M -r 8 -w 2 /bin/hashpipe 64">
+                    <tiles type="core" count="1"/>
+                    <sess name="m3fs"/>
+                    <sess name="pipes"/>
                     <sess lname="hash1" gname="rot" args="20000"/>
                     <sess lname="hash2" gname="rot" args="20000"/>
-                    <sess name="pipes"/>
                     <shmem name="inpipe"/>
                     <shmem name="outpipe"/>
                 </app>

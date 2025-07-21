@@ -1,2 +1,9 @@
 def build(gen, env):
-    env.m3_rust_exe(gen, out='hashpipe')
+    if env['ISA'].startswith('riscv'):
+        env.m3_rust_exe(
+            gen,
+            out='hashpipe',
+            libs=['isr-nostackswitch', 'unimux'],
+            varAddr=False,
+            ldscript='isr',
+        )

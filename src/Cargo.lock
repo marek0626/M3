@@ -276,9 +276,11 @@ dependencies = [
 name = "hashpipe"
 version = "0.1.0"
 dependencies = [
- "hex-literal",
- "m3",
+ "heapsimple",
+ "m3core",
+ "m3files",
  "pipecli",
+ "unimux",
 ]
 
 [[package]]

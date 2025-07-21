@@ -1,5 +1,6 @@
 dirs = [
     'accelchain',
+    'aesstream',
     'bench-apps',
     'chancreate',
     'cppbenchs',
