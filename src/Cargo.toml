@@ -28,6 +28,7 @@ members = [
     "apps/ping",
     "apps/raser",
     "apps/rasertest",
+    "apps/repeater",
     "apps/resmngtest",
     "apps/rusthello",
     "apps/rustnettests",
