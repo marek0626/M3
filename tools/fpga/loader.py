@@ -45,6 +45,7 @@ class Loader:
         else:
             ktiles = [i for i in range(0, len(tiles))
                       if tiles[i].type == TileType.ACC and "ACC-Hash" in tiles[i].desc.attrs()]
+            assert len(ktiles) > 0, "RoT tile (with SHA-3 accelerator) not found"
             # load RoT info into memory
             self._load_rot_info(dram, ktiles[0], rot_layers, mods)
 
