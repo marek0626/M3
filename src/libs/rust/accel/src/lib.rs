@@ -18,13 +18,16 @@
 
 #![no_std]
 
-use m3::com::{EpMng, RecvCap, RecvGate, EP};
-use m3::errors::{Code, Error};
-use m3::mem::{VirtAddr, VirtAddrRaw};
-use m3::tcu::EpId;
-use m3::tiles::ChildActivity;
-use m3::util::math::next_log2;
-use m3::vfs::{File, FileRef};
+#[allow(unused_extern_crates)]
+extern crate lang;
+
+use m3core::com::{EpMng, RecvCap, RecvGate, EP};
+use m3core::errors::{Code, Error};
+use m3core::mem::{VirtAddr, VirtAddrRaw};
+use m3core::tcu::EpId;
+use m3core::tiles::ChildActivity;
+use m3core::util::math::next_log2;
+use m3core::vfs::{File, FileRef};
 
 const MSG_SIZE: usize = 64;
 const RB_SIZE: usize = MSG_SIZE * 4;

@@ -6,7 +6,8 @@ version = 3
 name = "accel"
 version = "0.1.0"
 dependencies = [
- "m3",
+ "lang",
+ "m3core",
 ]
 
 [[package]]
