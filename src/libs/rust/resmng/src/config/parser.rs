@@ -229,6 +229,7 @@ fn parse_app(p: &mut ConfigParser, start: usize) -> Option<config::AppConfig> {
                 "sgate" => app.sgates.push(parse_sgate(p)?),
                 "sem" => app.sems.push(parse_sem(p)?),
                 "shmem" => app.shmems.push(parse_shmem(p)?),
+                "exregs" => app.exregs.push(parse_exreg(p)?),
                 "serial" => app.serial = Some(config::SerialDesc::default()),
                 _ => return None,
             }
@@ -366,6 +367,29 @@ fn parse_shmem(p: &mut ConfigParser) -> Option<config::ShMemDesc> {
     }
     else {
         Some(config::ShMemDesc::new(name))
+    }
+}
+
+fn parse_exreg(p: &mut ConfigParser) -> Option<config::ExRegDesc> {
+    let mut shmem = String::new();
+    let mut count = 0;
+
+    loop {
+        match p.parse_arg()? {
+            None => break,
+            Some((n, v)) => match n.as_ref() {
+                "shmem" => shmem.clone_from(&v),
+                "count" => count = parse::int(&v)? as usize,
+                _ => return None,
+            },
+        }
+    }
+
+    if count == 0 || shmem.is_empty() {
+        None
+    }
+    else {
+        Some(config::ExRegDesc::new(shmem, count))
     }
 }
 

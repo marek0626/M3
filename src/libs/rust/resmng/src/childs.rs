@@ -13,6 +13,7 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::Context;
 use bitflags::bitflags;
 
 use core::fmt;
@@ -105,6 +106,7 @@ pub struct ChildResources {
     mem: Vec<(Option<Selector>, Allocation)>,
     mods: Vec<MemCap>,
     tiles: Vec<(TileUsage, usize, Selector)>,
+    exregs: Vec<Rc<Tile>>,
     scaps: Vec<SendCap>,
 }
 
@@ -564,6 +566,38 @@ pub trait Child {
         })?;
 
         self.delegate(mcap.sel(), sel)
+    }
+
+    fn use_exregs(
+        &mut self,
+        res: &mut Resources,
+        shmem: &str,
+        sel: Selector,
+    ) -> anyhow::Result<(tcu::TileId, kif::TileDesc)> {
+        log!(
+            LogFlags::ResMngTiles,
+            "{}: get_exregs(shmem={}, sel={})",
+            self.name(),
+            shmem,
+            sel
+        );
+
+        let cfg = self.cfg();
+        let desc = cfg.get_exregs(shmem).ok_or_else(|| {
+            rerrno(Code::InvArgs)
+                .context(format!("child has no exclusive region for shmem {}", shmem))
+        })?;
+
+        let mtile = res
+            .shared_mems_mut()
+            .acquire_mem_tile(shmem, desc.count())
+            .context("acquire memory tile")?;
+
+        let (tile_id, desc) = (mtile.id(), mtile.desc());
+        self.delegate(mtile.sel(), sel)?;
+        self.res_mut().exregs.push(mtile);
+
+        Ok((tile_id, desc))
     }
 
     fn get_serial(&mut self, sel: Selector) -> anyhow::Result<()> {

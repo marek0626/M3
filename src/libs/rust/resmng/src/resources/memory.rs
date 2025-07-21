@@ -19,7 +19,7 @@ use m3::cap::Selector;
 use m3::cfg;
 use m3::col::Vec;
 use m3::com::MemCap;
-use m3::errors::Code;
+use m3::errors::{Code, Error};
 use m3::format;
 use m3::io::LogFlags;
 use m3::kif::Perm;
@@ -256,6 +256,16 @@ impl MemSlice {
             .mcap
             .derive(self.offset + off, size, self.perm)
             .map_err(rerror)
+    }
+
+    pub fn derive_tile(&self, exregs: usize) -> anyhow::Result<Rc<Tile>> {
+        let mem_tile =
+            self.mem.tile.clone().ok_or_else(|| {
+                rerror(Error::new(Code::NotSup)).context("no access to memory tile")
+            })?;
+        mem_tile
+            .derive(None, Some(exregs), None, None)
+            .map_err(|e| rerror(e).context("memory tile derive"))
     }
 
     pub fn allocate(&mut self, size: GlobOff, align: GlobOff) -> anyhow::Result<GlobOff> {

@@ -271,15 +271,27 @@ impl Subsystem {
                 let mut parts = shmem.split(':');
                 let name = parts.next().expect("Missing name for shmem region");
                 let size = parts.next().expect("Missing size for shmem region");
+                let locked = if let Some(next) = parts.next() {
+                    next == "locked"
+                }
+                else {
+                    true
+                };
                 let size = parse::size(size).expect("Unable to parse size");
 
                 // determine number of users of this shared memory region
-                let users = self
-                    .cfg()
-                    .domains()
-                    .iter()
-                    .flat_map(|d| d.shmems().iter().find(|sh| sh.name() == name))
-                    .count();
+                let users = if locked {
+                    Some(
+                        self.cfg()
+                            .domains()
+                            .iter()
+                            .flat_map(|d| d.shmems().iter().find(|sh| sh.name() == name))
+                            .count(),
+                    )
+                }
+                else {
+                    None
+                };
 
                 // allocate memory slice
                 let slice = res

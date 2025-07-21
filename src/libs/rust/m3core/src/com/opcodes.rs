@@ -127,6 +127,7 @@ pub enum ResMng {
     UseSem,
     UseMod,
     UseShMem,
+    UseExRegs,
     GetSerial,
     GetInfo,
 }

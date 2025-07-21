@@ -337,6 +337,19 @@ impl ResMng {
         .map(|_| ())
     }
 
+    /// Provides a memory tile capability with the configured exclusive region quota.
+    ///
+    /// The `shmem` argument specifies the name of a shared-memory region that indirectly defines
+    /// the memory tile it is located in.
+    pub fn use_exregs(&self, dst: Selector, shmem: &str) -> Result<(TileId, kif::TileDesc), Error> {
+        let mut reply = Self::send_receive(&self.sgate, opcodes::ResMng::UseExRegs, UseReq {
+            dst,
+            name: shmem.to_string(),
+        })?;
+        let reply: AllocTileReply = reply.pop()?;
+        Ok((reply.id, reply.desc))
+    }
+
     /// Retrieves the receive gate to receive serial input
     pub fn get_serial(&self, dst: Selector) -> Result<RecvGate, Error> {
         Self::send_receive(&self.sgate, opcodes::ResMng::GetSerial, GetSerialReq {

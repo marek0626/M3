@@ -26,7 +26,7 @@ use super::memory::MemSlice;
 struct SharedMem {
     slice: MemSlice,
     name: String,
-    rem_users: usize,
+    rem_users: Option<usize>,
 }
 
 #[derive(Default)]
@@ -39,10 +39,10 @@ impl SharedMemManager {
         Self { shmems: Vec::new() }
     }
 
-    pub fn add_mem(&mut self, slice: MemSlice, name: String, users: usize) {
+    pub fn add_mem(&mut self, slice: MemSlice, name: String, users: Option<usize>) {
         log!(
             LogFlags::ResMngShMem,
-            "Created shmem '{}' of size {}b for {} users",
+            "Created shmem '{}' of size {}b for {:?} users",
             name,
             slice.capacity(),
             users
@@ -59,6 +59,16 @@ impl SharedMemManager {
         Some(shmem.slice.capability())
     }
 
+    pub fn acquire_mem_tile(&mut self, name: &str, count: usize) -> anyhow::Result<Rc<Tile>> {
+        let shmem = self
+            .shmems
+            .iter_mut()
+            .find(|shmem| shmem.name == name)
+            .ok_or_else(|| anyhow!("No shared memory with name '{}'", name))?;
+
+        shmem.slice.derive_tile(count)
+    }
+
     pub fn acquire_for_tile(&mut self, name: &str, tile: &Rc<Tile>) -> anyhow::Result<&MemCap> {
         let shmem = self
             .shmems
@@ -66,8 +76,14 @@ impl SharedMemManager {
             .find(|shmem| shmem.name == name)
             .ok_or_else(|| anyhow!("No shared memory with name '{}'", name))?;
 
-        assert!(shmem.rem_users > 0);
-        shmem.rem_users -= 1;
+        let locked = if let Some(rem) = shmem.rem_users.as_mut() {
+            assert!(*rem > 0);
+            *rem -= 1;
+            *rem == 0
+        }
+        else {
+            false
+        };
 
         log!(
             LogFlags::ResMngShMem,
@@ -78,7 +94,7 @@ impl SharedMemManager {
 
         shmem
             .slice
-            .make_exclusive_for(tile, shmem.rem_users == 0)
+            .make_exclusive_for(tile, locked)
             .context(format!("making shared memory '{}' exclusive", name))?;
         Ok(shmem.slice.capability())
     }
