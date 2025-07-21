@@ -113,6 +113,11 @@ pub extern "C" fn env_run() {
         *argv = b"rots\0".as_ptr();
     }
 
+    // for simplicity and safety, just check for more arguments to disable exreg zeroing
+    if rots_env_src.boot.argc > 1 {
+        exregs::disable_zeroing();
+    }
+
     // init the remaining relevant fields
     rots_env.first_std_ep = tcu::FIRST_USER_EP as u64;
     rots_env.first_sel = rots_env_src.first_sel;

@@ -1,6 +1,6 @@
 use core::cmp::min;
 
-use base::cell::StaticRefCell;
+use base::cell::{StaticCell, StaticRefCell};
 use base::errors::{Code, Error};
 use base::io::LogFlags;
 use base::kif::Perm;
@@ -8,7 +8,7 @@ use base::mem::GlobOff;
 use base::tcu::{self, GenId, TileId, TCU};
 use base::util::math;
 use base::vec::Vec;
-use base::{log, vec};
+use base::{env, log, vec};
 
 #[derive(Debug)]
 struct ExReg {
@@ -23,6 +23,11 @@ struct ExReg {
 
 static REGS: StaticRefCell<Vec<ExReg>> = StaticRefCell::new(vec![]);
 static BUF: StaticRefCell<[u8; 1024]> = StaticRefCell::new([0u8; 1024]);
+static ZEROING: StaticCell<bool> = StaticCell::new(true);
+
+pub fn disable_zeroing() {
+    ZEROING.set(false);
+}
 
 #[allow(clippy::too_many_arguments, clippy::absurd_extreme_comparisons)]
 pub fn add(
@@ -56,7 +61,8 @@ pub fn add(
                 );
                 return Err(Error::new(Code::NotSup));
             }
-            if reg.locked {
+            // allow overlaps with our own tile, because we can never get rid of those
+            if reg.locked && reg.utile != env::boot().tile_id() {
                 log!(
                     LogFlags::RoTExRegs,
                     "[{}].{}: overlaps and is locked",
@@ -132,11 +138,13 @@ pub fn rem(mtile: TileId, idx: usize) -> Result<(), Error> {
 
     // are there no overlaps with this region left?
     let idxmtile = rot::IndexedTile::new_from_env(mtile).unwrap();
-    if !regs.iter().any(|r| {
-        r.mtile == mtile
-            && r.idx != idx
-            && math::overlaps(r.addr, r.addr + r.size, reg.addr, reg.addr + reg.size)
-    }) {
+    if ZEROING.get()
+        && !regs.iter().any(|r| {
+            r.mtile == mtile
+                && r.idx != idx
+                && math::overlaps(r.addr, r.addr + r.size, reg.addr, reg.addr + reg.size)
+        })
+    {
         // clear the memory to erase any secrets
         clear_mem(idxmtile.ep(), reg.addr, reg.size).unwrap();
     }
