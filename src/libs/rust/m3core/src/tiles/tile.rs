@@ -17,17 +17,21 @@
  */
 
 use core::fmt;
+use core::mem::{size_of, size_of_val};
 
 use crate::cap::{CapFlags, Capability, SelSpace, Selector};
 use crate::com::MemGate;
 use crate::errors::{Code, Error};
-use crate::kif::{syscalls::MuxType, TileDesc};
+use crate::io::{read_object, LogFlags, Read};
+use crate::kif::{self, syscalls::MuxType, TileDesc};
+use crate::mem::GlobOff;
 use crate::quota::Quota;
 use crate::rc::Rc;
-use crate::syscalls;
 use crate::tcu::TileId;
 use crate::tiles::Activity;
 use crate::time::TimeDuration;
+use crate::vfs::{Seek, SeekMode};
+use crate::{elf, env, log, syscalls, vec};
 
 /// Represents a tile in the tiled architecture
 ///
@@ -164,6 +168,21 @@ impl Tile {
             id,
             desc: ndesc,
             free: true,
+        }))
+    }
+
+    /// Requests a memory-tile capability from given shared memory name.
+    ///
+    /// The memory-tile capability will have the configured quota for exclusive regions in the
+    /// memory tile the shared memory is located in.
+    pub fn new_from_shmem(name: &str) -> Result<Rc<Self>, Error> {
+        let sel = SelSpace::get().alloc_sel();
+        let (id, ndesc) = Activity::own().resmng().unwrap().use_exregs(sel, name)?;
+        Ok(Rc::new(Tile {
+            cap: Capability::new(sel, CapFlags::KEEP_CAP),
+            id,
+            desc: ndesc,
+            free: false,
         }))
     }
 
@@ -333,6 +352,166 @@ impl Tile {
         else {
             Err(Error::new(Code::InvArgs))
         }
+    }
+
+    /// Load the multiplexer, given by `mux` into the memory region `mux_mem`.
+    ///
+    /// This method parses the ELF file in `mux` and loads it into the memory region given by
+    /// `mux_mem`. It also writes the environment to the expected location. Note however, that it
+    /// does not start the tile. Use [`Self::start`] for that purpose.
+    pub fn load_mux<M: Read + Seek>(
+        &self,
+        name: &str,
+        mux: &mut M,
+        mux_mem: &MemGate,
+    ) -> Result<(), Error> {
+        let mem_region = mux_mem.region()?;
+
+        log!(
+            LogFlags::LibLoader,
+            "Loading multiplexer '{}' to ({}, {}M) for {}",
+            name,
+            mem_region.0,
+            mem_region.1 / (1024 * 1024),
+            self.id(),
+        );
+
+        let hdr: elf::ElfHeaderCommon = read_object(mux)?;
+        hdr.ident.check_magic()?;
+
+        let zeros = vec![0u8; 4096];
+        let mut buf = vec![0u8; 4096];
+
+        mux.seek(0, SeekMode::Set)?;
+        let hdr = hdr.load_hdr(mux)?;
+
+        let mut off = hdr.ph_off() as GlobOff;
+        for _ in 0..hdr.ph_num() {
+            // load program header
+            mux.seek(off as usize, SeekMode::Set)?;
+            let phdr = hdr.load_ph(mux)?;
+            off += size_of_val(&*phdr) as GlobOff;
+
+            // we're only interested in non-empty load segments
+            if phdr.ty() != elf::PHType::Load.into() || phdr.mem_size() == 0 {
+                continue;
+            }
+
+            // load segment from boot module
+            let phys = phdr.phys_addr() - self.desc().mem_offset();
+            log!(
+                LogFlags::LibLoader,
+                "Load segment @ {:#x} with {}b",
+                phys,
+                phdr.file_size()
+            );
+            Self::copy_data(
+                &mut buf,
+                mux,
+                &mux_mem,
+                phdr.offset(),
+                phys,
+                phdr.file_size(),
+            )?;
+
+            log!(
+                LogFlags::LibLoader,
+                "Zero segment @ {:#x} with {}b",
+                phys + phdr.file_size(),
+                phdr.mem_size() - phdr.file_size()
+            );
+
+            // zero the remaining memory
+            let mut segpos = phdr.file_size();
+            while segpos < phdr.mem_size() {
+                let amount = (phdr.mem_size() - segpos).min(buf.len());
+                mux_mem.write(&zeros[0..amount], (phys + segpos) as GlobOff)?;
+                segpos += amount;
+            }
+        }
+
+        // pass env vars to multiplexer
+        let mut off = self.desc().env_space().0 + size_of::<env::BaseEnv>();
+        let envp = env::write_args(
+            &env::vars_raw(),
+            &mux_mem,
+            &mut off,
+            self.desc().mem_offset() as GlobOff,
+        )?;
+
+        // init environment
+        let env = env::BootEnv {
+            platform: env::boot().platform,
+            envp: envp.as_raw(),
+            tile_id: self.id().raw() as u64,
+            tile_desc: self.desc().value(),
+            raw_tile_count: env::boot().raw_tile_count,
+            raw_tile_ids: env::boot().raw_tile_ids,
+            ..Default::default()
+        };
+        mux_mem.write_obj(
+            &env,
+            (self.desc().env_space().0 - self.desc().mem_offset()).as_goff(),
+        )?;
+
+        Ok(())
+    }
+
+    /// Starts the tile.
+    ///
+    /// This method assumes that the multiplexer has been loaded (see [`Self::load_mux`]) and
+    /// therefore starts the tile with `mux_mem` that was used during loading.
+    ///
+    /// `ep_count` specifies the number of EPs to use for this tile (if the tile has external EPs).
+    pub fn start(&self, mux_mem: Option<&MemGate>, ep_count: usize) -> Result<(), Error> {
+        let (desired_eps, avail_eps) = match self.desc().has_internal_eps() {
+            false => (Some(ep_count), ep_count),
+            true => (None, self.ep_count()?),
+        };
+
+        log!(
+            LogFlags::LibLoader,
+            "Starting tile {} with EPs (#{})",
+            self.id(),
+            avail_eps,
+        );
+
+        syscalls::tile_reset(
+            self.sel(),
+            match mux_mem {
+                Some(mem) => mem.sel(),
+                None => kif::INVALID_SEL,
+            },
+            desired_eps,
+        )
+    }
+
+    /// Stops the tile.
+    ///
+    /// Analogously to [`Self::start`], this method stops the tile again.
+    pub fn stop(&self) -> Result<(), Error> {
+        log!(LogFlags::LibLoader, "Stopping tile {}", self.id());
+
+        syscalls::tile_reset(self.sel(), kif::INVALID_SEL, None)
+    }
+
+    fn copy_data<S: Read + Seek>(
+        buf: &mut [u8],
+        src: &mut S,
+        dst: &MemGate,
+        src_off: usize,
+        dst_off: usize,
+        size: usize,
+    ) -> Result<(), Error> {
+        let mut pos = 0;
+        src.seek(src_off, SeekMode::Set)?;
+        while pos < size {
+            let amount = (size - pos).min(buf.len());
+            src.read(&mut buf[0..amount])?;
+            dst.write(&buf[0..amount], (dst_off + pos) as GlobOff)?;
+            pos += amount;
+        }
+        Ok(())
     }
 }
 

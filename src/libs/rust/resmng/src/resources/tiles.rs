@@ -15,23 +15,22 @@
 
 use anyhow::Context;
 
-use m3::cap::Selector;
 use m3::cell::{Cell, Ref, RefCell, RefMut};
 use m3::col::Vec;
 use m3::com::{MemCap, MemGate};
-use m3::elf;
-use m3::env;
 use m3::errors::{Code, Error};
-use m3::io::{read_object, LogFlags, Read};
-use m3::kif::{Perm, TileDesc, INVALID_SEL};
+use m3::io::{LogFlags, Read};
+use m3::kif::{Perm, TileDesc};
 use m3::log;
-use m3::mem::{size_of, size_of_val, GlobOff};
+use m3::mem::GlobOff;
 use m3::rc::Rc;
 use m3::syscalls;
 use m3::tcu::{EpId, TileId};
 use m3::tiles::Tile;
 use m3::time::TimeDuration;
 use m3::util::math;
+use m3::vec;
+use m3::vfs::{Seek, SeekMode};
 use m3::{cfg, format};
 
 use crate::resources::memory::Allocation;
@@ -69,9 +68,11 @@ struct MuxBootMod<'a> {
     off: GlobOff,
 }
 
-impl MuxBootMod<'_> {
-    fn seek(&mut self, pos: GlobOff) {
-        self.off = pos;
+impl Seek for MuxBootMod<'_> {
+    fn seek(&mut self, pos: usize, mode: SeekMode) -> Result<usize, Error> {
+        assert_eq!(mode, SeekMode::Set);
+        self.off = pos as GlobOff;
+        Ok(pos)
     }
 }
 
@@ -184,86 +185,17 @@ impl TileState {
             },
         };
         let mux_elf = get_mod(name).with_context(|| format!("get mod {}", name))?;
-        let mem_region = mux
-            .mem
-            .region()
-            .map_err(|e| rerror(e).context("mux memory region"))?;
 
-        log!(
-            LogFlags::ResMngTiles,
-            "Loading multiplexer '{}' to ({}, {}M) for {}",
-            name,
-            mem_region.0,
-            mem_region.1 / (1024 * 1024),
-            self.tile.id(),
-        );
-
-        let mut muxbmod = MuxBootMod {
+        // load multiplexer ELF into the memory region
+        let mut mux_bmod = MuxBootMod {
             mgate: &mux_elf,
             off: 0,
         };
-        let hdr: elf::ElfHeaderCommon =
-            read_object(&mut muxbmod).map_err(|e| rerror(e).context("read mux ELF header"))?;
-        hdr.ident
-            .check_magic()
-            .map_err(|e| rerror(e).context("mux ELF magic"))?;
+        self.tile
+            .load_mux(name, &mut mux_bmod, &mux.mem)
+            .map_err(|e| rerror(e).context("load mux"))?;
 
-        let zeros = m3::vec![0u8; 4096];
-        let mut buf = m3::vec![0u8; 4096];
-
-        muxbmod.seek(0);
-        let hdr = hdr
-            .load_hdr(&mut muxbmod)
-            .map_err(|e| rerror(e).context("read mux ELF header"))?;
-
-        let mut off = hdr.ph_off() as GlobOff;
-        for _ in 0..hdr.ph_num() {
-            // load program header
-            muxbmod.seek(off);
-            let phdr = hdr
-                .load_ph(&mut muxbmod)
-                .map_err(|e| rerror(e).context(format!("load mux PH at {}", off)))?;
-            off += size_of_val(&*phdr) as GlobOff;
-
-            // we're only interested in non-empty load segments
-            if phdr.ty() != elf::PHType::Load.into() || phdr.mem_size() == 0 {
-                continue;
-            }
-
-            // load segment from boot module
-            let phys = phdr.phys_addr() - self.tile.desc().mem_offset();
-            log!(
-                LogFlags::ResMngTiles,
-                "Load segment @ {:#x} with {}b",
-                phys,
-                phdr.file_size()
-            );
-            Self::copy_data(
-                &mut buf,
-                &mux_elf,
-                &mux.mem,
-                phdr.offset(),
-                phys,
-                phdr.file_size(),
-            )?;
-
-            log!(
-                LogFlags::ResMngTiles,
-                "Zero segment @ {:#x} with {}b",
-                phys + phdr.file_size(),
-                phdr.mem_size() - phdr.file_size()
-            );
-
-            // zero the remaining memory
-            let mut segpos = phdr.file_size();
-            while segpos < phdr.mem_size() {
-                let amount = (phdr.mem_size() - segpos).min(buf.len());
-                mux.mem
-                    .write(&zeros[0..amount], (phys + segpos) as GlobOff)
-                    .map_err(|e| rerror(e).context("zeroing mux BSS"))?;
-                segpos += amount;
-            }
-        }
+        let mut buf = vec![0u8; 4096];
 
         // load initrd to the end of the memory region
         if let Some(initrd) = initrd {
@@ -308,34 +240,7 @@ impl TileState {
                 .with_context(|| "copying DTB")?;
         }
 
-        // pass env vars to multiplexer
-        let mut off = self.tile.desc().env_space().0 + size_of::<env::BaseEnv>();
-        let envp = env::write_args(
-            &env::vars_raw(),
-            &mux.mem,
-            &mut off,
-            self.tile.desc().mem_offset() as GlobOff,
-        )
-        .map_err(|e| rerror(e).context("writing mux env vars"))?;
-
-        // init environment
-        let env = env::BootEnv {
-            platform: env::boot().platform,
-            envp: envp.as_raw(),
-            tile_id: self.tile.id().raw() as u64,
-            tile_desc: self.tile.desc().value(),
-            raw_tile_count: env::boot().raw_tile_count,
-            raw_tile_ids: env::boot().raw_tile_ids,
-            ..Default::default()
-        };
-        mux.mem
-            .write_obj(
-                &env,
-                (self.tile.desc().env_space().0 - self.tile.desc().mem_offset()).as_goff(),
-            )
-            .map_err(|e| rerror(e).context("writing mux env"))?;
-
-        self.start(Some(mux.mem.sel()), ep_count)
+        self.start(Some(&mux.mem), ep_count)
             .with_context(|| "starting mux")?;
 
         self.mux = Some(mux);
@@ -361,43 +266,18 @@ impl TileState {
         Ok(())
     }
 
-    pub fn start(&mut self, mem: Option<Selector>, ep_count: usize) -> anyhow::Result<()> {
-        let (desired_eps, avail_eps) = match self.tile.desc().has_internal_eps() {
-            false => (Some(ep_count), ep_count),
-            true => (
-                None,
-                self.tile
-                    .ep_count()
-                    .map_err(|e| rerror(e).context("EP count"))?,
-            ),
-        };
-
-        log!(
-            LogFlags::ResMngTiles,
-            "Starting tile {} with EPs (#{})",
-            self.tile.id(),
-            avail_eps,
-        );
-
-        syscalls::tile_reset(
-            self.tile.sel(),
-            match mem {
-                Some(mem) => mem,
-                None => INVALID_SEL,
-            },
-            desired_eps,
-        )
-        .map_err(|e| rerror(e).context(format!("reset tile {} for start", self.tile.id())))?;
-
+    pub fn start(&mut self, mem: Option<&MemGate>, ep_count: usize) -> anyhow::Result<()> {
+        self.tile
+            .start(mem, ep_count)
+            .map_err(|e| rerror(e).context("start tile"))?;
         self.state = State::On;
         Ok(())
     }
 
     fn stop(&mut self) -> anyhow::Result<()> {
-        log!(LogFlags::ResMngTiles, "Stopping tile {}", self.tile.id());
-
         // reset the tile before we drop the MemGate for its PMP EP
-        syscalls::tile_reset(self.tile.sel(), INVALID_SEL, None)
+        self.tile
+            .stop()
             .map_err(|e| rerror(e).context(format!("reset tile {} for stop", self.tile.id())))?;
         self.state = State::Off;
         Ok(())

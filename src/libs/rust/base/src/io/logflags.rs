@@ -65,9 +65,11 @@ bitflags! {
         const LibHeap       = 1 << (Self::__lib_start.bits() + 8);
         /// libraries: data channel
         const LibDataChan   = 1 << (Self::__lib_start.bits() + 9);
+        /// libraries: ELF loading
+        const LibLoader     = 1 << (Self::__lib_start.bits() + 10);
 
         #[doc(hidden)]
-        const __kern_start = Self::__lib_start.bits() + 10;
+        const __kern_start = Self::__lib_start.bits() + 11;
 
         /// Kernel: endpoint configurations for user tiles
         const KernEPs       = 1 << (Self::__kern_start.bits() + 0);
