@@ -63,7 +63,7 @@ fn handle_foreign_recv(act: u16, ep: tcu::EpId) {
 
 fn handle_pmp_failure(phys: u32, write: bool, error: Code) {
     log!(
-        LogFlags::Error,
+        LogFlags::Debug,
         "PMP {} access to physical address {:#x} failed: {:?}",
         if write { "write" } else { "read" },
         phys,
