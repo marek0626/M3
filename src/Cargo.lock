@@ -19,6 +19,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "aesstream"
+version = "0.1.0"
+dependencies = [
+ "accel",
+ "heapsimple",
+ "m3core",
+ "m3files",
+ "unimux",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.93"
 source = "registry+https://github.com/rust-lang/crates.io-index"
