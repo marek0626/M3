@@ -29,7 +29,7 @@
 
 using namespace m3;
 
-static constexpr bool VERBOSE = 1;
+static constexpr bool VERBOSE = 0;
 static constexpr size_t PIPE_SHM_SIZE = 512 * 1024;
 
 static const char *names[] = {
