@@ -1,10 +1,10 @@
 [package]
-name = "hashpipe"
+name = "hashfile"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-path = "src/hashpipe.rs"
+path = "src/hashfile.rs"
 crate-type = ["staticlib"]
 
 [dependencies]

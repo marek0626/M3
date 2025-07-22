@@ -267,6 +267,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hashfile"
+version = "0.1.0"
+dependencies = [
+ "heapsimple",
+ "m3core",
+ "m3files",
+ "pipecli",
+ "unimux",
+]
+
+[[package]]
 name = "hashmuxbenchs"
 version = "0.1.0"
 dependencies = [
@@ -281,17 +292,6 @@ dependencies = [
  "hex-literal",
  "m3",
  "pipecli",
-]
-
-[[package]]
-name = "hashpipe"
-version = "0.1.0"
-dependencies = [
- "heapsimple",
- "m3core",
- "m3files",
- "pipecli",
- "unimux",
 ]
 
 [[package]]

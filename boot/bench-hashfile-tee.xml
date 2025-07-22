@@ -28,7 +28,7 @@
                 </app>
             </dom>
             <dom>
-                <app args="repeater -m 5M -r 8 -w 2 /bin/hashpipe 64">
+                <app args="repeater -t -m 5M -s inpipe -s outpipe -r 8 -w 2 /bin/hashfile 64">
                     <tiles type="core" count="1"/>
                     <sess name="m3fs"/>
                     <sess name="pipes"/>
@@ -36,6 +36,8 @@
                     <sess lname="hash2" gname="rot" args="20000"/>
                     <shmem name="inpipe"/>
                     <shmem name="outpipe"/>
+                    <exregs shmem="inpipe" count="1"/>
+                    <exregs shmem="outpipe" count="1"/>
                 </app>
             </dom>
         </app>
