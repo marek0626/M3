@@ -44,20 +44,21 @@ pub extern "C" fn env_run() -> ! {
 #[no_mangle]
 pub fn main() -> Result<(), Error> {
     let args = env::args().collect::<Vec<_>>();
-    if args.len() != 3 {
-        println!("Usage: {} <input> <output>", args[0]);
+    if args.len() != 3 && args.len() != 4 {
+        println!("Usage: {} <input> <output> [-t]", args[0]);
         return Err(Error::new(Code::InvArgs));
     }
 
     let infile = args[1];
     let outfile = args[2];
+    let tee = args.len() > 3 && args[3] == "-t";
 
     let tile = Tile::get_with(
         "riscv32+coreacc|core",
         TileArgs::default().inherit_pmp(false),
     )
     .expect("allocate riscv32 tile");
-    let act = ChildActivity::new(tile, "test").expect("create child activity");
+    let act = ChildActivity::new(tile.clone(), "test").expect("create child activity");
 
     let mut accel = StreamAccel::new(&act)?;
     let mut input = VFS::open(infile, OpenFlags::R | OpenFlags::NEW_SESS)
@@ -69,6 +70,10 @@ pub fn main() -> Result<(), Error> {
     .unwrap_or_else(|_| panic!("creating {} for writing", outfile));
     accel.attach_input(&mut input).expect("attach input");
     accel.attach_output(&mut output).expect("attach output");
+
+    if tee {
+        tile.lock().unwrap();
+    }
 
     let run = act.start().expect("start activity");
     run.wait().expect("wait activity");
