@@ -44,7 +44,8 @@ const CycleDuration ACCEL_TIMES[] = {
 };
 
 static void usage(const char *name) {
-    eprintln("Usage: {} [-m <mode>] [-n <num>] [-w <warmups>] [-r <repeats>] [-t] <in>"_cf, name);
+    eprintln("Usage: {} [-m <mode>] [-n <num>] [-w <warmups>] [-r <repeats>] [-t] [-q] <in>"_cf,
+             name);
     eprintln("  <mode> can be:"_cf);
     eprintln("    'indir'      for a single chain, assisted"_cf);
     eprintln("    'dir'        for a single chain, connected directly"_cf);
@@ -54,6 +55,7 @@ static void usage(const char *name) {
     eprintln("  <warmups> specifies the number of warmups"_cf);
     eprintln("  <repeats> specifies the number of repetitions of the benchmark"_cf);
     eprintln("  If -t is specific, the accelerators run as TEEs"_cf);
+    eprintln("  If -q is specific, the performance result is not printed"_cf);
     exit(1);
 }
 
@@ -64,9 +66,10 @@ int main(int argc, char **argv) {
     ulong repeats = 1;
     ulong warmup = 1;
     bool tee = false;
+    bool quiet = false;
 
     int opt;
-    while((opt = getopt(argc, argv, "m:n:r:w:t")) != -1) {
+    while((opt = getopt(argc, argv, "m:n:r:w:tq")) != -1) {
         switch(opt) {
             case 'm': {
                 modename = optarg;
@@ -86,6 +89,7 @@ int main(int argc, char **argv) {
             case 'r': repeats = IStringStream::read_from<ulong>(optarg); break;
             case 'w': warmup = IStringStream::read_from<ulong>(optarg); break;
             case 't': tee = true; break;
+            case 'q': quiet = true; break;
             default: usage(argv[0]);
         }
     }
@@ -115,8 +119,10 @@ int main(int argc, char **argv) {
             res.push(time);
     }
 
-    OStringStream os;
-    format_to(os, "imgproc-{} ({} chains)"_cf, modename, num);
-    WVPERF(os.str(), res);
+    if(!quiet) {
+        OStringStream os;
+        format_to(os, "imgproc-{} ({} chains)"_cf, modename, num);
+        WVPERF(os.str(), res);
+    }
     return 0;
 }
