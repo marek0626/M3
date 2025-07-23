@@ -7,10 +7,8 @@
     <rot layers="brom,blau.bin,rosa.bin,rots.bin"/>
     <kernel args="kernel"/>
     <dom>
-        <app args="root shmem=inpipe:16K:unlocked shmem=outpipe:16K:unlocked">
+        <app args="root">
             <dom tile="riscv64+kecacc+rot|riscv32+kecacc+rot">
-                <shmem name="inpipe"/>
-                <shmem name="outpipe"/>
                 <app args="rots" daemon="1">
                     <serv name="rot"/>
                     <mod name="rot-certificate.json" perm="r"/>
@@ -34,8 +32,6 @@
                     <sess name="pipes"/>
                     <sess lname="hash1" gname="rot" args="20000"/>
                     <sess lname="hash2" gname="rot" args="20000"/>
-                    <shmem name="inpipe"/>
-                    <shmem name="outpipe"/>
                 </app>
             </dom>
         </app>
