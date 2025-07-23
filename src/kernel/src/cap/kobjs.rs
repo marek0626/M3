@@ -838,10 +838,16 @@ impl TileObject {
     ) -> anyhow::Result<StrongRc<Self>> {
         // only allocate it from the tile here, but don't keep an Rc to the EPQuota
         if let Some(num) = eps {
-            if !tile.has_quota(num) {
+            if !tile.has_ep_quota(num) {
                 return Err(kerrno(Code::NoSpace).context("Insufficient EPs for tile derive"));
             }
             tile.alloc_eps(num);
+        }
+        if let Some(num) = exregs {
+            if !tile.has_exreg_quota(num) {
+                return Err(kerrno(Code::NoSpace).context("Insufficient exregs for tile derive"));
+            }
+            tile.alloc_exreg(num);
         }
 
         let tile_id = tile.tile();
@@ -866,6 +872,9 @@ impl TileObject {
                 Err(e) => {
                     if let Some(num) = eps {
                         tile.free_eps(num);
+                    }
+                    if let Some(num) = exregs {
+                        tile.free_exregs(num);
                     }
                     return Err(e.context("TileMux declined tile derive"));
                 },
@@ -927,8 +936,12 @@ impl TileObject {
         self.pt_quota
     }
 
-    pub fn has_quota(&self, eps: usize) -> bool {
+    pub fn has_ep_quota(&self, eps: usize) -> bool {
         self.ep_quota.left() >= eps
+    }
+
+    pub fn has_exreg_quota(&self, eps: usize) -> bool {
+        self.exregs_quota.left() >= eps
     }
 
     pub fn add_activity(&self, act: ActId, sel: CapSel) {

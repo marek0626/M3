@@ -55,7 +55,7 @@ pub fn alloc_ep_async(act: TempRc<Activity>) -> anyhow::Result<()> {
 
     let ep_count = 1 + r.replies as usize;
     let dst_act: TempRc<Activity> = act.get_kobj(r.act)?;
-    if !dst_act.tile().has_quota(ep_count) {
+    if !dst_act.tile().has_ep_quota(ep_count) {
         return Err(kerrno(Code::NoSpace).context(format!(
             "Tile cap has insufficient EPs (have {}, need {})",
             dst_act.tile().ep_quota().left(),
