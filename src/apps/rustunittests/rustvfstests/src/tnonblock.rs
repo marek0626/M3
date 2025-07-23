@@ -13,7 +13,7 @@
  * General Public License version 2 for more details.
  */
 
-use m3::com::MemGate;
+use m3::com::MemCap;
 use m3::errors::Code;
 use m3::io::{Read, Write};
 use m3::kif;
@@ -67,7 +67,7 @@ fn files(t: &mut dyn WvTester) {
 
 fn pipes(t: &mut dyn WvTester) {
     let pipeserv = wv_require_ok!(Pipes::new("pipes"));
-    let pipe_mem = wv_require_ok!(MemGate::new(PIPE_SIZE as GlobOff, kif::Perm::RW));
+    let pipe_mem = wv_require_ok!(MemCap::new(PIPE_SIZE as GlobOff, kif::Perm::RW));
     let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
     let mut fin = wv_require_some!(pipe.reader());

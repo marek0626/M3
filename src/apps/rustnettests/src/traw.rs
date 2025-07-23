@@ -15,7 +15,7 @@
 
 use m3::client::Network;
 use m3::col::{String, ToString};
-use m3::com::MemGate;
+use m3::com::MemCap;
 use m3::errors::Code;
 use m3::io;
 use m3::kif;
@@ -50,7 +50,7 @@ fn mac_addr(t: &mut dyn WvTester) {
 
 fn exec_ping(t: &mut dyn WvTester) {
     let pipeserv = wv_require_ok!(Pipes::new("pipes"));
-    let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+    let pipe_mem = wv_require_ok!(MemCap::new(0x10000, kif::Perm::RW));
     let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
     let tile = wv_require_ok!(Tile::get("compat|own"));
