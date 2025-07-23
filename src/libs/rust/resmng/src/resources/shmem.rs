@@ -22,6 +22,7 @@ use m3::tiles::Tile;
 use m3::{format, log};
 
 use super::memory::MemSlice;
+use super::tiles::TileUsage;
 
 struct SharedMem {
     slice: MemSlice,
@@ -59,14 +60,17 @@ impl SharedMemManager {
         Some(shmem.slice.capability())
     }
 
-    pub fn acquire_mem_tile(&mut self, name: &str, count: usize) -> anyhow::Result<Rc<Tile>> {
+    pub fn acquire_mem_tile(&mut self, name: &str, count: usize) -> anyhow::Result<TileUsage> {
         let shmem = self
             .shmems
             .iter_mut()
             .find(|shmem| shmem.name == name)
             .ok_or_else(|| anyhow!("No shared memory with name '{}'", name))?;
 
-        shmem.slice.derive_tile(count)
+        shmem
+            .slice
+            .derive_tile(count)
+            .map(|t| TileUsage::new_obj(t))
     }
 
     pub fn acquire_for_tile(&mut self, name: &str, tile: &Rc<Tile>) -> anyhow::Result<&MemCap> {

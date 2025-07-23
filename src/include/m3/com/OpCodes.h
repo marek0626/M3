@@ -97,12 +97,17 @@ struct ResMng {
         FREE_MEM,
 
         ALLOC_TILE,
+        ALLOC_EXREGS,
         FREE_TILE,
 
         USE_RGATE,
         USE_SGATE,
         USE_SEM,
         USE_MOD,
+        USE_SHMEM,
+
+        GET_SERIAL,
+        GET_INFO,
     };
 };
 

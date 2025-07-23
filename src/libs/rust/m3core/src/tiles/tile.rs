@@ -177,12 +177,12 @@ impl Tile {
     /// memory tile the shared memory is located in.
     pub fn new_from_shmem(name: &str) -> Result<Rc<Self>, Error> {
         let sel = SelSpace::get().alloc_sel();
-        let (id, ndesc) = Activity::own().resmng().unwrap().use_exregs(sel, name)?;
+        let (id, ndesc) = Activity::own().resmng().unwrap().alloc_exregs(sel, name)?;
         Ok(Rc::new(Tile {
             cap: Capability::new(sel, CapFlags::KEEP_CAP),
             id,
             desc: ndesc,
-            free: false,
+            free: true,
         }))
     }
 

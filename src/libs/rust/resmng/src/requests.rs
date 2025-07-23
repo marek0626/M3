@@ -128,6 +128,13 @@ impl Requests {
                     Err(e) => Err(e),
                 }
             },
+            Ok(opcodes::ResMng::AllocExRegs) => {
+                match self.alloc_exregs(childs, res, &mut is, id) {
+                    // reply already done
+                    Ok(_) => return,
+                    Err(e) => Err(e),
+                }
+            },
             Ok(opcodes::ResMng::FreeTile) => self.free_tile(childs, res, &mut is, id),
 
             Ok(opcodes::ResMng::UseRGate) => match self.use_rgate(childs, res, &mut is, id) {
@@ -142,14 +149,6 @@ impl Requests {
             Ok(opcodes::ResMng::UseMod) => self.use_mod(childs, res, &mut is, id),
 
             Ok(opcodes::ResMng::UseShMem) => self.use_shmem(childs, res, &mut is, id),
-
-            Ok(opcodes::ResMng::UseExRegs) => {
-                match self.use_exregs(childs, res, &mut is, id) {
-                    // reply already done
-                    Ok(_) => return,
-                    Err(e) => Err(e),
-                }
-            },
 
             Ok(opcodes::ResMng::GetSerial) => self.get_serial(childs, res, &mut is, id),
 
@@ -396,7 +395,7 @@ impl Requests {
         child.use_shmem(res, &req.name, req.dst)
     }
 
-    fn use_exregs(
+    fn alloc_exregs(
         &self,
         childs: &mut ChildManager,
         res: &mut Resources,
@@ -407,7 +406,7 @@ impl Requests {
 
         let child = childs.child_by_id_mut(id).unwrap();
         child
-            .use_exregs(res, &req.name, req.dst)
+            .alloc_exregs(res, &req.name, req.dst)
             .and_then(|(id, desc)| {
                 reply_vmsg!(is, Code::Success, resmng::AllocTileReply { id, desc })
                     .map_err(|e| rerror(e).context("alloc-tile reply"))

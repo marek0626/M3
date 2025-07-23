@@ -286,6 +286,23 @@ impl ResMng {
         Ok((reply.id, reply.desc))
     }
 
+    /// Provides a memory tile capability with the configured exclusive region quota.
+    ///
+    /// The `shmem` argument specifies the name of a shared-memory region that indirectly defines
+    /// the memory tile it is located in.
+    pub fn alloc_exregs(
+        &self,
+        dst: Selector,
+        shmem: &str,
+    ) -> Result<(TileId, kif::TileDesc), Error> {
+        let mut reply = Self::send_receive(&self.sgate, opcodes::ResMng::AllocExRegs, UseReq {
+            dst,
+            name: shmem.to_string(),
+        })?;
+        let reply: AllocTileReply = reply.pop()?;
+        Ok((reply.id, reply.desc))
+    }
+
     /// Free's the processing element with given selector
     pub fn free_tile(&self, sel: Selector) -> Result<(), Error> {
         Self::send_receive(&self.sgate, opcodes::ResMng::FreeTile, FreeReq { sel }).map(|_| ())
@@ -335,19 +352,6 @@ impl ResMng {
             name: name.to_string(),
         })
         .map(|_| ())
-    }
-
-    /// Provides a memory tile capability with the configured exclusive region quota.
-    ///
-    /// The `shmem` argument specifies the name of a shared-memory region that indirectly defines
-    /// the memory tile it is located in.
-    pub fn use_exregs(&self, dst: Selector, shmem: &str) -> Result<(TileId, kif::TileDesc), Error> {
-        let mut reply = Self::send_receive(&self.sgate, opcodes::ResMng::UseExRegs, UseReq {
-            dst,
-            name: shmem.to_string(),
-        })?;
-        let reply: AllocTileReply = reply.pop()?;
-        Ok((reply.id, reply.desc))
     }
 
     /// Retrieves the receive gate to receive serial input
