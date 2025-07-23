@@ -23,6 +23,7 @@ extern crate unimux;
 
 use heapsimple::create_heap;
 
+use m3core::cap::Selector;
 use m3core::col::Vec;
 use m3core::com::MemCap;
 use m3core::errors::{Code, Error};
@@ -31,9 +32,7 @@ use m3core::kif::Perm;
 use m3core::mem::GlobOff;
 use m3core::println;
 use m3core::rc::Rc;
-use m3core::tiles::{
-    Activity, ChildActivity, OwnActivity, RunningActivity, RunningDeviceActivity, Tile,
-};
+use m3core::tiles::{ChildActivity, OwnActivity, RunningActivity, RunningDeviceActivity, Tile};
 use m3core::time::CycleDuration;
 use m3core::vfs::{File, FileRef};
 use m3core::{env, vec};
@@ -117,9 +116,8 @@ impl Chain {
         outmem: &MemCap,
         outtile: &Rc<Tile>,
     ) -> Result<(), Error> {
-        inmem.make_exclusive(&intile, &Activity::own().tile(), false)?;
+        // our tile has already access, because repeater did it for us
         inmem.make_exclusive(&intile, &self.accels[0].tile, true)?;
-        outmem.make_exclusive(&outtile, &Activity::own().tile(), false)?;
         outmem.make_exclusive(&outtile, &self.accels[ACCEL_COUNT - 1].tile, true)?;
         for accel in &self.accels {
             accel.tile.lock()?;
@@ -167,35 +165,46 @@ impl RunningChain {
 #[no_mangle]
 pub fn main() -> Result<(), Error> {
     let args = env::args().collect::<Vec<_>>();
-    if args.len() != 2 && args.len() != 3 {
-        println!("Usage: {} <image-size> [-t]", args[0]);
+    if args.len() != 4 && args.len() != 5 {
+        println!(
+            "Usage: {} <image-size> <inpipe-sel> <outpipe-sel> [-t]",
+            args[0]
+        );
         return Err(Error::new(Code::InvArgs));
     }
 
     let imgsize = args[1].parse::<usize>().expect("Parse image size");
-    let tee = args.len() > 2 && args[2] == "-t";
+    let inpipe_sel = args[2].parse::<Selector>().expect("Parse inpipe selector");
+    let outpipe_sel = args[3].parse::<Selector>().expect("Parse outpipe selector");
+    let tee = args.len() > 4 && args[4] == "-t";
 
     let pipes = Pipes::new("pipes").expect("open pipes session");
-    let in_mem = if tee {
-        MemCap::new_shmem("inpipe")
+    let (in_mem, in_tile) = if tee {
+        let in_pipe = MemCap::new_shmem("inpipe").expect("get inpipe shmem");
+        let in_tile = Tile::new_bind(inpipe_sel).expect("bind inpipe");
+        (in_pipe, Some(in_tile))
     }
     else {
-        MemCap::new(PIPE_SIZE as GlobOff, Perm::RW)
-    }
-    .expect("get inpipe shmem");
-    let in_tile = Tile::new_from_shmem("inpipe").expect("get memory tile");
+        (
+            MemCap::new(PIPE_SIZE as GlobOff, Perm::RW).expect("get inpipe shmem"),
+            None,
+        )
+    };
     let in_pipe = IndirectPipe::new(&pipes, in_mem).expect("create inpipe");
     let mut in_reader = in_pipe.reader().unwrap();
     let mut in_writer = in_pipe.writer().unwrap();
 
-    let out_mem = if tee {
-        MemCap::new_shmem("outpipe")
+    let (out_mem, out_tile) = if tee {
+        let out_pipe = MemCap::new_shmem("outpipe").expect("get outpipe shmem");
+        let out_tile = Tile::new_bind(outpipe_sel).expect("bind outpipe");
+        (out_pipe, Some(out_tile))
     }
     else {
-        MemCap::new(PIPE_SIZE as GlobOff, Perm::RW)
-    }
-    .expect("get outpipe shmem");
-    let out_tile = Tile::new_from_shmem("outpipe").expect("get memory tile");
+        (
+            MemCap::new(PIPE_SIZE as GlobOff, Perm::RW).expect("get outpipe shmem"),
+            None,
+        )
+    };
     let out_pipe = IndirectPipe::new(&pipes, out_mem).expect("create outpipe");
     let mut out_reader = out_pipe.reader().unwrap();
     let mut out_writer = out_pipe.writer().unwrap();
@@ -203,7 +212,12 @@ pub fn main() -> Result<(), Error> {
     let chain = Chain::new(&mut in_reader, &mut out_writer, tee).expect("create chain");
     if tee {
         chain
-            .lock(in_pipe.memory(), &in_tile, out_pipe.memory(), &out_tile)
+            .lock(
+                in_pipe.memory(),
+                in_tile.as_ref().unwrap(),
+                out_pipe.memory(),
+                out_tile.as_ref().unwrap(),
+            )
             .expect("lock chain");
     }
     let chain = chain.start().expect("start chain");

@@ -16,10 +16,11 @@
 
 #![no_std]
 
+use m3::cap::Selector;
 use m3::col::{String, ToString, Vec};
 use m3::com::{MemCap, MemGate};
 use m3::errors::{Code, Error, VerboseError};
-use m3::kif::Perm;
+use m3::kif::{CapRngDesc, CapType, Perm};
 use m3::mem::GlobOff;
 use m3::tiles::{ActivityArgs, ChildActivity, OwnActivity, RunningActivity, Tile, TileArgs};
 use m3::time::{CycleInstant, Profiler};
@@ -32,7 +33,7 @@ struct RepeaterSettings {
     repeats: u64,
     warmup: u64,
     args: Vec<String>,
-    shmem: Vec<String>,
+    shmem: Vec<(String, Option<Selector>)>,
     mux_mem_size: Option<GlobOff>,
     tee: bool,
 }
@@ -43,11 +44,12 @@ fn usage() -> ! {
         env::args().next().unwrap()
     );
     println!();
-    println!("    -r <repeats>  : set the number of repetitions (default: 1)");
-    println!("    -w <warmups>  : set the number of warmup runs (default: 0)");
-    println!("    -m <memsize>  : load app as multiplexer with <memsize> memory");
-    println!("    -s <shmem>    : add app to shared memory with name <shmem>");
-    println!("    -t            : run app as a TEE");
+    println!("    -r <repeats>      : set the number of repetitions (default: 1)");
+    println!("    -w <warmups>      : set the number of warmup runs (default: 0)");
+    println!("    -m <memsize>      : load app as multiplexer with <memsize> memory");
+    println!("    -s <shmem>        : add app to shared memory with name <shmem>");
+    println!("    -s <shmem>=<sel>  : add app to shared memory and delegate as <sel>");
+    println!("    -t                : run app as a TEE");
     OwnActivity::exit_with(Code::InvArgs);
 }
 
@@ -81,7 +83,15 @@ fn parse_args() -> Result<RepeaterSettings, VerboseError> {
                 settings.mux_mem_size = Some(parse::size(&args[i + 1]).unwrap() as GlobOff);
             },
             "-s" => {
-                settings.shmem.push(args[i + 1].to_string());
+                let parts = args[i + 1].split("=").collect::<Vec<_>>();
+                if parts.len() == 2 {
+                    let name = parts[0].to_string();
+                    let sel = parse::int(parts[1]).unwrap();
+                    settings.shmem.push((name, Some(sel)));
+                }
+                else {
+                    settings.shmem.push((parts[0].to_string(), None));
+                }
             },
             "-t" => {
                 settings.tee = true;
@@ -136,15 +146,25 @@ pub fn main() -> Result<(), Error> {
             None
         };
 
+        let mut act = ChildActivity::new_with(tile.clone(), ActivityArgs::new("child"))
+            .expect("create activity");
+        act.add_mount("/", "/");
+
         let _shmems = if settings.tee {
             let shmems = settings
                 .shmem
                 .iter()
-                .map(|name| {
+                .map(|(name, sel)| {
                     let mcap = MemCap::new_shmem(name).expect("get shmem");
                     let mtile = Tile::new_from_shmem(name).expect("get memory tile");
-                    mcap.make_exclusive(&mtile, &tile, true)
+                    mcap.make_exclusive(&mtile, &tile, sel.is_none())
                         .expect("make exclusive");
+
+                    if let Some(sel) = sel {
+                        act.delegate_to(CapRngDesc::new_single(CapType::Object, mtile.sel()), *sel)
+                            .expect("delegate memory tile");
+                    }
+
                     (mcap, mtile)
                 })
                 .collect::<Vec<_>>();
@@ -153,10 +173,6 @@ pub fn main() -> Result<(), Error> {
         else {
             None
         };
-
-        let mut act = ChildActivity::new_with(tile.clone(), ActivityArgs::new("child"))
-            .expect("create activity");
-        act.add_mount("/", "/");
 
         let act = if settings.mux_mem_size.is_some() {
             act.exec_file(None, &settings.args, || {
