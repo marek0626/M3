@@ -8,6 +8,7 @@ members = [
     "apps/bench/hashmuxbenchs",
     "apps/bench/hashfile",
     "apps/bench/ipc",
+    "apps/bench/imgprocpipe",
     "apps/bench/mem",
     "apps/bench/netlat",
     "apps/bench/noopbench",

@@ -11,6 +11,7 @@ dirs = [
     'hashmuxbenchs',
     'hashfile',
     'imgproc',
+    'imgprocpipe',
     'ipc',
     'loadgen',
     'mem',

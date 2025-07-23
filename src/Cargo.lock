@@ -341,6 +341,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ebdb29d2ea9ed0083cd8cece49bbd968021bd99b0849edb4a9a7ee0fdf6a4e0"
 
 [[package]]
+name = "imgprocpipe"
+version = "0.1.0"
+dependencies = [
+ "accel",
+ "heapsimple",
+ "m3core",
+ "m3files",
+ "pipecli",
+ "unimux",
+]
+
+[[package]]
 name = "info"
 version = "0.1.0"
 dependencies = [
