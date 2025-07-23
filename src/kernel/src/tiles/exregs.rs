@@ -152,7 +152,7 @@ impl ExRegs {
 
                 let exreg_idx = e.idx;
                 exregs.exregs.remove(idx);
-                exregs.free.clear(idx);
+                exregs.free.clear(exreg_idx);
                 drop(exregs);
 
                 let tilemux = tilemng::tilemux(rot_tile);
