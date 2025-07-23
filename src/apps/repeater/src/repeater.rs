@@ -148,8 +148,6 @@ pub fn main() -> Result<(), Error> {
                     (mcap, mtile)
                 })
                 .collect::<Vec<_>>();
-
-            tile.lock().expect("tile lock");
             Some(shmems)
         }
         else {
@@ -161,8 +159,13 @@ pub fn main() -> Result<(), Error> {
         act.add_mount("/", "/");
 
         let act = if settings.mux_mem_size.is_some() {
-            act.exec_file(None, &settings.args, || Ok(()))
-                .expect("exec activity")
+            act.exec_file(None, &settings.args, || {
+                if settings.tee {
+                    tile.lock().expect("tile lock");
+                }
+                Ok(())
+            })
+            .expect("exec activity")
         }
         else {
             act.exec(&settings.args).expect("exec activity")
