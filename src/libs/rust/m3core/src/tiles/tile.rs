@@ -190,19 +190,19 @@ impl Tile {
     ///
     /// Performs the `tile_info` system call to obtain the tile id and description from the
     /// capability denoted by the selector.
-    pub fn new_bind(sel: Selector) -> Result<Self, Error> {
+    pub fn new_bind(sel: Selector) -> Result<Rc<Self>, Error> {
         let (_mux, tile_id, tile_desc, _ep_count) = syscalls::tile_info(sel)?;
         Ok(Self::new_bind_with(tile_id, tile_desc, sel))
     }
 
     /// Binds a new tile object to given tile id, description, and selector
-    pub fn new_bind_with(id: TileId, desc: TileDesc, sel: Selector) -> Self {
-        Tile {
+    pub fn new_bind_with(id: TileId, desc: TileDesc, sel: Selector) -> Rc<Self> {
+        Rc::new(Tile {
             cap: Capability::new(sel, CapFlags::KEEP_CAP),
             id,
             desc,
             free: false,
-        }
+        })
     }
 
     /// Gets a tile with given description.

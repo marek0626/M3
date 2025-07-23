@@ -340,11 +340,11 @@ impl Subsystem {
     }
 
     pub fn get_tile(&self, idx: usize) -> Rc<Tile> {
-        Rc::new(Tile::new_bind_with(
+        Tile::new_bind_with(
             self.tiles[idx].id as TileId,
             self.tiles[idx].desc,
             SUBSYS_SELS + 2 + (self.mods.len() + idx) as Selector,
-        ))
+        )
     }
 
     pub fn get_mem(&self, idx: usize) -> MemCap {

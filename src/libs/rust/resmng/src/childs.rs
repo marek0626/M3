@@ -1521,9 +1521,9 @@ impl ChildManager {
             // all childs get the same PMP EPs, so that we can also give the same PMP EPs to childs
             // of childs.
             child.our_tile().clone(),
-            TileUsage::new_obj(Rc::new(
+            TileUsage::new_obj(
                 Tile::new_bind(our_tile).map_err(|e| rerror(e).context("tile bind"))?,
-            )),
+            ),
             Rc::new(KMem::new_bind(our_kmem)),
             act_id,
             our_act,
