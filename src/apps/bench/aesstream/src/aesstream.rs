@@ -60,7 +60,7 @@ pub fn main() -> Result<(), Error> {
     .expect("allocate riscv32 tile");
     let act = ChildActivity::new(tile.clone(), "test").expect("create child activity");
 
-    let mut accel = StreamAccel::new(&act)?;
+    let mut accel = StreamAccel::new(&act, tee)?;
     let mut input = VFS::open(infile, OpenFlags::R | OpenFlags::NEW_SESS)
         .unwrap_or_else(|_| panic!("open {} for reading", infile));
     let mut output = VFS::open(
