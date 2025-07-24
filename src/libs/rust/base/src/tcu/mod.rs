@@ -58,9 +58,9 @@ pub type ActId = u16;
 /// A tile-generation id
 pub type GenId = u8;
 
-#[cfg(M3_TARGET = "gem5")]
+#[cfg(any(M3_TARGET = "hw", M3_TARGET = "gem5"))]
 pub const EXREG_REGS: usize = 16;
-#[cfg(not(M3_TARGET = "gem5"))]
+#[cfg(not(any(M3_TARGET = "hw", M3_TARGET = "gem5")))]
 pub const EXREG_REGS: usize = 0;
 pub const PMEM_PROT_EPS: usize = 4;
 pub const TILEMUX_EPS: usize = 4;

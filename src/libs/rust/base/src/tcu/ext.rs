@@ -312,10 +312,10 @@ impl TCU {
         size: GlobOff,
         perm: kif::Perm,
     ) -> Option<(Reg, Reg)> {
-        #[cfg(not(M3_TARGET = "gem5"))]
+        #[cfg(not(any(M3_TARGET = "hw", M3_TARGET = "gem5")))]
         return None;
 
-        #[cfg(M3_TARGET = "gem5")]
+        #[cfg(any(M3_TARGET = "hw", M3_TARGET = "gem5"))]
         {
             let mut cfg = (user_tile_gen as Reg) << 16 | (user_tile.raw() as Reg) << 2;
             if perm.contains(kif::Perm::R) {
