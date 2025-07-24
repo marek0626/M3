@@ -36,6 +36,8 @@ use crate::tcu::{
     NO_REPLIES, PRINT_REGS, TCU, UNPRIV_REGS,
 };
 
+use super::{ConfigReg, CONFIG_OFF};
+
 /// The external commands
 #[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
 #[repr(u64)]
@@ -351,5 +353,10 @@ impl TCU {
     /// Returns the MMIO address of the given exclusive register
     pub fn exreg_addr(reg: usize) -> VirtAddr {
         MMIO_ADDR + (EXT_REGS + UNPRIV_REGS + PRINT_REGS + reg * 2) * mem::size_of::<Reg>()
+    }
+
+    /// Returns the MMIO address of the given config register
+    pub fn config_addr(reg: ConfigReg) -> VirtAddr {
+        MMIO_ADDR + CONFIG_OFF + (reg as usize) * mem::size_of::<Reg>()
     }
 }

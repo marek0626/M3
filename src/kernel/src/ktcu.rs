@@ -22,8 +22,8 @@ use base::kif;
 use base::log;
 use base::mem::{self, GlobAddr, GlobOff, PhysAddr, PhysAddrRaw, VirtAddr};
 use base::tcu::{
-    ActId, EpId, ExtCmdOpCode, ExtReg, FeatureFlags, Header, Label, OwnedMessage, Reg, TileId,
-    EP_REGS, MMIO_ADDR, PMEM_PROT_EPS, TCU, UNLIM_CREDITS,
+    ActId, ConfigReg, EpId, ExtCmdOpCode, ExtReg, FeatureFlags, Header, Label, OwnedMessage, Reg,
+    TileId, EP_REGS, PMEM_PROT_EPS, TCU, UNLIM_CREDITS,
 };
 
 use crate::platform;
@@ -411,9 +411,9 @@ pub fn reset_tile(tile: TileId, start: bool) -> anyhow::Result<()> {
     if env::boot().platform == env::Platform::Hw {
         // TODO put the reset command into the spec so that we can use that on HW as well
         // start/stop tile
-        try_write_slice(tile, MMIO_ADDR.as_goff() + 0x3028, &[val])?;
+        try_write_slice(tile, TCU::config_addr(ConfigReg::Enable).as_goff(), &[val])?;
         // start/stop rocket core
-        try_write_slice(tile, MMIO_ADDR.as_goff() + 0x3030, &[val])
+        try_write_slice(tile, TCU::config_addr(ConfigReg::Int0).as_goff(), &[val])
     }
     else {
         let cmd = TCU::build_ext_cmd(ExtCmdOpCode::Reset, val);

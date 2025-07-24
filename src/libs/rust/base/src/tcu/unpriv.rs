@@ -106,14 +106,6 @@ cfg_if! {
     }
 }
 
-/// The config registers (hardware only)
-#[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
-#[repr(u64)]
-pub enum ConfigReg {
-    /// Enables/disables the instruction trace
-    InstrTrace = 0xD,
-}
-
 impl TCU {
     /// Sends the given message via given endpoint.
     ///
@@ -624,11 +616,6 @@ impl TCU {
     pub fn msg_to_offset(base: VirtAddr, msg: &Message) -> usize {
         let addr = msg as *const _ as *const u8 as usize;
         addr - base.as_local()
-    }
-
-    /// Enables or disables instruction tracing
-    pub fn set_trace_instrs(enable: bool) {
-        Self::write_cfg_reg(ConfigReg::InstrTrace, enable as Reg);
     }
 
     fn build_cmd(ep: EpId, cmd: CmdOpCode, arg: Reg) -> Reg {

@@ -18,7 +18,7 @@ use base::io::{log, LogFlags};
 use base::kif::boot::{Info, Mem, Mod};
 use base::kif::{tilemux, Perm, TileAttr, TileDesc, TileType};
 use base::mem::{GlobAddr, GlobOff};
-use base::tcu::{ActId, TCU};
+use base::tcu::{ActId, ConfigReg, TCU};
 use base::util::math::round_up;
 use base::{cfg, env, log, mem, tcu, util};
 use rot::cert::{HashBuf, M3RawCertificate};
@@ -525,7 +525,7 @@ pub fn run() -> crate::RosaPrivateCtx {
     // enable tile to allow memory transfers
     if env!("M3_TARGET") == "hw23" {
         ktile
-            .write_tcu(&[1u64], tcu::MMIO_ADDR.as_goff() + 0x3028)
+            .write_tcu(&[1u64], tcu::TCU::config_addr(ConfigReg::Enable).as_goff())
             .expect("Failed to start kernel tile");
     }
 

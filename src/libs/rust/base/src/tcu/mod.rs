@@ -41,6 +41,7 @@ use crate::{
     cpu::{CPUOps, CPU},
     kif::PageFlags,
     mem::{self, VirtAddr, VirtAddrRaw},
+    util::math,
 };
 
 /// A TCU register
@@ -102,6 +103,25 @@ pub const NO_REPLIES: EpId = INVALID_EP;
 pub const MMIO_ADDR: VirtAddr = VirtAddr::new(0xF000_0000);
 /// The size of the TCU's privileged MMIO area
 pub const MMIO_PRIV_SIZE: usize = cfg::PAGE_SIZE;
+
+cfg_if! {
+    if #[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))] {
+        pub const CONFIG_OFF: usize = 0x3028;
+    } else {
+        pub const CONFIG_OFF: usize = 0x20_3000;
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
+#[repr(u64)]
+pub enum ConfigReg {
+    /// Enables/disables the tile
+    Enable      = 0,
+    /// Issues interrupt 0 to start the core
+    Int0        = 1,
+    /// Enables/disables the instruction trace
+    TraceEnable = 8,
+}
 
 /// The number of PRINT registers
 pub const PRINT_REGS: usize = 32;
@@ -222,16 +242,24 @@ pub struct TCU {}
 
 impl TCU {
     /// Returns all MMIO areas that need to be mapped
-    pub fn mmio_areas() -> [(VirtAddr, usize, PageFlags); 3] {
+    pub fn mmio_areas() -> [(VirtAddr, usize, PageFlags); 4] {
         match env!("M3_TARGET") {
-            "hw22" | "hw23" => [
-                (MMIO_ADDR, cfg::PAGE_SIZE * 2, PageFlags::U | PageFlags::RW),
+            "hw22" | "hw23" | "hw" => [
+                (MMIO_ADDR, MMIO_SIZE, PageFlags::U | PageFlags::RW),
+                (MMIO_PRIV_ADDR, MMIO_PRIV_SIZE, PageFlags::U | PageFlags::RW),
                 (
-                    MMIO_PRIV_ADDR,
-                    cfg::PAGE_SIZE * 2,
+                    VirtAddr::from(math::round_dn(
+                        MMIO_ADDR.as_local() + CONFIG_OFF,
+                        cfg::PAGE_SIZE,
+                    )),
+                    cfg::PAGE_SIZE,
                     PageFlags::U | PageFlags::RW,
                 ),
-                (VirtAddr::null(), 0, PageFlags::empty()),
+                (
+                    VirtAddr::from(math::round_dn(MMIO_EPS_ADDR.as_local(), cfg::PAGE_SIZE)),
+                    math::round_up(Self::endpoints_size(), cfg::PAGE_SIZE),
+                    PageFlags::U | PageFlags::R,
+                ),
             ],
             _ => [
                 (MMIO_ADDR, MMIO_SIZE, PageFlags::U | PageFlags::RW),
@@ -241,6 +269,7 @@ impl TCU {
                     Self::endpoints_size(),
                     PageFlags::U | PageFlags::R,
                 ),
+                (VirtAddr::null(), 0, PageFlags::empty()),
             ],
         }
     }
@@ -308,13 +337,6 @@ impl TCU {
         Self::write_reg(EXT_REGS + reg as usize, val)
     }
 
-    pub(crate) fn write_cfg_reg(reg: ConfigReg, val: Reg) {
-        Self::write_reg(
-            ((cfg::PAGE_SIZE * 3) / mem::size_of::<Reg>()) + reg as usize,
-            val,
-        )
-    }
-
     pub(crate) fn read_ep_reg(ep: EpId, reg: usize) -> Reg {
         Self::read_reg(
             (MMIO_EPS_ADDR.as_local() - MMIO_ADDR.as_local()) / mem::size_of::<Reg>()
@@ -331,5 +353,14 @@ impl TCU {
     pub(crate) fn write_reg(idx: usize, val: Reg) {
         // safety: as above
         unsafe { CPU::write8b((MMIO_ADDR.as_mut_ptr::<Reg>()).add(idx), val) };
+    }
+
+    pub(crate) fn write_cfg_reg(reg: ConfigReg, val: Reg) {
+        Self::write_reg((CONFIG_OFF / mem::size_of::<Reg>()) + reg as usize, val)
+    }
+
+    /// Enables or disables instruction tracing
+    pub fn set_trace_instrs(enable: bool) {
+        Self::write_cfg_reg(ConfigReg::TraceEnable, enable as Reg);
     }
 }

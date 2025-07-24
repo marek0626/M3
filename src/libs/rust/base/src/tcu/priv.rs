@@ -336,7 +336,7 @@ impl TCU {
 
     fn build_priv_cmd(op: PrivCmdOpCode, arg: Reg) -> Reg {
         let mut cmd: Reg = op.into();
-        if cfg!(M3_TARGET = "gem5") {
+        if cfg!(M3_TARGET = "gem5") || cfg!(M3_TARGET = "hw") {
             cmd |= arg << 10;
         }
         else {
@@ -347,7 +347,7 @@ impl TCU {
 
     fn decode_priv_cmd(cmd: Reg) -> (Reg, Code, Reg) {
         let op = cmd & 0xF;
-        let (err, arg) = if cfg!(M3_TARGET = "gem5") {
+        let (err, arg) = if cfg!(M3_TARGET = "gem5") || cfg!(M3_TARGET = "hw") {
             ((cmd >> 4) & 0x3F, cmd >> 10)
         }
         else {

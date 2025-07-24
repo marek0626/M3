@@ -21,7 +21,7 @@ use base::errors::Error;
 use base::io::{LogFlags, Read};
 use base::kif::TileDesc;
 use base::mem::{GlobOff, VirtAddr};
-use base::tcu::TCU;
+use base::tcu::{ConfigReg, TCU};
 use base::util::math::round_up;
 use base::vec::Vec;
 use base::{env, format, log, mem, tcu, util};
@@ -178,7 +178,7 @@ pub fn run(ctx: crate::RosaPrivateCtx) -> ! {
     else {
         // start rocket core
         ctx.kernel_tile
-            .write_tcu(&[1u64], tcu::MMIO_ADDR.as_goff() + 0x3030)
+            .write_tcu(&[1u64], tcu::TCU::config_addr(ConfigReg::Int0).as_goff())
             .expect("Failed to start kernel rocket core");
     }
 
