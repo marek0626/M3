@@ -63,13 +63,13 @@ impl StreamAccel {
     pub fn new(act: &ChildActivity, tee: bool) -> Result<Self, Error> {
         let rcap = RecvCap::new(next_log2(RB_SIZE), next_log2(MSG_SIZE))?;
 
-        let in_sep = Some(EpMng::acquire_for(act.sel(), EP_IN_SEND, 0)?);
-        let in_mep = EpMng::acquire_for(act.sel(), EP_IN_MEM, 0)?;
+        let in_sep = Some(EpMng::acquire_for(act.sel(), EP_IN_SEND, 0, false)?);
+        let in_mep = EpMng::acquire_for(act.sel(), EP_IN_MEM, 0, tee)?;
 
-        let out_sep = Some(EpMng::acquire_for(act.sel(), EP_OUT_SEND, 0)?);
-        let out_mep = Some(EpMng::acquire_for(act.sel(), EP_OUT_MEM, 0)?);
+        let out_sep = Some(EpMng::acquire_for(act.sel(), EP_OUT_SEND, 0, false)?);
+        let out_mep = Some(EpMng::acquire_for(act.sel(), EP_OUT_MEM, 0, tee)?);
 
-        let rep = EpMng::acquire_for(act.sel(), EP_RECV, RB_SIZE / MSG_SIZE)?;
+        let rep = EpMng::acquire_for(act.sel(), EP_RECV, RB_SIZE / MSG_SIZE, false)?;
         let recv_addr = VirtAddr::new(act.tile_desc().mem_offset() as VirtAddrRaw + 0x1_4C00);
         let _rgate = rcap.activate_with(None, recv_addr.as_goff(), recv_addr, Some(rep))?;
 
