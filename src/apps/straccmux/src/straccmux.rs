@@ -18,6 +18,7 @@
 #[allow(unused_extern_crates)]
 extern crate lang;
 
+mod aes;
 mod proto;
 
 use core::arch::asm;

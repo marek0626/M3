@@ -1001,6 +1001,7 @@ version = "0.1.0"
 dependencies = [
  "base",
  "lang",
+ "num_enum",
 ]
 
 [[package]]

@@ -10,3 +10,4 @@ crate-type = ["staticlib"]
 [dependencies]
 base = { path = "../../libs/rust/base" }
 lang = { path = "../../libs/rust/lang" }
+num_enum = { version = "0.6.1", default-features = false }

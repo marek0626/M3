@@ -257,12 +257,20 @@ bitflags! {
         #[doc(hidden)]
         const __sha3_start = Self::__rot_start.bits() + 4;
 
-        /// sha3: register accesses
+        /// SHA-3: register accesses
         const SHA3Reg       = 1 << (Self::__sha3_start.bits() + 0);
-        /// sha3: accesses to the accelerator SPM
+        /// SHA-3: accesses to the accelerator SPM
         const SHA3Mem       = 1 << (Self::__sha3_start.bits() + 1);
-        /// sha3: accelerator commands
+        /// SHA-3: accelerator commands
         const SHA3Cmd       = 1 << (Self::__sha3_start.bits() + 2);
+
+        #[doc(hidden)]
+        const __aes_start = Self::__sha3_start.bits() + 3;
+
+        /// AES: register accesses
+        const AESReg        = 1 << (Self::__aes_start.bits() + 0);
+        /// AES: accelerator commands
+        const AESCmd        = 1 << (Self::__aes_start.bits() + 1);
     }
 }
 
