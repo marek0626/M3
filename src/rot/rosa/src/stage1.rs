@@ -360,7 +360,7 @@ fn prepare_for_rots(our_tile: IndexedTile, root_tile: IndexedTile) {
     });
 
     // configure exclusive region for the environment, accessible only from the root tile
-    #[cfg(M3_TARGET = "gem5")]
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
     if let Some((cfg, arg1)) = TCU::build_exreg(
         our_tile.id(),
         root_tile.id(),
@@ -375,7 +375,7 @@ fn prepare_for_rots(our_tile: IndexedTile, root_tile: IndexedTile) {
     }
 }
 
-#[cfg(M3_TARGET = "gem5")]
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
 fn lock_tile(our_tile: IndexedTile) {
     // get the address of the register
     let reg_addr = TCU::ext_reg_addr(tcu::ExtReg::Features).as_goff();
@@ -408,7 +408,7 @@ pub fn run() -> crate::RosaPrivateCtx {
             tile.init(Perm::RW, 0);
 
             // set us as the exclusive-region manager
-            #[cfg(M3_TARGET = "gem5")]
+            #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
             {
                 let value = env::boot().tile_id().raw() as tcu::Reg;
                 tile.write_tcu(&[value], TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff())
@@ -556,7 +556,7 @@ pub fn run() -> crate::RosaPrivateCtx {
 
     // prepare execution of rots/unimux and lock tile as we're about to start the kernel
     prepare_for_rots(our_tile, root_tile);
-    #[cfg(M3_TARGET = "gem5")]
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
     lock_tile(our_tile);
 
     crate::RosaPrivateCtx {
