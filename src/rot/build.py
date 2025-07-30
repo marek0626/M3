@@ -10,7 +10,7 @@ def build(gen, env):
         return
 
     # the RoT always runs on a riscv32 core on the hardware platform
-    if env['TGT'] == 'hw23':
+    if env['TGT'] == 'hw23' or env['TGT'] == 'hw':
         isa = 'riscv32'
     else:
         isa = env['ISA']
@@ -61,7 +61,7 @@ def build_stage(gen, env, out):
     else:
         libs = []
 
-    if env['TGT'] == 'hw23':
+    if env['TGT'] == 'hw23' or env['TGT'] == 'hw':
         env['RUSTCFLAGS'] += ['-C', 'opt-level=z']
 
     exe = env.m3_rust_exe(
