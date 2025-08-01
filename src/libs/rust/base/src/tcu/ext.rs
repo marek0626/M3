@@ -188,15 +188,14 @@ impl TCU {
                 regs[2] = 0;
             },
             _ => {
-                regs[1] = buf.as_raw() as Reg;
-                regs[2] = 0;
-                regs[3] = 0;
-                // write r0 last because that might freeze the EP
                 regs[0] = (EpType::Receive as Reg)
                     | ((act as Reg) << 3)
                     | ((reply_eps.unwrap_or(NO_REPLIES) as Reg) << 19)
                     | (((buf_ord - msg_ord) as Reg) << 35)
                     | ((msg_ord as Reg) << 42);
+                regs[1] = buf.as_raw() as Reg;
+                regs[2] = 0;
+                regs[3] = 0;
             },
         }
     }
@@ -223,16 +222,16 @@ impl TCU {
                 regs[2] = lbl as Reg;
             },
             _ => {
-                regs[1] = (dst_ep as Reg)
-                    | ((Self::tileid_to_nocid(tile) as Reg) << 16)
-                    | ((_gen as Reg) << 30);
-                regs[2] = lbl as Reg;
-                regs[3] = 0;
                 regs[0] = (EpType::Send as Reg)
                     | ((act as Reg) << 3)
                     | ((credits as Reg) << 19)
                     | ((credits as Reg) << 26)
                     | ((msg_order as Reg) << 33);
+                regs[1] = (dst_ep as Reg)
+                    | ((Self::tileid_to_nocid(tile) as Reg) << 16)
+                    | ((_gen as Reg) << 30);
+                regs[2] = lbl as Reg;
+                regs[3] = 0;
             },
         }
     }
@@ -266,16 +265,16 @@ impl TCU {
         size: usize,
         perm: Perm,
     ) {
-        regs[1] = addr as Reg;
-        regs[2] = size as Reg;
-        if env!("M3_TARGET") == "gem5" || env!("M3_TARGET") == "hw" {
-            regs[3] = 0;
-        }
         regs[0] = (EpType::Memory as Reg)
             | ((act as Reg) << 3)
             | ((perm.bits() as Reg) << 19)
             | ((tile_noc_id as Reg) << 23)
             | ((gen as Reg) << 37);
+        regs[1] = addr as Reg;
+        regs[2] = size as Reg;
+        if env!("M3_TARGET") == "gem5" || env!("M3_TARGET") == "hw" {
+            regs[3] = 0;
+        }
     }
 
     pub fn config_invalid(regs: &mut [Reg], act: ActId, dynamic: bool) {
@@ -293,7 +292,8 @@ impl TCU {
         let off = EP_REGS * ep as usize;
         unsafe {
             let addr = (MMIO_EPS_ADDR.as_mut_ptr::<Reg>()).add(off);
-            for (i, r) in regs.iter().enumerate() {
+            // write r0 last because that might freeze the EP
+            for (i, r) in regs.iter().enumerate().rev() {
                 CPU::write8b(addr.add(i), *r);
             }
         }
