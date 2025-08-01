@@ -1087,7 +1087,7 @@ pub fn main() -> Result<(), Error> {
 
     server_loop(|| {
         // explicitly check for sidecalls on hw23, as we don't get interrupts
-        #[cfg(M3_TARGET = "hw23")]
+        #[cfg(any(M3_TARGET = "hw23", M3_TARGET = "hw"))]
         unimux::check_sidecalls();
 
         recv.handle_messages()?;
@@ -1115,9 +1115,9 @@ pub fn main() -> Result<(), Error> {
     .ok();
 
     // we cannot exit normally on hw23 as tmcalls are not supported
-    #[cfg(M3_TARGET = "hw23")]
+    #[cfg(any(M3_TARGET = "hw23", M3_TARGET = "hw"))]
     unimux::exit(Code::Success as u32);
 
-    #[cfg(not(M3_TARGET = "hw23"))]
+    #[cfg(not(any(M3_TARGET = "hw23", M3_TARGET = "hw")))]
     Ok(())
 }

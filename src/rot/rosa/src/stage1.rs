@@ -360,7 +360,7 @@ fn prepare_for_rots(our_tile: IndexedTile, root_tile: IndexedTile) {
     });
 
     // configure exclusive region for the environment, accessible only from the root tile
-    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+    #[cfg(any(M3_TARGET = "gem5"))]
     if let Some((cfg, arg1)) = TCU::build_exreg(
         our_tile.id(),
         root_tile.id(),
@@ -523,7 +523,7 @@ pub fn run() -> crate::RosaPrivateCtx {
     let our_tile = determine_our_tile(&m3);
 
     // enable tile to allow memory transfers
-    if env!("M3_TARGET") == "hw23" {
+    if env!("M3_TARGET") == "hw23" || env!("M3_TARGET") == "hw" {
         ktile
             .write_tcu(&[1u64], tcu::TCU::config_addr(ConfigReg::Enable).as_goff())
             .expect("Failed to start kernel tile");
