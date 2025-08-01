@@ -188,14 +188,15 @@ impl TCU {
                 regs[2] = 0;
             },
             _ => {
+                regs[1] = buf.as_raw() as Reg;
+                regs[2] = 0;
+                regs[3] = 0;
+                // write r0 last because that might freeze the EP
                 regs[0] = (EpType::Receive as Reg)
                     | ((act as Reg) << 3)
                     | ((reply_eps.unwrap_or(NO_REPLIES) as Reg) << 19)
                     | (((buf_ord - msg_ord) as Reg) << 35)
                     | ((msg_ord as Reg) << 42);
-                regs[1] = buf.as_raw() as Reg;
-                regs[2] = 0;
-                regs[3] = 0;
             },
         }
     }
@@ -222,16 +223,16 @@ impl TCU {
                 regs[2] = lbl as Reg;
             },
             _ => {
-                regs[0] = (EpType::Send as Reg)
-                    | ((act as Reg) << 3)
-                    | ((credits as Reg) << 19)
-                    | ((credits as Reg) << 26)
-                    | ((msg_order as Reg) << 33);
                 regs[1] = (dst_ep as Reg)
                     | ((Self::tileid_to_nocid(tile) as Reg) << 16)
                     | ((_gen as Reg) << 30);
                 regs[2] = lbl as Reg;
                 regs[3] = 0;
+                regs[0] = (EpType::Send as Reg)
+                    | ((act as Reg) << 3)
+                    | ((credits as Reg) << 19)
+                    | ((credits as Reg) << 26)
+                    | ((msg_order as Reg) << 33);
             },
         }
     }
@@ -265,28 +266,26 @@ impl TCU {
         size: usize,
         perm: Perm,
     ) {
-        regs[0] = (EpType::Memory as Reg)
-            | ((act as Reg) << 3)
-            | ((perm.bits() as Reg) << 19)
-            | ((tile_noc_id as Reg) << 23)
-            | ((gen as Reg) << 37);
         regs[1] = addr as Reg;
         regs[2] = size as Reg;
         if env!("M3_TARGET") == "gem5" || env!("M3_TARGET") == "hw" {
             regs[3] = 0;
         }
+        regs[0] = (EpType::Memory as Reg)
+            | ((act as Reg) << 3)
+            | ((perm.bits() as Reg) << 19)
+            | ((tile_noc_id as Reg) << 23)
+            | ((gen as Reg) << 37);
     }
 
     pub fn config_invalid(regs: &mut [Reg], act: ActId, dynamic: bool) {
-        regs[0] = (EpType::Invalid as Reg) | ((act as Reg) << 3);
-        if dynamic {
-            regs[0] |= 1 << 62;
-        }
         regs[1] = 0;
         regs[2] = 0;
         if env!("M3_TARGET") == "gem5" || env!("M3_TARGET") == "hw" {
             regs[3] = 0;
         }
+        let dyn_flag = if dynamic { 1 << 62 } else { 0 };
+        regs[0] = (EpType::Invalid as Reg) | ((act as Reg) << 3) | dyn_flag;
     }
 
     /// Configures the given endpoint

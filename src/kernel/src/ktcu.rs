@@ -469,7 +469,7 @@ pub fn write_ep_remote(tile: TileId, ep: EpId, regs: &[Reg]) -> anyhow::Result<(
         try_write_slice(tile, TCU::ep_regs_addr(ep).as_goff(), regs)
     }
     else {
-        for (i, r) in regs.iter().enumerate() {
+        for (i, r) in regs.iter().enumerate().rev() {
             try_write_slice(tile, (TCU::ep_regs_addr(ep) + i * 8).as_goff(), &[*r])?;
         }
         Ok(())
