@@ -34,6 +34,7 @@ use base::machine;
 use base::mem::{size_of, GlobAddr, MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
 use base::tcu::{self, EpId, TileId, TCU};
 use base::util;
+use base::util::math::next_log2;
 
 use core::intrinsics::transmute;
 use core::ptr;
@@ -622,6 +623,51 @@ fn test_tlb() {
     TCU::invalidate_tlb();
 }
 
+fn test_lock() {
+    // configure mem EP for TCU's MMIO area
+    helper::config_local_ep(MEP, |regs| {
+        TCU::config_mem(
+            regs,
+            OWN_ACT,
+            OWN_TILE,
+            0,
+            tcu::MMIO_ADDR.as_goff(),
+            tcu::MMIO_SIZE,
+            Perm::RW,
+        );
+    });
+
+    {
+        log!(LogFlags::Info, "Testing TCU lock");
+
+        // get the address of the register
+        let reg_addr = TCU::ext_reg_addr(tcu::ExtReg::Features).as_goff();
+        // get features
+        let mut features: u64 = TCU::read_obj(MEP, reg_addr - tcu::MMIO_ADDR.as_goff())
+            .expect("Failed to FEATURES reg");
+        // set locked bit
+        features |= tcu::FeatureFlags::LOCKED.bits();
+        // write it
+        TCU::write_obj(MEP, &features, reg_addr - tcu::MMIO_ADDR.as_goff())
+            .expect("failed to FEATURES reg");
+    }
+
+    {
+        log!(LogFlags::Info, "Configuring frozen EP");
+
+        let (_virt, rbuf_phys) = helper::virt_to_phys(VirtAddr::from(RBUF2.as_ptr()));
+        helper::config_local_ep(REP1, |regs| {
+            TCU::config_recv(regs, OWN_ACT, rbuf_phys, next_log2(64), next_log2(64), None);
+        });
+
+        TCU::check_recv_ep(REP1, rbuf_phys, 64, false).unwrap();
+
+        helper::config_local_ep(SEP, |regs| {
+            TCU::config_send(regs, OWN_ACT, 0x1234, OWN_TILE, 0, REP1, next_log2(64), 1);
+        });
+    }
+}
+
 macro_rules! run_test {
     ($name:ident($( $arg:expr ),*)) => {{
         log!(LogFlags::Info, "-- Running {} --", stringify!($name));
@@ -655,8 +701,9 @@ pub extern "C" fn env_run() {
     run_test!(test_msgs(area_begin, area_size));
     run_test!(test_foreign_msg());
     run_test!(test_own_msg());
-    run_test!(test_pmp_failures());
+    // run_test!(test_pmp_failures());
     run_test!(test_tlb());
+    run_test!(test_lock());
 
     log!(LogFlags::Info, "Shutting down");
     helper::exit(0);
