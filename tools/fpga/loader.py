@@ -125,7 +125,7 @@ class Loader:
 
     def _init_tile(self, dram: memory, tile: pm, tile_idx: int, loaded: bool):
         # reset TCU (clear command log and reset registers except FEATURES and EPs)
-        tile.tcu_reset()
+        tile.tcu_reset(resetBits=0xF)
 
         # enable instruction trace for all Rocket tiles (doesn't cost anything)
         if tile.type == TileType.ROCKET:
