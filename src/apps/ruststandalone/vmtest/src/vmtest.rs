@@ -661,10 +661,23 @@ fn test_lock() {
         });
 
         TCU::check_recv_ep(REP1, rbuf_phys, 64, false).unwrap();
+        assert_eq!(TCU::is_frozen(REP1), true);
 
         helper::config_local_ep(SEP, |regs| {
             TCU::config_send(regs, OWN_ACT, 0x1234, OWN_TILE, 0, REP1, next_log2(64), 1);
         });
+        assert_eq!(TCU::is_frozen(SEP), true);
+
+        TCU::unfreeze(REP1).unwrap();
+        assert_eq!(TCU::is_frozen(REP1), false);
+        TCU::unfreeze(SEP).unwrap();
+        assert_eq!(TCU::is_frozen(SEP), false);
+        assert_eq!(TCU::has_msgs(REP1), false);
+
+        let buf = MsgBuf::new();
+        assert_eq!(TCU::send(SEP, &buf, 0x1111, tcu::NO_REPLIES), Ok(()));
+        assert_eq!(TCU::has_msgs(REP1), true);
+        TCU::fetch_msg(REP1).unwrap();
     }
 }
 
