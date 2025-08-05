@@ -92,7 +92,7 @@ pub fn add(
 
     // write region to memory tile
     let idxmtile = rot::IndexedTile::new_from_env(mtile).unwrap();
-    let (cfg, range) = TCU::build_exreg(mtile, utile, ugen, idx, addr, size, perm)
+    let (cfg, range) = TCU::build_exreg(utile, ugen, idx, addr, size, perm)
         .ok_or_else(|| Error::new(Code::InvArgs))?;
     let exreg = [cfg, range];
     idxmtile

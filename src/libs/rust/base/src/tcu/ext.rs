@@ -303,7 +303,6 @@ impl TCU {
 
     #[allow(unused, clippy::too_many_arguments)]
     pub fn build_exreg(
-        mem_tile: TileId,
         user_tile: TileId,
         user_tile_gen: GenId,
         idx: usize,

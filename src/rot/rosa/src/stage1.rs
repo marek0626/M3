@@ -362,7 +362,6 @@ fn prepare_for_rots(our_tile: IndexedTile, root_tile: IndexedTile) {
     // configure exclusive region for the environment, accessible only from the root tile
     #[cfg(any(M3_TARGET = "gem5"))]
     if let Some((cfg, arg1)) = TCU::build_exreg(
-        our_tile.id(),
         root_tile.id(),
         0,
         0,

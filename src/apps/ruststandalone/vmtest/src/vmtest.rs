@@ -624,7 +624,6 @@ fn test_tlb() {
 }
 
 fn config_exreg(
-    mem_tile: TileId,
     user_tile: TileId,
     user_gen: GenId,
     idx: usize,
@@ -632,8 +631,7 @@ fn config_exreg(
     size: GlobOff,
     perm: Perm,
 ) -> Result<(), Error> {
-    let (cfg, range) =
-        TCU::build_exreg(mem_tile, user_tile, user_gen, idx, addr, size, perm).unwrap();
+    let (cfg, range) = TCU::build_exreg(user_tile, user_gen, idx, addr, size, perm).unwrap();
     let exreg = [cfg, range];
     TCU::write_slice(
         MEP,
@@ -681,7 +679,7 @@ fn test_exregs() {
             r.0,
             OWN_TILE
         );
-        config_exreg(MEM_TILE, OWN_TILE, 0, r.0, r.1, r.2, Perm::RW).unwrap();
+        config_exreg(OWN_TILE, 0, r.0, r.1, r.2, Perm::RW).unwrap();
 
         // configure mem EP for that memory region
         helper::config_local_ep(SEP, |regs| {
