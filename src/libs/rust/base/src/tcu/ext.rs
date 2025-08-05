@@ -315,7 +315,8 @@ impl TCU {
 
         #[cfg(any(M3_TARGET = "hw", M3_TARGET = "gem5"))]
         {
-            let mut cfg = (user_tile_gen as Reg) << 16 | (user_tile.raw() as Reg) << 2;
+            let tile_id = Self::tileid_to_nocid(user_tile);
+            let mut cfg = (user_tile_gen as Reg) << 16 | (tile_id as Reg) << 2;
             if perm.contains(kif::Perm::R) {
                 cfg |= 1 << 0;
             }
