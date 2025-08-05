@@ -31,8 +31,8 @@ use base::kif::{PageFlags, Perm};
 use base::libc;
 use base::log;
 use base::machine;
-use base::mem::{size_of, GlobAddr, MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
-use base::tcu::{self, EpId, TileId, TCU};
+use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
+use base::tcu::{self, EpId, GenId, TileId, TCU};
 use base::util;
 use base::util::math::next_log2;
 
@@ -623,6 +623,77 @@ fn test_tlb() {
     TCU::invalidate_tlb();
 }
 
+fn config_exreg(
+    mem_tile: TileId,
+    user_tile: TileId,
+    user_gen: GenId,
+    idx: usize,
+    addr: GlobOff,
+    size: GlobOff,
+    perm: Perm,
+) -> Result<(), Error> {
+    let (cfg, range) =
+        TCU::build_exreg(mem_tile, user_tile, user_gen, idx, addr, size, perm).unwrap();
+    let exreg = [cfg, range];
+    TCU::write_slice(
+        MEP,
+        &exreg,
+        TCU::exreg_addr(idx).as_goff() - tcu::MMIO_ADDR.as_goff(),
+    )
+}
+
+fn test_exregs() {
+    // configure mem EP for the memory tile's TCU MMIO area
+    helper::config_local_ep(MEP, |regs| {
+        TCU::config_mem(
+            regs,
+            OWN_ACT,
+            MEM_TILE,
+            0,
+            tcu::MMIO_ADDR.as_goff(),
+            tcu::MMIO_SIZE,
+            Perm::RW,
+        );
+    });
+
+    // make ourself the exreg manager
+    let own_tile = TCU::tileid_to_nocid(OWN_TILE);
+    let value = own_tile as tcu::Reg;
+    let reg_addr = TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff();
+    // write it
+    TCU::write_obj(MEP, &value, reg_addr - tcu::MMIO_ADDR.as_goff())
+        .expect("failed to write ExRegMng reg");
+
+    let regs = [
+        (0, 0x2000_0000, 64),
+        (1, 0x4000, 0x2000),
+        (2, 0x8000, 0x8000),
+        (3, 0x1000_0000, 0x1000),
+        (4, 0x8, 0x8),
+    ];
+    for r in regs {
+        // configure region
+        log!(
+            LogFlags::Info,
+            "Configuring exclusive region {:#x}:{:#x} at {} for {}.0",
+            r.1,
+            r.2,
+            r.0,
+            OWN_TILE
+        );
+        config_exreg(MEM_TILE, OWN_TILE, 0, r.0, r.1, r.2, Perm::RW).unwrap();
+
+        // configure mem EP for that memory region
+        helper::config_local_ep(SEP, |regs| {
+            TCU::config_mem(regs, OWN_ACT, MEM_TILE, 0, r.1, r.2 as usize, Perm::RW);
+        });
+
+        // try to access it
+        let val: u64 = TCU::read_obj(SEP, r.2 - 8).unwrap();
+        TCU::write_obj(SEP, &val, 0).unwrap();
+    }
+}
+
 fn test_lock() {
     // configure mem EP for TCU's MMIO area
     helper::config_local_ep(MEP, |regs| {
@@ -716,6 +787,7 @@ pub extern "C" fn env_run() {
     run_test!(test_own_msg());
     // run_test!(test_pmp_failures());
     run_test!(test_tlb());
+    run_test!(test_exregs());
     run_test!(test_lock());
 
     log!(LogFlags::Info, "Shutting down");
