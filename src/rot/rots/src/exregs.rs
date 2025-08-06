@@ -94,9 +94,11 @@ pub fn add(
     let idxmtile = rot::IndexedTile::new_from_env(mtile).unwrap();
     let (cfg, range) = TCU::build_exreg(utile, ugen, idx, addr, size, perm)
         .ok_or_else(|| Error::new(Code::InvArgs))?;
-    let exreg = [cfg, range];
     idxmtile
-        .write_tcu(&exreg, TCU::exreg_addr(idx).as_goff())
+        .write_tcu(&[cfg], TCU::exreg_addr(idx).as_goff())
+        .unwrap();
+    idxmtile
+        .write_tcu(&[range], TCU::exreg_addr(idx).as_goff() + 8)
         .unwrap();
 
     regs.push(ExReg {
