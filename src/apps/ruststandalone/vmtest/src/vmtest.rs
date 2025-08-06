@@ -632,12 +632,15 @@ fn config_exreg(
     perm: Perm,
 ) -> Result<(), Error> {
     let (cfg, range) = TCU::build_exreg(user_tile, user_gen, idx, addr, size, perm).unwrap();
-    let exreg = [cfg, range];
-    TCU::write_slice(
+    TCU::write_obj(
         MEP,
-        &exreg,
-        TCU::exreg_addr(idx).as_goff() - tcu::MMIO_ADDR.as_goff(),
-    )
+        &cfg,
+        TCU::exreg_addr(idx).as_goff() - tcu::MMIO_ADDR.as_goff()
+    ).unwrap();
+    TCU::write_obj(
+        MEP,
+        &range,
+        TCU::exreg_addr(idx).as_goff() - tcu::MMIO_ADDR.as_goff() + 8)
 }
 
 fn test_exregs() {
