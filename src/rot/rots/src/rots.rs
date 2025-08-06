@@ -84,7 +84,7 @@ fn check_std_endpoints() {
     .expect("DEF_REP_OFF not sane");
 
     // now unfreeze all the standard EPs created by the kernel
-    if env!("M3_TARGET") == "gem5" {
+    if env!("M3_TARGET") == "gem5" || env!("M3_TARGET") == "hw" {
         TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_SEP_OFF).unwrap();
         TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF).unwrap();
         TCU::unfreeze(tcu::FIRST_USER_EP + tcu::UPCALL_REP_OFF).unwrap();
