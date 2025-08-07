@@ -360,7 +360,7 @@ fn prepare_for_rots(our_tile: IndexedTile, root_tile: IndexedTile) {
     });
 
     // configure exclusive region for the environment, accessible only from the root tile
-    #[cfg(any(M3_TARGET = "gem5"))]
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
     if let Some((cfg, arg1)) = TCU::build_exreg(
         root_tile.id(),
         0,
@@ -409,7 +409,7 @@ pub fn run() -> crate::RosaPrivateCtx {
             // set us as the exclusive-region manager
             #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
             {
-                let value = env::boot().tile_id().raw() as tcu::Reg;
+                let value = TCU::tileid_to_nocid(env::boot().tile_id()) as tcu::Reg;
                 tile.write_tcu(&[value], TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff())
                     .unwrap();
             }
