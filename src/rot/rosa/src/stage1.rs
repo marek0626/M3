@@ -370,7 +370,8 @@ fn prepare_for_rots(our_tile: IndexedTile, root_tile: IndexedTile) {
         Perm::W,
     ) {
         let exreg_addr = TCU::exreg_addr(0).as_goff();
-        our_tile.write_tcu(&[cfg, arg1], exreg_addr).unwrap();
+        our_tile.write_tcu(&[cfg], exreg_addr).unwrap();
+        our_tile.write_tcu(&[arg1], exreg_addr + 8).unwrap();
     }
 }
 
