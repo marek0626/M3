@@ -149,7 +149,7 @@ def stop_tiles(fpga_inst, extract, timed_out):
     for i, tile in enumerate(fpga_inst.pmTiles, 0):
         #if tile is locked, unlock it first
         if tile.tcu_get_lock():
-            tile.tcu_ext_cmd_reset(False)
+            tile.tcu_unlock()
         if extract:
             extract_tcu_stats(tile, i)
             if timed_out:
