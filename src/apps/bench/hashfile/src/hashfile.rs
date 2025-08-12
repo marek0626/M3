@@ -52,7 +52,8 @@ pub fn main() -> Result<(), Error> {
     let sha3 = RoTSession::new("hash2", &HashAlgorithm::SHA3_224).unwrap();
     input.hash_input(&sha3, input_size).expect("hash file");
 
-    let hash = sha3.get_hash().expect("get hash");
+    let mut hash = [0u8; 28];
+    sha3.finish(&mut hash).expect("get hash");
     println!("hash: {:?}", hash);
 
     Ok(())
