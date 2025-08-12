@@ -237,6 +237,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "enchash"
+version = "0.1.0"
+dependencies = [
+ "accel",
+ "heapsimple",
+ "m3core",
+ "m3files",
+ "pipecli",
+ "unimux",
+]
+
+[[package]]
 name = "facever"
 version = "0.1.0"
 dependencies = [

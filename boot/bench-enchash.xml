@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<config>
+    <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py M3_GEM5_ROT_CPU=TimingSimpleCPU</env>
+    <mods>
+        <mod name="straccmux" file="bin/straccmux"/>
+        <mod name="fs" file="default.img"/>
+    </mods>
+    <rot layers="brom,blau.bin,rosa.bin,rots.bin"/>
+    <kernel args="kernel"/>
+    <dom>
+        <app args="root shmem=inpipe:64K:unlocked shmem=outpipe:64K:unlocked shmem=hashpipe:64K:unlocked">
+            <dom tile="riscv64+kecacc+rot|riscv32+kecacc+rot">
+                <shmem name="inpipe"/>
+                <shmem name="outpipe"/>
+                <shmem name="hashpipe"/>
+                <app args="rots no-zeroing" daemon="1">
+                    <serv name="rot"/>
+                    <mod name="rot-certificate.json" perm="r"/>
+                </app>
+            </dom>
+            <dom>
+                <app args="m3fs mem" daemon="1">
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
+                </app>
+            </dom>
+            <dom>
+                <app args="pipes" daemon="1">
+                    <serv name="pipes"/>
+                </app>
+            </dom>
+            <dom>
+                <app args="repeater -t -m 5M -s inpipe=10000 -s outpipe=10001 -s hashpipe=10002 -r 8 -w 2 /bin/enchash 100000 /encryped 10000 -t">
+                    <sess name="m3fs"/>
+                    <sess name="pipes"/>
+                    <sess gname="rot" lname="hash" args="seed"/>
+                    <shmem name="inpipe"/>
+                    <shmem name="outpipe"/>
+                    <shmem name="hashpipe"/>
+                    <exregs shmem="inpipe" count="2"/>
+                    <exregs shmem="outpipe" count="2"/>
+                    <exregs shmem="hashpipe" count="2"/>
+                    <tiles type="core" count="1"/>
+                    <tiles type="riscv32+coreacc|core" mux="straccmux"/>
+                </app>
+            </dom>
+        </app>
+    </dom>
+</config>

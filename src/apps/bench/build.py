@@ -5,6 +5,7 @@ dirs = [
     'chancreate',
     'cppbenchs',
     'cppnetbenchs',
+    'enchash',
     'facever',
     'fs',
     'fstrace',

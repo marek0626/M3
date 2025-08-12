@@ -1,0 +1,17 @@
+[package]
+name = "enchash"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/enchash.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+accel = { path = "../../../libs/rust/accel" }
+heapsimple = { path = "../../../libs/rust/heapsimple" }
+m3core = { path = "../../../libs/rust/m3core" }
+m3files = { path = "../../../libs/rust/m3files" }
+pipecli = { path = "../../../libs/rust/pipecli" }
+unimux = { path = "../../../unimux" }
+
