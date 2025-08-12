@@ -235,6 +235,11 @@ impl RequestSession for RoTSession {
     /// ROTS provides two things: Root of Trust and hash acceleration
     /// functionality. ROTS can provide either/or without panicking.
     fn new(serv: ServerSession, arg: &str) -> Result<Self, Error> {
+        // we need at least some seed to produce valid hashes
+        if arg.len() == 0 {
+            return Err(Error::new(Code::InvArgs));
+        }
+
         fn have_ctx(arg: &str) -> (Option<MemCap>, Option<Secret<OpaqueKMacKey>>) {
             let ctx = CTX.get();
             let rot_sig_cap = ctx
