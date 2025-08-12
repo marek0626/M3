@@ -73,7 +73,7 @@ struct CommitReq {
 #[derive(Default, Clone, Debug)]
 struct FileView {
     off: usize,
-    len: usize,
+    end: usize,
 }
 
 pub struct Executor {
@@ -95,7 +95,7 @@ impl Executor {
 
     pub fn step(&mut self) -> bool {
         // request input
-        if self.input.off == self.input.len {
+        if self.input.off == self.input.end {
             let reply = self.next_in();
 
             if reply.len == 0 {
@@ -104,7 +104,7 @@ impl Executor {
             }
 
             self.input.off = reply.offset;
-            self.input.len = reply.len;
+            self.input.end = reply.offset + reply.len;
         }
 
         // read block
@@ -122,10 +122,10 @@ impl Executor {
         let mut pos = 0;
         while pos < amount {
             // request output?
-            if self.output.off == self.output.len {
+            if self.output.off == self.output.end {
                 let reply = self.next_out();
                 self.output.off = reply.offset;
-                self.output.len = reply.len;
+                self.output.end = reply.offset + reply.len;
             }
 
             // write block
@@ -138,12 +138,13 @@ impl Executor {
     }
 
     fn read_block(&self) -> usize {
-        let amount = (self.input.len - self.input.off).min(Self::accel_inout_size());
+        let amount = (self.input.end - self.input.off).min(Self::accel_inout_size());
         log!(
             LogFlags::Debug,
-            "reading {} @ {:#x}",
+            "reading {} @ {:#x} (end={:#x})",
             amount,
-            self.input.off
+            self.input.off,
+            self.input.end,
         );
 
         tcu::TCU::read(
@@ -157,12 +158,13 @@ impl Executor {
     }
 
     fn write_block(&self, size: usize, pos: usize) -> usize {
-        let amount = (self.output.len - self.output.off).min(size);
+        let amount = (self.output.end - self.output.off).min(size);
         log!(
             LogFlags::Debug,
-            "writing {} @ {:#x}",
+            "writing {} @ {:#x} (end={:#x})",
             amount,
-            self.output.off
+            self.output.off,
+            self.output.end
         );
         tcu::TCU::write(
             self.ep_off + EP_OUT_MEM,
