@@ -70,7 +70,7 @@ fn mem(_t: &mut dyn WvTester) {
     }
 
     wv_perf!(
-        "snd",
+        "mem",
         prof.runner::<CycleInstant, _>(&mut Tester {
             base_mgate: wv_require_ok!(MemGate::new(0x1000, Perm::RW)),
             mgate: None,
@@ -137,7 +137,7 @@ fn snd(_t: &mut dyn WvTester) {
     }
 
     wv_perf!(
-        "mem",
+        "snd",
         prof.runner::<CycleInstant, _>(&mut Tester {
             rgate: None,
             sgate: None,
