@@ -32,7 +32,7 @@ use base::libc;
 use base::log;
 use base::machine;
 use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
-use base::tcu::{self, EpId, GenId, TileId, TCU};
+use base::tcu::{self, EpId, ExtCmdOpCode, ExtReg, GenId, TileId, TCU};
 use base::util;
 use base::util::math::next_log2;
 
@@ -635,12 +635,14 @@ fn config_exreg(
     TCU::write_obj(
         MEP,
         &cfg,
-        TCU::exreg_addr(idx).as_goff() - tcu::MMIO_ADDR.as_goff()
-    ).unwrap();
+        TCU::exreg_addr(idx).as_goff() - tcu::MMIO_ADDR.as_goff(),
+    )
+    .unwrap();
     TCU::write_obj(
         MEP,
         &range,
-        TCU::exreg_addr(idx).as_goff() - tcu::MMIO_ADDR.as_goff() + 8)
+        TCU::exreg_addr(idx).as_goff() - tcu::MMIO_ADDR.as_goff() + 8,
+    )
 }
 
 fn test_exregs() {
@@ -692,6 +694,28 @@ fn test_exregs() {
         // try to access it
         let val: u64 = TCU::read_obj(SEP, r.2 - 8).unwrap();
         TCU::write_obj(SEP, &val, 0).unwrap();
+    }
+}
+
+fn do_ext_cmd(cmd: tcu::Reg) -> Result<tcu::Reg, Error> {
+    let addr = TCU::ext_reg_addr(ExtReg::ExtCmd).as_goff();
+    TCU::write_obj(MEP, &cmd, addr - tcu::MMIO_ADDR.as_goff())?;
+    wait_ext_cmd()
+}
+
+fn wait_ext_cmd() -> Result<tcu::Reg, Error> {
+    let addr = TCU::ext_reg_addr(ExtReg::ExtCmd).as_goff();
+
+    let res = loop {
+        let res: tcu::Reg = TCU::read_obj(MEP, addr - tcu::MMIO_ADDR.as_goff())?;
+        if (res & 0xF) == ExtCmdOpCode::Idle.into() {
+            break res;
+        }
+    };
+
+    match Code::try_from(((res >> 4) & 0x3F) as u32).unwrap() {
+        Code::Success => Ok(res >> 10),
+        e => Err(Error::new(e)),
     }
 }
 
@@ -750,6 +774,28 @@ fn test_lock() {
         assert_eq!(TCU::send(SEP, &buf, 0x1111, tcu::NO_REPLIES), Ok(()));
         assert_eq!(TCU::has_msgs(REP1), true);
         TCU::fetch_msg(REP1).unwrap();
+
+        let reg = TCU::build_ext_cmd(ExtCmdOpCode::InvEP, (REP1 as u64) | (true as u64) << 16);
+        do_ext_cmd(reg).unwrap();
+    }
+
+    {
+        log!(LogFlags::Info, "Configuring dynamic EP");
+
+        // configure it first as dynamic + owned by the activity
+        helper::config_local_ep(REP1, |regs| {
+            TCU::config_invalid(regs, OWN_ACT, true);
+        });
+
+        let (_virt, rbuf_phys) = helper::virt_to_phys(VirtAddr::from(RBUF2.as_ptr()));
+        helper::config_local_ep(REP1, |regs| {
+            TCU::config_recv(regs, OWN_ACT, rbuf_phys, next_log2(64), next_log2(64), None);
+        });
+
+        assert_eq!(TCU::is_frozen(REP1), false);
+
+        let reg = TCU::build_ext_cmd(ExtCmdOpCode::InvEP, (REP1 as u64) | (true as u64) << 16);
+        do_ext_cmd(reg).unwrap();
     }
 }
 
