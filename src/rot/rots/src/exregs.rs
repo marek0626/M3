@@ -101,6 +101,13 @@ pub fn add(
         .write_tcu(&[range], TCU::exreg_addr(idx).as_goff() + 8)
         .unwrap();
 
+    // update region count
+    let count = regs.iter().map(|r| r.idx).max().unwrap_or(0).max(idx);
+    let value = (count as tcu::Reg) << 32 | TCU::tileid_to_nocid(env::boot().tile_id()) as tcu::Reg;
+    idxmtile
+        .write_tcu(&[value], TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff())
+        .unwrap();
+
     regs.push(ExReg {
         mtile,
         idx,

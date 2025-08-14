@@ -369,9 +369,16 @@ fn prepare_for_rots(our_tile: IndexedTile, root_tile: IndexedTile) {
         (cfg::ENV_SIZE / 2) as GlobOff,
         Perm::W,
     ) {
+        // set region registers
         let exreg_addr = TCU::exreg_addr(0).as_goff();
         our_tile.write_tcu(&[cfg], exreg_addr).unwrap();
         our_tile.write_tcu(&[arg1], exreg_addr + 8).unwrap();
+
+        // update region count
+        let value = (1 as tcu::Reg) << 32 | TCU::tileid_to_nocid(env::boot().tile_id()) as tcu::Reg;
+        our_tile
+            .write_tcu(&[value], TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff())
+            .unwrap();
     }
 }
 
