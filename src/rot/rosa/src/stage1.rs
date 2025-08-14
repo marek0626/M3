@@ -435,6 +435,15 @@ pub fn run() -> crate::RosaPrivateCtx {
                 }
                 TileDesc::new_with_attr(desc.tile_type(), desc.isa(), desc.mem_size(), attr)
             }
+            else if env!("M3_TARGET") == "hw" {
+                let attr = if idx == 5 || idx == 6 || idx == 7 {
+                    TileAttr::PERF | TileAttr::IEPS
+                }
+                else {
+                    desc.attr()
+                };
+                TileDesc::new_with_attr(desc.tile_type(), desc.isa(), desc.mem_size(), attr)
+            }
             else {
                 desc
             }
