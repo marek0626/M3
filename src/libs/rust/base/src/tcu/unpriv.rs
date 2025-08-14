@@ -437,6 +437,13 @@ impl TCU {
         Ok(())
     }
 
+    /// Returns true if the given EP is dynamic
+    #[inline(always)]
+    pub fn is_dynamic(ep: EpId) -> bool {
+        let r0 = Self::read_ep_reg(ep, 0);
+        ((r0 >> 62) & 0x1) != 0
+    }
+
     /// Returns true if the given EP is frozen
     #[inline(always)]
     pub fn is_frozen(ep: EpId) -> bool {

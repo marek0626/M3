@@ -792,10 +792,16 @@ fn test_lock() {
             TCU::config_recv(regs, OWN_ACT, rbuf_phys, next_log2(64), next_log2(64), None);
         });
 
+        // EP is not frozen due to dynamic bit; dynamic bit cannot be unset
         assert_eq!(TCU::is_frozen(REP1), false);
+        assert_eq!(TCU::is_dynamic(REP1), true);
 
+        // invalidate sets dynamic=0
         let reg = TCU::build_ext_cmd(ExtCmdOpCode::InvEP, (REP1 as u64) | (true as u64) << 16);
         do_ext_cmd(reg).unwrap();
+
+        assert_eq!(TCU::is_frozen(REP1), false);
+        assert_eq!(TCU::is_dynamic(REP1), false);
     }
 }
 
