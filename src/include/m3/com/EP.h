@@ -54,8 +54,7 @@ public:
     static EP bind(epid_t id) noexcept;
 
     EP &operator=(EP &&ep) noexcept;
-    EP(EP &&ep)
-    noexcept
+    EP(EP &&ep) noexcept
         : SListItem(std::move(ep)),
           ObjCap(std::move(ep)),
           _id(ep._id),
@@ -85,8 +84,10 @@ public:
     }
 
     void mkdyn() const {
-        if(TCU::get().is_locked())
+        if(TCU::get().is_locked()) {
             TCU::get().mkdyn(_id);
+            TCU::get().unfreeze(_id);
+        }
     }
 
 private:

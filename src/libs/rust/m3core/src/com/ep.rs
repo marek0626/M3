@@ -187,7 +187,8 @@ impl EP {
     /// kernel. Note that this is only done if the TCU is locked.
     pub fn mkdyn(&self) -> Result<(), Error> {
         if TCU::is_locked() {
-            TCU::mkdyn(self.id())
+            TCU::mkdyn(self.id())?;
+            TCU::unfreeze(self.id())
         }
         else {
             Ok(())
