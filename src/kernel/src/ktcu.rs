@@ -465,15 +465,10 @@ pub fn read_ep_remote(tile: TileId, ep: EpId, regs: &mut [Reg]) -> anyhow::Resul
 }
 
 pub fn write_ep_remote(tile: TileId, ep: EpId, regs: &[Reg]) -> anyhow::Result<()> {
-    if env!("M3_TARGET") == "gem5" {
-        try_write_slice(tile, TCU::ep_regs_addr(ep).as_goff(), regs)
+    for (i, r) in regs.iter().enumerate().rev() {
+        try_write_slice(tile, (TCU::ep_regs_addr(ep) + i * 8).as_goff(), &[*r])?;
     }
-    else {
-        for (i, r) in regs.iter().enumerate().rev() {
-            try_write_slice(tile, (TCU::ep_regs_addr(ep) + i * 8).as_goff(), &[*r])?;
-        }
-        Ok(())
-    }
+    Ok(())
 }
 
 pub fn invalidate_ep_remote(tile: TileId, ep: EpId, force: bool) -> anyhow::Result<u32> {
