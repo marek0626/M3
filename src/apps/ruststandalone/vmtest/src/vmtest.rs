@@ -808,6 +808,7 @@ fn test_lock() {
         helper::config_local_ep(REP1, |regs| {
             TCU::config_invalid(regs, OWN_ACT, true);
         });
+        assert_eq!(TCU::is_frozen(REP1), true);
 
         // now make it dynamic
         TCU::mkdyn(REP1).unwrap();
@@ -818,8 +819,11 @@ fn test_lock() {
         });
 
         // EP is not frozen due to dynamic bit; dynamic bit cannot be unset
-        assert_eq!(TCU::is_frozen(REP1), false);
+        assert_eq!(TCU::is_frozen(REP1), true);
         assert_eq!(TCU::is_dynamic(REP1), true);
+
+        // unfreeze it to allow INV_EP
+        TCU::unfreeze(REP1).unwrap();
 
         // invalidate sets dynamic=0
         let reg = TCU::build_ext_cmd(ExtCmdOpCode::InvEP, (REP1 as u64) | (true as u64) << 16);
