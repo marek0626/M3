@@ -719,6 +719,27 @@ fn wait_ext_cmd() -> Result<tcu::Reg, Error> {
     }
 }
 
+fn test_unlocked() {
+    log!(LogFlags::Info, "Configuring dynamic EP w/o tile locking");
+
+    // configure it first as dynamic + owned by the activity
+    helper::config_local_ep(REP1, |regs| {
+        TCU::config_invalid(regs, OWN_ACT, true);
+    });
+
+    assert_eq!(TCU::is_frozen(REP1), false);
+    assert_eq!(TCU::is_dynamic(REP1), true);
+
+    let (_virt, rbuf_phys) = helper::virt_to_phys(VirtAddr::from(RBUF2.as_ptr()));
+    helper::config_local_ep(REP1, |regs| {
+        TCU::config_recv(regs, OWN_ACT, rbuf_phys, next_log2(64), next_log2(64), None);
+    });
+
+    // EP is not frozen and can also be made non-dynamic as the tile is not locked
+    assert_eq!(TCU::is_frozen(REP1), false);
+    assert_eq!(TCU::is_dynamic(REP1), false);
+}
+
 fn test_lock() {
     // configure mem EP for TCU's MMIO area
     helper::config_local_ep(MEP, |regs| {
@@ -782,10 +803,14 @@ fn test_lock() {
     {
         log!(LogFlags::Info, "Configuring dynamic EP");
 
-        // configure it first as dynamic + owned by the activity
+        // configure it first as dynamic + owned by the activity (dynamic bit cannot be set as the
+        // TCU is locked)
         helper::config_local_ep(REP1, |regs| {
             TCU::config_invalid(regs, OWN_ACT, true);
         });
+
+        // now make it dynamic
+        TCU::mkdyn(REP1).unwrap();
 
         let (_virt, rbuf_phys) = helper::virt_to_phys(VirtAddr::from(RBUF2.as_ptr()));
         helper::config_local_ep(REP1, |regs| {
@@ -841,6 +866,7 @@ pub extern "C" fn env_run() {
     // run_test!(test_pmp_failures());
     run_test!(test_tlb());
     run_test!(test_exregs());
+    run_test!(test_unlocked());
     run_test!(test_lock());
 
     log!(LogFlags::Info, "Shutting down");
