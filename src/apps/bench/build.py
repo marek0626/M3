@@ -6,6 +6,7 @@ dirs = [
     'cppbenchs',
     'cppnetbenchs',
     'enchash',
+    'exregs',
     'facever',
     'fs',
     'fstrace',

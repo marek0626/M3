@@ -4,6 +4,7 @@ members = [
     "apps/bench/aesstream",
     "apps/bench/chancreate",
     "apps/bench/enchash",
+    "apps/bench/exregs",
     "apps/bench/facever",
     "apps/bench/fs",
     "apps/bench/hashmuxbenchs",
