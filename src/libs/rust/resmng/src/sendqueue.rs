@@ -19,7 +19,6 @@ use m3::com::{MsgQueue, MsgSender, RecvGate, SendGate};
 use m3::errors::Error;
 use m3::io::LogFlags;
 use m3::mem::MsgBuf;
-use m3::server::DEF_MAX_CLIENTS;
 use m3::tcu;
 use m3::{format, log};
 
@@ -28,7 +27,6 @@ use crate::resources::Resources;
 use crate::{events, rerror};
 
 pub const RBUF_MSG_SIZE: usize = 1 << 6;
-pub const RBUF_SIZE: usize = RBUF_MSG_SIZE * DEF_MAX_CLIENTS;
 
 struct GateSender {
     sid: Id,

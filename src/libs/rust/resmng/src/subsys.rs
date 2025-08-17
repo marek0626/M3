@@ -48,6 +48,7 @@ use crate::{config, rerror};
 //
 const SUBSYS_SELS: Selector = FIRST_FREE_SEL;
 
+const DEF_MAX_SERVICES: usize = 16;
 const DEF_RESMNG_MEM: GlobOff = 32 * 1024 * 1024;
 const DEF_TIME_SLICE: TimeDuration = TimeDuration::from_millis(1);
 const OUR_EPS: usize = cfg::RESMNG_EPS;
@@ -56,12 +57,14 @@ pub(crate) const SERIAL_RGATE_SEL: Selector = SUBSYS_SELS + 1;
 
 pub struct Arguments {
     pub max_clients: usize,
+    pub max_services: usize,
 }
 
 impl Default for Arguments {
     fn default() -> Self {
         Self {
             max_clients: DEF_MAX_CLIENTS,
+            max_services: DEF_MAX_SERVICES,
         }
     }
 }
@@ -261,6 +264,11 @@ impl Subsystem {
                 args.max_clients = clients
                     .parse::<usize>()
                     .expect("Failed to parse client count");
+            }
+            else if let Some(services) = arg.strip_prefix("maxsrv=") {
+                args.max_services = services
+                    .parse::<usize>()
+                    .expect("Failed to parse service count");
             }
             else if let Some(sem) = arg.strip_prefix("sem=") {
                 res.semaphores_mut()
