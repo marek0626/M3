@@ -408,23 +408,21 @@ pub fn lock_tile(tile: TileId) -> anyhow::Result<()> {
 
 pub fn reset_tile(tile: TileId, start: bool) -> anyhow::Result<()> {
     let val: Reg = if start { 1 } else { 0 };
+    let cmd = TCU::build_ext_cmd(ExtCmdOpCode::Reset, val);
+    let addr = TCU::ext_reg_addr(ExtReg::ExtCmd).as_goff();
+    try_write_slice(tile, addr, &[cmd])?;
+    // on stop, increment tile generation before we read the result of the external command
+    if !start {
+        tilemng::inc_tilegen(tile);
+    }
+    wait_ext_cmd(tile)?;
+
     if env::boot().platform == env::Platform::Hw {
-        // TODO put the reset command into the spec so that we can use that on HW as well
         // start/stop tile
         try_write_slice(tile, TCU::config_addr(ConfigReg::Enable).as_goff(), &[val])?;
-        // start/stop rocket core
-        try_write_slice(tile, TCU::config_addr(ConfigReg::Int0).as_goff(), &[val])
     }
-    else {
-        let cmd = TCU::build_ext_cmd(ExtCmdOpCode::Reset, val);
-        let addr = TCU::ext_reg_addr(ExtReg::ExtCmd).as_goff();
-        try_write_slice(tile, addr, &[cmd])?;
-        // on stop, increment tile generation before we read the result of the external command
-        if !start {
-            tilemng::inc_tilegen(tile);
-        }
-        wait_ext_cmd(tile).map(|_| ())
-    }
+
+    Ok(())
 }
 
 pub fn glob_to_phys_remote(
