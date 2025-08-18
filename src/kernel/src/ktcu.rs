@@ -22,8 +22,8 @@ use base::kif;
 use base::log;
 use base::mem::{self, GlobAddr, GlobOff, PhysAddr, PhysAddrRaw, VirtAddr};
 use base::tcu::{
-    ActId, ConfigReg, EpId, ExtCmdOpCode, ExtReg, FeatureFlags, Header, Label, OwnedMessage, Reg,
-    TileId, EP_REGS, PMEM_PROT_EPS, TCU, UNLIM_CREDITS,
+    ActId, EpId, ExtCmdOpCode, ExtReg, FeatureFlags, Header, Label, OwnedMessage, Reg, TileId,
+    EP_REGS, PMEM_PROT_EPS, TCU, UNLIM_CREDITS,
 };
 
 use crate::platform;
