@@ -31,10 +31,9 @@ use base::kif::{PageFlags, Perm};
 use base::libc;
 use base::log;
 use base::machine;
-use base::mem::{size_of, GlobAddr, GlobOff, MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
-use base::tcu::{self, EpId, ExtCmdOpCode, ExtReg, GenId, TileId, TCU};
+use base::mem::{size_of, GlobAddr, MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
+use base::tcu::{self, EpId, TileId, TCU};
 use base::util;
-use base::util::math::next_log2;
 
 use core::intrinsics::transmute;
 use core::ptr;
@@ -623,12 +622,13 @@ fn test_tlb() {
     TCU::invalidate_tlb();
 }
 
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
 fn config_exreg(
     user_tile: TileId,
-    user_gen: GenId,
+    user_gen: base::tcu::GenId,
     idx: usize,
-    addr: GlobOff,
-    size: GlobOff,
+    addr: base::mem::GlobOff,
+    size: base::mem::GlobOff,
     perm: Perm,
 ) -> Result<(), Error> {
     let (cfg, range) = TCU::build_exreg(user_tile, user_gen, idx, addr, size, perm).unwrap();
@@ -645,6 +645,7 @@ fn config_exreg(
     )
 }
 
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
 fn test_exregs() {
     // configure mem EP for the memory tile's TCU MMIO area
     helper::config_local_ep(MEP, |regs| {
@@ -697,18 +698,20 @@ fn test_exregs() {
     }
 }
 
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
 fn do_ext_cmd(cmd: tcu::Reg) -> Result<tcu::Reg, Error> {
-    let addr = TCU::ext_reg_addr(ExtReg::ExtCmd).as_goff();
+    let addr = TCU::ext_reg_addr(base::tcu::ExtReg::ExtCmd).as_goff();
     TCU::write_obj(MEP, &cmd, addr - tcu::MMIO_ADDR.as_goff())?;
     wait_ext_cmd()
 }
 
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
 fn wait_ext_cmd() -> Result<tcu::Reg, Error> {
-    let addr = TCU::ext_reg_addr(ExtReg::ExtCmd).as_goff();
+    let addr = TCU::ext_reg_addr(base::tcu::ExtReg::ExtCmd).as_goff();
 
     let res = loop {
         let res: tcu::Reg = TCU::read_obj(MEP, addr - tcu::MMIO_ADDR.as_goff())?;
-        if (res & 0xF) == ExtCmdOpCode::Idle.into() {
+        if (res & 0xF) == base::tcu::ExtCmdOpCode::Idle.into() {
             break res;
         }
     };
@@ -719,6 +722,7 @@ fn wait_ext_cmd() -> Result<tcu::Reg, Error> {
     }
 }
 
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
 fn test_unlocked() {
     log!(LogFlags::Info, "Configuring dynamic EP w/o tile locking");
 
@@ -732,7 +736,14 @@ fn test_unlocked() {
 
     let (_virt, rbuf_phys) = helper::virt_to_phys(VirtAddr::from(RBUF2.as_ptr()));
     helper::config_local_ep(REP1, |regs| {
-        TCU::config_recv(regs, OWN_ACT, rbuf_phys, next_log2(64), next_log2(64), None);
+        TCU::config_recv(
+            regs,
+            OWN_ACT,
+            rbuf_phys,
+            util::math::next_log2(64),
+            util::math::next_log2(64),
+            None,
+        );
     });
 
     // EP is not frozen and can also be made non-dynamic as the tile is not locked
@@ -740,6 +751,7 @@ fn test_unlocked() {
     assert_eq!(TCU::is_dynamic(REP1), false);
 }
 
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
 fn test_lock() {
     // configure mem EP for TCU's MMIO area
     helper::config_local_ep(MEP, |regs| {
@@ -774,14 +786,30 @@ fn test_lock() {
 
         let (_virt, rbuf_phys) = helper::virt_to_phys(VirtAddr::from(RBUF2.as_ptr()));
         helper::config_local_ep(REP1, |regs| {
-            TCU::config_recv(regs, OWN_ACT, rbuf_phys, next_log2(64), next_log2(64), None);
+            TCU::config_recv(
+                regs,
+                OWN_ACT,
+                rbuf_phys,
+                util::math::next_log2(64),
+                util::math::next_log2(64),
+                None,
+            );
         });
 
         TCU::check_recv_ep(REP1, rbuf_phys, 64, false).unwrap();
         assert_eq!(TCU::is_frozen(REP1), true);
 
         helper::config_local_ep(SEP, |regs| {
-            TCU::config_send(regs, OWN_ACT, 0x1234, OWN_TILE, 0, REP1, next_log2(64), 1);
+            TCU::config_send(
+                regs,
+                OWN_ACT,
+                0x1234,
+                OWN_TILE,
+                0,
+                REP1,
+                util::math::next_log2(64),
+                1,
+            );
         });
         assert_eq!(TCU::is_frozen(SEP), true);
 
@@ -796,7 +824,10 @@ fn test_lock() {
         assert_eq!(TCU::has_msgs(REP1), true);
         TCU::fetch_msg(REP1).unwrap();
 
-        let reg = TCU::build_ext_cmd(ExtCmdOpCode::InvEP, (REP1 as u64) | (true as u64) << 16);
+        let reg = TCU::build_ext_cmd(
+            base::tcu::ExtCmdOpCode::InvEP,
+            (REP1 as u64) | (true as u64) << 16,
+        );
         do_ext_cmd(reg).unwrap();
     }
 
@@ -815,7 +846,14 @@ fn test_lock() {
 
         let (_virt, rbuf_phys) = helper::virt_to_phys(VirtAddr::from(RBUF2.as_ptr()));
         helper::config_local_ep(REP1, |regs| {
-            TCU::config_recv(regs, OWN_ACT, rbuf_phys, next_log2(64), next_log2(64), None);
+            TCU::config_recv(
+                regs,
+                OWN_ACT,
+                rbuf_phys,
+                util::math::next_log2(64),
+                util::math::next_log2(64),
+                None,
+            );
         });
 
         // EP is not frozen due to dynamic bit; dynamic bit cannot be unset
@@ -826,7 +864,10 @@ fn test_lock() {
         TCU::unfreeze(REP1).unwrap();
 
         // invalidate sets dynamic=0
-        let reg = TCU::build_ext_cmd(ExtCmdOpCode::InvEP, (REP1 as u64) | (true as u64) << 16);
+        let reg = TCU::build_ext_cmd(
+            base::tcu::ExtCmdOpCode::InvEP,
+            (REP1 as u64) | (true as u64) << 16,
+        );
         do_ext_cmd(reg).unwrap();
 
         assert_eq!(TCU::is_frozen(REP1), false);
@@ -869,8 +910,11 @@ pub extern "C" fn env_run() {
     run_test!(test_own_msg());
     // run_test!(test_pmp_failures());
     run_test!(test_tlb());
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
     run_test!(test_exregs());
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
     run_test!(test_unlocked());
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
     run_test!(test_lock());
 
     log!(LogFlags::Info, "Shutting down");

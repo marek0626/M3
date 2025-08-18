@@ -90,23 +90,27 @@ pub fn add(
         locked
     );
 
-    // write region to memory tile
-    let idxmtile = rot::IndexedTile::new_from_env(mtile).unwrap();
-    let (cfg, range) = TCU::build_exreg(utile, ugen, idx, addr, size, perm)
-        .ok_or_else(|| Error::new(Code::InvArgs))?;
-    idxmtile
-        .write_tcu(&[cfg], TCU::exreg_addr(idx).as_goff())
-        .unwrap();
-    idxmtile
-        .write_tcu(&[range], TCU::exreg_addr(idx).as_goff() + 8)
-        .unwrap();
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+    {
+        // write region to memory tile
+        let idxmtile = rot::IndexedTile::new_from_env(mtile).unwrap();
+        let (cfg, range) = TCU::build_exreg(utile, ugen, idx, addr, size, perm)
+            .ok_or_else(|| Error::new(Code::InvArgs))?;
+        idxmtile
+            .write_tcu(&[cfg], TCU::exreg_addr(idx).as_goff())
+            .unwrap();
+        idxmtile
+            .write_tcu(&[range], TCU::exreg_addr(idx).as_goff() + 8)
+            .unwrap();
 
-    // update region count
-    let count = regs.iter().map(|r| r.idx).max().unwrap_or(0).max(idx);
-    let value = (count as tcu::Reg) << 32 | TCU::tileid_to_nocid(env::boot().tile_id()) as tcu::Reg;
-    idxmtile
-        .write_tcu(&[value], TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff())
-        .unwrap();
+        // update region count
+        let count = regs.iter().map(|r| r.idx).max().unwrap_or(0).max(idx);
+        let value =
+            (count as tcu::Reg) << 32 | TCU::tileid_to_nocid(env::boot().tile_id()) as tcu::Reg;
+        idxmtile
+            .write_tcu(&[value], TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff())
+            .unwrap();
+    }
 
     regs.push(ExReg {
         mtile,
@@ -159,6 +163,7 @@ pub fn rem(mtile: TileId, idx: usize) -> Result<(), Error> {
     }
 
     // make region invalid
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
     idxmtile
         .write_tcu(&[0u64, 0], TCU::exreg_addr(idx).as_goff())
         .unwrap();
