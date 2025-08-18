@@ -130,6 +130,7 @@ class Loader:
         # enable instruction trace for all Rocket tiles (doesn't cost anything)
         if tile.type == TileType.ROCKET:
             tile.inst.rocket_enableTrace()
+            tile.inst.start()
         elif tile.type == TileType.ACC:
             tile.inst.asm_enableTrace()
 
@@ -202,7 +203,6 @@ class Loader:
             mem_off = PMP_ADDR + tile_idx * self.pmp_size
             mem_begin = mem_off - DRAM_OFF
             env = 0x10001000
-            pm.inst.start()
         else:
             entry = 0x4000
             mem_tile = pm

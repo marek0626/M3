@@ -415,14 +415,7 @@ pub fn reset_tile(tile: TileId, start: bool) -> anyhow::Result<()> {
     if !start {
         tilemng::inc_tilegen(tile);
     }
-    wait_ext_cmd(tile)?;
-
-    if env::boot().platform == env::Platform::Hw {
-        // start/stop tile
-        try_write_slice(tile, TCU::config_addr(ConfigReg::Enable).as_goff(), &[val])?;
-    }
-
-    Ok(())
+    wait_ext_cmd(tile).map(|_| ())
 }
 
 pub fn glob_to_phys_remote(
