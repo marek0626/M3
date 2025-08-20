@@ -676,25 +676,45 @@ fn test_exregs() {
         (4, 0x8, 0x8),
     ];
     for r in regs {
-        // configure region
-        log!(
-            LogFlags::Info,
-            "Configuring exclusive region {:#x}:{:#x} at {} for {}.0",
-            r.1,
-            r.2,
-            r.0,
-            OWN_TILE
-        );
-        config_exreg(OWN_TILE, 0, r.0, r.1, r.2, Perm::RW).unwrap();
+        for utile in [OWN_TILE, TileId::new(0, 1)] {
+            // configure region
+            log!(
+                LogFlags::Info,
+                "Configuring exclusive region {:#x}:{:#x} at {} for {}.0",
+                r.1,
+                r.2,
+                r.0,
+                utile
+            );
+            config_exreg(utile, 0, r.0, r.1, r.2, Perm::RW).unwrap();
 
-        // configure mem EP for that memory region
-        helper::config_local_ep(SEP, |regs| {
-            TCU::config_mem(regs, OWN_ACT, MEM_TILE, 0, r.1, r.2 as usize, Perm::RW);
-        });
+            // set region count and make us not the manager
+            let exmng: tcu::Reg = (r.0 as tcu::Reg + 1) << 32;
+            TCU::write_obj(MEP, &exmng, reg_addr - tcu::MMIO_ADDR.as_goff())
+                .expect("failed to write ExRegMng reg");
 
-        // try to access it
-        let val: u64 = TCU::read_obj(SEP, r.2 - 8).unwrap();
-        TCU::write_obj(SEP, &val, 0).unwrap();
+            // configure mem EP for that memory region
+            helper::config_local_ep(SEP, |regs| {
+                TCU::config_mem(regs, OWN_ACT, MEM_TILE, 0, r.1, r.2 as usize, Perm::RW);
+            });
+
+            // try to access it
+            if utile == OWN_TILE {
+                let val: u64 = TCU::read_obj(SEP, r.2 - 8).unwrap();
+                TCU::write_obj(SEP, &val, 0).unwrap();
+            }
+            else {
+                assert_eq!(
+                    TCU::read_obj::<u64>(SEP, r.2 - 8),
+                    Err(Error::new(Code::ExRegNoPerm))
+                );
+            }
+
+            // make us the manager again
+            let exmng = (r.0 as tcu::Reg + 1) << 32 | (own_tile as tcu::Reg);
+            TCU::write_obj(MEP, &exmng, reg_addr - tcu::MMIO_ADDR.as_goff())
+                .expect("failed to write ExRegMng reg");
+        }
     }
 }
 
