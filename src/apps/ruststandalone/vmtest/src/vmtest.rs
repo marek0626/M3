@@ -719,6 +719,66 @@ fn test_exregs() {
 }
 
 #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+fn test_exregs_shmem() {
+    // configure mem EP for the memory tile's TCU MMIO area
+    helper::config_local_ep(MEP, |regs| {
+        TCU::config_mem(
+            regs,
+            OWN_ACT,
+            MEM_TILE,
+            0,
+            tcu::MMIO_ADDR.as_goff(),
+            tcu::MMIO_SIZE,
+            Perm::RW,
+        );
+    });
+
+    // make ourself the exreg manager
+    let own_tile = TCU::tileid_to_nocid(OWN_TILE);
+    let value = own_tile as tcu::Reg;
+    let reg_addr = TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff();
+    // write it
+    TCU::write_obj(MEP, &value, reg_addr - tcu::MMIO_ADDR.as_goff())
+        .expect("failed to write ExRegMng reg");
+
+    const ADDR: base::mem::GlobOff = 0x2000_0000;
+    const SIZE: base::mem::GlobOff = 0x1000;
+
+    for indices in [[0, 1], [1, 0]] {
+        // configure region
+        log!(
+            LogFlags::Info,
+            "Configuring exclusive region {:#x}:{:#x} at {} and {}",
+            ADDR,
+            SIZE,
+            indices[0],
+            indices[1]
+        );
+        config_exreg(OWN_TILE, 0, indices[0], ADDR, SIZE, Perm::RW).unwrap();
+        config_exreg(TileId::new(0, 1), 0, indices[1], ADDR, SIZE, Perm::RW).unwrap();
+
+        // set region count and make us not the manager
+        let exmng: tcu::Reg = (2 as tcu::Reg) << 32;
+        TCU::write_obj(MEP, &exmng, reg_addr - tcu::MMIO_ADDR.as_goff())
+            .expect("failed to write ExRegMng reg");
+
+        // configure mem EP for that memory region
+        helper::config_local_ep(SEP, |regs| {
+            TCU::config_mem(regs, OWN_ACT, MEM_TILE, 0, ADDR, SIZE as usize, Perm::RW);
+        });
+
+        // try to access it
+        let val: u64 = TCU::read_obj(SEP, SIZE - 8).unwrap();
+        TCU::write_obj(SEP, &val, 0).unwrap();
+
+        // make us the manager again
+        let exmng = (2 as tcu::Reg) << 32 | (own_tile as tcu::Reg);
+        TCU::write_obj(MEP, &exmng, reg_addr - tcu::MMIO_ADDR.as_goff())
+            .expect("failed to write ExRegMng reg");
+    }
+}
+
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
 fn do_ext_cmd(cmd: tcu::Reg) -> Result<tcu::Reg, Error> {
     let addr = TCU::ext_reg_addr(base::tcu::ExtReg::ExtCmd).as_goff();
     TCU::write_obj(MEP, &cmd, addr - tcu::MMIO_ADDR.as_goff())?;
@@ -932,6 +992,8 @@ pub extern "C" fn env_run() {
     run_test!(test_tlb());
     #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
     run_test!(test_exregs());
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+    run_test!(test_exregs_shmem());
     #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
     run_test!(test_unlocked());
     #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
