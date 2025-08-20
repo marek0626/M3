@@ -164,9 +164,14 @@ pub fn rem(mtile: TileId, idx: usize) -> Result<(), Error> {
 
     // make region invalid
     #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
-    idxmtile
-        .write_tcu(&[0u64, 0], TCU::exreg_addr(idx).as_goff())
-        .unwrap();
+    {
+        idxmtile
+            .write_tcu(&[0u64], TCU::exreg_addr(idx).as_goff())
+            .unwrap();
+        idxmtile
+            .write_tcu(&[0u64], TCU::exreg_addr(idx).as_goff() + 8)
+            .unwrap();
+    }
 
     regs.retain(|r| r.mtile != mtile || r.idx != idx);
     Ok(())
