@@ -6,6 +6,7 @@ use base::io::LogFlags;
 use base::kif::Perm;
 use base::mem::GlobOff;
 use base::tcu::{self, GenId, TileId, TCU};
+use base::time::CycleInstant;
 use base::util::math;
 use base::vec::Vec;
 use base::{env, log, vec};
@@ -21,6 +22,8 @@ struct ExReg {
     locked: bool,
 }
 
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+static COUNT: StaticCell<usize> = StaticCell::new(0);
 static REGS: StaticRefCell<Vec<ExReg>> = StaticRefCell::new(vec![]);
 static BUF: StaticRefCell<[u8; 1024]> = StaticRefCell::new([0u8; 1024]);
 static ZEROING: StaticCell<bool> = StaticCell::new(true);
@@ -90,28 +93,6 @@ pub fn add(
         locked
     );
 
-    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
-    {
-        // write region to memory tile
-        let idxmtile = rot::IndexedTile::new_from_env(mtile).unwrap();
-        let (cfg, range) = TCU::build_exreg(utile, ugen, idx, addr, size, perm)
-            .ok_or_else(|| Error::new(Code::InvArgs))?;
-        idxmtile
-            .write_tcu(&[cfg], TCU::exreg_addr(idx).as_goff())
-            .unwrap();
-        idxmtile
-            .write_tcu(&[range], TCU::exreg_addr(idx).as_goff() + 8)
-            .unwrap();
-
-        // update region count
-        let count = regs.iter().map(|r| r.idx).max().unwrap_or(0).max(idx);
-        let value =
-            (count as tcu::Reg) << 32 | TCU::tileid_to_nocid(env::boot().tile_id()) as tcu::Reg;
-        idxmtile
-            .write_tcu(&[value], TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff())
-            .unwrap();
-    }
-
     regs.push(ExReg {
         mtile,
         idx,
@@ -121,6 +102,19 @@ pub fn add(
         size,
         locked,
     });
+
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+    {
+        // write region to memory tile
+        let idxmtile = rot::IndexedTile::new_from_env(mtile).unwrap();
+        let (cfg, range) = TCU::build_exreg(utile, ugen, idx, addr, size, perm)
+            .ok_or_else(|| Error::new(Code::InvArgs))?;
+        set_region(&idxmtile, idx, [cfg, range]);
+        if idx + 1 != COUNT.get() {
+            set_count(&idxmtile, idx + 1);
+            COUNT.set(idx + 1);
+        }
+    }
 
     Ok(())
 }
@@ -162,19 +156,43 @@ pub fn rem(mtile: TileId, idx: usize) -> Result<(), Error> {
         clear_mem(idxmtile.ep(), reg.addr, reg.size).unwrap();
     }
 
+    regs.retain(|r| r.mtile != mtile || r.idx != idx);
+
     // make region invalid
     #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
     {
-        idxmtile
-            .write_tcu(&[0u64], TCU::exreg_addr(idx).as_goff())
-            .unwrap();
-        idxmtile
-            .write_tcu(&[0u64], TCU::exreg_addr(idx).as_goff() + 8)
-            .unwrap();
+        if idx + 1 == COUNT.get() {
+            let count = 1 + regs
+                .iter()
+                .filter(|r| r.mtile == idxmtile.id())
+                .map(|r| r.idx)
+                .max()
+                .unwrap_or(0);
+            set_count(&idxmtile, count);
+            COUNT.set(count);
+        }
+        set_region(&idxmtile, idx, [0u64, 0u64]);
     }
 
-    regs.retain(|r| r.mtile != mtile || r.idx != idx);
     Ok(())
+}
+
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+fn set_region(idxtile: &rot::IndexedTile, idx: usize, reg: [u64; 2]) {
+    idxtile
+        .write_tcu(&reg[..1], TCU::exreg_addr(idx).as_goff())
+        .unwrap();
+    idxtile
+        .write_tcu(&reg[1..], TCU::exreg_addr(idx).as_goff() + 8)
+        .unwrap();
+}
+
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+fn set_count(idxtile: &rot::IndexedTile, count: usize) {
+    let value = (count as tcu::Reg) << 32 | TCU::tileid_to_nocid(env::boot().tile_id()) as tcu::Reg;
+    idxtile
+        .write_tcu(&[value], TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff())
+        .unwrap();
 }
 
 fn clear_mem(ep: tcu::EpId, mut off: GlobOff, mut size: GlobOff) -> Result<(), Error> {
