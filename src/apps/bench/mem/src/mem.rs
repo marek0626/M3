@@ -51,7 +51,7 @@ impl FromStr for Mode {
 
 #[no_mangle]
 pub fn main() -> Result<(), Error> {
-    let mode: Mode = env::args().nth(1).unwrap().parse().unwrap();
+    let mode: Mode = Mode::Random;
     let size = env::args().nth(2).map(|s| s.parse::<usize>().unwrap());
 
     let buf = vec![0u8; 1024 * 1024];
