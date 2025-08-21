@@ -85,7 +85,7 @@ fn perform_op(mgate: &MemGate, buf: &[u8], buf2: &mut [u8], size: usize, mode: M
                     Mode::Copy => buf2[0..cur_buf.len()].copy_from_slice(cur_buf),
                     Mode::Random => {
                         const CHUNK_SIZE: usize = 64;
-                        let chunks = buf.len() / CHUNK_SIZE;
+                        let chunks = buf.len().min(size) / CHUNK_SIZE;
                         for _ in 0..chunks {
                             let a = rng.get() as usize % chunks;
                             let b = rng.get() as usize % chunks;
