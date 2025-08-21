@@ -29,14 +29,14 @@ use m3core::col::Vec;
 use m3core::com::MemCap;
 use m3core::crypto::HashAlgorithm;
 use m3core::errors::{Code, Error};
-use m3core::io::{Read, Write};
+use m3core::io::{LogFlags, Read, Write};
 use m3core::kif::Perm;
 use m3core::mem::GlobOff;
-use m3core::println;
 use m3core::rc::Rc;
 use m3core::tiles::{ChildActivity, OwnActivity, RunningActivity, Tile, TileArgs};
 use m3core::vfs::{File, FileRef, OpenFlags, VFS};
 use m3core::{env, vec};
+use m3core::{log, println};
 
 use accel::StreamAccel;
 use pipecli::{IndirectPipe, Pipes};
@@ -101,7 +101,7 @@ pub fn main() -> Result<(), Error> {
     let datasize = args[1].parse::<usize>().expect("Invalid data size");
     let outfile = args[2];
     let pipe_sels = args[3].parse::<Selector>().expect("Invalid pipe-sel-start");
-    let tee = args.len() > 3 && args[3] == "-t";
+    let tee = args.len() > 4 && args[4] == "-t";
 
     let pipes = Pipes::new("pipes").expect("open pipes session");
 
@@ -168,9 +168,13 @@ pub fn main() -> Result<(), Error> {
             match in_writer.write_all(&in_data[0..amount]) {
                 Ok(_) => {
                     if VERBOSE {
-                        println!("Wrote {} bytes", amount);
+                        log!(LogFlags::Info, "Wrote {} bytes", amount);
                     }
                     write_pos += amount;
+                    // TODO add occasional print to prevent halt
+                    if write_pos > 0 && write_pos % 16384 == 0 {
+                        println!("Wrote {} bytes", write_pos);
+                    }
                     if write_pos >= datasize {
                         in_pipe.close_writer();
                     }
@@ -184,7 +188,7 @@ pub fn main() -> Result<(), Error> {
         match out_reader.read(&mut out_data) {
             Ok(read) => {
                 if VERBOSE {
-                    println!("Read {} bytes", read);
+                    log!(LogFlags::Info, "Read {} bytes", read);
                 }
 
                 hash_writer
@@ -219,7 +223,7 @@ pub fn main() -> Result<(), Error> {
 
     let mut hash = [0u8; 28];
     sha3.finish(&mut hash).expect("get hash");
-    println!("hash: {:?}", hash);
+    assert_eq!(hash[0], 0);
 
     // drop those explicitly before we drop `run` (the activity)
     drop(hash_pipe);
