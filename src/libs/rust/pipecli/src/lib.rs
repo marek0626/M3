@@ -66,7 +66,7 @@ impl Pipes {
 /// Represents a pipe
 ///
 /// A pipe allows to create *channels* that either write to the pipe or read from the pipe. To
-/// exchange the data, the pipe requires memory, which is provided in form of a [`MemGate`].
+/// exchange the data, the pipe requires memory, which is provided in form of a [`MemCap`].
 pub struct Pipe {
     sess: ClientSession,
     mgate: MemCap,
