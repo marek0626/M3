@@ -12,7 +12,9 @@
                 </app>
             </dom>
             <dom>
-                <app args="hello"/>
+                <app args="hello">
+                    <sess name="rot"/>
+                </app>
             </dom>
         </app>
     </dom>
