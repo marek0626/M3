@@ -5,24 +5,27 @@
     </mods>
     <kernel args="kernel"/>
     <dom>
-        <app args="root" eps="512">
-            <app args="m3fs mem" daemon="1">
-                <serv name="m3fs"/>
-                <mod name="fs"/>
-            </app>
-            <app args="pipes" daemon="1">
-                <serv name="pipes"/>
-            </app>
-            <app args="vterm" daemon="1">
+        <app args="root maxcli=4 maxsrv=4" eps="512">
+            <dom>
+                <app args="m3fs mem" daemon="1">
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
+                </app>
+            </dom>
+            <dom>
+                <app args="pipes" daemon="1">
+                    <serv name="pipes"/>
+                </app>
+            </dom>
+            <app args="vterm -m 8" daemon="1">
                 <serv name="vterm"/>
                 <serial/>
             </app>
             <dom>
-                <app args="pager maxcli=3">
+                <app args="pager maxcli=3 maxsrv=1">
                     <sess name="m3fs"/>
                     <mod name="fs" perm="r"/>
                     <mod name="tilemux" perm="r"/>
-                    <tiles type="perf|core" count="1"/>
                     <app args="/bin/shell cat /test.txt | wc">
                         <mount fs="m3fs" path="/"/>
                         <sess name="pipes"/>

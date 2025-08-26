@@ -5,16 +5,18 @@
     </mods>
     <kernel args="kernel"/>
     <dom>
-        <app args="root">
-            <app args="m3fs mem" daemon="1">
+        <app args="root maxcli=2 maxsrv=1">
+            <app args="m3fs -m 16 mem" daemon="1">
                 <serv name="m3fs"/>
                 <mod name="fs"/>
             </app>
-            <app args="pipes" daemon="1">
-                <serv name="pipes"/>
-            </app>
             <dom>
-                <app args="pager">
+                <app args="pipes" daemon="1">
+                    <serv name="pipes"/>
+                </app>
+            </dom>
+            <dom>
+                <app args="pager maxcli=4 maxsrv=1">
                     <sess name="m3fs"/>
                     <mod name="fs" perm="r"/>
                     <mod name="tilemux" perm="r"/>

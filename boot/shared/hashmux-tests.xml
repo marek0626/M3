@@ -7,22 +7,22 @@
     <rot layers="brom,blau.bin,rosa.bin,rots.bin"/>
     <kernel args="kernel"/>
     <dom>
-        <app args="root">
-            <dom tile="core+kecacc+rot">
+        <app args="root maxcli=4 maxsrv=4">
+            <dom tile="riscv64+kecacc+rot|riscv32+kecacc+rot">
                 <app args="rots" daemon="1">
                     <serv name="rot"/>
                     <mod name="rot-certificate.json" perm="r"/>
                 </app>
             </dom>
-            <app args="pipes" daemon="1">
+            <app args="pipes -m 4" daemon="1">
                 <serv name="pipes"/>
             </app>
-            <app args="m3fs mem" daemon="1">
+            <app args="m3fs -m 4 mem" daemon="1">
                 <serv name="m3fs"/>
                 <mod name="fs"/>
             </app>
             <dom>
-                <app args="pager">
+                <app args="pager maxcli=2 maxsrv=1">
                     <sess name="m3fs"/>
                     <mod name="fs" perm="r"/>
                     <mod name="tilemux" perm="r"/>

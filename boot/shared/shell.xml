@@ -5,14 +5,16 @@
     </mods>
     <kernel args="kernel"/>
     <dom>
-        <app args="root maxcli=4">
-            <app args="vterm" daemon="1">
+        <app args="root maxcli=4 maxsrv=4">
+            <app args="vterm -m 16" daemon="1">
                 <serv name="vterm"/>
                 <serial/>
             </app>
-            <app args="pipes" daemon="1">
-                <serv name="pipes"/>
-            </app>
+            <dom>
+                <app args="pipes" daemon="1">
+                    <serv name="pipes"/>
+                </app>
+            </dom>
             <dom>
                 <app args="m3fs -m 8 mem" daemon="1">
                     <serv name="m3fs"/>
@@ -23,11 +25,10 @@
                 </app>
             </dom>
             <dom>
-                <app args="pager maxcli=4" usermem="256M" getinfo="1">
+                <app args="pager maxcli=4 maxsrv=1" usermem="256M" getinfo="1">
                     <sess name="m3fs"/>
                     <mod name="fs" perm="r"/>
                     <mod name="tilemux" perm="r"/>
-                    <tiles type="core" count="1"/>
                     <app args="/bin/shell" getinfo="1">
                         <mount fs="m3fs" path="/"/>
                         <sess name="pipes"/>

@@ -5,13 +5,13 @@
     </mods>
     <kernel args="kernel"/>
     <dom>
-        <app args="root">
+        <app args="root maxcli=2 maxsrv=1">
             <app args="m3fs mem" daemon="1">
                 <serv name="m3fs"/>
                 <mod name="fs"/>
             </app>
             <dom>
-                <app args="pager sem=net-udp sem=net-tcp" usermem="256M">
+                <app args="pager maxcli=8 maxsrv=2 sem=net-udp sem=net-tcp" usermem="256M">
                     <sess name="m3fs"/>
                     <mod name="fs" perm="r"/>
                     <mod name="tilemux" perm="r"/>
@@ -21,11 +21,13 @@
                             <serv name="net"/>
                         </app>
                     </dom>
-                    <app args="/bin/netechoserver" daemon="1">
-                        <sess name="net" args="bufs=1M socks=2 udp=1337 tcp=1338"/>
-                        <sem name="net-udp"/>
-                        <sem name="net-tcp"/>
-                    </app>
+                    <dom>
+                        <app args="/bin/netechoserver" daemon="1">
+                            <sess name="net" args="bufs=1M socks=2 udp=1337 tcp=1338"/>
+                            <sem name="net-udp"/>
+                            <sem name="net-tcp"/>
+                        </app>
+                    </dom>
                     <app args="/bin/ruststdtest">
                         <mount fs="m3fs" path="/"/>
                         <sess name="net" args="udp=3000"/>
