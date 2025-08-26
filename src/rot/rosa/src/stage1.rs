@@ -18,7 +18,7 @@ use base::io::{log, LogFlags};
 use base::kif::boot::{Info, Mem, Mod};
 use base::kif::{tilemux, Perm, TileAttr, TileDesc, TileType};
 use base::mem::{GlobAddr, GlobOff};
-use base::tcu::{ActId, ConfigReg, TCU};
+use base::tcu::{ActId, TCU};
 use base::util::math::round_up;
 use base::{cfg, env, log, mem, tcu, util};
 use rot::cert::{HashBuf, M3RawCertificate};
@@ -537,13 +537,6 @@ pub fn run() -> crate::RosaPrivateCtx {
 
     let root_tile = determine_root_tile(&m3, ktile);
     let our_tile = determine_our_tile(&m3);
-
-    // enable tile to allow memory transfers
-    if env!("M3_TARGET") == "hw23" || env!("M3_TARGET") == "hw" {
-        ktile
-            .write_tcu(&[1u64], tcu::TCU::config_addr(ConfigReg::Enable).as_goff())
-            .expect("Failed to start kernel tile");
-    }
 
     // Configure endpoint used to load kernel ELF
     rot::config_local_ep(crate::MEM_EP, |regs| {
