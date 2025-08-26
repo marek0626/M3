@@ -7,4 +7,3 @@ def build(gen, env):
             varAddr=False,
             ldscript='isr',
         )
-
