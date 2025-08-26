@@ -259,6 +259,7 @@ impl RequestSession for RoTSession {
         assert!(serv.id() < MAX_SESSIONS);
 
         // Use the time slice specified in the arguments or fall back to the default one
+        // TODO expect arguments in a proper format
         let time_slice = if !arg.is_empty() {
             match arg.parse::<u64>() {
                 Ok(time) => TimeDuration::from_nanos(time),
