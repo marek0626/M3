@@ -54,37 +54,41 @@ pub extern "C" fn env_run() -> ! {
     m3core::env::run();
 }
 
-fn create_shm_pipe(
-    pipes: &Pipes,
-    name: &str,
-    sel: Selector,
-    tee: bool,
-) -> (
-    Option<Rc<Tile>>,
-    IndirectPipe,
-    FileRef<dyn File>,
-    FileRef<dyn File>,
-) {
-    let (in_mem, in_tile) = if tee {
-        let in_pipe =
-            MemCap::new_shmem(name).unwrap_or_else(|e| panic!("get shmem '{}': {}", name, e));
-        let in_tile =
-            Tile::new_bind(sel).unwrap_or_else(|e| panic!("bind tile for '{}': {}", name, e));
-        (in_pipe, Some(in_tile))
-    }
-    else {
-        (
-            MemCap::new(PIPE_SIZE as GlobOff, Perm::RW)
-                .unwrap_or_else(|e| panic!("get shmem '{}': {}", name, e)),
-            None,
-        )
-    };
+struct ShmPipe {
+    tile: Option<Rc<Tile>>,
+    pipe: IndirectPipe,
+    reader: FileRef<dyn File>,
+    writer: FileRef<dyn File>,
+}
 
-    let in_pipe = IndirectPipe::new(&pipes, in_mem)
-        .unwrap_or_else(|e| panic!("create pipe '{}': {}", name, e));
-    let in_reader = in_pipe.reader().unwrap();
-    let in_writer = in_pipe.writer().unwrap();
-    (in_tile, in_pipe, in_reader, in_writer)
+impl ShmPipe {
+    fn new(pipes: &Pipes, name: &str, sel: Selector, tee: bool) -> Self {
+        let (mem, tile) = if tee {
+            let pipe =
+                MemCap::new_shmem(name).unwrap_or_else(|e| panic!("get shmem '{}': {}", name, e));
+            let tile =
+                Tile::new_bind(sel).unwrap_or_else(|e| panic!("bind tile for '{}': {}", name, e));
+            (pipe, Some(tile))
+        }
+        else {
+            (
+                MemCap::new(PIPE_SIZE as GlobOff, Perm::RW)
+                    .unwrap_or_else(|e| panic!("get shmem '{}': {}", name, e)),
+                None,
+            )
+        };
+
+        let pipe = IndirectPipe::new(pipes, mem)
+            .unwrap_or_else(|e| panic!("create pipe '{}': {}", name, e));
+        let reader = pipe.reader().unwrap();
+        let writer = pipe.writer().unwrap();
+        Self {
+            tile,
+            pipe,
+            reader,
+            writer,
+        }
+    }
 }
 
 #[no_mangle]
@@ -105,12 +109,9 @@ pub fn main() -> Result<(), Error> {
 
     let pipes = Pipes::new("pipes").expect("open pipes session");
 
-    let (in_tile, in_pipe, mut in_reader, mut in_writer) =
-        create_shm_pipe(&pipes, "inpipe", pipe_sels + 0, tee);
-    let (out_tile, out_pipe, mut out_reader, mut out_writer) =
-        create_shm_pipe(&pipes, "outpipe", pipe_sels + 1, tee);
-    let (_hash_tile, hash_pipe, mut hash_reader, mut hash_writer) =
-        create_shm_pipe(&pipes, "hashpipe", pipe_sels + 2, tee);
+    let mut input = ShmPipe::new(&pipes, "inpipe", pipe_sels + 0, tee);
+    let mut output = ShmPipe::new(&pipes, "outpipe", pipe_sels + 1, tee);
+    let mut hash = ShmPipe::new(&pipes, "hashpipe", pipe_sels + 2, tee);
 
     let tile = Tile::get_with(
         "riscv32+coreacc|core",
@@ -120,19 +121,23 @@ pub fn main() -> Result<(), Error> {
     let act = ChildActivity::new(tile.clone(), "test").expect("create child activity");
 
     let mut accel = StreamAccel::new(&act, tee)?;
-    accel.attach_input(&mut in_reader).expect("attach input");
-    accel.attach_output(&mut out_writer).expect("attach output");
+    accel.attach_input(&mut input.reader).expect("attach input");
+    accel
+        .attach_output(&mut output.writer)
+        .expect("attach output");
 
     if tee {
         tile.lock().unwrap();
 
-        let in_tile = in_tile.as_ref().unwrap();
-        in_pipe
+        let in_tile = input.tile.as_ref().unwrap();
+        input
+            .pipe
             .memory()
             .make_exclusive(in_tile, &tile, true)
             .expect("make in-pipe exclusive");
-        let out_tile = out_tile.as_ref().unwrap();
-        out_pipe
+        let out_tile = output.tile.as_ref().unwrap();
+        output
+            .pipe
             .memory()
             .make_exclusive(out_tile, &tile, true)
             .expect("make out-pipe exclusive");
@@ -140,7 +145,7 @@ pub fn main() -> Result<(), Error> {
 
     let run = act.start().expect("start activity");
 
-    let mut output = VFS::open(
+    let mut out_file = VFS::open(
         outfile,
         OpenFlags::W | OpenFlags::CREATE | OpenFlags::NEW_SESS,
     )
@@ -151,10 +156,12 @@ pub fn main() -> Result<(), Error> {
     let in_data = vec![0u8; BUF_SIZE];
     let mut out_data = vec![0u8; BUF_SIZE];
 
-    in_writer
+    input
+        .writer
         .set_blocking(false)
         .expect("make input non-blocking");
-    out_reader
+    output
+        .reader
         .set_blocking(false)
         .expect("make output non-blocking");
 
@@ -165,7 +172,7 @@ pub fn main() -> Result<(), Error> {
 
         if write_pos < datasize {
             let amount = (datasize - write_pos).min(in_data.len());
-            match in_writer.write_all(&in_data[0..amount]) {
+            match input.writer.write_all(&in_data[0..amount]) {
                 Ok(_) => {
                     if VERBOSE {
                         log!(LogFlags::Info, "Wrote {} bytes", amount);
@@ -176,7 +183,7 @@ pub fn main() -> Result<(), Error> {
                         println!("Wrote {} bytes", write_pos);
                     }
                     if write_pos >= datasize {
-                        in_pipe.close_writer();
+                        input.pipe.close_writer();
                     }
                     progress += 1;
                 },
@@ -185,22 +192,22 @@ pub fn main() -> Result<(), Error> {
             }
         }
 
-        match out_reader.read(&mut out_data) {
+        match output.reader.read(&mut out_data) {
             Ok(read) => {
                 if VERBOSE {
                     log!(LogFlags::Info, "Read {} bytes", read);
                 }
 
-                hash_writer
+                hash.writer
                     .write_all(&out_data[..read])
                     .expect("write to-be-hashed chunk");
-                hash_writer.flush().expect("flushing hash pipe");
+                hash.writer.flush().expect("flushing hash pipe");
 
-                hash_reader
+                hash.reader
                     .hash_input_chunk(&sha3, read)
                     .expect("hash chunk");
 
-                output
+                out_file
                     .write_all(&out_data[..read])
                     .expect("write to output file");
 
@@ -216,20 +223,20 @@ pub fn main() -> Result<(), Error> {
         }
     }
 
-    hash_pipe.close_writer();
-    out_pipe.close_reader();
+    hash.pipe.close_writer();
+    output.pipe.close_reader();
 
     run.wait().expect("wait activity");
 
-    let mut hash = [0u8; 28];
-    sha3.finish(&mut hash).expect("get hash");
-    assert_eq!(hash[0], 0);
+    let mut res = [0u8; 28];
+    sha3.finish(&mut res).expect("get hash");
+    assert_eq!(res[0], 0);
 
     // drop those explicitly before we drop `run` (the activity)
-    drop(hash_pipe);
-    drop(out_pipe);
-    drop(in_pipe);
+    drop(hash);
     drop(output);
+    drop(input);
+    drop(out_file);
     drop(accel);
 
     Ok(())
