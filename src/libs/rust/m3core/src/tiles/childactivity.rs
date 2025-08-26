@@ -22,8 +22,10 @@ use core::cmp;
 use core::fmt;
 use core::ops::{Deref, DerefMut};
 
+use base::io::LogFlags;
 use base::kif::syscalls::MuxType;
 use base::kif::TileAttr;
+use base::log;
 
 use crate::cap::{CapFlags, Capability, SelSpace, Selector};
 use crate::cell::Cell;
@@ -415,6 +417,7 @@ impl ChildActivity {
         self.obtain_files_and_mounts()?;
 
         let (file, entry) = if let Some((mapper, file)) = program {
+            log!(LogFlags::LibLoader, "Loading {}", args[0].as_ref());
             let mut file = BufReader::new(file);
             let entry = loader::load_program(&self, mapper, &mut file)?;
             (Some(file), entry)
