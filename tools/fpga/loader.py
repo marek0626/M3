@@ -308,14 +308,4 @@ class Loader:
         if self.tcu_version[0] < 3:
             desc |= (1 << 5) << 11  # IEPS
 
-        if self.tcu_version[0] == 4 and (tile_idx == 5 or tile_idx == 6 or tile_idx == 7):
-            desc &= 0x3FFFF << 11
-            desc |= ((1 << 0) | (1 << 5)) << 11
-
-        # TODO manually set RV32 until the HW reports that correctly
-        # if self.tcu_version == (2, 0, 1) and (tile_idx == 3 or tile_idx == 4):
-        #     desc &= ~(0x1FF << 6)
-        #     desc |= 2 << 6          # RV32
-        #     desc |= (1 << 7) << 11  # COREACC
-
         return desc
