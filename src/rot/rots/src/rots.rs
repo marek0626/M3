@@ -576,8 +576,21 @@ impl RoTSession {
         reply_vmsg!(is, Code::Success, Bytes::new(&signature.to_bytes()[..]))
     }
 
-    fn epid(&self) -> EpId {
-        self.mem.as_ref().unwrap().id()
+    fn try_with_ep<F>(&self, mut func: F) -> Result<(), Error>
+    where
+        F: FnMut(EpId) -> Result<(), Error>,
+    {
+        let ep = self.mem.as_ref().unwrap().id();
+        match func(ep) {
+            Err(e) if e.code() == Code::NoMEP => {
+                if TCU::is_frozen(ep) {
+                    TCU::unfreeze(ep)?;
+                }
+                func(ep)
+            },
+            Err(e) => Err(e),
+            Ok(_) => Ok(()),
+        }
     }
 
     /// Work on an input request by reading memory from the MemGate and
@@ -596,7 +609,7 @@ impl RoTSession {
                 return Err(Error::new(Code::Success)); // Done
             }
 
-            TCU::read(self.epid(), buf.as_mut_ptr(), n, req.off as u64)?;
+            self.try_with_ep(|ep| TCU::read(ep, buf.as_mut_ptr(), n, req.off as u64))?;
 
             KECACC.start_absorb(&buf[..n]);
             if DISABLE_DOUBLE_BUFFER {
@@ -645,7 +658,7 @@ impl RoTSession {
             if n == 0 {
                 // Still need to write back the last buffer
                 KECACC.poll_complete();
-                TCU::write(self.epid(), lbuf.as_ptr(), ln, req.off as u64)?;
+                self.try_with_ep(|ep| TCU::write(ep, lbuf.as_ptr(), ln, req.off as u64))?;
                 return Err(Error::new(Code::Success)); // Done
             }
 
@@ -655,14 +668,14 @@ impl RoTSession {
                 KECACC.poll_complete();
             }
 
-            TCU::write(self.epid(), lbuf.as_ptr(), ln, req.off as u64)?;
+            self.try_with_ep(|ep| TCU::write(ep, lbuf.as_ptr(), ln, req.off as u64))?;
             req.complete_buffer(ln);
 
             if let Err(remaining_time) = timer.try_continue(req_rgate, srv_rgate) {
                 // Still need to write back the last buffer - this might take a bit
                 // so measure the time and subtract it from the remaining time.
                 let t = TimeInstant::now();
-                TCU::write(self.epid(), buf.as_ptr(), n, req.off as u64)?;
+                self.try_with_ep(|ep| TCU::write(ep, buf.as_ptr(), n, req.off as u64))?;
                 req.complete_buffer(n);
                 self.remaining_time = remaining_time - (TimeInstant::now() - t).as_nanos() as i64;
                 return Ok(false);
@@ -829,7 +842,7 @@ impl RoTSession {
             return Err(Error::new(Code::Exists));
         }
 
-        let ep = EpMng::get().acquire(0, true)?;
+        let ep = EpMng::get().acquire(0, false)?;
         let ep_sel = ep.sel();
         hash.mem = Some(ep);
         xchg.out_caps(CapRngDesc::new_single(CapType::Object, ep_sel));
