@@ -89,7 +89,7 @@ impl Executor {
             ep_off,
             input: FileView::default(),
             output: FileView::default(),
-            aes: AESAcc::default(),
+            aes: AESAcc,
         }
     }
 

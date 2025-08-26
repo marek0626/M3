@@ -814,8 +814,8 @@ fn test_unlocked() {
         TCU::config_invalid(regs, OWN_ACT, true);
     });
 
-    assert_eq!(TCU::is_frozen(REP1), false);
-    assert_eq!(TCU::is_dynamic(REP1), true);
+    assert!(!TCU::is_frozen(REP1));
+    assert!(TCU::is_dynamic(REP1));
 
     let (_virt, rbuf_phys) = helper::virt_to_phys(VirtAddr::from(RBUF2.as_ptr()));
     helper::config_local_ep(REP1, |regs| {
@@ -830,8 +830,8 @@ fn test_unlocked() {
     });
 
     // EP is not frozen and can also be made non-dynamic as the tile is not locked
-    assert_eq!(TCU::is_frozen(REP1), false);
-    assert_eq!(TCU::is_dynamic(REP1), false);
+    assert!(!TCU::is_frozen(REP1));
+    assert!(!TCU::is_dynamic(REP1));
 }
 
 #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
@@ -880,7 +880,7 @@ fn test_lock() {
         });
 
         TCU::check_recv_ep(REP1, rbuf_phys, 64, false).unwrap();
-        assert_eq!(TCU::is_frozen(REP1), true);
+        assert!(TCU::is_frozen(REP1));
 
         helper::config_local_ep(SEP, |regs| {
             TCU::config_send(
@@ -894,17 +894,17 @@ fn test_lock() {
                 1,
             );
         });
-        assert_eq!(TCU::is_frozen(SEP), true);
+        assert!(TCU::is_frozen(SEP));
 
         TCU::unfreeze(REP1).unwrap();
-        assert_eq!(TCU::is_frozen(REP1), false);
+        assert!(!TCU::is_frozen(REP1));
         TCU::unfreeze(SEP).unwrap();
-        assert_eq!(TCU::is_frozen(SEP), false);
-        assert_eq!(TCU::has_msgs(REP1), false);
+        assert!(!TCU::is_frozen(SEP));
+        assert!(!TCU::has_msgs(REP1));
 
         let buf = MsgBuf::new();
         assert_eq!(TCU::send(SEP, &buf, 0x1111, tcu::NO_REPLIES), Ok(()));
-        assert_eq!(TCU::has_msgs(REP1), true);
+        assert!(TCU::has_msgs(REP1));
         TCU::fetch_msg(REP1).unwrap();
 
         let reg = TCU::build_ext_cmd(
@@ -922,7 +922,7 @@ fn test_lock() {
         helper::config_local_ep(REP1, |regs| {
             TCU::config_invalid(regs, OWN_ACT, true);
         });
-        assert_eq!(TCU::is_frozen(REP1), true);
+        assert!(TCU::is_frozen(REP1));
 
         // now make it dynamic
         TCU::mkdyn(REP1).unwrap();
@@ -940,8 +940,8 @@ fn test_lock() {
         });
 
         // EP is not frozen due to dynamic bit; dynamic bit cannot be unset
-        assert_eq!(TCU::is_frozen(REP1), true);
-        assert_eq!(TCU::is_dynamic(REP1), true);
+        assert!(TCU::is_frozen(REP1));
+        assert!(TCU::is_dynamic(REP1));
 
         // unfreeze it to allow INV_EP
         TCU::unfreeze(REP1).unwrap();
@@ -953,8 +953,8 @@ fn test_lock() {
         );
         do_ext_cmd(reg).unwrap();
 
-        assert_eq!(TCU::is_frozen(REP1), false);
-        assert_eq!(TCU::is_dynamic(REP1), false);
+        assert!(!TCU::is_frozen(REP1));
+        assert!(!TCU::is_dynamic(REP1));
     }
 }
 

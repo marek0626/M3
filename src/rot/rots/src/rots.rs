@@ -236,7 +236,7 @@ impl RequestSession for RoTSession {
     /// functionality. ROTS can provide either/or without panicking.
     fn new(serv: ServerSession, arg: &str) -> Result<Self, Error> {
         // we need at least some seed to produce valid hashes
-        if arg.len() == 0 {
+        if arg.is_empty() {
             return Err(Error::new(Code::InvArgs));
         }
 

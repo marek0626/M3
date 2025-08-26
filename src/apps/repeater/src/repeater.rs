@@ -80,10 +80,10 @@ fn parse_args() -> Result<RepeaterSettings, VerboseError> {
                 settings.warmup = parse_arg(args[i + 1], "warmups")?;
             },
             "-m" => {
-                settings.mux_mem_size = Some(parse::size(&args[i + 1]).unwrap() as GlobOff);
+                settings.mux_mem_size = Some(parse::size(args[i + 1]).unwrap() as GlobOff);
             },
             "-s" => {
-                let parts = args[i + 1].split("=").collect::<Vec<_>>();
+                let parts = args[i + 1].split('=').collect::<Vec<_>>();
                 if parts.len() == 2 {
                     let name = parts[0].to_string();
                     let sel = parse::int(parts[1]).unwrap();

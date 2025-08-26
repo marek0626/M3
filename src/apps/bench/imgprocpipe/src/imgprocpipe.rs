@@ -117,8 +117,8 @@ impl Chain {
         outtile: &Rc<Tile>,
     ) -> Result<(), Error> {
         // our tile has already access, because repeater did it for us
-        inmem.make_exclusive(&intile, &self.accels[0].tile, true)?;
-        outmem.make_exclusive(&outtile, &self.accels[ACCEL_COUNT - 1].tile, true)?;
+        inmem.make_exclusive(intile, &self.accels[0].tile, true)?;
+        outmem.make_exclusive(outtile, &self.accels[ACCEL_COUNT - 1].tile, true)?;
         for accel in &self.accels {
             accel.tile.lock()?;
         }

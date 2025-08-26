@@ -67,10 +67,7 @@ impl SharedMemManager {
             .find(|shmem| shmem.name == name)
             .ok_or_else(|| anyhow!("No shared memory with name '{}'", name))?;
 
-        shmem
-            .slice
-            .derive_tile(count)
-            .map(|t| TileUsage::new_obj(t))
+        shmem.slice.derive_tile(count).map(TileUsage::new_obj)
     }
 
     pub fn acquire_for_tile(&mut self, name: &str, tile: &Rc<Tile>) -> anyhow::Result<&MemCap> {

@@ -408,7 +408,7 @@ impl Tile {
             Self::copy_data(
                 &mut buf,
                 mux,
-                &mux_mem,
+                mux_mem,
                 phdr.offset(),
                 phys,
                 phdr.file_size(),
@@ -434,7 +434,7 @@ impl Tile {
         let mut off = self.desc().env_space().0 + size_of::<env::BaseEnv>();
         let envp = env::write_args(
             &env::vars_raw(),
-            &mux_mem,
+            mux_mem,
             &mut off,
             self.desc().mem_offset() as GlobOff,
         )?;
