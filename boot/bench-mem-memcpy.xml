@@ -4,7 +4,7 @@
     <dom>
         <app args="root">
             <dom tile="perf|core">
-                <app args="mem memcpy"/>
+                <app args="mem copy"/>
             </dom>
         </app>
     </dom>
