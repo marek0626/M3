@@ -30,8 +30,7 @@ use base::io::LogFlags;
 use base::kif::{PageFlags, Perm};
 use base::libc;
 use base::log;
-use base::machine;
-use base::mem::{size_of, GlobAddr, MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
+use base::mem::{size_of, MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
 use base::tcu::{self, EpId, TileId, TCU};
 use base::util;
 
@@ -401,7 +400,11 @@ fn test_own_msg() {
     assert_eq!(CU_REQS.get(), 0);
 }
 
+#[cfg(not(M3_TARGET = "hw"))]
 fn test_pmp_failures() {
+    use base::machine;
+    use base::mem::GlobAddr;
+
     CU_REQS.set(0);
 
     // flush the cache to be sure that the reads cause cache misses
@@ -988,7 +991,8 @@ pub extern "C" fn env_run() {
     run_test!(test_msgs(area_begin, area_size));
     run_test!(test_foreign_msg());
     run_test!(test_own_msg());
-    // run_test!(test_pmp_failures());
+    #[cfg(not(M3_TARGET = "hw"))]
+    run_test!(test_pmp_failures());
     run_test!(test_tlb());
     #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
     run_test!(test_exregs());
