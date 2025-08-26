@@ -9,8 +9,6 @@
     <dom>
         <app args="root">
             <dom tile="riscv64+kecacc+rot|riscv32+kecacc+rot">
-                <shmem name="inpipe"/>
-                <shmem name="outpipe"/>
                 <app args="rots" daemon="1">
                     <serv name="rot"/>
                     <mod name="rot-certificate.json" perm="r"/>
@@ -32,8 +30,7 @@
                     <tiles type="core" count="1"/>
                     <sess name="m3fs"/>
                     <sess name="pipes"/>
-                    <sess lname="hash1" gname="rot" args="20000"/>
-                    <sess lname="hash2" gname="rot" args="20000"/>
+                    <sess lname="hash" gname="rot" args="20000"/>
                 </app>
             </dom>
         </app>

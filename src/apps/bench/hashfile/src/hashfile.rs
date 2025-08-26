@@ -49,7 +49,7 @@ pub fn main() -> Result<(), Error> {
     let mut input =
         VFS::open("/data/4096k.txt", OpenFlags::R | OpenFlags::NEW_SESS).expect("open input file");
 
-    let sha3 = RoTSession::new("hash2", &HashAlgorithm::SHA3_224).unwrap();
+    let sha3 = RoTSession::new("hash", &HashAlgorithm::SHA3_224).unwrap();
     input.hash_input(&sha3, input_size).expect("hash file");
 
     let mut hash = [0u8; 28];
