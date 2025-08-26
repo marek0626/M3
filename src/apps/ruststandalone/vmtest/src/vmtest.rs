@@ -692,7 +692,7 @@ fn test_exregs() {
             config_exreg(utile, 0, r.0, r.1, r.2, Perm::RW).unwrap();
 
             // set region count and make us not the manager
-            let exmng: tcu::Reg = (r.0 as tcu::Reg + 1) << 32;
+            let exmng: tcu::Reg = (r.0 as tcu::Reg + 1) << 32 | (own_tile as tcu::Reg + 1);
             TCU::write_obj(MEP, &exmng, reg_addr - tcu::MMIO_ADDR.as_goff())
                 .expect("failed to write ExRegMng reg");
 
