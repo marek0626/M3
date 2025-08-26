@@ -6,7 +6,6 @@ use base::io::LogFlags;
 use base::kif::Perm;
 use base::mem::GlobOff;
 use base::tcu::{self, GenId, TileId, TCU};
-use base::time::CycleInstant;
 use base::util::math;
 use base::vec::Vec;
 use base::{env, log, vec};
