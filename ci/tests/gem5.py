@@ -38,7 +38,7 @@ all_tests = [
     "rust-algo-benchs", "rust-misc-benchs", "rust-vfs-benchs",
     "cpp-algo-benchs", "cpp-misc-benchs", "cpp-vfs-benchs",
     "chantests",
-    "unittests", "hashmux-benchs", "hashmux-tests", "bench-hashpipe-tee", "resmngtest",
+    "unittests", "hashmux-benchs", "hashmux-tests", "bench-hashfile-tee", "resmngtest",
     "hello",
     "facever", "rots-raser", "rots-hello", "rots-evidence-test",
     "find", "tar", "untar", "sqlite", "leveldb", "sha256sum", "sort",
@@ -57,7 +57,7 @@ fstrace_tests = ["find", "tar", "untar", "sqlite", "leveldb", "sha256sum", "sort
 pipe_tests = ["cat_awk", "cat_wc", "grep_awk", "grep_wc"]
 rots_tests = [
     "rots-raser", "rots-hello", "rots-evidence-test",
-    "hashmux-benchs", "hashmux-tests", "bench-hashpipe-tee",
+    "hashmux-benchs", "hashmux-tests", "bench-hashfile-tee",
     "tee-msgchan"
 ]
 
