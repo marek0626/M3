@@ -296,7 +296,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='This is the M³ builder.')
-    parser.add_argument('--target', nargs='+', default=['gem5', 'hw22', 'hw23'])
+    parser.add_argument('--target', nargs='+', default=['gem5', 'hw22', 'hw23', 'hw'])
     parser.add_argument('--isa', nargs='+', default=['riscv32', 'riscv64', 'x86_64'])
     parser.add_argument('--build', nargs='+', default=['debug', 'release'])
     parser.add_argument('command')
