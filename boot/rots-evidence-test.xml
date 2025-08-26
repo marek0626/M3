@@ -24,7 +24,7 @@
                 <app args="pager">
                     <sess name="m3fs"/>
                     <serv name="evidence"/>
-                    <sess name="rot"/>
+                    <sess name="rot" args="seed"/>
                     <mod name="fs" perm="r"/>
                     <mod name="tilemux" perm="r"/>
                     <tiles count="1" type="core"/>

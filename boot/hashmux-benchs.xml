@@ -29,11 +29,11 @@
                     <dom>
                         <app args="/bin/hashmuxbenchs">
                             <mount fs="m3fs" path="/"/>
-                            <sess lname="hash-prepare" gname="rot"/>
-                            <sess lname="hash-bench" gname="rot"/>
-                            <sess lname="hash-client0" gname="rot"/>
-                            <sess lname="hash-client1" gname="rot"/>
-                            <sess lname="hash-latency" gname="rot"/>
+                            <sess lname="hash-prepare" gname="rot" args="seed"/>
+                            <sess lname="hash-bench" gname="rot" args="seed"/>
+                            <sess lname="hash-client0" gname="rot" args="seed"/>
+                            <sess lname="hash-client1" gname="rot" args="seed"/>
+                            <sess lname="hash-latency" gname="rot" args="seed"/>
                             <tiles type="core" count="2"/>
                         </app>
                     </dom>

@@ -13,7 +13,7 @@
             </dom>
             <dom tile="perf|core" mux="chancreate" tee="1">
                 <app args="chancreate">
-                    <sess name="rot"/>
+                    <sess name="rot" args="seed"/>
                 </app>
             </dom>
         </app>
