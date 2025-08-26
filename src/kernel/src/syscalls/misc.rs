@@ -365,7 +365,6 @@ pub fn activate_rgate(act: &TempRc<Activity>) -> anyhow::Result<()> {
 
     let epid = ep.ep();
     let dst_tile = ep.tile_id();
-    let mut tilemux = tilemng::tilemux(dst_tile);
 
     if let Err(e) = ep.deconfigure(InvalidateType::None) {
         return Err(e.context(format!("Invalidation of EP {}:{} failed", dst_tile, epid)));
@@ -378,7 +377,7 @@ pub fn activate_rgate(act: &TempRc<Activity>) -> anyhow::Result<()> {
 
     // determine receive buffer address
     let dst_desc = platform::tile_desc(dst_tile);
-    let has_vm = dst_desc.has_virtmem() && tilemux.mux_type() != MuxType::Unimux;
+    let has_vm = dst_desc.has_virtmem() && tilemng::tilemux(dst_tile).mux_type() != MuxType::Unimux;
     let rbuf_addr = if has_vm && epid == ep_act.eps_start() + tcu::PG_REP_OFF {
         // special case for activating the pager reply rgate: there is no way to get a
         // memory capability to the standard receive buffer. thus, we just determine the
@@ -429,7 +428,7 @@ pub fn activate_rgate(act: &TempRc<Activity>) -> anyhow::Result<()> {
 
     rg.activate(ep_act.tile_id(), epid, rbuf_addr);
 
-    if let Err(e) = tilemux.config_rcv_ep(epid, ep_act.id(), replies, &rg) {
+    if let Err(e) = tilemng::tilemux(dst_tile).config_rcv_ep(epid, ep_act.id(), replies, &rg) {
         rg.deactivate();
         return Err(e.context("Unable to configure recv EP"));
     }
