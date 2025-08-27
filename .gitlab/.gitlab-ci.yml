@@ -37,7 +37,7 @@ build:
   script:
     - |
       kubectl exec -n os -t m3-ci -- \
-        ./bootstrap.sh $CI_COMMIT_SHA
+        ./bootstrap.py $CI_COMMIT_SHA
   resource_group: pod
 
 check:
@@ -45,7 +45,7 @@ check:
   rules:
     - if: '$CI_MERGE_REQUEST_LABELS !~ /:no-ci:|:no-ci-build:/'
   script:
-    - kubectl exec -n os -t m3-ci -- sh -c "./bootstrap.sh $CI_COMMIT_SHA"
+    - kubectl exec -n os -t m3-ci -- sh -c "./bootstrap.py $CI_COMMIT_SHA"
     - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b checkboot -n'
     - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b fmt-check -n'
     - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b clippy -n'
@@ -63,7 +63,7 @@ test-host:
   rules:
     - if: '$CI_MERGE_REQUEST_LABELS !~ /:no-ci:|:no-ci-tests:|:no-ci-build:/'
   script:
-    - kubectl exec -n os -t m3-ci -- sh -c "./bootstrap.sh $CI_COMMIT_SHA"
+    - kubectl exec -n os -t m3-ci -- sh -c "./bootstrap.py $CI_COMMIT_SHA"
     - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b test -n'
     - |
       kubectl exec -n os -t m3-ci -- sh -c "
@@ -80,7 +80,7 @@ test-gem5:
   rules:
     - if: '$CI_MERGE_REQUEST_LABELS !~ /:no-ci:|:no-ci-tests:|:no-ci-build:/'
   script:
-    - kubectl exec -n os -t m3-ci -- sh -c "./bootstrap.sh $CI_COMMIT_SHA"
+    - kubectl exec -n os -t m3-ci -- sh -c "./bootstrap.py $CI_COMMIT_SHA"
     - kubectl exec -n os -t m3-ci -- sh -c "cd M3 && python3 ./ci/gcdir.py -m 10 /cache/results"
     - |
       kubectl exec -n os -t m3-ci -- sh -c " \
@@ -99,7 +99,7 @@ submods:
   rules:
     - if: '$CI_MERGE_REQUEST_LABELS !~ /:no-ci:/'
   script:
-    - kubectl exec -n os -t m3-ci -- sh -c "./bootstrap.sh $CI_COMMIT_SHA --no-build"
+    - kubectl exec -n os -t m3-ci -- sh -c "./bootstrap.py $CI_COMMIT_SHA --no-build"
     - kubectl exec -n os -t m3-ci -- sh -c "cd M3 && nix develop path:nix -c ./ci/submods-changed.py"
   when: always
   resource_group: pod
