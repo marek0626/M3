@@ -5,7 +5,7 @@
 
 trace_op_t trace_ops_sort[] = {
     /* #1 = 0x1 */ { .opcode = WAITUNTIL_OP, .args.waituntil = { 0, 154727 } },
-    /* #2 = 0x2 */ { .opcode = OPEN_OP, .args.open = { 3, "/unsorted.txt", O_RDONLY, 0 } },
+    /* #2 = 0x2 */ { .opcode = OPEN_OP, .args.open = { 3, "/fstrace/unsorted.txt", O_RDONLY, 0 } },
     /* #3 = 0x3 */ { .opcode = WAITUNTIL_OP, .args.waituntil = { 0, 22220 } },
     /* #4 = 0x4 */ { .opcode = READ_OP, .args.read = { 4096, 3, 4096, 1 } },
     /* #5 = 0x5 */ { .opcode = WAITUNTIL_OP, .args.waituntil = { 0, 95526 } },

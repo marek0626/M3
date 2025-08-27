@@ -28,7 +28,7 @@
                         <sess lname="m3fs" gname="app_m3fs"/>
                         <sem name="net"/>
                     </app>
-                    <app args="/bin/ycsbclient tcp 127.0.0.1 1337 /data/small-workload.wl 4" daemon="1">
+                    <app args="/bin/ycsbclient tcp 127.0.0.1 1337 /ycsb/small-workload.wl 4" daemon="1">
                         <sess name="net" args="bufs=1M socks=1"/>
                         <sess lname="m3fs" gname="app_m3fs"/>
                         <sem name="net"/>

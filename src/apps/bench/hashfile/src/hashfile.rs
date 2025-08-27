@@ -46,8 +46,8 @@ pub fn main() -> Result<(), Error> {
         .parse::<usize>()
         .expect("Invalid input size");
 
-    let mut input =
-        VFS::open("/data/4096k.txt", OpenFlags::R | OpenFlags::NEW_SESS).expect("open input file");
+    let mut input = VFS::open("/fstrace/tar/4096.bin", OpenFlags::R | OpenFlags::NEW_SESS)
+        .expect("open input file");
 
     let sha3 = RoTSession::new("hash", &HashAlgorithm::SHA3_224).unwrap();
     input.hash_input(&sha3, input_size).expect("hash file");

@@ -33,7 +33,7 @@ NOINLINE static void open_close() {
     Profile pr(50, 100);
 
     WVPERF("open-close", pr.run<CycleInstant>([] {
-        VFS::open("/data/2048k.txt", FILE_R);
+        VFS::open("/fstrace/tar/2048.bin", FILE_R);
     }));
 }
 
@@ -42,7 +42,7 @@ NOINLINE static void stat() {
 
     WVPERF(__func__, pr.run<CycleInstant>([] {
         FileInfo info;
-        VFS::stat("/data/2048k.txt", info);
+        VFS::stat("/fstrace/tar/2048.bin", info);
     }));
 }
 
@@ -68,7 +68,7 @@ NOINLINE static void read() {
     Profile pr(2, 1);
 
     WVPERF("read 2 MiB file with 8K buf", pr.run<CycleInstant>([] {
-        auto file = VFS::open("/data/2048k.txt", FILE_R);
+        auto file = VFS::open("/fstrace/tar/2048.bin", FILE_R);
 
         size_t amount;
         while((amount = file->read(buf, sizeof(buf)).unwrap()) > 0)
@@ -93,7 +93,7 @@ NOINLINE static void copy() {
     Profile pr(2, 1);
 
     WVPERF("copy 2 MiB file with 8K buf", pr.run<CycleInstant>([] {
-        auto in = VFS::open("/data/2048k.txt", FILE_R);
+        auto in = VFS::open("/fstrace/tar/2048.bin", FILE_R);
         auto out = VFS::open("/newfile", FILE_W | FILE_TRUNC | FILE_CREATE);
 
         size_t count;

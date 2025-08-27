@@ -14,10 +14,12 @@
                     <mod name="rot-certificate.json" perm="r"/>
                 </app>
             </dom>
-            <app args="pipes -m 4" daemon="1">
-                <serv name="pipes"/>
-            </app>
-            <app args="m3fs -m 4 mem" daemon="1">
+            <dom>
+                <app args="pipes" daemon="1">
+                    <serv name="pipes"/>
+                </app>
+            </dom>
+            <app args="m3fs -m 8 mem" daemon="1">
                 <serv name="m3fs"/>
                 <mod name="fs"/>
             </app>

@@ -25,7 +25,7 @@
                     <mod name="tilemux" perm="r"/>
                     <tiles type="core" count="1"/>
                     <dom>
-                        <app args="/bin/accelchain -m dir -n 3 -c 1024 -r 1 /medium.bin /tmp/out1.txt">
+                        <app args="/bin/accelchain -m dir -n 3 -c 1024 -r 1 /fstrace/tar/4096.bin /tmp/out1.txt">
                             <mount fs="m3fs" path="/"/>
                             <sess name="pipes"/>
                             <tiles type="copy" count="3"/>

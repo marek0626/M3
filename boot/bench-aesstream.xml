@@ -22,7 +22,7 @@
                 </app>
             </dom>
             <dom>
-                <app args="repeater -m 5M -r 8 -w 2 /bin/aesstream /data/128k.txt /tmp/out">
+                <app args="repeater -m 5M -r 8 -w 2 /bin/aesstream /fstrace/tar/128.bin /tmp/out">
                     <tiles type="core" count="1"/>
                     <sess name="m3fs"/>
                     <tiles type="riscv32+coreacc|core" mux="straccmux"/>

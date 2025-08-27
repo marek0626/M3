@@ -5,7 +5,7 @@
 
 trace_op_t trace_ops_grep_awk_awk[] = {
     /* #1 = 0x1 */ { .opcode = WAITUNTIL_OP, .args.waituntil = { 0, 223520 } },
-    /* #2 = 0x2 */ { .opcode = OPEN_OP, .args.open = { 4, "/count-bench.awk", O_RDONLY, 0 } },
+    /* #2 = 0x2 */ { .opcode = OPEN_OP, .args.open = { 4, "/fstrace/count-bench.awk", O_RDONLY, 0 } },
     /* #3 = 0x3 */ { .opcode = WAITUNTIL_OP, .args.waituntil = { 0, 28866 } },
     /* #4 = 0x4 */ { .opcode = READ_OP, .args.read = { 78, 4, 4094, 1 } },
     /* #5 = 0x5 */ { .opcode = READ_OP, .args.read = { 0, 4, 4016, 1 } },
@@ -1197,5 +1197,5 @@ trace_op_t trace_ops_grep_awk_awk[] = {
     /* #1191 = 0x4a7 */ { .opcode = CLOSE_OP, .args.close = { 0, 0 } },
     /* #1192 = 0x4a8 */ { .opcode = WAITUNTIL_OP, .args.waituntil = { 0, 78431 } },
     /* #1193 = 0x4a9 */ { .opcode = WRITE_OP, .args.write = { 2, 1, 2, 1 } },
-    { .opcode = INVALID_OP } 
+    { .opcode = INVALID_OP }
 };

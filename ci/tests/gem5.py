@@ -366,7 +366,7 @@ for isa in args.isas:
                     [builddir / "toolsbin" / "mkm3fs",
                      bmoddir / "bench.img",
                      builddir / "src" / "fs" / "bench",
-                     64 * 1024,  # blocks
+                     32 * 1024,  # blocks
                      4096,       # inodes
                      bpe])
         build_image(name + "-default",
