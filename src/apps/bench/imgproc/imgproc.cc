@@ -44,16 +44,15 @@ const CycleDuration ACCEL_TIMES[] = {
 };
 
 static void usage(const char *name) {
-    eprintln("Usage: {} [-m <mode>] [-n <num>] [-w <warmups>] [-r <repeats>] [-t] <in>"_cf, name);
+    eprintln("Usage: {} [-m <mode>] [-n <num>] [-w <warmups>] [-r <repeats>] [-q] <in>"_cf, name);
     eprintln("  <mode> can be:"_cf);
     eprintln("    'indir'      for a single chain, assisted"_cf);
     eprintln("    'dir'        for a single chain, connected directly"_cf);
     eprintln("    'dir-simple' for a single chain, connected via pipes"_cf);
-    eprintln("    'dir-pipe'   for a single chain, connected directly but feed via pipe"_cf);
     eprintln("  <num> specifies the number of chains"_cf);
     eprintln("  <warmups> specifies the number of warmups"_cf);
     eprintln("  <repeats> specifies the number of repetitions of the benchmark"_cf);
-    eprintln("  If -t is specific, the accelerators run as TEEs"_cf);
+    eprintln("  If -q is specific, the performance result is not printed"_cf);
     exit(1);
 }
 
@@ -63,10 +62,10 @@ int main(int argc, char **argv) {
     size_t num = 1;
     ulong repeats = 1;
     ulong warmup = 1;
-    bool tee = false;
+    bool quiet = false;
 
     int opt;
-    while((opt = getopt(argc, argv, "m:n:r:w:t")) != -1) {
+    while((opt = getopt(argc, argv, "m:n:r:w:q")) != -1) {
         switch(opt) {
             case 'm': {
                 modename = optarg;
@@ -76,8 +75,6 @@ int main(int argc, char **argv) {
                     mode = Mode::DIR;
                 else if(strcmp(optarg, "dir-simple") == 0)
                     mode = Mode::DIR_SIMPLE;
-                else if(strcmp(optarg, "dir-pipe") == 0)
-                    mode = Mode::DIR_PIPE;
                 else
                     usage(argv[0]);
                 break;
@@ -85,19 +82,12 @@ int main(int argc, char **argv) {
             case 'n': num = IStringStream::read_from<size_t>(optarg); break;
             case 'r': repeats = IStringStream::read_from<ulong>(optarg); break;
             case 'w': warmup = IStringStream::read_from<ulong>(optarg); break;
-            case 't': tee = true; break;
+            case 'q': quiet = true; break;
             default: usage(argv[0]);
         }
     }
     if(optind >= argc)
         usage(argv[0]);
-    if(tee) {
-        if(repeats + warmup > 1) {
-            eprintln("Multiple runs are not supported in TEE mode."_cf);
-            warmup = 0;
-            repeats = 1;
-        }
-    }
 
     const char *in = argv[optind];
 
@@ -106,8 +96,6 @@ int main(int argc, char **argv) {
         CycleDuration time;
         if(mode == Mode::INDIR)
             time = chain_indirect(in, num);
-        else if(mode == Mode::DIR_PIPE)
-            time = chain_direct_pipes(in, num, tee);
         else
             time = chain_direct(in, num, mode);
 
@@ -115,8 +103,10 @@ int main(int argc, char **argv) {
             res.push(time);
     }
 
-    OStringStream os;
-    format_to(os, "imgproc-{} ({} chains)"_cf, modename, num);
-    WVPERF(os.str(), res);
+    if(!quiet) {
+        OStringStream os;
+        format_to(os, "imgproc-{} ({} chains)"_cf, modename, num);
+        WVPERF(os.str(), res);
+    }
     return 0;
 }

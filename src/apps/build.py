@@ -23,6 +23,7 @@ dirs = [
     'queue',
     'raser',
     'rasertest',
+    'repeater',
     'resmngtest',
     'rusthello',
     'rustnettests',

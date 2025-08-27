@@ -36,7 +36,7 @@ fn read(_t: &mut dyn WvTester) {
     wv_perf!(
         "read 2 MiB file with 4K buf",
         prof.run::<CycleInstant, _>(|| {
-            let mut file = wv_require_ok!(VFS::open("/data/2048k.txt", OpenFlags::R));
+            let mut file = wv_require_ok!(VFS::open("/fstrace/tar/2048.bin", OpenFlags::R));
             loop {
                 let amount = wv_require_ok!(file.read(buf));
                 if amount == 0 {

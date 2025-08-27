@@ -25,11 +25,9 @@ enum Mode {
     INDIR = 0,
     DIR = 1,
     DIR_SIMPLE = 2,
-    DIR_PIPE = 3,
 };
 
 extern const m3::CycleDuration ACCEL_TIMES[];
 
 m3::CycleDuration chain_direct(const char *in, size_t num, Mode mode);
-m3::CycleDuration chain_direct_pipes(const char *in, size_t num, bool tee);
 m3::CycleDuration chain_indirect(const char *in, size_t num);

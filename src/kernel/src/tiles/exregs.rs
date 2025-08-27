@@ -61,7 +61,7 @@ impl ExRegs {
         };
 
         // not yet supported on hw
-        if cfg!(not(M3_TARGET = "gem5")) {
+        if cfg!(not(any(M3_TARGET = "gem5", M3_TARGET = "hw"))) {
             return Ok(());
         }
 
@@ -152,6 +152,7 @@ impl ExRegs {
 
                 let exreg_idx = e.idx;
                 exregs.exregs.remove(idx);
+                exregs.free.clear(exreg_idx);
                 drop(exregs);
 
                 let tilemux = tilemng::tilemux(rot_tile);

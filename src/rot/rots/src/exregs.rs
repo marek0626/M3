@@ -1,6 +1,6 @@
 use core::cmp::min;
 
-use base::cell::StaticRefCell;
+use base::cell::{StaticCell, StaticRefCell};
 use base::errors::{Code, Error};
 use base::io::LogFlags;
 use base::kif::Perm;
@@ -8,7 +8,7 @@ use base::mem::GlobOff;
 use base::tcu::{self, GenId, TileId, TCU};
 use base::util::math;
 use base::vec::Vec;
-use base::{log, vec};
+use base::{env, log, vec};
 
 #[derive(Debug)]
 struct ExReg {
@@ -21,8 +21,15 @@ struct ExReg {
     locked: bool,
 }
 
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+static COUNT: StaticCell<usize> = StaticCell::new(0);
 static REGS: StaticRefCell<Vec<ExReg>> = StaticRefCell::new(vec![]);
 static BUF: StaticRefCell<[u8; 1024]> = StaticRefCell::new([0u8; 1024]);
+static ZEROING: StaticCell<bool> = StaticCell::new(true);
+
+pub fn disable_zeroing() {
+    ZEROING.set(false);
+}
 
 #[allow(clippy::too_many_arguments, clippy::absurd_extreme_comparisons)]
 pub fn add(
@@ -56,7 +63,8 @@ pub fn add(
                 );
                 return Err(Error::new(Code::NotSup));
             }
-            if reg.locked {
+            // allow overlaps with our own tile, because we can never get rid of those
+            if reg.locked && reg.utile != env::boot().tile_id() {
                 log!(
                     LogFlags::RoTExRegs,
                     "[{}].{}: overlaps and is locked",
@@ -84,15 +92,6 @@ pub fn add(
         locked
     );
 
-    // write region to memory tile
-    let idxmtile = rot::IndexedTile::new_from_env(mtile).unwrap();
-    let (cfg, range) = TCU::build_exreg(mtile, utile, ugen, idx, addr, size, perm)
-        .ok_or_else(|| Error::new(Code::InvArgs))?;
-    let exreg = [cfg, range];
-    idxmtile
-        .write_tcu(&exreg, TCU::exreg_addr(idx).as_goff())
-        .unwrap();
-
     regs.push(ExReg {
         mtile,
         idx,
@@ -102,6 +101,19 @@ pub fn add(
         size,
         locked,
     });
+
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+    {
+        // write region to memory tile
+        let idxmtile = rot::IndexedTile::new_from_env(mtile).unwrap();
+        let (cfg, range) = TCU::build_exreg(utile, ugen, idx, addr, size, perm)
+            .ok_or_else(|| Error::new(Code::InvArgs))?;
+        set_region(&idxmtile, idx, [cfg, range]);
+        if idx + 1 != COUNT.get() {
+            set_count(&idxmtile, idx + 1);
+            COUNT.set(idx + 1);
+        }
+    }
 
     Ok(())
 }
@@ -132,22 +144,54 @@ pub fn rem(mtile: TileId, idx: usize) -> Result<(), Error> {
 
     // are there no overlaps with this region left?
     let idxmtile = rot::IndexedTile::new_from_env(mtile).unwrap();
-    if !regs.iter().any(|r| {
-        r.mtile == mtile
-            && r.idx != idx
-            && math::overlaps(r.addr, r.addr + r.size, reg.addr, reg.addr + reg.size)
-    }) {
+    if ZEROING.get()
+        && !regs.iter().any(|r| {
+            r.mtile == mtile
+                && r.idx != idx
+                && math::overlaps(r.addr, r.addr + r.size, reg.addr, reg.addr + reg.size)
+        })
+    {
         // clear the memory to erase any secrets
         clear_mem(idxmtile.ep(), reg.addr, reg.size).unwrap();
     }
 
-    // make region invalid
-    idxmtile
-        .write_tcu(&[0u64, 0], TCU::exreg_addr(idx).as_goff())
-        .unwrap();
-
     regs.retain(|r| r.mtile != mtile || r.idx != idx);
+
+    // make region invalid
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+    {
+        if idx + 1 == COUNT.get() {
+            let count = 1 + regs
+                .iter()
+                .filter(|r| r.mtile == idxmtile.id())
+                .map(|r| r.idx)
+                .max()
+                .unwrap_or(0);
+            set_count(&idxmtile, count);
+            COUNT.set(count);
+        }
+        set_region(&idxmtile, idx, [0u64, 0u64]);
+    }
+
     Ok(())
+}
+
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+fn set_region(idxtile: &rot::IndexedTile, idx: usize, reg: [u64; 2]) {
+    idxtile
+        .write_tcu(&reg[..1], TCU::exreg_addr(idx).as_goff())
+        .unwrap();
+    idxtile
+        .write_tcu(&reg[1..], TCU::exreg_addr(idx).as_goff() + 8)
+        .unwrap();
+}
+
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+fn set_count(idxtile: &rot::IndexedTile, count: usize) {
+    let value = (count as tcu::Reg) << 32 | TCU::tileid_to_nocid(env::boot().tile_id()) as tcu::Reg;
+    idxtile
+        .write_tcu(&[value], TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff())
+        .unwrap();
 }
 
 fn clear_mem(ep: tcu::EpId, mut off: GlobOff, mut size: GlobOff) -> Result<(), Error> {

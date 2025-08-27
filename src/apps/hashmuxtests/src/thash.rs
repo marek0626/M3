@@ -445,9 +445,9 @@ fn shake_and_hash_pipe(t: &mut dyn WvTester) {
     let pipes = wv_require_ok!(Pipes::new("pipes"));
 
     // Create two pipes
-    let imgate = wv_require_ok!(MemGate::new(0x1000, Perm::RW));
+    let imgate = wv_require_ok!(MemCap::new(0x1000, Perm::RW));
     let ipipe = wv_require_ok!(IndirectPipe::new(&pipes, imgate));
-    let omgate = wv_require_ok!(MemGate::new(0x10000, Perm::RW));
+    let omgate = wv_require_ok!(MemCap::new(0x10000, Perm::RW));
     let opipe = wv_require_ok!(IndirectPipe::new(&pipes, omgate));
 
     // Setup child activity that runs "hashsum shake128 -O 262144 -o -"

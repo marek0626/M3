@@ -23,7 +23,7 @@ use base::log;
 use base::mem::{self, GlobAddr, GlobOff, PhysAddr, PhysAddrRaw, VirtAddr};
 use base::tcu::{
     ActId, EpId, ExtCmdOpCode, ExtReg, FeatureFlags, Header, Label, OwnedMessage, Reg, TileId,
-    EP_REGS, MMIO_ADDR, PMEM_PROT_EPS, TCU, UNLIM_CREDITS,
+    EP_REGS, PMEM_PROT_EPS, TCU, UNLIM_CREDITS,
 };
 
 use crate::platform;
@@ -408,23 +408,14 @@ pub fn lock_tile(tile: TileId) -> anyhow::Result<()> {
 
 pub fn reset_tile(tile: TileId, start: bool) -> anyhow::Result<()> {
     let val: Reg = if start { 1 } else { 0 };
-    if env::boot().platform == env::Platform::Hw {
-        // TODO put the reset command into the spec so that we can use that on HW as well
-        // start/stop tile
-        try_write_slice(tile, MMIO_ADDR.as_goff() + 0x3028, &[val])?;
-        // start/stop rocket core
-        try_write_slice(tile, MMIO_ADDR.as_goff() + 0x3030, &[val])
+    let cmd = TCU::build_ext_cmd(ExtCmdOpCode::Reset, val);
+    let addr = TCU::ext_reg_addr(ExtReg::ExtCmd).as_goff();
+    try_write_slice(tile, addr, &[cmd])?;
+    // on stop, increment tile generation before we read the result of the external command
+    if !start {
+        tilemng::inc_tilegen(tile);
     }
-    else {
-        let cmd = TCU::build_ext_cmd(ExtCmdOpCode::Reset, val);
-        let addr = TCU::ext_reg_addr(ExtReg::ExtCmd).as_goff();
-        try_write_slice(tile, addr, &[cmd])?;
-        // on stop, increment tile generation before we read the result of the external command
-        if !start {
-            tilemng::inc_tilegen(tile);
-        }
-        wait_ext_cmd(tile).map(|_| ())
-    }
+    wait_ext_cmd(tile).map(|_| ())
 }
 
 pub fn glob_to_phys_remote(
@@ -465,15 +456,10 @@ pub fn read_ep_remote(tile: TileId, ep: EpId, regs: &mut [Reg]) -> anyhow::Resul
 }
 
 pub fn write_ep_remote(tile: TileId, ep: EpId, regs: &[Reg]) -> anyhow::Result<()> {
-    if env!("M3_TARGET") == "gem5" {
-        try_write_slice(tile, TCU::ep_regs_addr(ep).as_goff(), regs)
+    for (i, r) in regs.iter().enumerate().rev() {
+        try_write_slice(tile, (TCU::ep_regs_addr(ep) + i * 8).as_goff(), &[*r])?;
     }
-    else {
-        for (i, r) in regs.iter().enumerate() {
-            try_write_slice(tile, (TCU::ep_regs_addr(ep) + i * 8).as_goff(), &[*r])?;
-        }
-        Ok(())
-    }
+    Ok(())
 }
 
 pub fn invalidate_ep_remote(tile: TileId, ep: EpId, force: bool) -> anyhow::Result<u32> {

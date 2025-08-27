@@ -37,7 +37,7 @@ NOINLINE static void stat() {
 
     WVPERF("Stat in sub dir", pr.run<CycleInstant>([] {
         FileInfo info;
-        VFS::stat("/finddata/dir/dir-1/32.txt", info);
+        VFS::stat("/fstrace/find/dir/dir-1/32.txt", info);
     }));
 }
 

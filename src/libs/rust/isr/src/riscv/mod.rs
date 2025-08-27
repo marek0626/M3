@@ -286,7 +286,8 @@ impl crate::ISRArch for RISCVISR {
 
         // TODO: temporary (add to spec and make gem5 behave the same)
         if env::boot().platform == env::Platform::Hw {
-            let tcu_set_irq_addr = 0xF000_3030 as *mut u64;
+            let tcu_set_irq_addr =
+                tcu::TCU::config_addr(tcu::ConfigReg::Int0).as_local() as *mut u64;
             unsafe {
                 tcu_set_irq_addr.add((irq - 1) as usize).write_volatile(0);
             }

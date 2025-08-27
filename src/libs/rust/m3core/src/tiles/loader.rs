@@ -22,8 +22,9 @@ use crate::cfg;
 use crate::client::MapFlags;
 use crate::elf;
 use crate::errors::Error;
-use crate::io::read_object;
+use crate::io::{read_object, LogFlags};
 use crate::kif;
+use crate::log;
 use crate::mem::VirtAddr;
 use crate::tiles::{ChildActivity, Mapper};
 use crate::util::math;
@@ -39,6 +40,7 @@ pub(crate) fn load_program(
 
     file.seek(0, SeekMode::Set)?;
     let hdr = hdr.load_hdr(file)?;
+    log!(LogFlags::LibLoader, "Found entrypoint {:#x}", hdr.entry());
 
     let heap_begin = load_segments(act, mapper, file, hdr.as_ref())?;
     create_heap(act, mapper, heap_begin)?;
@@ -49,6 +51,13 @@ pub(crate) fn load_program(
 
 fn create_stack(act: &ChildActivity, mapper: &mut dyn Mapper) -> Result<(), Error> {
     let (stack_addr, stack_size) = act.tile_desc().stack_space();
+    log!(
+        LogFlags::LibLoader,
+        "Creating stack @ {} .. {} ({}b)",
+        stack_addr,
+        stack_addr + stack_size - 1,
+        stack_size
+    );
     mapper.map_anon(
         act,
         stack_addr,
@@ -66,6 +75,12 @@ fn create_heap(act: &ChildActivity, mapper: &mut dyn Mapper, start: VirtAddr) ->
     else {
         (cfg::MOD_HEAP_SIZE, MapFlags::empty())
     };
+    log!(
+        LogFlags::LibLoader,
+        "Creating heap @ {} with {}b",
+        start,
+        heap_size
+    );
     mapper.map_anon(
         act,
         start,
@@ -110,13 +125,21 @@ fn load_segment(
     phdr: &dyn elf::ProgramHeader,
 ) -> Result<(), Error> {
     let prot = kif::Perm::from(elf::PHFlags::from_bits_truncate(phdr.flags()));
+    let virt = VirtAddr::from(phdr.virt_addr());
+
+    log!(
+        LogFlags::LibLoader,
+        "Load segment @ {} with {}b",
+        virt,
+        phdr.mem_size()
+    );
 
     if phdr.mem_size() == phdr.file_size() {
         mapper.map_file(
             act,
             file,
             phdr.offset(),
-            VirtAddr::from(phdr.virt_addr()),
+            virt,
             phdr.file_size(),
             phdr.mem_size(),
             prot,
@@ -127,7 +150,7 @@ fn load_segment(
         assert!(phdr.file_size() == 0);
         mapper.map_anon(
             act,
-            VirtAddr::from(phdr.virt_addr()),
+            virt,
             phdr.file_size(),
             phdr.mem_size(),
             prot,

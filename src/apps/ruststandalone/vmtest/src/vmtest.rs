@@ -30,8 +30,7 @@ use base::io::LogFlags;
 use base::kif::{PageFlags, Perm};
 use base::libc;
 use base::log;
-use base::machine;
-use base::mem::{size_of, GlobAddr, MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
+use base::mem::{size_of, MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
 use base::tcu::{self, EpId, TileId, TCU};
 use base::util;
 
@@ -401,7 +400,11 @@ fn test_own_msg() {
     assert_eq!(CU_REQS.get(), 0);
 }
 
+#[cfg(not(M3_TARGET = "hw"))]
 fn test_pmp_failures() {
+    use base::machine;
+    use base::mem::GlobAddr;
+
     CU_REQS.set(0);
 
     // flush the cache to be sure that the reads cause cache misses
@@ -622,6 +625,339 @@ fn test_tlb() {
     TCU::invalidate_tlb();
 }
 
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+fn config_exreg(
+    user_tile: TileId,
+    user_gen: base::tcu::GenId,
+    idx: usize,
+    addr: base::mem::GlobOff,
+    size: base::mem::GlobOff,
+    perm: Perm,
+) -> Result<(), Error> {
+    let (cfg, range) = TCU::build_exreg(user_tile, user_gen, idx, addr, size, perm).unwrap();
+    TCU::write_obj(
+        MEP,
+        &cfg,
+        TCU::exreg_addr(idx).as_goff() - tcu::MMIO_ADDR.as_goff(),
+    )
+    .unwrap();
+    TCU::write_obj(
+        MEP,
+        &range,
+        TCU::exreg_addr(idx).as_goff() - tcu::MMIO_ADDR.as_goff() + 8,
+    )
+}
+
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+fn test_exregs() {
+    // configure mem EP for the memory tile's TCU MMIO area
+    helper::config_local_ep(MEP, |regs| {
+        TCU::config_mem(
+            regs,
+            OWN_ACT,
+            MEM_TILE,
+            0,
+            tcu::MMIO_ADDR.as_goff(),
+            tcu::MMIO_SIZE,
+            Perm::RW,
+        );
+    });
+
+    // make ourself the exreg manager
+    let own_tile = TCU::tileid_to_nocid(OWN_TILE);
+    let value = own_tile as tcu::Reg;
+    let reg_addr = TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff();
+    // write it
+    TCU::write_obj(MEP, &value, reg_addr - tcu::MMIO_ADDR.as_goff())
+        .expect("failed to write ExRegMng reg");
+
+    let regs = [
+        (0, 0x2000_0000, 64),
+        (1, 0x4000, 0x2000),
+        (2, 0x8000, 0x8000),
+        (3, 0x1000_0000, 0x1000),
+        (4, 0x8, 0x8),
+    ];
+    for r in regs {
+        for utile in [OWN_TILE, TileId::new(0, 1)] {
+            // configure region
+            log!(
+                LogFlags::Info,
+                "Configuring exclusive region {:#x}:{:#x} at {} for {}.0",
+                r.1,
+                r.2,
+                r.0,
+                utile
+            );
+            config_exreg(utile, 0, r.0, r.1, r.2, Perm::RW).unwrap();
+
+            // set region count and make us not the manager
+            let exmng: tcu::Reg = (r.0 as tcu::Reg + 1) << 32 | (own_tile as tcu::Reg + 1);
+            TCU::write_obj(MEP, &exmng, reg_addr - tcu::MMIO_ADDR.as_goff())
+                .expect("failed to write ExRegMng reg");
+
+            // configure mem EP for that memory region
+            helper::config_local_ep(SEP, |regs| {
+                TCU::config_mem(regs, OWN_ACT, MEM_TILE, 0, r.1, r.2 as usize, Perm::RW);
+            });
+
+            // try to access it
+            if utile == OWN_TILE {
+                let val: u64 = TCU::read_obj(SEP, r.2 - 8).unwrap();
+                TCU::write_obj(SEP, &val, 0).unwrap();
+            }
+            else {
+                assert_eq!(
+                    TCU::read_obj::<u64>(SEP, r.2 - 8),
+                    Err(Error::new(Code::ExRegNoPerm))
+                );
+            }
+
+            // make us the manager again
+            let exmng = (r.0 as tcu::Reg + 1) << 32 | (own_tile as tcu::Reg);
+            TCU::write_obj(MEP, &exmng, reg_addr - tcu::MMIO_ADDR.as_goff())
+                .expect("failed to write ExRegMng reg");
+        }
+    }
+}
+
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+fn test_exregs_shmem() {
+    // configure mem EP for the memory tile's TCU MMIO area
+    helper::config_local_ep(MEP, |regs| {
+        TCU::config_mem(
+            regs,
+            OWN_ACT,
+            MEM_TILE,
+            0,
+            tcu::MMIO_ADDR.as_goff(),
+            tcu::MMIO_SIZE,
+            Perm::RW,
+        );
+    });
+
+    // make ourself the exreg manager
+    let own_tile = TCU::tileid_to_nocid(OWN_TILE);
+    let value = own_tile as tcu::Reg;
+    let reg_addr = TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff();
+    // write it
+    TCU::write_obj(MEP, &value, reg_addr - tcu::MMIO_ADDR.as_goff())
+        .expect("failed to write ExRegMng reg");
+
+    const ADDR: base::mem::GlobOff = 0x2000_0000;
+    const SIZE: base::mem::GlobOff = 0x1000;
+
+    for indices in [[0, 1], [1, 0]] {
+        // configure region
+        log!(
+            LogFlags::Info,
+            "Configuring exclusive region {:#x}:{:#x} at {} and {}",
+            ADDR,
+            SIZE,
+            indices[0],
+            indices[1]
+        );
+        config_exreg(OWN_TILE, 0, indices[0], ADDR, SIZE, Perm::RW).unwrap();
+        config_exreg(TileId::new(0, 1), 0, indices[1], ADDR, SIZE, Perm::RW).unwrap();
+
+        // set region count and make us not the manager
+        let exmng: tcu::Reg = (2 as tcu::Reg) << 32;
+        TCU::write_obj(MEP, &exmng, reg_addr - tcu::MMIO_ADDR.as_goff())
+            .expect("failed to write ExRegMng reg");
+
+        // configure mem EP for that memory region
+        helper::config_local_ep(SEP, |regs| {
+            TCU::config_mem(regs, OWN_ACT, MEM_TILE, 0, ADDR, SIZE as usize, Perm::RW);
+        });
+
+        // try to access it
+        let val: u64 = TCU::read_obj(SEP, SIZE - 8).unwrap();
+        TCU::write_obj(SEP, &val, 0).unwrap();
+
+        // make us the manager again
+        let exmng = (2 as tcu::Reg) << 32 | (own_tile as tcu::Reg);
+        TCU::write_obj(MEP, &exmng, reg_addr - tcu::MMIO_ADDR.as_goff())
+            .expect("failed to write ExRegMng reg");
+    }
+}
+
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+fn do_ext_cmd(cmd: tcu::Reg) -> Result<tcu::Reg, Error> {
+    let addr = TCU::ext_reg_addr(base::tcu::ExtReg::ExtCmd).as_goff();
+    TCU::write_obj(MEP, &cmd, addr - tcu::MMIO_ADDR.as_goff())?;
+    wait_ext_cmd()
+}
+
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+fn wait_ext_cmd() -> Result<tcu::Reg, Error> {
+    let addr = TCU::ext_reg_addr(base::tcu::ExtReg::ExtCmd).as_goff();
+
+    let res = loop {
+        let res: tcu::Reg = TCU::read_obj(MEP, addr - tcu::MMIO_ADDR.as_goff())?;
+        if (res & 0xF) == base::tcu::ExtCmdOpCode::Idle.into() {
+            break res;
+        }
+    };
+
+    match Code::try_from(((res >> 4) & 0x3F) as u32).unwrap() {
+        Code::Success => Ok(res >> 10),
+        e => Err(Error::new(e)),
+    }
+}
+
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+fn test_unlocked() {
+    log!(LogFlags::Info, "Configuring dynamic EP w/o tile locking");
+
+    // configure it first as dynamic + owned by the activity
+    helper::config_local_ep(REP1, |regs| {
+        TCU::config_invalid(regs, OWN_ACT, true);
+    });
+
+    assert!(!TCU::is_frozen(REP1));
+    assert!(TCU::is_dynamic(REP1));
+
+    let (_virt, rbuf_phys) = helper::virt_to_phys(VirtAddr::from(RBUF2.as_ptr()));
+    helper::config_local_ep(REP1, |regs| {
+        TCU::config_recv(
+            regs,
+            OWN_ACT,
+            rbuf_phys,
+            util::math::next_log2(64),
+            util::math::next_log2(64),
+            None,
+        );
+    });
+
+    // EP is not frozen and can also be made non-dynamic as the tile is not locked
+    assert!(!TCU::is_frozen(REP1));
+    assert!(!TCU::is_dynamic(REP1));
+}
+
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+fn test_lock() {
+    // configure mem EP for TCU's MMIO area
+    helper::config_local_ep(MEP, |regs| {
+        TCU::config_mem(
+            regs,
+            OWN_ACT,
+            OWN_TILE,
+            0,
+            tcu::MMIO_ADDR.as_goff(),
+            tcu::MMIO_SIZE,
+            Perm::RW,
+        );
+    });
+
+    {
+        log!(LogFlags::Info, "Testing TCU lock");
+
+        // get the address of the register
+        let reg_addr = TCU::ext_reg_addr(tcu::ExtReg::Features).as_goff();
+        // get features
+        let mut features: u64 = TCU::read_obj(MEP, reg_addr - tcu::MMIO_ADDR.as_goff())
+            .expect("Failed to FEATURES reg");
+        // set locked bit
+        features |= tcu::FeatureFlags::LOCKED.bits();
+        // write it
+        TCU::write_obj(MEP, &features, reg_addr - tcu::MMIO_ADDR.as_goff())
+            .expect("failed to FEATURES reg");
+    }
+
+    {
+        log!(LogFlags::Info, "Configuring frozen EP");
+
+        let (_virt, rbuf_phys) = helper::virt_to_phys(VirtAddr::from(RBUF2.as_ptr()));
+        helper::config_local_ep(REP1, |regs| {
+            TCU::config_recv(
+                regs,
+                OWN_ACT,
+                rbuf_phys,
+                util::math::next_log2(64),
+                util::math::next_log2(64),
+                None,
+            );
+        });
+
+        TCU::check_recv_ep(REP1, rbuf_phys, 64, false).unwrap();
+        assert!(TCU::is_frozen(REP1));
+
+        helper::config_local_ep(SEP, |regs| {
+            TCU::config_send(
+                regs,
+                OWN_ACT,
+                0x1234,
+                OWN_TILE,
+                0,
+                REP1,
+                util::math::next_log2(64),
+                1,
+            );
+        });
+        assert!(TCU::is_frozen(SEP));
+
+        TCU::unfreeze(REP1).unwrap();
+        assert!(!TCU::is_frozen(REP1));
+        TCU::unfreeze(SEP).unwrap();
+        assert!(!TCU::is_frozen(SEP));
+        assert!(!TCU::has_msgs(REP1));
+
+        let buf = MsgBuf::new();
+        assert_eq!(TCU::send(SEP, &buf, 0x1111, tcu::NO_REPLIES), Ok(()));
+        assert!(TCU::has_msgs(REP1));
+        TCU::fetch_msg(REP1).unwrap();
+
+        let reg = TCU::build_ext_cmd(
+            base::tcu::ExtCmdOpCode::InvEP,
+            (REP1 as u64) | (true as u64) << 16,
+        );
+        do_ext_cmd(reg).unwrap();
+    }
+
+    {
+        log!(LogFlags::Info, "Configuring dynamic EP");
+
+        // configure it first as dynamic + owned by the activity (dynamic bit cannot be set as the
+        // TCU is locked)
+        helper::config_local_ep(REP1, |regs| {
+            TCU::config_invalid(regs, OWN_ACT, true);
+        });
+        assert!(TCU::is_frozen(REP1));
+
+        // now make it dynamic
+        TCU::mkdyn(REP1).unwrap();
+
+        let (_virt, rbuf_phys) = helper::virt_to_phys(VirtAddr::from(RBUF2.as_ptr()));
+        helper::config_local_ep(REP1, |regs| {
+            TCU::config_recv(
+                regs,
+                OWN_ACT,
+                rbuf_phys,
+                util::math::next_log2(64),
+                util::math::next_log2(64),
+                None,
+            );
+        });
+
+        // EP is not frozen due to dynamic bit; dynamic bit cannot be unset
+        assert!(TCU::is_frozen(REP1));
+        assert!(TCU::is_dynamic(REP1));
+
+        // unfreeze it to allow INV_EP
+        TCU::unfreeze(REP1).unwrap();
+
+        // invalidate sets dynamic=0
+        let reg = TCU::build_ext_cmd(
+            base::tcu::ExtCmdOpCode::InvEP,
+            (REP1 as u64) | (true as u64) << 16,
+        );
+        do_ext_cmd(reg).unwrap();
+
+        assert!(!TCU::is_frozen(REP1));
+        assert!(!TCU::is_dynamic(REP1));
+    }
+}
+
 macro_rules! run_test {
     ($name:ident($( $arg:expr ),*)) => {{
         log!(LogFlags::Info, "-- Running {} --", stringify!($name));
@@ -655,8 +991,17 @@ pub extern "C" fn env_run() {
     run_test!(test_msgs(area_begin, area_size));
     run_test!(test_foreign_msg());
     run_test!(test_own_msg());
+    #[cfg(not(M3_TARGET = "hw"))]
     run_test!(test_pmp_failures());
     run_test!(test_tlb());
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+    run_test!(test_exregs());
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+    run_test!(test_exregs_shmem());
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+    run_test!(test_unlocked());
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
+    run_test!(test_lock());
 
     log!(LogFlags::Info, "Shutting down");
     helper::exit(0);

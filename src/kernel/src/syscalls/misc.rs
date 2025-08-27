@@ -15,6 +15,7 @@
 
 use base::cfg;
 use base::errors::Code;
+use base::kif::syscalls::MuxType;
 use base::kif::{self, syscalls};
 use base::mem::{GlobOff, MsgBuf, PhysAddr, PhysAddrRaw};
 use base::tcu;
@@ -54,7 +55,7 @@ pub fn alloc_ep_async(act: TempRc<Activity>) -> anyhow::Result<()> {
 
     let ep_count = 1 + r.replies as usize;
     let dst_act: TempRc<Activity> = act.get_kobj(r.act)?;
-    if !dst_act.tile().has_quota(ep_count) {
+    if !dst_act.tile().has_ep_quota(ep_count) {
         return Err(kerrno(Code::NoSpace).context(format!(
             "Tile cap has insufficient EPs (have {}, need {})",
             dst_act.tile().ep_quota().left(),
@@ -376,7 +377,8 @@ pub fn activate_rgate(act: &TempRc<Activity>) -> anyhow::Result<()> {
 
     // determine receive buffer address
     let dst_desc = platform::tile_desc(dst_tile);
-    let rbuf_addr = if dst_desc.has_virtmem() && epid == ep_act.eps_start() + tcu::PG_REP_OFF {
+    let has_vm = dst_desc.has_virtmem() && tilemng::tilemux(dst_tile).mux_type() != MuxType::Unimux;
+    let rbuf_addr = if has_vm && epid == ep_act.eps_start() + tcu::PG_REP_OFF {
         // special case for activating the pager reply rgate: there is no way to get a
         // memory capability to the standard receive buffer. thus, we just determine the
         // physical address here and remove the choice for the user.
@@ -385,7 +387,7 @@ pub fn activate_rgate(act: &TempRc<Activity>) -> anyhow::Result<()> {
             + cfg::UPCALL_RBUF_SIZE as PhysAddrRaw
             + cfg::DEF_RBUF_SIZE as PhysAddrRaw
     }
-    else if dst_desc.has_virtmem() {
+    else if has_vm {
         let rbuf: TempRc<MGateObject> = act.get_kobj(r.rbuf_mem)?;
         if r.rbuf_off >= rbuf.size() || r.rbuf_off + rg.size() as GlobOff > rbuf.size() {
             return Err(kerrno(Code::InvArgs).context("Invalid receive buffer memory"));

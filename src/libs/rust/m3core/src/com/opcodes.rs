@@ -121,6 +121,7 @@ pub enum ResMng {
     AllocMem,
     FreeMem,
     AllocTile,
+    AllocExRegs,
     FreeTile,
     UseRGate,
     UseSGate,

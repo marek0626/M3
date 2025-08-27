@@ -107,6 +107,13 @@
                 </xs:complexType>
             </xs:element>
 
+            <xs:element name="exregs">
+                <xs:complexType>
+                    <xs:attribute name="shmem" type="xs:string" use="required"/>
+                    <xs:attribute name="count" type="xs:int" use="required"/>
+                </xs:complexType>
+            </xs:element>
+
             <xs:element name="serial" />
         </xs:choice>
         <xs:attribute name="args" type="xs:string" use="required"/>

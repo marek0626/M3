@@ -388,6 +388,26 @@ impl ShMemDesc {
     }
 }
 
+#[derive(Default, Debug, Eq, PartialEq)]
+pub struct ExRegDesc {
+    shmem: String,
+    count: usize,
+}
+
+impl ExRegDesc {
+    pub fn new(shmem: String, count: usize) -> Self {
+        Self { shmem, count }
+    }
+
+    pub fn shmem(&self) -> &String {
+        &self.shmem
+    }
+
+    pub fn count(&self) -> usize {
+        self.count
+    }
+}
+
 #[derive(Default, Debug)]
 pub struct Domain {
     pub(crate) pseudo: bool,
@@ -462,6 +482,7 @@ pub struct AppConfig {
     pub(crate) sgates: Vec<SGateDesc>,
     pub(crate) sems: Vec<SemDesc>,
     pub(crate) shmems: Vec<ShMemDesc>,
+    pub(crate) exregs: Vec<ExRegDesc>,
     pub(crate) tiles: Vec<TileDesc>,
     pub(crate) attestation_id: u32,
 }
@@ -562,6 +583,10 @@ impl AppConfig {
 
     pub fn semaphores(&self) -> &Vec<SemDesc> {
         &self.sems
+    }
+
+    pub fn get_exregs(&self, shmem: &str) -> Option<&ExRegDesc> {
+        self.exregs.iter().find(|e| e.shmem == shmem)
     }
 
     pub fn get_mod(&self, lname: &str) -> Option<&ModDesc> {
@@ -702,6 +727,16 @@ impl AppConfig {
         }
         for s in &self.shmems {
             writeln!(f, "{:0w$}ShMem[name={}],", "", s.name, w = layer + 2)?;
+        }
+        for r in &self.exregs {
+            writeln!(
+                f,
+                "{:0w$}ExReg[shmem={}, count={}],",
+                "",
+                r.shmem,
+                r.count,
+                w = layer + 2
+            )?;
         }
         for s in &self.services {
             writeln!(f, "{:0w$}Service[{:?}],", "", s.name, w = layer + 2)?;

@@ -45,6 +45,7 @@ class Loader:
         else:
             ktiles = [i for i in range(0, len(tiles))
                       if tiles[i].type == TileType.ACC and "ACC-Hash" in tiles[i].desc.attrs()]
+            assert len(ktiles) > 0, "RoT tile (with SHA-3 accelerator) not found"
             # load RoT info into memory
             self._load_rot_info(dram, ktiles[0], rot_layers, mods)
 
@@ -124,11 +125,12 @@ class Loader:
 
     def _init_tile(self, dram: memory, tile: pm, tile_idx: int, loaded: bool):
         # reset TCU (clear command log and reset registers except FEATURES and EPs)
-        tile.tcu_reset()
+        tile.tcu_reset(resetBits=0xF)
 
         # enable instruction trace for all Rocket tiles (doesn't cost anything)
         if tile.type == TileType.ROCKET:
             tile.inst.rocket_enableTrace()
+            tile.inst.start()
         elif tile.type == TileType.ACC:
             tile.inst.asm_enableTrace()
 
@@ -201,7 +203,6 @@ class Loader:
             mem_off = PMP_ADDR + tile_idx * self.pmp_size
             mem_begin = mem_off - DRAM_OFF
             env = 0x10001000
-            pm.inst.start()
         else:
             entry = 0x4000
             mem_tile = pm
@@ -306,11 +307,5 @@ class Loader:
             desc |= ((self.pmp_size >> 12) << 28) | ((1 << 4) << 11)
         if self.tcu_version[0] < 3:
             desc |= (1 << 5) << 11  # IEPS
-
-        # TODO manually set RV32 until the HW reports that correctly
-        # if self.tcu_version == (2, 0, 1) and (tile_idx == 3 or tile_idx == 4):
-        #     desc &= ~(0x1FF << 6)
-        #     desc |= 2 << 6          # RV32
-        #     desc |= (1 << 7) << 11  # COREACC
 
         return desc

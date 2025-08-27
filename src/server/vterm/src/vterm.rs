@@ -20,19 +20,19 @@ mod input;
 
 use m3::cap::SelSpace;
 use m3::cell::LazyStaticRefCell;
-use m3::col::Vec;
+use m3::col::{String, Vec};
 use m3::com::{opcodes, GateIStream, MemGate, Perm, RGateArgs, RecvGate};
 use m3::errors::{Code, Error};
 use m3::io::LogFlags;
-use m3::kif;
-use m3::log;
 use m3::mem::GlobOff;
 use m3::rc::Rc;
 use m3::server::{
     server_loop, CapExchange, ClientManager, ExcType, RequestHandler, RequestSession, Server,
-    ServerSession, SessId, DEF_MAX_CLIENTS,
+    ServerSession, SessId, DEF_MAX_CLIENTS, DEF_MSG_SIZE,
 };
-use m3::tiles::Activity;
+use m3::tiles::{Activity, OwnActivity};
+use m3::{env, log};
+use m3::{kif, println};
 
 static MEM: LazyStaticRefCell<Rc<MemGate>> = LazyStaticRefCell::default();
 
@@ -189,14 +189,60 @@ impl VTermSession {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct VTermSettings {
+    max_clients: usize,
+}
+
+impl Default for VTermSettings {
+    fn default() -> Self {
+        VTermSettings {
+            max_clients: DEF_MAX_CLIENTS,
+        }
+    }
+}
+
+fn usage() -> ! {
+    println!("Usage: {} [-m <clients>]", env::args().next().unwrap());
+    println!();
+    println!("  -m: the maximum number of clients (receive slots)");
+    OwnActivity::exit_with(Code::InvArgs);
+}
+
+fn parse_args() -> Result<VTermSettings, String> {
+    let mut settings = VTermSettings::default();
+
+    let args: Vec<&str> = env::args().collect();
+    let mut i = 1;
+    while i < args.len() {
+        match args[i] {
+            "-m" => {
+                settings.max_clients = args[i + 1]
+                    .parse::<usize>()
+                    .map_err(|_| String::from("Failed to parse client count"))?;
+                i += 1;
+            },
+            _ => break,
+        }
+        i += 1;
+    }
+    Ok(settings)
+}
+
 #[no_mangle]
 pub fn main() -> Result<(), Error> {
+    let settings = parse_args().unwrap_or_else(|e| {
+        println!("Invalid arguments: {}", e);
+        usage();
+    });
+
     MEM.set(Rc::new(
-        MemGate::new((DEF_MAX_CLIENTS * chan::BUF_SIZE) as GlobOff, Perm::RW)
+        MemGate::new((settings.max_clients * chan::BUF_SIZE) as GlobOff, Perm::RW)
             .expect("Unable to alloc memory"),
     ));
 
-    let mut hdl = RequestHandler::new().expect("Unable to create request handler");
+    let mut hdl = RequestHandler::new_with(settings.max_clients, DEF_MSG_SIZE, 1)
+        .expect("Unable to create request handler");
     let srv = Server::new("vterm", &mut hdl).expect("Unable to create service 'vterm'");
 
     use opcodes::File;

@@ -21,7 +21,7 @@
 use m3core::boxed::Box;
 use m3core::cap::Selector;
 use m3core::client::ClientSession;
-use m3core::com::{opcodes, MemGate};
+use m3core::com::{opcodes, MemCap};
 use m3core::errors::Error;
 use m3core::kif::{CapRngDesc, CapType};
 use m3core::rc::Rc;
@@ -49,7 +49,7 @@ impl Pipes {
     }
 
     /// Creates a new pipe using `mem` as shared memory for the data exchange.
-    pub fn create_pipe(&self, mem: MemGate) -> Result<Pipe, Error> {
+    pub fn create_pipe(&self, mem: MemCap) -> Result<Pipe, Error> {
         let mem_size = mem.region()?.1;
         let crd = self.sess.obtain(
             1,
@@ -66,14 +66,14 @@ impl Pipes {
 /// Represents a pipe
 ///
 /// A pipe allows to create *channels* that either write to the pipe or read from the pipe. To
-/// exchange the data, the pipe requires memory, which is provided in form of a [`MemGate`].
+/// exchange the data, the pipe requires memory, which is provided in form of a [`MemCap`].
 pub struct Pipe {
     sess: ClientSession,
-    mgate: MemGate,
+    mgate: MemCap,
 }
 
 impl Pipe {
-    fn new(mem: MemGate, sel: Selector) -> Result<Self, Error> {
+    fn new(mem: MemCap, sel: Selector) -> Result<Self, Error> {
         let sess = ClientSession::new_owned_bind(sel);
         sess.delegate(
             CapRngDesc::new_single(CapType::Object, mem.sel()),
@@ -90,8 +90,8 @@ impl Pipe {
         self.sess.sel()
     }
 
-    /// Returns the [`MemGate`] used for the data exchange
-    pub fn memory(&self) -> &MemGate {
+    /// Returns the [`MemCap`] used for the data exchange
+    pub fn memory(&self) -> &MemCap {
         &self.mgate
     }
 
@@ -136,7 +136,7 @@ impl IndirectPipe {
     /// writing. The methods [`IndirectPipe::reader`] and [`IndirectPipe::writer`] provide access to
     /// these channels. In case one or both channels are delegated to another activity, the channel
     /// can be closed via [`IndirectPipe::close_reader`] or [`IndirectPipe::close_writer`].
-    pub fn new(pipes: &Pipes, mem: MemGate) -> Result<Self, Error> {
+    pub fn new(pipes: &Pipes, mem: MemCap) -> Result<Self, Error> {
         let pipe = Rc::new(pipes.create_pipe(mem)?);
         let mut files = Activity::own().files();
         let rd_fd = files.add(pipe.create_chan(true)?)?;
@@ -146,6 +146,11 @@ impl IndirectPipe {
             wr_fd,
             _pipe: pipe,
         })
+    }
+
+    /// Returns the [`MemCap`] used for the data exchange
+    pub fn memory(&self) -> &MemCap {
+        self._pipe.memory()
     }
 
     /// Returns the file for the reading side

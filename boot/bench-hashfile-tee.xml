@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<config>
+    <env>M3_GEM5_CFG=platform/gem5/configs/m3/rot.py</env>
+    <mods>
+        <mod name="fs" file="bench.img"/>
+    </mods>
+    <rot layers="brom,blau.bin,rosa.bin,rots.bin"/>
+    <kernel args="kernel"/>
+    <dom>
+        <app args="root">
+            <dom tile="riscv64+kecacc+rot|riscv32+kecacc+rot">
+                <app args="rots" daemon="1">
+                    <serv name="rot"/>
+                    <mod name="rot-certificate.json" perm="r"/>
+                </app>
+            </dom>
+            <dom>
+                <app args="pipes" daemon="1">
+                    <serv name="pipes"/>
+                </app>
+            </dom>
+            <dom>
+                <app args="m3fs mem" daemon="1">
+                    <serv name="m3fs"/>
+                    <mod name="fs"/>
+                </app>
+            </dom>
+            <dom>
+                <app args="repeater -t -m 5M -r 8 -w 2 /bin/hashfile 64">
+                    <tiles type="core" count="1"/>
+                    <sess name="m3fs"/>
+                    <sess name="pipes"/>
+                    <sess lname="hash" gname="rot" args="20000"/>
+                </app>
+            </dom>
+        </app>
+    </dom>
+</config>

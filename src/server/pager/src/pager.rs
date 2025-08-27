@@ -412,7 +412,7 @@ pub fn main() -> anyhow::Result<()> {
     let reqs = requests::Requests::new(req_rgate);
 
     let squeue_rgate = RecvGate::new(
-        math::next_log2(sendqueue::RBUF_MSG_SIZE * args.max_clients),
+        math::next_log2(sendqueue::RBUF_MSG_SIZE * args.max_services),
         math::next_log2(sendqueue::RBUF_MSG_SIZE),
     )
     .expect("Unable to create sendqueue RecvGate");

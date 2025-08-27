@@ -17,7 +17,7 @@
  */
 
 use m3::col::String;
-use m3::com::MemGate;
+use m3::com::MemCap;
 use m3::errors::Code;
 use m3::io::{self, Read, Write};
 use m3::kif;
@@ -38,7 +38,7 @@ pub fn run(t: &mut dyn WvTester) {
 
 fn child_to_parent(t: &mut dyn WvTester) {
     let pipeserv = wv_require_ok!(Pipes::new("pipes"));
-    let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+    let pipe_mem = wv_require_ok!(MemCap::new(0x10000, kif::Perm::RW));
     let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
     let tile = wv_require_ok!(Tile::get("compat|own"));
@@ -63,7 +63,7 @@ fn child_to_parent(t: &mut dyn WvTester) {
 
 fn parent_to_child(t: &mut dyn WvTester) {
     let pipeserv = wv_require_ok!(Pipes::new("pipes"));
-    let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+    let pipe_mem = wv_require_ok!(MemCap::new(0x10000, kif::Perm::RW));
     let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
     let tile = wv_require_ok!(Tile::get("compat|own"));
@@ -89,7 +89,7 @@ fn parent_to_child(t: &mut dyn WvTester) {
 
 fn child_to_child(t: &mut dyn WvTester) {
     let pipeserv = wv_require_ok!(Pipes::new("pipes"));
-    let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+    let pipe_mem = wv_require_ok!(MemCap::new(0x10000, kif::Perm::RW));
     let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
     let tile1 = wv_require_ok!(Tile::get("compat|own"));
@@ -120,7 +120,7 @@ fn child_to_child(t: &mut dyn WvTester) {
 
 fn exec_child_to_child(t: &mut dyn WvTester) {
     let pipeserv = wv_require_ok!(Pipes::new("pipes"));
-    let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+    let pipe_mem = wv_require_ok!(MemCap::new(0x10000, kif::Perm::RW));
     let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
     let tile1 = wv_require_ok!(Tile::get("compat|own"));
@@ -148,7 +148,7 @@ fn exec_child_to_child(t: &mut dyn WvTester) {
 
 fn writer_quit(t: &mut dyn WvTester) {
     let pipeserv = wv_require_ok!(Pipes::new("pipes"));
-    let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+    let pipe_mem = wv_require_ok!(MemCap::new(0x10000, kif::Perm::RW));
     let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
     let tile = wv_require_ok!(Tile::get("compat|own"));
@@ -182,7 +182,7 @@ fn writer_quit(t: &mut dyn WvTester) {
 
 fn reader_quit(t: &mut dyn WvTester) {
     let pipeserv = wv_require_ok!(Pipes::new("pipes"));
-    let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+    let pipe_mem = wv_require_ok!(MemCap::new(0x10000, kif::Perm::RW));
     let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
     let tile = wv_require_ok!(Tile::get("compat|own"));

@@ -48,6 +48,7 @@ use crate::{config, rerror};
 //
 const SUBSYS_SELS: Selector = FIRST_FREE_SEL;
 
+const DEF_MAX_SERVICES: usize = 16;
 const DEF_RESMNG_MEM: GlobOff = 32 * 1024 * 1024;
 const DEF_TIME_SLICE: TimeDuration = TimeDuration::from_millis(1);
 const OUR_EPS: usize = cfg::RESMNG_EPS;
@@ -56,12 +57,14 @@ pub(crate) const SERIAL_RGATE_SEL: Selector = SUBSYS_SELS + 1;
 
 pub struct Arguments {
     pub max_clients: usize,
+    pub max_services: usize,
 }
 
 impl Default for Arguments {
     fn default() -> Self {
         Self {
             max_clients: DEF_MAX_CLIENTS,
+            max_services: DEF_MAX_SERVICES,
         }
     }
 }
@@ -262,6 +265,11 @@ impl Subsystem {
                     .parse::<usize>()
                     .expect("Failed to parse client count");
             }
+            else if let Some(services) = arg.strip_prefix("maxsrv=") {
+                args.max_services = services
+                    .parse::<usize>()
+                    .expect("Failed to parse service count");
+            }
             else if let Some(sem) = arg.strip_prefix("sem=") {
                 res.semaphores_mut()
                     .add_sem(sem.to_string())
@@ -271,15 +279,27 @@ impl Subsystem {
                 let mut parts = shmem.split(':');
                 let name = parts.next().expect("Missing name for shmem region");
                 let size = parts.next().expect("Missing size for shmem region");
+                let locked = if let Some(next) = parts.next() {
+                    next == "locked"
+                }
+                else {
+                    true
+                };
                 let size = parse::size(size).expect("Unable to parse size");
 
                 // determine number of users of this shared memory region
-                let users = self
-                    .cfg()
-                    .domains()
-                    .iter()
-                    .flat_map(|d| d.shmems().iter().find(|sh| sh.name() == name))
-                    .count();
+                let users = if locked {
+                    Some(
+                        self.cfg()
+                            .domains()
+                            .iter()
+                            .flat_map(|d| d.shmems().iter().find(|sh| sh.name() == name))
+                            .count(),
+                    )
+                }
+                else {
+                    None
+                };
 
                 // allocate memory slice
                 let slice = res
@@ -328,11 +348,11 @@ impl Subsystem {
     }
 
     pub fn get_tile(&self, idx: usize) -> Rc<Tile> {
-        Rc::new(Tile::new_bind_with(
+        Tile::new_bind_with(
             self.tiles[idx].id as TileId,
             self.tiles[idx].desc,
             SUBSYS_SELS + 2 + (self.mods.len() + idx) as Selector,
-        ))
+        )
     }
 
     pub fn get_mem(&self, idx: usize) -> MemCap {

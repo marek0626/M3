@@ -271,7 +271,7 @@ pub fn create_activity_async(act: TempRc<Activity>) -> anyhow::Result<()> {
     }
 
     let tile: TempRc<TileObject> = act.get_kobj(r.tile)?;
-    if !tile.has_quota(tcu::STD_EPS_COUNT) {
+    if !tile.has_ep_quota(tcu::STD_EPS_COUNT) {
         return Err(kerrno(Code::InvArgs).context(format!(
             "Tile cap has insufficient EPs (have {}, need {})",
             tile.ep_quota().left(),

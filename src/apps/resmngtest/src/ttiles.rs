@@ -15,7 +15,6 @@
 
 use m3::errors::Code;
 use m3::kif::{TileAttr, TileDesc, TileISA, TileType};
-use m3::rc::Rc;
 use m3::tcu::TileId;
 use m3::test::WvTester;
 use m3::tiles::Tile;
@@ -27,21 +26,21 @@ use crate::wv_assert_anyhow_err;
 
 fn create_tiles() -> TileManager {
     let mut mng = TileManager::default();
-    mng.add(Rc::new(Tile::new_bind_with(
+    mng.add(Tile::new_bind_with(
         TileId::new(0, 1),
         TileDesc::new(TileType::Comp, TileISA::RISCV64, 0),
         64,
-    )));
-    mng.add(Rc::new(Tile::new_bind_with(
+    ));
+    mng.add(Tile::new_bind_with(
         TileId::new(0, 2),
         TileDesc::new_with_attr(TileType::Comp, TileISA::RISCV32, 32 * 1024, TileAttr::IMEM),
         65,
-    )));
-    mng.add(Rc::new(Tile::new_bind_with(
+    ));
+    mng.add(Tile::new_bind_with(
         TileId::new(0, 3),
         TileDesc::new(TileType::Mem, TileISA::None, 1024 * 1024),
         66,
-    )));
+    ));
     mng
 }
 

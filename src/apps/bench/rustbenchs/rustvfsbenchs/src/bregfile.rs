@@ -42,7 +42,7 @@ fn open_close(t: &mut dyn WvTester) {
     wv_perf!(
         "open-close",
         prof.run::<CycleInstant, _>(|| {
-            wv_assert_ok!(t, VFS::open("/data/2048k.txt", OpenFlags::R));
+            wv_assert_ok!(t, VFS::open("/fstrace/tar/2048.bin", OpenFlags::R));
         })
     );
 }
@@ -53,7 +53,7 @@ fn stat(t: &mut dyn WvTester) {
     wv_perf!(
         "stat",
         prof.run::<CycleInstant, _>(|| {
-            wv_assert_ok!(t, VFS::stat("/data/2048k.txt"));
+            wv_assert_ok!(t, VFS::stat("/fstrace/tar/2048.bin"));
         })
     );
 }
@@ -93,7 +93,7 @@ fn read(_t: &mut dyn WvTester) {
     wv_perf!(
         "read 2 MiB file with 8K buf",
         prof.run::<CycleInstant, _>(|| {
-            let mut file = wv_require_ok!(VFS::open("/data/2048k.txt", OpenFlags::R));
+            let mut file = wv_require_ok!(VFS::open("/fstrace/tar/2048.bin", OpenFlags::R));
             loop {
                 let amount = wv_require_ok!(file.read(buf));
                 if amount == 0 {
@@ -137,7 +137,7 @@ fn copy(t: &mut dyn WvTester) {
     wv_perf!(
         "copy 2 MiB file with 8K buf",
         prof.run::<CycleInstant, _>(|| {
-            let mut fin = wv_require_ok!(VFS::open("/data/2048k.txt", OpenFlags::R));
+            let mut fin = wv_require_ok!(VFS::open("/fstrace/tar/2048.bin", OpenFlags::R));
             let mut fout = wv_require_ok!(VFS::open(
                 "/newfile",
                 OpenFlags::W | OpenFlags::CREATE | OpenFlags::TRUNC

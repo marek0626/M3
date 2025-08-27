@@ -360,9 +360,8 @@ fn prepare_for_rots(our_tile: IndexedTile, root_tile: IndexedTile) {
     });
 
     // configure exclusive region for the environment, accessible only from the root tile
-    #[cfg(M3_TARGET = "gem5")]
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
     if let Some((cfg, arg1)) = TCU::build_exreg(
-        our_tile.id(),
         root_tile.id(),
         0,
         0,
@@ -370,12 +369,20 @@ fn prepare_for_rots(our_tile: IndexedTile, root_tile: IndexedTile) {
         (cfg::ENV_SIZE / 2) as GlobOff,
         Perm::W,
     ) {
+        // set region registers
         let exreg_addr = TCU::exreg_addr(0).as_goff();
-        our_tile.write_tcu(&[cfg, arg1], exreg_addr).unwrap();
+        our_tile.write_tcu(&[cfg], exreg_addr).unwrap();
+        our_tile.write_tcu(&[arg1], exreg_addr + 8).unwrap();
+
+        // update region count
+        let value = (1 as tcu::Reg) << 32 | TCU::tileid_to_nocid(env::boot().tile_id()) as tcu::Reg;
+        our_tile
+            .write_tcu(&[value], TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff())
+            .unwrap();
     }
 }
 
-#[cfg(M3_TARGET = "gem5")]
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
 fn lock_tile(our_tile: IndexedTile) {
     // get the address of the register
     let reg_addr = TCU::ext_reg_addr(tcu::ExtReg::Features).as_goff();
@@ -408,9 +415,9 @@ pub fn run() -> crate::RosaPrivateCtx {
             tile.init(Perm::RW, 0);
 
             // set us as the exclusive-region manager
-            #[cfg(M3_TARGET = "gem5")]
+            #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
             {
-                let value = env::boot().tile_id().raw() as tcu::Reg;
+                let value = TCU::tileid_to_nocid(env::boot().tile_id()) as tcu::Reg;
                 tile.write_tcu(&[value], TCU::ext_reg_addr(tcu::ExtReg::ExRegMng).as_goff())
                     .unwrap();
             }
@@ -427,6 +434,9 @@ pub fn run() -> crate::RosaPrivateCtx {
                     attr |= TileAttr::KECACC;
                 }
                 TileDesc::new_with_attr(desc.tile_type(), desc.isa(), desc.mem_size(), attr)
+            }
+            else if env!("M3_TARGET") == "hw" {
+                TileDesc::new_with_attr(desc.tile_type(), desc.isa(), desc.mem_size(), desc.attr())
             }
             else {
                 desc
@@ -522,13 +532,6 @@ pub fn run() -> crate::RosaPrivateCtx {
     let root_tile = determine_root_tile(&m3, ktile);
     let our_tile = determine_our_tile(&m3);
 
-    // enable tile to allow memory transfers
-    if env!("M3_TARGET") == "hw23" {
-        ktile
-            .write_tcu(&[1u64], tcu::MMIO_ADDR.as_goff() + 0x3028)
-            .expect("Failed to start kernel tile");
-    }
-
     // Configure endpoint used to load kernel ELF
     rot::config_local_ep(crate::MEM_EP, |regs| {
         TCU::config_mem(
@@ -556,7 +559,7 @@ pub fn run() -> crate::RosaPrivateCtx {
 
     // prepare execution of rots/unimux and lock tile as we're about to start the kernel
     prepare_for_rots(our_tile, root_tile);
-    #[cfg(M3_TARGET = "gem5")]
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
     lock_tile(our_tile);
 
     crate::RosaPrivateCtx {

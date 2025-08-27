@@ -758,12 +758,12 @@ impl TileQuota {
         self.left.get()
     }
 
-    fn alloc(&self, num: usize, tile: TileId, name: &str) {
+    fn alloc(&self, num: usize, tile: TileId, name: &str, addr: usize) {
         log!(
             LogFlags::KernTiles,
             "Tile[{}, {:#x}]: allocating {} {} ({} left)",
             tile,
-            self as *const _ as usize,
+            addr,
             num,
             name,
             self.left()
@@ -772,14 +772,14 @@ impl TileQuota {
         self.left.set(self.left() - num);
     }
 
-    fn free(&self, num: usize, tile: TileId, name: &str) {
+    fn free(&self, num: usize, tile: TileId, name: &str, addr: usize) {
         assert!(self.left() + num <= self.total());
         self.left.set(self.left() + num);
         log!(
             LogFlags::KernTiles,
             "Tile[{}, {:#x}]: freed {} {} ({} left)",
             tile,
-            self as *const _ as usize,
+            addr,
             num,
             name,
             self.left()
@@ -838,10 +838,16 @@ impl TileObject {
     ) -> anyhow::Result<StrongRc<Self>> {
         // only allocate it from the tile here, but don't keep an Rc to the EPQuota
         if let Some(num) = eps {
-            if !tile.has_quota(num) {
+            if !tile.has_ep_quota(num) {
                 return Err(kerrno(Code::NoSpace).context("Insufficient EPs for tile derive"));
             }
             tile.alloc_eps(num);
+        }
+        if let Some(num) = exregs {
+            if !tile.has_exreg_quota(num) {
+                return Err(kerrno(Code::NoSpace).context("Insufficient exregs for tile derive"));
+            }
+            tile.alloc_exreg(num);
         }
 
         let tile_id = tile.tile();
@@ -866,6 +872,9 @@ impl TileObject {
                 Err(e) => {
                     if let Some(num) = eps {
                         tile.free_eps(num);
+                    }
+                    if let Some(num) = exregs {
+                        tile.free_exregs(num);
                     }
                     return Err(e.context("TileMux declined tile derive"));
                 },
@@ -927,8 +936,12 @@ impl TileObject {
         self.pt_quota
     }
 
-    pub fn has_quota(&self, eps: usize) -> bool {
+    pub fn has_ep_quota(&self, eps: usize) -> bool {
         self.ep_quota.left() >= eps
+    }
+
+    pub fn has_exreg_quota(&self, eps: usize) -> bool {
+        self.exregs_quota.left() >= eps
     }
 
     pub fn add_activity(&self, act: ActId, sel: CapSel) {
@@ -973,19 +986,23 @@ impl TileObject {
     }
 
     pub fn alloc_eps(&self, num: usize) {
-        self.ep_quota.alloc(num, self.tile, "EPs");
+        self.ep_quota
+            .alloc(num, self.tile, "EPs", self as *const _ as usize);
     }
 
     pub fn free_eps(&self, num: usize) {
-        self.ep_quota.free(num, self.tile, "EPs");
+        self.ep_quota
+            .free(num, self.tile, "EPs", self as *const _ as usize);
     }
 
     pub fn alloc_exreg(&self, num: usize) {
-        self.exregs_quota.alloc(num, self.tile, "ExRegs");
+        self.exregs_quota
+            .alloc(num, self.tile, "ExRegs", self as *const _ as usize);
     }
 
     pub fn free_exregs(&self, num: usize) {
-        self.exregs_quota.free(num, self.tile, "ExRegs");
+        self.exregs_quota
+            .free(num, self.tile, "ExRegs", self as *const _ as usize);
     }
 
     pub fn reset(&self, total_eps: usize) {

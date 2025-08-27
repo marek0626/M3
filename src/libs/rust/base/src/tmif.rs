@@ -149,8 +149,14 @@ cfg_if! {
         }
 
         pub fn translate(virt: VirtAddr) -> Result<PhysAddr, Error> {
-            let phys = TMABI::call1_result(Operation::Translate, virt.as_local())?;
-            Ok(PhysAddr::new_raw(crate::env::boot().tile_desc(), phys as crate::mem::PhysAddrRaw))
+            let tile_desc = crate::env::boot().tile_desc();
+            let phys = if tile_desc.has_virtmem() {
+                TMABI::call1_result(Operation::Translate, virt.as_local())?
+            }
+            else {
+                virt.as_local()
+            };
+            Ok(PhysAddr::new_raw(tile_desc, phys as crate::mem::PhysAddrRaw))
         }
 
         pub fn map(virt: VirtAddr, phys: PhysAddr, pages: usize, access: kif::Perm) -> Result<(), Error> {

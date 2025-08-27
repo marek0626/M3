@@ -45,7 +45,7 @@ pub struct CycleDuration(u64);
 
 impl CycleDuration {
     /// Creates a new duration from given cycle count.
-    pub fn new(cycles: u64) -> Self {
+    pub const fn new(cycles: u64) -> Self {
         Self(cycles)
     }
 }

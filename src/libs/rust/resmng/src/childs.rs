@@ -13,6 +13,7 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::Context;
 use bitflags::bitflags;
 
 use core::fmt;
@@ -104,7 +105,7 @@ pub struct ChildResources {
     sessions: Vec<(usize, Session)>,
     mem: Vec<(Option<Selector>, Allocation)>,
     mods: Vec<MemCap>,
-    tiles: Vec<(TileUsage, usize, Selector)>,
+    tiles: Vec<(TileUsage, Option<usize>, Selector)>,
     scaps: Vec<SendCap>,
 }
 
@@ -129,7 +130,7 @@ impl ChildResources {
         &self.mods
     }
 
-    pub fn tiles(&self) -> &[(TileUsage, usize, Selector)] {
+    pub fn tiles(&self) -> &[(TileUsage, Option<usize>, Selector)] {
         &self.tiles
     }
 
@@ -653,8 +654,40 @@ pub trait Child {
 
         let tile_id = tile_usage.tile_id();
         res.tiles().add_user(&tile_usage);
-        self.res_mut().tiles.push((tile_usage, idx, sel));
+        self.res_mut().tiles.push((tile_usage, Some(idx), sel));
         cfg.alloc_tile(idx);
+
+        Ok((tile_id, desc))
+    }
+
+    fn alloc_exregs(
+        &mut self,
+        res: &mut Resources,
+        shmem: &str,
+        sel: Selector,
+    ) -> anyhow::Result<(tcu::TileId, kif::TileDesc)> {
+        log!(
+            LogFlags::ResMngTiles,
+            "{}: alloc_exregs(shmem={}, sel={})",
+            self.name(),
+            shmem,
+            sel
+        );
+
+        let cfg = self.cfg();
+        let desc = cfg.get_exregs(shmem).ok_or_else(|| {
+            rerrno(Code::InvArgs)
+                .context(format!("child has no exclusive region for shmem {}", shmem))
+        })?;
+
+        let mtile = res
+            .shared_mems_mut()
+            .acquire_mem_tile(shmem, desc.count())
+            .context("acquire memory tile")?;
+
+        let (tile_id, desc) = (mtile.tile_obj().id(), mtile.tile_obj().desc());
+        self.delegate(mtile.tile_obj().sel(), sel)?;
+        self.res_mut().tiles.push((mtile, None, sel));
 
         Ok((tile_id, desc))
     }
@@ -702,12 +735,14 @@ pub trait Child {
             })
             .unwrap();
 
-        let cfg = self.cfg();
-        let crd = CapRngDesc::new_single(CapType::Object, ep_sel);
-        // TODO if that fails, we need to kill this child because otherwise we don't get the tile back
-        syscalls::revoke(self.activity_sel(), crd, true).ok();
-        res.tiles().remove_user(&tile_usage);
-        cfg.free_tile(idx);
+        if let Some(idx) = idx {
+            let cfg = self.cfg();
+            let crd = CapRngDesc::new_single(CapType::Object, ep_sel);
+            // TODO if that fails, we need to kill this child because otherwise we don't get the tile back
+            syscalls::revoke(self.activity_sel(), crd, true).ok();
+            res.tiles().remove_user(&tile_usage);
+            cfg.free_tile(idx);
+        }
 
         Ok(())
     }
@@ -1487,9 +1522,9 @@ impl ChildManager {
             // all childs get the same PMP EPs, so that we can also give the same PMP EPs to childs
             // of childs.
             child.our_tile().clone(),
-            TileUsage::new_obj(Rc::new(
+            TileUsage::new_obj(
                 Tile::new_bind(our_tile).map_err(|e| rerror(e).context("tile bind"))?,
-            )),
+            ),
             Rc::new(KMem::new_bind(our_kmem)),
             act_id,
             our_act,

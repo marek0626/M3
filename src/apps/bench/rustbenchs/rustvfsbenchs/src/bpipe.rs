@@ -17,7 +17,7 @@
  */
 
 use m3::cell::StaticRefCell;
-use m3::com::MemGate;
+use m3::com::MemCap;
 use m3::errors::Code;
 use m3::io::{self, stdin, stdout, Read, Write};
 use m3::kif;
@@ -44,7 +44,7 @@ fn child_to_parent(t: &mut dyn WvTester) {
 
     let tile = wv_require_ok!(Tile::get("compat|own"));
     let res = prof.run::<CycleInstant, _>(|| {
-        let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+        let pipe_mem = wv_require_ok!(MemCap::new(0x10000, kif::Perm::RW));
         let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
         let mut act = wv_require_ok!(ChildActivity::new_with(
@@ -90,7 +90,7 @@ fn parent_to_child(t: &mut dyn WvTester) {
 
     let tile = wv_require_ok!(Tile::get("compat|own"));
     let res = prof.run::<CycleInstant, _>(|| {
-        let pipe_mem = wv_require_ok!(MemGate::new(0x10000, kif::Perm::RW));
+        let pipe_mem = wv_require_ok!(MemCap::new(0x10000, kif::Perm::RW));
         let pipe = wv_require_ok!(IndirectPipe::new(&pipeserv, pipe_mem));
 
         let mut act = wv_require_ok!(ChildActivity::new_with(

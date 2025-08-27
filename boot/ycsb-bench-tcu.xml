@@ -32,7 +32,7 @@
                         </app>
                     </dom>
                     <dom tile="perf+nic|core">
-                        <app args="/bin/ycsbclient tcu /data/small-workload.wl 4" daemon="1">
+                        <app args="/bin/ycsbclient tcu /ycsb/small-workload.wl 4" daemon="1">
                             <sess lname="m3fs" gname="app_m3fs"/>
                             <sgate name="req"/>
                         </app>

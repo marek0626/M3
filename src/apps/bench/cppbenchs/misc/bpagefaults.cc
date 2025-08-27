@@ -44,7 +44,7 @@ NOINLINE static void anon() {
 NOINLINE static void file() {
     Profile pr(4, 4);
     WVPERF("file mapping (64 pages)", pr.run<CycleInstant>([] {
-        auto file = VFS::open("/large.bin", FILE_RW | FILE_NEWSESS);
+        auto file = VFS::open("/fstrace/tar/4096.bin", FILE_RW | FILE_NEWSESS);
 
         goff_t virt = 0x3100'0000;
         file->map(Activity::own().pager(), &virt, 0, PAGES * PAGE_SIZE, Pager::READ | Pager::WRITE,

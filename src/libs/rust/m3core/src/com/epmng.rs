@@ -41,8 +41,19 @@ impl EpMng {
     }
 
     /// Allocates a specific endpoint for the given activity.
-    pub fn acquire_for(act: Selector, ep: EpId, replies: usize) -> Result<EP, Error> {
-        EP::new_with(EPArgs::default().epid(ep).activity(act).replies(replies))
+    pub fn acquire_for(
+        act: Selector,
+        ep: EpId,
+        replies: usize,
+        dynamic: bool,
+    ) -> Result<EP, Error> {
+        EP::new_with(
+            EPArgs::default()
+                .epid(ep)
+                .activity(act)
+                .replies(replies)
+                .dynamic(dynamic),
+        )
     }
 
     /// Allocates a new endpoint.

@@ -5,13 +5,13 @@
     </mods>
     <kernel args="kernel"/>
     <dom>
-        <app args="root">
+        <app args="root maxcli=2 maxsrv=1">
             <app args="m3fs mem" daemon="1">
                 <serv name="m3fs"/>
                 <mod name="fs"/>
             </app>
             <dom>
-                <app args="pager">
+                <app args="pager maxcli=4 maxsrv=1">
                     <sess name="m3fs"/>
                     <mod name="fs" perm="r"/>
                     <mod name="tilemux" perm="r"/>

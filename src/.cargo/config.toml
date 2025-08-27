@@ -1,5 +1,5 @@
 [build]
-target = "toolchain/rust/riscv64-linux-m3-musl.json"
+target = "riscv64-linux-m3-musl"
 
 # rustflags specified in [build] are overridden by the target-specific rustflags
 [target.'cfg(all())']

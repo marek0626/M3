@@ -243,7 +243,7 @@ fn do_check() -> bool {
     // if the SEP is still frozen, it means that the kernel just initialized our tile and these
     // EPs, so unfreeze them. Note that the kernel does not configure TMSIDE_REP (rosa did that)
     // and thus it does not need to be unfrozen.
-    #[cfg(M3_TARGET = "gem5")]
+    #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
     if tcu::TCU::is_frozen(tcu::KPEX_REP) {
         let tile_desc = crate::pex_env().tile_desc;
         tcu::TCU::check_recv_ep(

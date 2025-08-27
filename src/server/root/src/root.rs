@@ -282,6 +282,7 @@ pub fn main() -> Result<(), Error> {
 
     let max_msg_size = 1 << 8;
     let buf_size = max_msg_size * args.max_clients;
+    let qbuf_size = sendqueue::RBUF_MSG_SIZE * args.max_services;
 
     // allocate and map memory for receive buffer. note that we need to do that manually here,
     // because RecvBufs allocate new physical memory via the resource manager and root does not have
@@ -290,7 +291,7 @@ pub fn main() -> Result<(), Error> {
     let (rbuf_off, rbuf_mem) = if Activity::own().tile_desc().has_virtmem() {
         let buf_mem = res
             .memory_mut()
-            .alloc_mem((buf_size + sendqueue::RBUF_SIZE) as GlobOff, 1)
+            .alloc_mem((buf_size + qbuf_size) as GlobOff, 1)
             .expect("Unable to allocate memory for receive buffers");
         let pages = (buf_mem.capacity() as usize).div_ceil(cfg::PAGE_SIZE);
         let buf_mem = buf_mem.derive().expect("derive of receive buffer failed");
@@ -320,7 +321,7 @@ pub fn main() -> Result<(), Error> {
     let reqs = requests::Requests::new(req_rgate);
 
     let squeue_rgate = create_rgate(
-        sendqueue::RBUF_SIZE,
+        qbuf_size,
         sendqueue::RBUF_MSG_SIZE,
         rbuf_mem.as_ref().map(|r| r.sel()),
         rbuf_off + buf_size as GlobOff,

@@ -1,0 +1,13 @@
+[package]
+name = "chancreate"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/chancreate.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+m3core = { path = "../../../libs/rust/m3core" }
+heapsimple = { path = "../../../libs/rust/heapsimple" }
+unimux = { path = "../../../unimux" }

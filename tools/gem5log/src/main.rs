@@ -15,6 +15,7 @@
 
 mod error;
 mod flamegraph;
+mod reltime;
 mod symbols;
 mod trace;
 
@@ -55,6 +56,7 @@ impl Log for Logger {
 #[derive(Copy, Clone, Debug)]
 pub enum Mode {
     Trace,
+    RelTime,
     FlameGraph { start: u64, end: Option<u64> },
     FTrace { start: u64, end: Option<u64> },
     Snapshot { time: u64 },
@@ -69,7 +71,7 @@ pub enum ISA {
 
 fn usage(prog: &str) -> ! {
     eprintln!(
-        "Usage: {} (trace|flamegraph|snapshot <time>) [<binary>[+<offset>]...]",
+        "Usage: {} (trace|reltime|flamegraph|snapshot <time>) [<binary>[+<offset>]...]",
         prog
     );
     exit(1)
@@ -116,6 +118,7 @@ fn main() -> Result<(), error::Error> {
 
     let (mode, bin_start) = match args.get(1) {
         Some(mode) if mode == "trace" => (Mode::Trace, 2),
+        Some(mode) if mode == "reltime" => (Mode::RelTime, 2),
         Some(mode) if mode == "flamegraph" || mode == "ftrace" => {
             if args.len() < 5 {
                 usage(&args[0]);
@@ -169,6 +172,7 @@ fn main() -> Result<(), error::Error> {
 
     match mode {
         Mode::Trace => trace::generate(&syms),
+        Mode::RelTime => reltime::generate(),
         Mode::FlameGraph { .. } | Mode::FTrace { .. } | Mode::Snapshot { .. } => {
             flamegraph::generate(mode, isa.unwrap(), &syms)
         },

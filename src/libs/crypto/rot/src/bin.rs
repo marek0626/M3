@@ -21,7 +21,7 @@ use cfg_if::cfg_if;
 
 cfg_if! {
     // note: needs to be in sync with the memory areas in ld.conf
-    if #[cfg(M3_TARGET = "hw23")] {
+    if #[cfg(any(M3_TARGET = "hw23", M3_TARGET = "hw"))] {
         pub const BROM_NEXT_ADDR: usize = MEM_OFFSET + 0x10000;
         pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x49000;
         pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x6000;

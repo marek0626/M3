@@ -340,15 +340,11 @@ impl TileMux {
                         }
                     }
 
-                    // accelerators with co-processors run straccmux and don't do the jump, because
-                    // everything is tightly packed at the beginning of the SPM
-                    if !platform::tile_desc(tile_id)
-                        .attr()
-                        .contains(TileAttr::COREACC)
-                    {
-                        let trampoline: u64 = 0x0000_0000_0000_406f; // j _start (+0x4000)
-                        ktcu::write_slice(mux_tile_id, mux_offset, &[trampoline]);
-                    }
+                    let trampoline: u64 = 0x0000_0000_0000_406f; // j _start (+0x4000)
+                    ktcu::write_slice(mux_tile_id, mux_offset, &[trampoline]);
+                }
+                else {
+                    drop(mux_mem);
                 }
 
                 // the exit call is async and thus requires a dedicated thread for this tile. note
@@ -362,6 +358,7 @@ impl TileMux {
             }
             else {
                 drop(tile);
+                drop(mux_mem);
                 // to ensure that we don't send more requests to this tilemux instance (e.g., in
                 // other kernel threads), we mark it as shutdown and therefore not available.
                 tilemux.shutdown = true;

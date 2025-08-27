@@ -23,7 +23,6 @@ use crate::cap::Capability;
 use crate::cap::{CapFlags, SelSpace, Selector};
 use crate::cell::{Cell, LazyReadOnlyCell};
 use crate::cfg;
-use crate::com::rbufs::{alloc_rbuf, free_rbuf};
 use crate::com::{gate::Gate, EpMng, GateCap, RecvBuf, SendGate, EP};
 use crate::env;
 use crate::errors::{Code, Error};
@@ -227,7 +226,7 @@ impl GateCap for RecvCap {
     #[cold]
     fn activate(mut self) -> Result<Self::Target, Error> {
         let size = self.size()?;
-        let buf = alloc_rbuf(size)?;
+        let buf = RecvBuf::new(size)?;
 
         let (order, msg_order) = (self.order.get().unwrap(), self.msg_order.get().unwrap());
         let replies = 1 << (order - msg_order);
@@ -549,8 +548,5 @@ pub(crate) fn pre_init() {
 impl ops::Drop for RecvGate {
     fn drop(&mut self) {
         self.gate.release(true);
-        if let RGateBuf::Allocated(ref b) = self.buf {
-            free_rbuf(b);
-        }
     }
 }

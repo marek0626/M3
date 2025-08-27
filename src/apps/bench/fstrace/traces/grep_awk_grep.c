@@ -5,7 +5,7 @@
 
 trace_op_t trace_ops_grep_awk_grep[] = {
     /* #1 = 0x1 */ { .opcode = WAITUNTIL_OP, .args.waituntil = { 0, 85959 } },
-    /* #2 = 0x2 */ { .opcode = OPEN_OP, .args.open = { 3, "/pipedata/1024k.txt", O_RDONLY, 0 } },
+    /* #2 = 0x2 */ { .opcode = OPEN_OP, .args.open = { 3, "/fstrace/tar/1024.bin", O_RDONLY, 0 } },
     /* #3 = 0x3 */ { .opcode = WAITUNTIL_OP, .args.waituntil = { 0, 21288 } },
     /* #4 = 0x4 */ { .opcode = READ_OP, .args.read = { 4096, 3, 4096, 1 } },
     /* #5 = 0x5 */ { .opcode = WAITUNTIL_OP, .args.waituntil = { 0, 318448 } },
@@ -1125,5 +1125,5 @@ trace_op_t trace_ops_grep_awk_grep[] = {
     /* #1119 = 0x45f */ { .opcode = CLOSE_OP, .args.close = { 0, 3 } },
     /* #1120 = 0x460 */ { .opcode = WAITUNTIL_OP, .args.waituntil = { 0, 40087 } },
     /* #1121 = 0x461 */ { .opcode = WRITE_OP, .args.write = { 206, 1, 206, 1 } },
-    { .opcode = INVALID_OP } 
+    { .opcode = INVALID_OP }
 };

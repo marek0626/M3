@@ -85,8 +85,10 @@ public:
     }
 
     void mkdyn() const {
-        if(TCU::get().is_locked())
+        if(TCU::get().is_locked()) {
             TCU::get().mkdyn(_id);
+            TCU::get().unfreeze(_id);
+        }
     }
 
 private:

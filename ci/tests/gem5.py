@@ -38,7 +38,7 @@ all_tests = [
     "rust-algo-benchs", "rust-misc-benchs", "rust-vfs-benchs",
     "cpp-algo-benchs", "cpp-misc-benchs", "cpp-vfs-benchs",
     "chantests",
-    "unittests", "hashmux-benchs", "hashmux-tests", "bench-hashpipe-tee", "resmngtest",
+    "unittests", "hashmux-benchs", "hashmux-tests", "bench-hashfile-tee", "resmngtest",
     "hello",
     "facever", "rots-raser", "rots-hello", "rots-evidence-test",
     "find", "tar", "untar", "sqlite", "leveldb", "sha256sum", "sort",
@@ -57,7 +57,7 @@ fstrace_tests = ["find", "tar", "untar", "sqlite", "leveldb", "sha256sum", "sort
 pipe_tests = ["cat_awk", "cat_wc", "grep_awk", "grep_wc"]
 rots_tests = [
     "rots-raser", "rots-hello", "rots-evidence-test",
-    "hashmux-benchs", "hashmux-tests", "bench-hashpipe-tee",
+    "hashmux-benchs", "hashmux-tests", "bench-hashfile-tee",
     "tee-msgchan"
 ]
 
@@ -174,7 +174,7 @@ class Test:
         vars["M3_TARGET"] = self.target
         vars["M3_ISA"] = self.isa
         vars["M3_BUILD"] = self.build_mode()
-        vars["M3_MOD_PATH"] = str(self.build_dir() / "fsimgs-{}".format(self.bpe))
+        vars["M3_MOD_PATH"] = str(self.build_dir() / "fsimgs-{}-{}".format(self.isa, self.bpe))
         vars["M3_TILETYPE"] = "b" if self.ty == "sh" else self.ty
         vars["M3_GEM5_CPU"] = "DerivO3CPU" if self.is_bench() else "TimingSimpleCPU"
         vars["M3_GEM5_LOG"] = "Tcu,TcuRegWrite,TcuCmd,TcuConnector"
@@ -185,7 +185,7 @@ class Test:
             vars["M3_GEM5_CORES"] = "12"
 
         if self.name in rots_tests:
-            fspath = self.build_dir() / "fsimgs-{}".format(self.bpe) / "default.img"
+            fspath = self.build_dir() / "fsimgs-{}-{}".format(self.isa, self.bpe) / "default.img"
             vars["M3_GEM5_HDD"] = str(fspath)
         else:
             vars["M3_GEM5_CFG"] = str(indir / "test-config.py")
@@ -233,7 +233,7 @@ class Test:
             f.write("\n")
             # create FS images
             for img in ["bench", "default"]:
-                cmd = fscmd["fsimgs-{}-{}".format(self.bpe, img)].copy()
+                cmd = fscmd["fsimgs-{}-{}-{}".format(self.isa, self.bpe, img)].copy()
                 cmd[1] = "\"$tmp/{}\"".format(os.path.basename(cmd[1]))
                 f.write(" ".join(cmd))
                 f.write("\n")
@@ -359,14 +359,14 @@ def build_image(name, argv):
 for isa in args.isas:
     builddir = Path("build") / "gem5-{}-{}".format(isa, "bench")
     for bpe in args.bpes:
-        name = "fsimgs-{}".format(bpe)
+        name = "fsimgs-{}-{}".format(isa, bpe)
         bmoddir = builddir / name
         bmoddir.mkdir(exist_ok=True, parents=True)
         build_image(name + "-bench",
                     [builddir / "toolsbin" / "mkm3fs",
                      bmoddir / "bench.img",
                      builddir / "src" / "fs" / "bench",
-                     64 * 1024,  # blocks
+                     32 * 1024,  # blocks
                      4096,       # inodes
                      bpe])
         build_image(name + "-default",

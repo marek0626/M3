@@ -15,6 +15,7 @@
 
 use base::build_vmsg;
 use base::errors::Code;
+use base::kif::syscalls::MuxType;
 use base::kif::{self, syscalls, TileType};
 use base::mem::MsgBuf;
 use base::quota::Quota;
@@ -247,8 +248,13 @@ pub fn tile_info(act: &TempRc<Activity>) -> anyhow::Result<()> {
     let act_caps = act.obj_caps().borrow();
     let tile: TempRc<TileObject> = act_caps.get_kobj(r.tile)?;
 
-    let tilemux = tilemng::tilemux(tile.tile());
-    let ty = tilemux.mux_type();
+    let ty = if platform::tile_desc(tile.tile()).tile_type() == TileType::Comp {
+        let tilemux = tilemng::tilemux(tile.tile());
+        tilemux.mux_type()
+    }
+    else {
+        MuxType::None
+    };
 
     let mut kreply = MsgBuf::borrow_def();
     build_vmsg!(kreply, Code::Success, kif::syscalls::TileInfoReply {

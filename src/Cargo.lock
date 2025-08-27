@@ -6,7 +6,8 @@ version = 3
 name = "accel"
 version = "0.1.0"
 dependencies = [
- "m3",
+ "lang",
+ "m3core",
 ]
 
 [[package]]
@@ -15,6 +16,17 @@ version = "0.1.0"
 dependencies = [
  "accel",
  "m3",
+]
+
+[[package]]
+name = "aesstream"
+version = "0.1.0"
+dependencies = [
+ "accel",
+ "heapsimple",
+ "m3core",
+ "m3files",
+ "unimux",
 ]
 
 [[package]]
@@ -98,6 +110,15 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "chancreate"
+version = "0.1.0"
+dependencies = [
+ "heapsimple",
+ "m3core",
+ "unimux",
+]
 
 [[package]]
 name = "chantests"
@@ -216,6 +237,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "enchash"
+version = "0.1.0"
+dependencies = [
+ "accel",
+ "heapsimple",
+ "m3core",
+ "m3files",
+ "pipecli",
+ "unimux",
+]
+
+[[package]]
+name = "exregs"
+version = "0.1.0"
+dependencies = [
+ "m3",
+]
+
+[[package]]
 name = "facever"
 version = "0.1.0"
 dependencies = [
@@ -246,6 +286,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hashfile"
+version = "0.1.0"
+dependencies = [
+ "heapsimple",
+ "m3core",
+ "m3files",
+ "pipecli",
+ "unimux",
+]
+
+[[package]]
 name = "hashmuxbenchs"
 version = "0.1.0"
 dependencies = [
@@ -257,15 +308,6 @@ name = "hashmuxtests"
 version = "0.1.0"
 dependencies = [
  "cshake",
- "hex-literal",
- "m3",
- "pipecli",
-]
-
-[[package]]
-name = "hashpipe"
-version = "0.1.0"
-dependencies = [
  "hex-literal",
  "m3",
  "pipecli",
@@ -316,6 +358,18 @@ name = "hex-literal"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ebdb29d2ea9ed0083cd8cece49bbd968021bd99b0849edb4a9a7ee0fdf6a4e0"
+
+[[package]]
+name = "imgprocpipe"
+version = "0.1.0"
+dependencies = [
+ "accel",
+ "heapsimple",
+ "m3core",
+ "m3files",
+ "pipecli",
+ "unimux",
+]
 
 [[package]]
 name = "info"
@@ -639,6 +693,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "repeater"
+version = "0.1.0"
+dependencies = [
+ "m3",
+]
+
+[[package]]
 name = "resmng"
 version = "0.1.0"
 dependencies = [
@@ -959,6 +1020,7 @@ version = "0.1.0"
 dependencies = [
  "base",
  "lang",
+ "num_enum",
 ]
 
 [[package]]

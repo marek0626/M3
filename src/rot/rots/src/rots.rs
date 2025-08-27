@@ -84,7 +84,7 @@ fn check_std_endpoints() {
     .expect("DEF_REP_OFF not sane");
 
     // now unfreeze all the standard EPs created by the kernel
-    if env!("M3_TARGET") == "gem5" {
+    if env!("M3_TARGET") == "gem5" || env!("M3_TARGET") == "hw" {
         TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_SEP_OFF).unwrap();
         TCU::unfreeze(tcu::FIRST_USER_EP + tcu::SYSC_REP_OFF).unwrap();
         TCU::unfreeze(tcu::FIRST_USER_EP + tcu::UPCALL_REP_OFF).unwrap();
@@ -111,6 +111,11 @@ pub extern "C" fn env_run() {
     let argv = rots_env.boot.argv as *mut *const u8;
     unsafe {
         *argv = b"rots\0".as_ptr();
+    }
+
+    // for simplicity and safety, just check for more arguments to disable exreg zeroing
+    if rots_env_src.boot.argc > 1 {
+        exregs::disable_zeroing();
     }
 
     // init the remaining relevant fields
@@ -230,6 +235,11 @@ impl RequestSession for RoTSession {
     /// ROTS provides two things: Root of Trust and hash acceleration
     /// functionality. ROTS can provide either/or without panicking.
     fn new(serv: ServerSession, arg: &str) -> Result<Self, Error> {
+        // we need at least some seed to produce valid hashes
+        if arg.is_empty() {
+            return Err(Error::new(Code::InvArgs));
+        }
+
         fn have_ctx(arg: &str) -> (Option<MemCap>, Option<Secret<OpaqueKMacKey>>) {
             let ctx = CTX.get();
             let rot_sig_cap = ctx
@@ -249,6 +259,7 @@ impl RequestSession for RoTSession {
         assert!(serv.id() < MAX_SESSIONS);
 
         // Use the time slice specified in the arguments or fall back to the default one
+        // TODO expect arguments in a proper format
         let time_slice = if !arg.is_empty() {
             match arg.parse::<u64>() {
                 Ok(time) => TimeDuration::from_nanos(time),
@@ -565,8 +576,21 @@ impl RoTSession {
         reply_vmsg!(is, Code::Success, Bytes::new(&signature.to_bytes()[..]))
     }
 
-    fn epid(&self) -> EpId {
-        self.mem.as_ref().unwrap().id()
+    fn try_with_ep<F>(&self, mut func: F) -> Result<(), Error>
+    where
+        F: FnMut(EpId) -> Result<(), Error>,
+    {
+        let ep = self.mem.as_ref().unwrap().id();
+        match func(ep) {
+            Err(e) if e.code() == Code::NoMEP => {
+                if TCU::is_frozen(ep) {
+                    TCU::unfreeze(ep)?;
+                }
+                func(ep)
+            },
+            Err(e) => Err(e),
+            Ok(_) => Ok(()),
+        }
     }
 
     /// Work on an input request by reading memory from the MemGate and
@@ -585,7 +609,7 @@ impl RoTSession {
                 return Err(Error::new(Code::Success)); // Done
             }
 
-            TCU::read(self.epid(), buf.as_mut_ptr(), n, req.off as u64)?;
+            self.try_with_ep(|ep| TCU::read(ep, buf.as_mut_ptr(), n, req.off as u64))?;
 
             KECACC.start_absorb(&buf[..n]);
             if DISABLE_DOUBLE_BUFFER {
@@ -634,7 +658,7 @@ impl RoTSession {
             if n == 0 {
                 // Still need to write back the last buffer
                 KECACC.poll_complete();
-                TCU::write(self.epid(), lbuf.as_ptr(), ln, req.off as u64)?;
+                self.try_with_ep(|ep| TCU::write(ep, lbuf.as_ptr(), ln, req.off as u64))?;
                 return Err(Error::new(Code::Success)); // Done
             }
 
@@ -644,14 +668,14 @@ impl RoTSession {
                 KECACC.poll_complete();
             }
 
-            TCU::write(self.epid(), lbuf.as_ptr(), ln, req.off as u64)?;
+            self.try_with_ep(|ep| TCU::write(ep, lbuf.as_ptr(), ln, req.off as u64))?;
             req.complete_buffer(ln);
 
             if let Err(remaining_time) = timer.try_continue(req_rgate, srv_rgate) {
                 // Still need to write back the last buffer - this might take a bit
                 // so measure the time and subtract it from the remaining time.
                 let t = TimeInstant::now();
-                TCU::write(self.epid(), buf.as_ptr(), n, req.off as u64)?;
+                self.try_with_ep(|ep| TCU::write(ep, buf.as_ptr(), n, req.off as u64))?;
                 req.complete_buffer(n);
                 self.remaining_time = remaining_time - (TimeInstant::now() - t).as_nanos() as i64;
                 return Ok(false);
@@ -818,7 +842,7 @@ impl RoTSession {
             return Err(Error::new(Code::Exists));
         }
 
-        let ep = EpMng::get().acquire(0, true)?;
+        let ep = EpMng::get().acquire(0, false)?;
         let ep_sel = ep.sel();
         hash.mem = Some(ep);
         xchg.out_caps(CapRngDesc::new_single(CapType::Object, ep_sel));
@@ -1017,6 +1041,7 @@ pub fn main() -> Result<(), Error> {
                 Activity::own().sel(),
                 ep_start,
                 amount - 1,
+                false,
             ));
             ep_start += amount as tcu::EpId;
         }
@@ -1081,7 +1106,7 @@ pub fn main() -> Result<(), Error> {
 
     server_loop(|| {
         // explicitly check for sidecalls on hw23, as we don't get interrupts
-        #[cfg(M3_TARGET = "hw23")]
+        #[cfg(any(M3_TARGET = "hw23", M3_TARGET = "hw"))]
         unimux::check_sidecalls();
 
         recv.handle_messages()?;
@@ -1109,9 +1134,9 @@ pub fn main() -> Result<(), Error> {
     .ok();
 
     // we cannot exit normally on hw23 as tmcalls are not supported
-    #[cfg(M3_TARGET = "hw23")]
+    #[cfg(any(M3_TARGET = "hw23", M3_TARGET = "hw"))]
     unimux::exit(Code::Success as u32);
 
-    #[cfg(not(M3_TARGET = "hw23"))]
+    #[cfg(not(any(M3_TARGET = "hw23", M3_TARGET = "hw")))]
     Ok(())
 }

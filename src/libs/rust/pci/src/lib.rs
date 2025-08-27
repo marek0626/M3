@@ -263,8 +263,8 @@ impl Device {
             (PCI_CFG_ADDR + REG_ADDR) + cfg::PAGE_SIZE as GlobOff,
             Perm::RW,
         )?;
-        let sep = EpMng::acquire_for(act_sel, EP_INT, 0)?;
-        let mep = EpMng::acquire_for(act_sel, EP_DMA, 0)?;
+        let sep = EpMng::acquire_for(act_sel, EP_INT, 0, false)?;
+        let mep = EpMng::acquire_for(act_sel, EP_DMA, 0, false)?;
         let rgate = RecvGate::new(math::next_log2(BUF_SIZE), math::next_log2(MSG_SIZE))?;
         let scap = SendCap::new(&rgate)?;
         sep.configure_sgate(scap.sel())?;

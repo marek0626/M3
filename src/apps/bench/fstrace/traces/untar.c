@@ -5,7 +5,7 @@
 
 trace_op_t trace_ops_untar[] = {
     /* #1 = 0x1 */ { .opcode = WAITUNTIL_OP, .args.waituntil = { 0, 178380 } },
-    /* #2 = 0x2 */ { .opcode = OPEN_OP, .args.open = { 3, "/untardata/tar-16m.tar", O_RDONLY, 0 } },
+    /* #2 = 0x2 */ { .opcode = OPEN_OP, .args.open = { 3, "/fstrace/untar/tar-16m.tar", O_RDONLY, 0 } },
     /* #3 = 0x3 */ { .opcode = WAITUNTIL_OP, .args.waituntil = { 0, 14387 } },
     /* #4 = 0x4 */ { .opcode = READ_OP, .args.read = { 512, 3, 512, 1 } },
     /* #5 = 0x5 */ { .opcode = WAITUNTIL_OP, .args.waituntil = { 0, 23393 } },
