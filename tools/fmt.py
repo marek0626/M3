@@ -130,7 +130,7 @@ async def python_fmt(path, inplace):
     if not path.endswith(".py"):
         return True
     args = ["-i"] if inplace else ["--diff", "--exit-code"]
-    return await exec(path, ["autopep8", "--global-config", ".python-format"] + args + [path])
+    return await exec(path, ["autopep8", "--global-config", "setup.cfg"] + args + [path])
 
 
 async def xml_fmt(path, inplace):
