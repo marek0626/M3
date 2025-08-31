@@ -265,7 +265,7 @@ class Test:
             bootgen = rundir / "boot.gen.xml"
             shutil.copyfile(bootin, bootgen)
 
-            self.job = subprocess.Popen(["nice", "./b", "run", bootgen, "-n"],
+            self.job = subprocess.Popen(["nice", "./b", "-n", "run", bootgen],
                                         stdin=subprocess.DEVNULL,
                                         stdout=subprocess.DEVNULL,
                                         stderr=subprocess.DEVNULL,

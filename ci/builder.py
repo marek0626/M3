@@ -233,7 +233,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
                       out_path="build/gem5/build",
                       cache_dir=cache_dir,
                       # don't build M³ at this point as we cannot do that yet
-                      cmd='./b mkgem5 ' + gem5isas + ' -n',
+                      cmd='./b -n mkgem5 ' + gem5isas,
                       shell=True)
         tasks.append(t)
 
@@ -270,7 +270,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
                       deps=TARGET_DEPS + ['src/m3lx/linux', 'src/m3lx/build.sh'],
                       out_path='build/linux',
                       cache_dir=cache_dir,
-                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mklx -n',
+                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b -n mklx',
                       shell=True)
         tasks.append(t)
 
@@ -289,7 +289,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
                       deps=TARGET_DEPS + ['src/m3lx/riscv-pk', 'src/m3lx/build.sh'],
                       out_path='build/riscv-pk',
                       cache_dir=cache_dir,
-                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mkbbl -n',
+                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b -n mkbbl',
                       shell=True)
         t.get(incremental)
 

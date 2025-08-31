@@ -127,7 +127,7 @@ async def cargo_fmt(path, inplace):
 
 
 async def python_fmt(path, inplace):
-    if not path.endswith(".py"):
+    if not path.endswith(".py") and path != "./b":
         return True
     args = ["-i"] if inplace else ["--diff", "--exit-code"]
     return await exec(path, ["autopep8", "--global-config", "setup.cfg"] + args + [path])
@@ -143,7 +143,7 @@ async def xml_fmt(path, inplace):
 
 
 async def shell_fmt(path, inplace):
-    if not path.endswith(".sh") and path != "./b":
+    if not path.endswith(".sh"):
         return True
     args = ["--indent", "4", "--case-indent"]
     args += ["--write"] if inplace else ["--diff"]

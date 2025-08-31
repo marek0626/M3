@@ -46,14 +46,14 @@ check:
     - if: '$CI_MERGE_REQUEST_LABELS !~ /:no-ci:|:no-ci-build:/'
   script:
     - kubectl exec -n os -t m3-ci -- sh -c "./bootstrap.py $CI_COMMIT_SHA"
-    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b checkboot -n'
-    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b fmt-check -n'
-    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b clippy -n'
-    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b lint -n'
+    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b -n checkboot'
+    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b -n fmt --check'
+    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b -n clippy'
+    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b -n lint'
     - |
       kubectl exec -n os -t m3-ci -- sh -c '
         cd M3 \
-          && nix develop path:nix -c ./b doc -n 2>&1 | tee log.txt \
+          && nix develop path:nix -c ./b -n doc 2>&1 | tee log.txt \
           && [ "$(grep error log.txt)" = "" ] \
         '
   resource_group: pod
@@ -64,11 +64,11 @@ test-host:
     - if: '$CI_MERGE_REQUEST_LABELS !~ /:no-ci:|:no-ci-tests:|:no-ci-build:/'
   script:
     - kubectl exec -n os -t m3-ci -- sh -c "./bootstrap.py $CI_COMMIT_SHA"
-    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b test -n'
+    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b -n test'
     - |
       kubectl exec -n os -t m3-ci -- sh -c "
         cd M3 \
-          && nix develop path:nix -c ./b testcov -n \
+          && nix develop path:nix -c ./b -n test --coverage \
           && mkdir -p /cache/results/$(date -I)-$CI_COMMIT_SHA \
           && cp -r build/rust/coverage /cache/results/$(date -I)-$CI_COMMIT_SHA \
         "
