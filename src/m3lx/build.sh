@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [ $# -lt 4 ]; then
+if [ $# -lt 3 ]; then
     echo "This script is not intended to be called directly. Use the commands in ./b." >&2 && exit 1
 fi
 if [ "$M3_ISA" != "riscv64" ]; then
