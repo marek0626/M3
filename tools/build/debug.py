@@ -6,6 +6,7 @@ import sys
 import time
 
 from pathlib import Path
+from typing import Optional
 
 from .utils import run, popen, paginate
 from .context import Context
@@ -40,7 +41,8 @@ def cmd_dbg(ctx: Context, args: argparse.Namespace) -> None:
 
 def _dbg_gem5(ctx: Context, prog: Path, cfg: Path) -> None:
     # TODO make that a CLI argument
-    if not os.getenv("M3_GEM5_PAUSE"):
+    pause = os.getenv("M3_GEM5_PAUSE")
+    if not pause:
         sys.exit("M3_GEM5_PAUSE must be set to the tile to debug.")
 
     # start M³ on gem5 in the background
@@ -48,14 +50,14 @@ def _dbg_gem5(ctx: Context, prog: Path, cfg: Path) -> None:
     log = log_path.open("w")
     proc = popen(
         "python3", "-B", "./tools/execute/main.py", ctx.cross_prefix(), str(cfg), "--debug",
-        stdout=log,
+        stdout=log.fileno(),
         stderr=subprocess.STDOUT,
     )
     log.close()
 
     try:
         # wait for the port to appear in the log
-        port = _find_gdb_port(log_path, 10)
+        port = _find_gdb_port(pause, log_path, 10)
         if not port:
             return
 
@@ -80,16 +82,12 @@ def _dbg_gem5(ctx: Context, prog: Path, cfg: Path) -> None:
             gdb_cmd.unlink()
 
 
-def _find_gdb_port(log_path: Path, timeout: int) -> int | None:
-    port = ""
-    tile = (
-        os.getenv("M3_GEM5_PAUSE")
-        if "C" in os.getenv("M3_GEM5_PAUSE")
-        else f"C0T{int(os.getenv('M3_GEM5_PAUSE')):02d}"
-    )
+def _find_gdb_port(pause: str, log_path: Path, timeout: int) -> Optional[int]:
+    tile = (pause if "C" in pause else f"C0T{int(pause):02d}")
 
-    last_activity = time.time()
     # wait until we know the port it's listening on for GDB
+    last_activity = time.time()
+    port = ""
     with log_path.open("r", encoding="utf-8", buffering=1) as f:
         fd = f.fileno()
         while not port:
@@ -98,7 +96,7 @@ def _find_gdb_port(log_path: Path, timeout: int) -> int | None:
                 last_activity = time.time()
                 line = line.rstrip("\n")
                 if not port and f"{tile}.remote_gdb" in line:
-                    return line.split()[-1]
+                    return int(line.split()[-1])
             else:
                 # No data, block until new data or timeout
                 now = time.time()
@@ -111,10 +109,12 @@ def _find_gdb_port(log_path: Path, timeout: int) -> int | None:
                     # Timeout expired with no data
                     print("Timeout reached, exiting.")
                     return None
+    return None
 
 
-def _dbg_hw(ctx: Context, prog: Path, cfg: Path):
-    if not os.getenv("M3_HW_PAUSE"):
+def _dbg_hw(ctx: Context, prog: Path, cfg: Path) -> None:
+    pause = os.getenv("M3_HW_PAUSE")
+    if not pause:
         sys.exit("M3_HW_PAUSE must be set for hardware debugging.")
 
     # start M³ on the FPGA in the background
@@ -125,8 +125,8 @@ def _dbg_hw(ctx: Context, prog: Path, cfg: Path):
     )
 
     # forward GDB port via SSH
-    port = 3340 + int(os.getenv("M3_HW_PAUSE"))
-    host = os.getenv("M3_HW_FPGA_HOST")
+    port = 3340 + int(pause)
+    host = str(os.getenv("M3_HW_FPGA_HOST"))
     ssh_cmd = ["ssh", "-N", "-L", f"30000:localhost:{port}", host]
     ssh_proc = popen(*ssh_cmd, stderr=subprocess.DEVNULL)
     try:
@@ -214,7 +214,7 @@ def cmd_hwitrace(ctx: Context, args: argparse.Namespace) -> None:
     Expects the trace in stdin (e.g., run/pm0-instr.log).
     """
     paths = [str(ctx.bin_dir / p) for p in args.progs.split(",")]
-    cross = ctx.cross_prefix(paths[0])
+    cross = ctx.cross_prefix(Path(paths[0]))
     paginate(str(ctx.tool_dir / "hwitrace"), cross, *paths)
 
 
@@ -265,7 +265,8 @@ def cmd_flamegraph(ctx: Context, args: argparse.Namespace) -> None:
         str(ctx.tool_dir / "gem5log"), "flamegraph", args.start, args.end, *paths,
         stdout=subprocess.PIPE,
     )
-    run("inferno-flamegraph", "--countname", "ns", stdin=proc.stdout)
+    assert proc.stdout
+    run("inferno-flamegraph", "--countname", "ns", stdin=proc.stdout.fileno())
 
 
 @command(

@@ -10,7 +10,7 @@ POD_NAME = "m3-ci-web-0"
 REMOTE_WEB_PATH = "/web"
 
 
-def clear_remote_dir():
+def clear_remote_dir() -> None:
     subprocess.run([
         "kubectl", "exec", "-n", NAMESPACE, "-t", POD_NAME,
         "--",
@@ -18,7 +18,7 @@ def clear_remote_dir():
     ], check=True)
 
 
-def copy_local_to_remote(local_dir: Path):
+def copy_local_to_remote(local_dir: Path) -> None:
     dest = f"{POD_NAME}:{REMOTE_WEB_PATH}"
     for entry in sorted(local_dir.iterdir()):
         subprocess.run([

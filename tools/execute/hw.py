@@ -14,7 +14,7 @@ class HWPlatform(BasePlatform):
     This platform runs the configuration on the FPGA attached to $M3_HW_FPGA_HOST.
     """
 
-    def run(self):
+    def run(self) -> None:
         # ensure required variables are defined
         for var in ("M3_HW_FPGA_HOST", "M3_HW_FPGA_DIR", "M3_HW_FPGA_NO"):
             if not os.getenv(var):
@@ -61,7 +61,7 @@ class HWPlatform(BasePlatform):
             args += f" --serial {M3_HW_TTY}"
 
         # collect files to transfer
-        files: List[str] = [str(self.outdir / "boot.xml")]
+        files = [str(self.outdir / "boot.xml")]
         if rot_layers:
             first, *rest = rot_layers.split()
             args += f" --tile '{Path(first).name}'"
@@ -77,7 +77,7 @@ class HWPlatform(BasePlatform):
             args += f" --mod '{mod}'"
             files.append(mod.split("=", 1)[1])
 
-        run_sh = self._generate_run_script(args, M3_HW_FPGA_DIR, M3_HW_PAUSE)
+        run_sh = self._generate_run_script(args, str(M3_HW_FPGA_DIR), str(M3_HW_PAUSE))
 
         # copy everything to the remote FPGA host
         remote = f"{M3_HW_FPGA_HOST}:{M3_HW_FPGA_DIR}"
@@ -89,7 +89,7 @@ class HWPlatform(BasePlatform):
         run(*rsync_cmd)
 
         # run the configuration on FPGA
-        ssh_cmd = ["ssh", "-t", M3_HW_FPGA_HOST, f"cd {M3_HW_FPGA_DIR} && sh run.sh"]
+        ssh_cmd = ["ssh", "-t", str(M3_HW_FPGA_HOST), f"cd {M3_HW_FPGA_DIR} && sh run.sh"]
         run(*ssh_cmd)
 
         # pull back the log files

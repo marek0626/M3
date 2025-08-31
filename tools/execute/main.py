@@ -4,12 +4,14 @@ import argparse
 import os
 
 from pathlib import Path
+
+from base import BasePlatform
 from gem5 import Gem5Platform
 from hw import HWPlatform
 from utils import die, run
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="M³ executor (gem5 & HW).")
     parser.add_argument("crossname", help="Name of the cross‑toolchain")
     parser.add_argument("script", help="Path to the XML configuration file")
@@ -23,7 +25,7 @@ def main():
     # choose the platform based on $M3_TARGET (or $M3_RUN_GEM5)
     target = os.getenv("M3_TARGET", "gem5")
     if target == "gem5" or os.getenv("M3_RUN_GEM5") == "1":
-        platform = Gem5Platform(Path(cfg_path), args.crossname, args.debug)
+        platform: BasePlatform = Gem5Platform(Path(cfg_path), args.crossname, args.debug)
     elif target in {"hw", "hw22", "hw23"}:
         platform = HWPlatform(Path(cfg_path), args.crossname, args.debug)
     else:

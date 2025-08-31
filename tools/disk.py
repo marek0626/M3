@@ -3,7 +3,9 @@
 import os
 import argparse
 import subprocess
-import sys
+
+from pathlib import Path
+from typing import List
 
 # disk geometry (512 * 31 * 63 ~= 1 mb)
 secsize = 512
@@ -11,7 +13,7 @@ hdheads = 31
 hdtracksecs = 63
 
 
-def create_disk(image, fs, parts, offset):
+def create_disk(image: Path, fs: Path, parts: List[int], offset: int) -> None:
     if len(parts) == 0:
         exit("Please provide at least one partition")
     if len(parts) > 4:
@@ -22,10 +24,9 @@ def create_disk(image, fs, parts, offset):
     for p in parts:
         totalmb += int(p)
     hdcyl = totalmb
-    totalsecs = offset + hdheads * hdtracksecs * hdcyl
 
     # create image and copy file system into partition
-    subprocess.call(["dd", "if=" + fs, "of=" + str(image),
+    subprocess.call(["dd", "if=" + str(fs), "of=" + str(image),
                      "bs=512", "seek=" + str(offset)])
 
     # zero beginning
@@ -55,40 +56,41 @@ def create_disk(image, fs, parts, offset):
 
     # create partitions with fdisk
     with open(tmpfile, "r") as fin:
-        p = subprocess.Popen(
+        proc = subprocess.Popen(
             ["sudo", "fdisk", "-u", "-C", str(hdcyl), "-S", str(hdheads), lodev], stdin=fin
         )
-        p.wait()
+        proc.wait()
     free_loop(lodev)
 
     # remove temp file
     subprocess.call(["rm", "-Rf", tmpfile])
 
 
-def mb_to_blocks(mb):
+def mb_to_blocks(mb: int) -> int:
     """determines the number of blocks for `mb` MB"""
-    return (mb * hdheads * hdtracksecs) / 2
+    return int((mb * hdheads * hdtracksecs) / 2)
 
 
-def block_offset(parts, secoffset, no):
+def block_offset(parts: List[int], secoffset: int, no: int) -> int:
     """determines the block offset for partition `no` in `parts`"""
     i = 0
     off = secoffset / 2
     for p in parts:
         if i == no:
-            return off
-        off += mb_to_blocks(int(p))
+            return int(off)
+        off += mb_to_blocks(p)
         i += 1
+    assert False, "<no> out of bounds"
 
 
-def create_loop(image, offset=0):
+def create_loop(image: Path, offset: int = 0) -> str:
     """creates a free loop device for `image`, starting at `offset`"""
-    lodev = subprocess.check_output(["sudo", "losetup", "-f"]).rstrip()
+    lodev = subprocess.check_output(["sudo", "losetup", "-f"], text=True).rstrip()
     subprocess.call(["sudo", "losetup", "-o", str(offset), lodev, image])
     return lodev
 
 
-def free_loop(lodev):
+def free_loop(lodev: str) -> None:
     """frees loop device `lodev`"""
     # sometimes the resource is still busy, so try it a few times
     i = 0
@@ -96,7 +98,7 @@ def free_loop(lodev):
         i += 1
 
 
-def run_fdisk(image):
+def run_fdisk(image: Path) -> None:
     """runs fdisk for `image`"""
     lodev = create_loop(image)
     hdcyl = int(os.path.getsize(image) / (1024 * 1024))
@@ -104,23 +106,23 @@ def run_fdisk(image):
     free_loop(lodev)
 
 
-def run_parted(image):
+def run_parted(image: Path) -> None:
     """runs parted for `image`"""
     lodev = create_loop(image)
     subprocess.call(["sudo", "parted", lodev, "print"])
     free_loop(lodev)
 
 
-def create(args):
+def create(args: argparse.Namespace) -> None:
     size = subprocess.check_output(["stat", "--format=%s", args.fs]).rstrip()
-    create_disk(args.disk, args.fs, [int(size) / (1024 * 1024)], 2048)
+    create_disk(args.disk, args.fs, [int(int(size) / (1024 * 1024))], 2048)
 
 
-def fdisk(args):
+def fdisk(args: argparse.Namespace) -> None:
     run_fdisk(args.disk)
 
 
-def parted(args):
+def parted(args: argparse.Namespace) -> None:
     run_parted(args.disk)
 
 

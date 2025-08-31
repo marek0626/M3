@@ -2,15 +2,18 @@ import argparse
 import importlib
 import sys
 
-from typing import Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 from .context import Context
+
+# tell b about the exported types (for mypy)
+__all__ = ["Context", "load_commands"]
 
 
 class Command:
     def __init__(self, name: str, group: str,
                  func: Callable[[Context, argparse.Namespace, List[str]], None],
-                 args: Dict[str, str]):
+                 args: Optional[List[Dict[str, str]]]):
         self.name = name
         self.group = group
         self.func = func
@@ -26,7 +29,7 @@ PLUGINS = [
     ("maintenance", "Maintenance"),
     ("m3lx",        "M³Linux"),
 ]
-CUR_GROUP: str = None
+CUR_GROUP: str = ""
 COMMAND_TABLE: Dict[str, Command] = {}
 
 
@@ -38,9 +41,13 @@ def load_commands() -> Dict[str, Command]:
     return COMMAND_TABLE
 
 
-def command(name: str, args: List[Dict[str, str]] = None) -> Callable:
+# don't be more specific here as this doesn't work with 3.9 that easily as it seems
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+def command(name: str, args: Optional[List[Dict[str, str]]] = None) -> Callable[[F], F]:
     """Decorator used inside plugins, e.g. @command('clean')."""
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: F) -> F:
         if name in COMMAND_TABLE:
             sys.exit(f"Command '{name}' does already exist.")
         COMMAND_TABLE[name] = Command(name, CUR_GROUP, func, args)

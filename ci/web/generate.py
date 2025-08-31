@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 
 import argparse
+import io
 import os
 import pprint
 import re
 import shutil
 import sys
+
 from pathlib import Path
+from typing import Dict, List, Tuple
 
 sys.path.append(os.path.realpath('ci/tests'))  # NOQA
 import check_result
@@ -36,7 +39,7 @@ COLORS = [
 ]
 
 
-def write_html_header(report):
+def write_html_header(report: io.TextIOWrapper) -> None:
     report.write("<!DOCTYPE html>\n")
     report.write("<html lang=\"en\">\n")
     report.write("<head>\n")
@@ -47,12 +50,12 @@ def write_html_header(report):
     report.write("<body>\n")
 
 
-def write_html_footer(report):
+def write_html_footer(report: io.TextIOWrapper) -> None:
     report.write("</body>\n")
     report.write("</html>\n")
 
 
-def write_results(report, date, test):
+def write_results(report: io.TextIOWrapper, date: str, test: str) -> None:
     report.write("<h2>Results of {} on {}:</h2>".format(test, date))
     for cfg in results[date][test]:
         filename = "{}/tests/{}-{}-log.txt".format(date, test, cfg)
@@ -84,7 +87,7 @@ for dir in Path(args.input).glob('*'):
     if re.search(r'^\d+-\d+-\d+-[0-9a-f]+$', filename):
         all_results[filename] = dir
 
-results = {}
+results: Dict[str, Dict[str, Dict[str, check_result.Result]]] = {}
 # use only the last NUM_DAYS days
 for key in sorted(all_results.keys())[-NUM_DAYS:]:
     try:
@@ -101,7 +104,7 @@ for key in sorted(all_results.keys())[-NUM_DAYS:]:
                 if test not in results[key]:
                     results[key][test] = {}
                 subkey = "{}-{}-{}".format(tiletype, isa, bpe)
-                logfile = str(dir) + '/' + str(f) + '/log.txt'
+                logfile = dir / str(f) / 'log.txt'
                 logcopy = '{}/{}/tests/{}-{}-log.txt'.format(args.output, key, test, subkey)
                 results[key][test][subkey] = check_result.parse_output(logfile)
                 os.makedirs(os.path.dirname(logcopy), exist_ok=True)
@@ -121,8 +124,7 @@ for key in results:
             # only consider the benchmarks on gem5 with 64 blocks per extent
             if cfg[-3:] != "-64" or "hw-debug" in cfg or "hw22-debug" in cfg:
                 continue
-            res = results[key][test][cfg]
-            for pname in res.perfs:
+            for pname in results[key][test][cfg].perfs:
                 benchs[pname] = 1
             cfgs[cfg] = 1
 
@@ -218,8 +220,8 @@ with open(args.output + '/index.html', 'w') as report:
                          .format("success" if fail == 0 else "failed", key, test, succ, fail + succ))
 
         # collect relative performance changes
-        base = {}
-        rel = {}
+        base: Dict[str, Dict[str, float]] = {}
+        rel: Dict[str, Dict[str, Dict[str, str]]] = {}
         for key in sorted(results.keys()):
             for cfg in cfgs:
                 if cfg not in base:
@@ -236,11 +238,14 @@ with open(args.output + '/index.html', 'w') as report:
                             for d in results:
                                 rel[cfg][perf.name][d] = "null"
 
-                        if perf.name in base[cfg]:
-                            rel[cfg][perf.name][key] = str(perf.time / base[cfg][perf.name])
+                        if perf.time:
+                            if perf.name in base[cfg]:
+                                rel[cfg][perf.name][key] = str(perf.time / base[cfg][perf.name])
+                            else:
+                                base[cfg][perf.name] = perf.time
+                                rel[cfg][perf.name][key] = "1"
                         else:
-                            base[cfg][perf.name] = perf.time
-                            rel[cfg][perf.name][key] = "1"
+                            rel[cfg][perf.name][key] = "null"
                 except Exception:
                     pass
 
@@ -313,18 +318,19 @@ for test in TESTS:
         report.write("Chart.defaults.font.size = 16;\n")
 
         for bench in benchs:
-            cfgdata = {}
+            cfgdata: Dict[str, List[str]] = {}
             label = ''
             for cfg in cfgs:
                 # collect the benchmark results
-                tbenchs = {}
+                tbenchs: Dict[str, Tuple[float, float]] = {}
                 for key in sorted(results.keys()):
                     if key in results and test in results[key] and cfg in results[key][test]:
                         res = results[key][test][cfg]
                         if bench in res.perfs:
                             perf = res.perfs[bench]
-                            tbenchs[key] = (perf.time, perf.variance)
-                            label = perf.unit
+                            if perf.time:
+                                tbenchs[key] = (perf.time, perf.variance)
+                                label = perf.unit
                 # if none are part of this test, stop
                 if len(tbenchs) == 0:
                     cfgdata[cfg] = []

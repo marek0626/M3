@@ -4,14 +4,14 @@ import subprocess
 import sys
 
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 
 def run(*cmd: str,
-        cwd: Path | None = None,
-        capture: int | None = None,
+        cwd: Optional[Path] = None,
+        capture: Optional[int] = None,
         check: bool = True,
-        env: Optional[dict] = None) -> subprocess.CompletedProcess:
+        env: Optional[Dict[str, str]] = None) -> subprocess.CompletedProcess[Any]:
     """Thin wrapper around subprocess.run that prints an error on failure."""
     try:
         return subprocess.run(
@@ -33,10 +33,10 @@ def which(name: str) -> str:
     path = shutil.which(name)
     if not path:
         die(f"Required program '{name}' not found in $PATH")
-    return path
+    return str(path)
 
 
-def die(msg: str):
+def die(msg: str) -> None:
     """Print an error and exit with a non‑zero status."""
     print(msg, file=sys.stderr)
     sys.exit(1)
@@ -59,17 +59,17 @@ def parse_size(size: str) -> int:
 
 def xml_xpath(file: Path, xpath: str) -> str:
     """Extracts parts of given XML file using the given XPath expression."""
-    return run(
+    return str(run(
         which("xmllint"),
         "--xpath",
         xpath,
         str(file),
         capture=subprocess.PIPE,
         check=False,
-    ).stdout.strip()
+    ).stdout.strip())
 
 
-def xml_attr_value(xml: str) -> str | None:
+def xml_attr_value(xml: str) -> Optional[str]:
     """Extracts the attribute value from XML such as ' attr="value"'."""
     pattern = re.compile(r'\S+="(.*?)"')
     m = pattern.match(xml.strip())

@@ -1,3 +1,5 @@
+from __future__ import annotations  # Enables forward references
+
 import fcntl
 import os
 import re
@@ -6,14 +8,19 @@ import subprocess
 
 from pathlib import Path
 from utils import die, run, which, parse_size, xml_xpath, xml_attr_value
+from typing import TYPE_CHECKING
+
+# only import it during static type checking to avoid circular dependencies
+if TYPE_CHECKING:
+    from base import BasePlatform
 
 
 class M3Lx:
-    def __init__(self, platform):
+    def __init__(self, platform: BasePlatform) -> None:
         self.platform = platform
         self.enabled = self._have_initrds()
 
-    def build(self):
+    def build(self) -> None:
         """Generates dependencies for M³Linux."""
         if not self.enabled:
             return
@@ -78,8 +85,8 @@ class M3Lx:
         fakeroot_env["PATH"] = f"{crossroot}/host/sbin:{fakeroot_env['PATH']}"
         fakeroot_env["FAKEROOTDONTTRYCHOWN"] = "1"
         run(
-            f"{crossroot}/host/bin/fakeroot", "--", fakeroot,
-            cwd="cross/buildroot",
+            f"{crossroot}/host/bin/fakeroot", "--", str(fakeroot),
+            cwd=Path("cross/buildroot"),
             capture=subprocess.DEVNULL,
             env=fakeroot_env,
         )
@@ -91,7 +98,7 @@ class M3Lx:
         size = (size + 0xFFF) & 0xFFFFF000
         return size
 
-    def _generate_dtb(self, initrd_size):
+    def _generate_dtb(self, initrd_size: int) -> None:
         dtb_names = set()
         dtb_tags = xml_xpath(self.platform.cfg, ".//dom[@dtb]/@dtb")
         for line in dtb_tags.split("\n"):
@@ -112,7 +119,7 @@ class M3Lx:
             mem_off = 0x10000000
             initrd_end = mem_off + mem_size
             initrd_start = initrd_end - initrd_size
-            new_dts = self._generate_dts(dtb, initrd_start, initrd_end, mem_off, mem_size)
+            new_dts = self._generate_dts(str(dtb), initrd_start, initrd_end, mem_off, mem_size)
 
             # compile to DTB
             dtb_path = xml_xpath(self.platform.cfg, f'string(.//mods/mod[@name="{dtb}"]/@file)')
@@ -120,7 +127,7 @@ class M3Lx:
             run(which("dtc"), "-O", "dtb", str(new_dts), "-o", str(dtb_dst))
 
     def _generate_dts(self, dtb: str, initrd_start: int, initrd_end: int,
-                      mem_off: int, mem_size: int):
+                      mem_off: int, mem_size: int) -> Path:
         """Generates DTS with given initrd settings and memory size."""
         src_dts = Path(f"src/m3lx/configs/{self.platform.target}.dts")
         dst_dts = Path(f"{self.platform.outdir}/{dtb}.dts")
@@ -149,7 +156,7 @@ class M3Lx:
         dst_dts.write_text(dts)
         return dst_dts
 
-    def _copy_modules(self, xpath: str, src_path: Path):
+    def _copy_modules(self, xpath: str, src_path: Path) -> None:
         """Copies the modules identified by `xpath` to the modules directory."""
         # determine modules to copy
         names = set()

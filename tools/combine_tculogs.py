@@ -4,6 +4,8 @@ import os
 import re
 import sys
 
+from typing import Tuple
+
 if len(sys.argv) < 2:
     print("Usage: {} <log-file>...".format(sys.argv[0]))
     print("  The tool assumes that the file names match the pattern ^pm\\d+-.*$")
@@ -12,8 +14,11 @@ if len(sys.argv) < 2:
 events = []
 for file in sys.argv[1:]:
     m = re.search(r"^pm(\d+)-.*$", os.path.basename(file))
-    pm = int(m[1])
+    if not m:
+        print(f"Skipping non-matching filename '{os.path.basename(file)}'")
+        continue
 
+    pm = int(m[1])
     f = open(file, 'r')
     for line in f.readlines():
         m = re.search(r"^\s*(\d+): Time:\s*(\d+), (.*)$", line)
@@ -21,7 +26,7 @@ for file in sys.argv[1:]:
             events.append((pm, int(m[2]), m[3]))
 
 
-def sort_by_ts(event):
+def sort_by_ts(event: Tuple[int, int, str]) -> int:
     return event[1]
 
 

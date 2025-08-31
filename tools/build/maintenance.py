@@ -30,7 +30,10 @@ def cmd_checkboot(ctx: Context, args: argparse.Namespace) -> None:
 def cmd_clippy(ctx: Context, args: argparse.Namespace) -> None:
     """Run clippy on a specified or every Cargo package."""
     if args.path:
-        paths = [args.path] if args.path.endswith("Cargo.toml") else [f"{args.path}/Cargo.toml"]
+        if args.path.endswith("Cargo.toml"):
+            paths = [Path(args.path)]
+        else:
+            paths = [Path(args.path) / "Cargo.toml"]
     else:
         paths = [toml for toml in ctx.root.glob("src/**/Cargo.toml")
                  if toml != Path("src/Cargo.toml").resolve()]
@@ -85,7 +88,8 @@ def _run_clippy(ctx: Context, cargo_toml: Path) -> None:
     else:
         target = ctx.rust_target_args
 
-    print(f"Running clippy for {os.path.dirname(rel)}...")
+    dir = cargo_toml.parent
+    print(f"Running clippy for {dir}...")
     ignore = [
         "clippy::identity_op",
         "clippy::manual_range_contains",
@@ -96,7 +100,7 @@ def _run_clippy(ctx: Context, cargo_toml: Path) -> None:
     cmd = ["cargo", "clippy"] + target + ["--", "-D", "warnings"]
     for flag in ignore:
         cmd += ["-A", flag]
-    run(*cmd, cwd=os.path.dirname(rel), env=env)
+    run(*cmd, cwd=dir, env=env)
 
 
 @command("doc")
@@ -105,7 +109,7 @@ def cmd_doc(ctx: Context, args: argparse.Namespace) -> None:
     os.environ["RUSTDOCFLAGS"] = "-D warnings"
     for lib in (ctx.root / "src/libs/rust").iterdir():
         if lib.is_dir():
-            run("cargo", "doc", *ctx.rust_target_args, cwd=str(lib))
+            run("cargo", "doc", *ctx.rust_target_args, cwd=lib)
     out = f"file://{ctx.build_dir}/rust/{ctx.rust_target}/doc/m3/index.html"
     print(f"Documentation generated at {out}")
 
@@ -123,7 +127,7 @@ def cmd_fmt(ctx: Context, args: argparse.Namespace) -> None:
     cmd = ["python3", "./tools/fmt.py", *args.remainder]
     if not args.check:
         cmd += ["--inplace"]
-    run(*cmd, cwd=str(ctx.root))
+    run(*cmd, cwd=ctx.root)
 
 
 @command(
@@ -186,18 +190,55 @@ def _rust_default_target() -> str:
     for line in out.splitlines():
         if "Default host:" in line:
             # line looks like: "Default host: x86_64-unknown-linux-gnu"
-            return line.split()[-1]
+            return str(line.split()[-1])
     sys.exit("rustup output does not contain a 'Default host' line")
 
 
-@command("lint")
+@command(
+    "lint",
+    [{"name": "lints", "nargs": "?", "help": "The lints to use (default 'async,python')"}]
+)
 def cmd_lint(ctx: Context, args: argparse.Namespace) -> None:
     """Run the async linter on the kernel, root, and pager."""
-    env = os.environ.copy()
-    env["CARGO_TARGET_DIR"] = str(ctx.root / "build/rust")
-    dirs = ["src/kernel", "src/libs/rust/resmng", "src/server/root", "src/server/pager"]
-    run(
-        "python3", "./tools/linter.py", *dirs,
-        cwd=str(ctx.root),
-        env=env,
-    )
+    lints = args.lints.split(",") if args.lints else ["async", "python"]
+
+    if "async" in lints:
+        env = os.environ.copy()
+        env["CARGO_TARGET_DIR"] = str(ctx.root / "build/rust")
+        dirs = ["src/kernel", "src/libs/rust/resmng", "src/server/root", "src/server/pager"]
+        run(
+            "python3", "./tools/linter.py", *dirs,
+            cwd=ctx.root,
+            env=env,
+        )
+
+    if "python" in lints:
+        pys = [
+            ("b",                         {"MYPYPATH": "tools"}),
+            ("ci/bootstrap.py",           {}),
+            ("ci/builder.py",             {}),
+            ("ci/gcdir.py",               {}),
+            ("ci/k8s.py",                 {}),
+            ("ci/submods-changed.py",     {}),
+            ("ci/tests/check_result.py",  {}),
+            ("ci/tests/gem5.py",          {}),
+            ("ci/web/generate.py",        {"MYPYPATH": "ci/tests"}),
+            ("ci/web/publish.py",         {}),
+            ("tools/backtrace.py",        {}),
+            ("tools/build",               {}),
+            ("tools/combine_tculogs.py",  {}),
+            ("tools/disk.py",             {}),
+            ("tools/execute",             {}),
+            ("tools/fmt.py",              {}),
+            ("tools/gem5act.py",          {}),
+            ("tools/genman.py",           {}),
+            ("tools/linter.py",           {}),
+            ("tools/syncremote.py",       {}),
+        ]
+        for py in pys:
+            path, add_env = py
+            print(f"Running mypy for '{path}'...", flush=True)
+            run(
+                "mypy", "--python-version", "3.9", "--strict", path,
+                env=os.environ.copy() | add_env
+            )

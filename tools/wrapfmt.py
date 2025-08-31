@@ -8,11 +8,13 @@ import argparse
 import subprocess
 import os
 import sys
-from difflib import unified_diff
 import tempfile
 
+from difflib import unified_diff
+from typing import List
 
-def main():
+
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Script for wrapping a formatting program that does not support in-place updates and dry-runs",
         epilog="The formatter command line will be split at spaces. The file path is appended to it.",
@@ -69,7 +71,7 @@ def main():
         exit(1)
 
 
-def to_lines(b: bytes) -> [str]:
+def to_lines(b: bytes) -> List[str]:
     return b.decode("UTF-8").splitlines(keepends=True)
 
 

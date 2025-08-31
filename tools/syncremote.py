@@ -8,6 +8,8 @@ import subprocess
 import tempfile
 import traceback
 
+from typing import Callable, List, Optional, Set
+
 excludes = [
     '.git',
     '.gitmodules',
@@ -29,25 +31,27 @@ excludes = [
 
 
 class FileCollector:
-    def __init__(self, timeout_seconds, on_timeout):
+    def __init__(self,
+                 timeout_seconds: float,
+                 on_timeout: Callable[[Set[str], List[str]], None]) -> None:
         self.timeout_seconds = timeout_seconds
         self.on_timeout = on_timeout
-        self.created = set()
-        self.modified = set()
-        self.deleted = set()
-        self.moved = set()
-        self._timeout_task = None
+        self.created: Set[str] = set()
+        self.modified: Set[str] = set()
+        self.deleted: Set[str] = set()
+        self.moved: Set[str] = set()
+        self._timeout_task: Optional[asyncio.Task[None]] = None
         self._lock = asyncio.Lock()
 
-    async def handle_timeout(self):
+    async def handle_timeout(self) -> None:
         await asyncio.sleep(self.timeout_seconds)
         async with self._lock:
             if self.created or self.modified or self.deleted or self.moved:
                 try:
                     # sync union of created and modified files
                     files = [f for f in self.created.union(self.modified)]
-                    dirs = set([os.path.dirname(f) for f in self.deleted])
-                    dirs = list(dirs.union(self.moved))
+                    del_dirs = set([os.path.dirname(f) for f in self.deleted])
+                    dirs = set(del_dirs.union(self.moved))
                     self.on_timeout(dirs, files)
                 except Exception:
                     print(traceback.format_exc())
@@ -57,7 +61,7 @@ class FileCollector:
                 self.moved.clear()
             self._timeout_task = None
 
-    async def process_line(self, line):
+    async def process_line(self, line: str) -> None:
         events = [
             "CREATE", "MODIFY", "DELETE",
             "MOVED_FROM", "MOVED_TO",
@@ -72,37 +76,36 @@ class FileCollector:
             # skip temporary files
             if full_path.endswith('~'):
                 return
-            match parts[0]:
-                case "CREATE":
-                    # if we recreated the file, don't sync the directory
-                    if full_path in self.deleted:
-                        self.deleted.remove(full_path)
-                        self.modified.add(full_path)
-                    else:
-                        self.created.add(full_path)
-                case "MODIFY":
+            if parts[0] == "CREATE":
+                # if we recreated the file, don't sync the directory
+                if full_path in self.deleted:
+                    self.deleted.remove(full_path)
                     self.modified.add(full_path)
-                case "DELETE":
-                    # if it was created in this run, we can ignore it completely
-                    if full_path in self.created:
-                        if full_path in self.modified:
-                            self.modified.remove(full_path)
-                        self.created.remove(full_path)
-                    else:
-                        self.deleted.add(full_path)
-                case "MOVED_FROM" | "MOVED_TO" | "MOVED_FROM,ISDIR" | "MOVED_TO,ISDIR":
-                    # if something was moved, we just update the directory
-                    self.moved.add(parts[1])
+                else:
+                    self.created.add(full_path)
+            elif parts[0] == "MODIFY":
+                self.modified.add(full_path)
+            elif parts[0] == "DELETE":
+                # if it was created in this run, we can ignore it completely
+                if full_path in self.created:
+                    if full_path in self.modified:
+                        self.modified.remove(full_path)
+                    self.created.remove(full_path)
+                else:
+                    self.deleted.add(full_path)
+            elif parts[0] in {"MOVED_FROM", "MOVED_TO", "MOVED_FROM,ISDIR", "MOVED_TO,ISDIR"}:
+                # if something was moved, we just update the directory
+                self.moved.add(parts[1])
             # print(self.created, self.modified, self.deleted, self.moved)
             if self._timeout_task is None:
                 self._timeout_task = asyncio.create_task(self.handle_timeout())
 
 
-async def sync_incremental(dest, timeout_seconds, dry_run):
-    def perform_sync(dirs, files):
+async def sync_incremental(dest: str, timeout_seconds: float, dry_run: bool) -> None:
+    def perform_sync(dirs: Set[str], files: List[str]) -> None:
         print('Syncing: dirs={}, files={} ... '.format(dirs, files),
               flush=True, end='')
-        with tempfile.NamedTemporaryFile(delete_on_close=False) as fp:
+        with tempfile.NamedTemporaryFile(delete=False) as fp:
             # write dirs and files to sync in temp file
             for f in dirs:
                 fp.write("{}/\n".format(f).encode('utf-8'))
@@ -118,7 +121,7 @@ async def sync_incremental(dest, timeout_seconds, dry_run):
             subprocess.run(cmd, stdout=subprocess.DEVNULL)
         print('DONE')
 
-    def posix_regex(s):
+    def posix_regex(s: str) -> str:
         res = s
         if res.startswith('/'):
             res = '^./' + res[1:]
@@ -139,26 +142,27 @@ async def sync_incremental(dest, timeout_seconds, dry_run):
         '--event', 'modify', '--event', 'create', '--event', 'delete', '--event', 'move',
     ]
     proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE)
+    assert proc.stdout, "Pipe creation failed"
     while True:
-        line = await proc.stdout.readline()
-        if not line:
+        line_bytes = await proc.stdout.readline()
+        if not line_bytes:
             break
-        line = line.decode().rstrip()
+        line = line_bytes.decode().rstrip()
         await collector.process_line(line)
 
 
-def remote_cmd(target, local_cmd):
+def remote_cmd(target: str, local_cmd: List[str]) -> List[str]:
     host, path = tuple(target.split(':'))
     local_cmd = [shlex.quote(c) for c in local_cmd]
     return ['ssh', host, 'cd {} && '.format(shlex.quote(path)) + ' '.join(local_cmd)]
 
 
-def ask_user(question):
+def ask_user(question: str) -> bool:
     answer = input(question + "Are you sure to continue (y/n)? ")
     return answer == 'y'
 
 
-def check_commit(src, dest):
+def check_commit(src: str, dest: str) -> bool:
     target = src if dest == './' else dest
     local_commit_cmd = ['git', 'rev-parse', 'HEAD']
     remote_commit_cmd = remote_cmd(target, local_commit_cmd)
@@ -193,7 +197,7 @@ def check_commit(src, dest):
     return True
 
 
-def check_changes(src, dest):
+def check_changes(src: str, dest: str) -> bool:
     local_changes_cmd = ['git', 'status', '--porcelain']
 
     # sync to local
@@ -217,7 +221,7 @@ def check_changes(src, dest):
     return True
 
 
-def sync_full(src, dest, dry_run, force):
+def sync_full(src: str, dest: str, dry_run: bool, force: bool) -> None:
     # some safety checks to ensure local and remote are in a sane state for this sync
     if (not dry_run or force) and (not check_commit(src, dest) or not check_changes(src, dest)):
         return
@@ -235,7 +239,7 @@ def sync_full(src, dest, dry_run, force):
 
 parser = argparse.ArgumentParser(description='This is the M³ remote syncer.')
 parser.add_argument('remote', help='The remote location to sync to (e.g., bios:M3)')
-parser.add_argument('operation', choices=['incremental', 'to_remote', 'to_local'],
+parser.add_argument('operation', choices=['iincremental', 'to_remote', 'to_local'],
                     default='incremental',
                     help='The operation to execute; "incremental" monitors the repository and syncs'
                     ' all changes to the remote site, whereas "to_remote" and "to_local" perform a'
@@ -250,13 +254,12 @@ if not args.remote.endswith('/'):
     args.remote += '/'
 
 try:
-    match args.operation:
-        case 'incremental':
-            asyncio.run(sync_incremental(args.remote, 10e-3, args.dry_run))
-        case 'to_remote':
-            sync_full('./', args.remote, args.dry_run, args.force)
-        case 'to_local':
-            sync_full(args.remote, './', args.dry_run, args.force)
+    if args.operation == 'incremental':
+        asyncio.run(sync_incremental(args.remote, 10e-3, args.dry_run))
+    elif args.operation == 'to_remote':
+        sync_full('./', args.remote, args.dry_run, args.force)
+    elif args.operation == 'to_local':
+        sync_full(args.remote, './', args.dry_run, args.force)
 except KeyboardInterrupt:
     pass
 except Exception:

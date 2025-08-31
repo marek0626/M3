@@ -29,7 +29,8 @@ def cmd_elf(ctx: Context, args: argparse.Namespace) -> None:
     binary = ctx.bin_dir / args.prog
     cmd = [ctx.cross_prefix(binary) + "readelf", "-aW", str(binary)]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-    paginate("c++filt", stdin=proc.stdout)
+    assert proc.stdout
+    paginate("c++filt", stdin=proc.stdout.fileno())
 
 
 @command(
@@ -77,6 +78,7 @@ def cmd_ctors(ctx: Context, args: argparse.Namespace) -> None:
     # determine offset and size of constructor section
     pattern = re.compile(r'\s*\[\s*\d+\]\s*\S+\s*\S+\s*\S+\s*([0-9a-f]+)\s+([0-9a-f]+).*')
     m = pattern.match(sec_line)
+    assert m
     off = int(m[1], 16)
     size = int(m[2], 16)
     bytes_per = 8 if isa in ("x86_64", "riscv64") else 4
@@ -158,9 +160,10 @@ def cmd_straddr(ctx: Context, args: argparse.Namespace) -> None:
     rodata = run(cross + "readelf", "-S", str(binary), capture=True, text=True).stdout
     base_line = next(line for line in rodata.splitlines() if ".rodata" in line)
     pattern = re.compile(r'\s*\[\s*(\d+)\]\s*\S+\s*\S+\s*([0-9a-f]+).*')
-    m = pattern.match(base_line)
-    base = int(m[2], 16)
-    sec_no = int(m[1])
+    sec_desc = pattern.match(base_line)
+    assert sec_desc
+    base = int(sec_desc[2], 16)
+    sec_no = int(sec_desc[1])
 
     # dump the .rodata strings and filter
     out = run(str(cross) + "readelf", "-p", str(sec_no), str(binary), capture=True).stdout

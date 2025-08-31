@@ -3,7 +3,7 @@ import subprocess
 import sys
 
 from pathlib import Path
-from typing import Mapping, Optional
+from typing import Any, Mapping, Optional
 
 
 def popen(*cmd: str,
@@ -12,7 +12,7 @@ def popen(*cmd: str,
           stdin: Optional[int] = None,
           stdout: Optional[int] = None,
           stderr: Optional[int] = None,
-          text: bool = False) -> subprocess.CompletedProcess:
+          text: bool = False) -> subprocess.Popen[Any]:
     """Wrapper around subprocess.Popen that prints the command when M3_VERBOSE=1."""
     if os.getenv("M3_VERBOSE") == "1":
         print(">>>", " ".join(cmd), file=sys.stderr)
@@ -35,7 +35,7 @@ def run(*cmd: str,
         stdin: Optional[int] = None,
         stdout: Optional[int] = None,
         stderr: Optional[int] = None,
-        text: bool = False) -> subprocess.CompletedProcess:
+        text: bool = False) -> subprocess.CompletedProcess[Any]:
     """Wrapper around subprocess.run that prints the command when M3_VERBOSE=1."""
     if os.getenv("M3_VERBOSE") == "1":
         print(">>>", " ".join(cmd), file=sys.stderr)
@@ -68,6 +68,8 @@ def run_and_tee(*cmd: str,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         )
+        if proc.stdout is None:
+            raise RuntimeError("Pipe creation failed")
 
         # Read line‑by‑line, write to both destinations.
         for raw_line in proc.stdout:
@@ -84,7 +86,7 @@ def run_and_tee(*cmd: str,
 
 def paginate(*cmd: str,
              cwd: Optional[Path] = None,
-             stdin: int | None = None) -> None:
+             stdin: Optional[int] = None) -> None:
     """Run *cmd* and pipe through `less` when stdout is a TTY."""
     if os.getenv("M3_VERBOSE") == "1":
         print(">>>", " ".join(cmd), file=sys.stderr)
@@ -94,7 +96,7 @@ def paginate(*cmd: str,
             cwd=str(cwd) if cwd else None,
             stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
-        if prod.stdout is None:
+        if prod.stdout is None or prod.stderr is None:
             raise RuntimeError("Pipe creation failed")
         pager = subprocess.Popen(["less"], stdin=prod.stdout)
         # give the pipe to less only

@@ -6,7 +6,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+
 from pathlib import Path
+from typing import Any, Optional
 
 ROOT = Path(__file__).resolve().parent
 NS = "os"
@@ -23,10 +25,10 @@ RESULTS_SIZE = "100Gi"
 
 
 def run(*cmd: str,
-        cwd: Path | None = None,
-        input: str | None = None,
-        capture: int | None = None,
-        check: bool = True) -> subprocess.CompletedProcess:
+        cwd: Optional[Path] = None,
+        input: Optional[str] = None,
+        capture: Optional[int] = None,
+        check: bool = True) -> subprocess.CompletedProcess[Any]:
     result = subprocess.run(
         cmd,
         cwd=str(cwd) if cwd else None,
@@ -39,14 +41,14 @@ def run(*cmd: str,
     return result
 
 
-def apply_yaml(yaml: str):
+def apply_yaml(yaml: str) -> None:
     run(
         "kubectl", "apply", "-f", "-",
         input=yaml,
     )
 
 
-def create_storage(name: str, size: str):
+def create_storage(name: str, size: str) -> None:
     yaml = run(
         "sh", str(ROOT / "config" / "storage.sh"), name, size,
         capture=subprocess.PIPE,
@@ -54,7 +56,7 @@ def create_storage(name: str, size: str):
     apply_yaml(yaml)
 
 
-def create_image(name: str, gitlab_user: str, gitlab_pw: str):
+def create_image(name: str, gitlab_user: str, gitlab_pw: str) -> None:
     user_file = OUT_DIR / "user"
     pw_file = OUT_DIR / "pw"
 
@@ -89,7 +91,7 @@ def create_image(name: str, gitlab_user: str, gitlab_pw: str):
                 pass
 
 
-def create_pod(name: str, image: str):
+def create_pod(name: str, image: str) -> None:
     # ``kubectl get pod`` returns 0 if the pod exists, non‑zero otherwise.
     try:
         run("kubectl", "get", "pod", "-n", NS, name, capture=subprocess.PIPE)
@@ -112,7 +114,7 @@ def create_pod(name: str, image: str):
     )
 
 
-def remove_pod(name: str):
+def remove_pod(name: str) -> None:
     run(
         "kubectl", "delete", "-n", NS, f"pod/{name}", "--now",
         capture=subprocess.DEVNULL,
@@ -125,14 +127,14 @@ def remove_pod(name: str):
     )
 
 
-def exec_shell(name: str):
+def exec_shell(name: str) -> None:
     run(
         "kubectl", "exec", "-n", NS, "-ti", name, "--", "bash",
         check=False,   # propagate the remote shell's exit status
     )
 
 
-def debug_test(test_dir: str):
+def debug_test(test_dir: str) -> None:
     fd, tmp_name = tempfile.mkstemp(suffix=".sh")
     os.close(fd)  # ensure that the file is not open anymore
     tmp_path = Path(tmp_name)
@@ -190,7 +192,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main():
+def main() -> None:
     parser = build_parser()
     args = parser.parse_args(sys.argv[1:])
 

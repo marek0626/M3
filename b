@@ -5,6 +5,7 @@ import sys
 
 from pathlib import Path
 from textwrap import fill, dedent
+from typing import Dict, List, Optional, Tuple
 
 # add plugin path
 PLUGIN_DIR = Path(__file__).with_name("tools") / "build"
@@ -24,7 +25,7 @@ parser.add_argument("-n", "--no-build", action="store_true",
                     help="skip the build step and execute the command directly")
 subparsers = parser.add_subparsers(dest="command", metavar="<command>")
 
-cmd_groups = {}
+cmd_groups: Dict[str, List[Tuple[str, str]]] = {}
 
 # add subparsers for plugins
 for name, cmd in commands.items():
@@ -33,10 +34,10 @@ for name, cmd in commands.items():
     if cmd.args:
         for arg in cmd.args:
             name = arg.pop("name")
-            sp.add_argument(name, **arg)
+            sp.add_argument(name, **arg)  # type: ignore
     if cmd.group not in cmd_groups:
         cmd_groups[cmd.group] = []
-    cmd_groups[cmd.group] += [(cmd.name, help_msg)]
+    cmd_groups[cmd.group].append((cmd.name, help_msg))
     sp.set_defaults(_func=cmd.func)
 
 # add options as shown by argparse
@@ -47,7 +48,7 @@ cmd_groups["Options"] = [
 
 
 # custom help text to show commands in groups and list environment variables
-def help_text():
+def help_text() -> None:
     print("usage: ./b [-h] [-n] <command> ...")
     print(dedent(
         """
@@ -118,7 +119,7 @@ def help_text():
             replace_whitespace=True,
         )
 
-    def print_vars(title: str, data: dict) -> None:
+    def print_vars(title: str, data: Dict[str, str]) -> None:
         print()
         print(title)
         for name, desc in data.items():
@@ -129,7 +130,7 @@ def help_text():
     print_vars("Environment variables for target hw/hw22/hw23:", hw)
 
 
-parser.print_help = help_text
+parser.print_help = help_text  # type: ignore
 
 args, remainder = parser.parse_known_args()
 args.remainder = remainder

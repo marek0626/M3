@@ -6,16 +6,18 @@
 
 import os
 import asyncio
-from asyncio.subprocess import PIPE, STDOUT
 import argparse
 import sys
+
+from asyncio.subprocess import PIPE, STDOUT
+from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 verbose = None
 prefix = ""
 suffix = ""
 
 
-async def main():
+async def main() -> None:
     global verbose, prefix, suffix
 
     if sys.stdout.isatty():
@@ -41,7 +43,7 @@ async def main():
     inplace = args.inplace
     routines = []
 
-    def my_fmt(path):
+    def my_fmt(path: str) -> None:
         nonlocal routines, inplace
         routines += fmt(path, inplace)
 
@@ -52,7 +54,7 @@ async def main():
         exit(1)
 
 
-def walk(func):
+def walk(func: Callable[[str], None]) -> None:
     for root, dirs, files in os.walk("."):
         for d in list(dirs):
             keep = all((filt(root, d) for filt in FILTERS))
@@ -66,12 +68,12 @@ def walk(func):
     func("./b")
 
 
-def root_filter(root, name):
+def root_filter(root: str, name: str) -> bool:
     DIRS = ["ci", "src", "tools", "boot", "cross", ".gitlab"]
     return root != "." or name in DIRS
 
 
-def dir_filter(root, name):
+def dir_filter(root: str, name: str) -> bool:
     DIRS = ["src/m3lx", "cross/buildroot", "tools/ninjapie", "tools/lints"]
     path = os.path.join(root, name)
     for d in DIRS:
@@ -80,7 +82,7 @@ def dir_filter(root, name):
     return True
 
 
-def build_filter(root, name):
+def build_filter(root: str, name: str) -> bool:
     DIRS = ["src/libs/flac",  "src/apps/bsdutils", "src/libs/leveldb", "src/libs/axieth"]
     for d in DIRS:
         if root.endswith("/" + d) and name != "build.py":
@@ -88,25 +90,25 @@ def build_filter(root, name):
     return True
 
 
-def musl_filter(root, name):
+def musl_filter(root: str, name: str) -> bool:
     return not root.endswith("/src/libs/musl") or name == "build.py" or name == "m3"
 
 
-FILTERS = [root_filter, dir_filter, build_filter, musl_filter]
+FILTERS: List[Callable[[str, str], bool]] = [root_filter, dir_filter, build_filter, musl_filter]
 
 
-def fmt(*args, **kwargs):
-    return [f(*args, **kwargs) for f in FORMATTERS]
+def fmt(path: str, inplace: bool) -> List[Coroutine[Any, Any, bool]]:
+    return [f(path, inplace) for f in FORMATTERS]
 
 
-async def clang_fmt(path, inplace):
+async def clang_fmt(path: str, inplace: bool) -> bool:
     if not path.endswith(".cc") and not path.endswith(".h"):
         return True
     args = ["-i"] if inplace else ["--dry-run", "--Werror"]
     return await exec(path, ["clang-format"] + args + [path])
 
 
-async def cargo_fmt(path, inplace):
+async def cargo_fmt(path: str, inplace: bool) -> bool:
     if not path.endswith("/Cargo.toml"):
         return True
     args = ["--unstable-features", "--skip-children"]
@@ -126,14 +128,14 @@ async def cargo_fmt(path, inplace):
     return all(results)
 
 
-async def python_fmt(path, inplace):
+async def python_fmt(path: str, inplace: bool) -> bool:
     if not path.endswith(".py") and path != "./b":
         return True
     args = ["-i"] if inplace else ["--diff", "--exit-code"]
     return await exec(path, ["autopep8", "--global-config", "setup.cfg"] + args + [path])
 
 
-async def xml_fmt(path, inplace):
+async def xml_fmt(path: str, inplace: bool) -> bool:
     if not path.endswith(".xml"):
         return True
     args = ["--inplace"] if inplace else []
@@ -142,7 +144,7 @@ async def xml_fmt(path, inplace):
     return await exec(path, ["./tools/wrapfmt.py"] + args + ["xmllint --format", path], env=env)
 
 
-async def shell_fmt(path, inplace):
+async def shell_fmt(path: str, inplace: bool) -> bool:
     if not path.endswith(".sh"):
         return True
     args = ["--indent", "4", "--case-indent"]
@@ -150,7 +152,7 @@ async def shell_fmt(path, inplace):
     return await exec(path, ["shfmt"] + args + [path])
 
 
-async def yaml_fmt(path, inplace):
+async def yaml_fmt(path: str, inplace: bool) -> bool:
     if not path.endswith(".yaml") and not path.endswith(".yml"):
         return True
     args = ["-conf", ".yamlfmt.yaml"]
@@ -160,9 +162,9 @@ async def yaml_fmt(path, inplace):
 limiter = asyncio.Semaphore(128)
 
 
-async def exec(path, args, **kwargs):
+async def exec(path: str, args: List[str], env: Optional[Dict[str, str]] = None) -> bool:
     async with limiter:
-        proc = await asyncio.create_subprocess_exec(*args, **kwargs, stdout=PIPE, stderr=STDOUT)
+        proc = await asyncio.create_subprocess_exec(*args, env=env, stdout=PIPE, stderr=STDOUT)
         stdout, _ = await proc.communicate()
         if verbose or proc.returncode != 0 or stdout:
             print(f"{prefix}Formatting {path}...{suffix}")
@@ -170,7 +172,8 @@ async def exec(path, args, **kwargs):
         return proc.returncode == 0
 
 
-FORMATTERS = [clang_fmt, cargo_fmt, python_fmt, xml_fmt, shell_fmt, yaml_fmt]
+FmtType = Callable[[str, bool], Coroutine[Any, Any, bool]]
+FORMATTERS: List[FmtType] = [clang_fmt, cargo_fmt, python_fmt, xml_fmt, shell_fmt, yaml_fmt]
 
 
 if __name__ == "__main__":

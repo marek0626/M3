@@ -4,6 +4,7 @@ import sys
 
 from pathlib import Path
 from textwrap import dedent
+from typing import Optional
 
 
 class Context:
@@ -22,9 +23,9 @@ class Context:
         for var, val in DEFAULTS.items():
             os.environ.setdefault(var, val)
 
-        self.build = os.getenv("M3_BUILD")               # debug / release / bench
-        self.target = os.getenv("M3_TARGET")             # gem5 / hw / …
-        self.isa = os.getenv("M3_ISA")                   # x86_64 / riscv64 / …
+        self.build = str(os.getenv("M3_BUILD"))         # debug / release / bench
+        self.target = str(os.getenv("M3_TARGET"))       # gem5 / hw / …
+        self.isa = str(os.getenv("M3_ISA"))             # x86_64 / riscv64 / …
 
         # validate variables
         if self.target == "gem5":
@@ -42,7 +43,7 @@ class Context:
         self.build_dir = self.root / f"build/{self.target}-{self.isa}-{self.build}"
         self.bin_dir = self.build_dir / "bin"
         self.tool_dir = self.build_dir / "toolsbin"
-        self.out_dir = Path(os.getenv("M3_OUT"))
+        self.out_dir = Path(str(os.getenv("M3_OUT")))
         self.cross_dir = self.root / f"build/cross-{self.isa}"
         self.ninjapie = Path("tools/ninjapie/ninjapie")
 
@@ -51,6 +52,7 @@ class Context:
         self.rust_build = self.root / self.build_dir / "rust"
         self.rust_generic = self.root / "build/rust"
         self.rust_target = f"{self.isa}-linux-m3-musl"
+        self.rust_host_args = ["--target-dir", str(self.rust_build)]
         self.rust_target_args = [
             "--target", str(self.rust_toolchain / f"{self.rust_target}.json"),
             "--target-dir", str(self.rust_build),
@@ -88,12 +90,12 @@ class Context:
             return "riscv64"
         return self.isa
 
-    def cross_prefix(self, binary: Path = None) -> str:
+    def cross_prefix(self, binary: Optional[Path] = None) -> str:
         """Return the cross-compiler prefix required to analyze the given binary."""
         isa = self.isa_for_binary(binary) if binary else self.isa
         return str(self.root / f"build/cross-{isa}/host/bin/{self.cross_name(binary)}")
 
-    def cross_name(self, binary: Path = None) -> str:
+    def cross_name(self, binary: Optional[Path] = None) -> str:
         """Return the cross-compiler name required to analyze the given binary."""
         isa = self.isa_for_binary(binary) if binary else self.isa
         return f"{isa}-buildroot-linux-musl-"

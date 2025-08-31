@@ -4,10 +4,12 @@ import argparse
 import os
 import subprocess
 import sys
+
 from pathlib import Path
+from typing import Optional
 
 
-def run(*cmd: str, cwd: Path | None = None):
+def run(*cmd: str, cwd: Optional[Path] = None) -> None:
     subprocess.run(cmd, cwd=str(cwd) if cwd else None, check=True)
 
 

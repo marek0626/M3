@@ -76,4 +76,4 @@ def cmd_loadfpga(ctx: Context, args: argparse.Namespace) -> None:
         f"{vivado} -mode batch -source {os.getenv('M3_HW_FPGA_DIR')}/program_fpga.tcl "
         f"-tclargs {os.getenv('M3_HW_FPGA_DIR')}/{args.bitfile} {jtag}"
     )
-    run("ssh", os.getenv("M3_HW_FPGA_HOST"), remote_cmd)
+    run("ssh", str(os.getenv("M3_HW_FPGA_HOST")), remote_cmd)

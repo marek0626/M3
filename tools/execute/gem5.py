@@ -14,7 +14,7 @@ class Gem5Platform(BasePlatform):
     This platform runs the configuration on the gem5 simulator.
     """
 
-    def run(self):
+    def run(self) -> None:
         # generate config & deps
         self.generate_config()
         self.m3lx.build()
@@ -43,7 +43,7 @@ class Gem5Platform(BasePlatform):
         kernels = ",".join(kernel_list)
 
         # build the gem5 argument list
-        params: List[str] = [
+        params = [
             f"--outdir={self.outdir}",
             "--debug-file=gem5.log",
             f"--debug-flags={M3_GEM5_LOG}",
@@ -75,7 +75,7 @@ class Gem5Platform(BasePlatform):
             die(f"Hard disk image '{M3_GEM5_HDD}' does not exist.")
         env["M3_GEM5_IDE_DRIVE"] = str(M3_GEM5_HDD) if M3_GEM5_HDD else ""
         env["M3_GEM5_TILES"] = str(M3_GEM5_CORES)
-        env["M5_PATH"] = self.builddir
+        env["M5_PATH"] = str(self.builddir)
 
         # start gem5
         build_dir = Path("build/gem5")

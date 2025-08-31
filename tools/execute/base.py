@@ -7,6 +7,7 @@ import tempfile
 
 from pathlib import Path
 from m3lx import M3Lx
+from typing import Tuple
 from utils import die, run, which, xml_xpath, xml_attr_value
 
 
@@ -26,9 +27,9 @@ class BasePlatform:
         self.debug = debug
 
         # basic env vars
-        self.target = os.getenv("M3_TARGET")
-        self.isa = os.getenv("M3_ISA")
-        self.build = os.getenv("M3_BUILD")
+        self.target = str(os.getenv("M3_TARGET"))
+        self.isa = str(os.getenv("M3_ISA"))
+        self.build = str(os.getenv("M3_BUILD"))
         self.logflags = os.getenv("M3_LOG", "Info,Error")
 
         # directory paths
@@ -53,15 +54,15 @@ class BasePlatform:
         else:
             self.moddir = defmoddir
 
-    def __del__(self):
+    def __del__(self) -> None:
         if self.m3lx.enabled:
             shutil.rmtree(self.moddir, ignore_errors=True)
 
     # Abstract entry point – must be implemented by subclasses
-    def run(self):
+    def run(self) -> None:
         raise NotImplementedError("Sub‑class must implement run()")
 
-    def generate_config(self):
+    def generate_config(self) -> None:
         """Generate self.outdir/boot.xml from the configuration file."""
         # validate against XSD
         run(which("xmllint"), "--schema", "misc/boot.xsd", "--noout", str(self.cfg))
@@ -77,7 +78,7 @@ class BasePlatform:
         (self.outdir / "boot.xml").write_text(app_xml)
 
     @staticmethod
-    def _env_export(var: str, val: str):
+    def _env_export(var: str, val: str) -> None:
         """Export a variable only if it is not already set."""
         if var in os.environ:
             if os.environ[var] != val:
@@ -108,13 +109,13 @@ class BasePlatform:
         # modules referenced by <app args="…">
         app_args = xml_xpath(self.cfg, ".//app[@args]/@args")
         for arg in app_args.split('\n'):
-            arg = xml_attr_value(arg)
-            if not arg:
+            arg_val = xml_attr_value(arg)
+            if not arg_val:
                 continue
             # we currently assume that binaries starting with "/" are loaded from the FS
-            if arg.startswith("/"):
+            if arg_val.startswith("/"):
                 continue
-            name = arg.split(" ")[0]
+            name = arg_val.split(" ")[0]
             if mode != "hw" and name == "disk" and not os.getenv("M3_GEM5_HDD"):
                 die("Please specify the HDD image to use via M3_GEM5_HDD.")
             path = self.bindir / name
@@ -136,7 +137,7 @@ class BasePlatform:
 
         return ",".join(parts)
 
-    def add_rot(self, kernels, mods) -> (str, str, str):
+    def add_rot(self, kernels: str, mods: str) -> Tuple[str, str, str]:
         """
         Returns the kernels, modules, and RoT layers.
 
@@ -169,7 +170,7 @@ class BasePlatform:
 
         return (kernels, mods, rot_layers)
 
-    def _print_module_hashes(self, modules: str):
+    def _print_module_hashes(self, modules: str) -> None:
         """Prints the SHA3-224 hashes of `modules`, given as a comma-separated list."""
         if not which("openssl"):
             print("NOTE: openssl is not installed. Skipping hashes of boot modules.")
