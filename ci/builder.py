@@ -149,7 +149,7 @@ class BuildTask:
             # if we rebuilt, we move the out directory into the cache
             if rebuild:
                 mkdir(os.path.dirname(self.cache_path()))
-                subprocess.run(['mv', self.out_path, self.cache_path()])
+                shutil.move(self.out_path, self.cache_path())
             # make sure that the out directory does not exist
             if os.path.islink(self.out_path):
                 os.unlink(self.out_path)
