@@ -13,12 +13,12 @@ branches = {
 }
 
 
-def desired_commit(path):
+def desired_commit(path: str) -> str:
     commit = subprocess.check_output(["git", "ls-tree", "HEAD", path]).decode().split()[2]
     return commit
 
 
-def actual_commit(url, branch):
+def actual_commit(url: str, branch: str) -> str:
     last_err = None
     for i in range(0, RETRIES):
         try:
@@ -35,7 +35,7 @@ res = 0
 repo = Repo('.')
 for mod in repo.submodules:
     branch = 'm3' if mod.name not in branches else branches[mod.name]
-    desired = desired_commit(mod.path)
+    desired = desired_commit(str(mod.path))
     actual = actual_commit(mod.url, branch)
     if actual != desired:
         print("{}: expected commit {}, found {} in branch {}"

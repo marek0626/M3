@@ -12,6 +12,7 @@ import traceback
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.append(os.path.realpath('ci/tests'))  # NOQA
 import check_result
@@ -66,7 +67,7 @@ if len(args.tests) == 0:
 
 indir = Path("ci") / "input"
 gem5cfg = Path("platform") / "gem5" / "configs" / "m3"
-fscmd = {}
+fscmd: Dict[str, List[str]] = {}
 
 
 class State(Enum):
@@ -76,16 +77,16 @@ class State(Enum):
 
 
 class Test:
-    def __init__(self, name, target, isa, ty, bpe):
+    def __init__(self, name: str, target: str, isa: str, ty: str, bpe: int) -> None:
         self.name = name
         self.target = target
         self.isa = isa
         self.ty = ty
         self.bpe = bpe
-        self.job = None
+        self.job: Optional[subprocess.Popen[Any]] = None
         self.state = State.INIT
 
-    def should_run(self):
+    def should_run(self) -> bool:
         # riscv32 does not support VM
         if self.isa == "riscv32" and self.ty != "a":
             return False
@@ -109,22 +110,22 @@ class Test:
             return False
         return True
 
-    def is_bench(self):
+    def is_bench(self) -> bool:
         return self.bpe == 64
 
-    def build_mode(self):
+    def build_mode(self) -> str:
         return "debug" if self.name == "hello" else "bench"
 
-    def build_dir(self):
+    def build_dir(self) -> Path:
         return Path("build") / "{}-{}-{}".format(self.target, self.isa, self.build_mode())
 
-    def run_dir(self):
+    def run_dir(self) -> str:
         return "m3-tests-{}-{}-{}-{}".format(self.name, self.ty, self.isa, self.bpe)
 
-    def log_file(self, dir):
+    def log_file(self, dir: Path) -> Path:
         return dir / self.run_dir() / "log.txt"
 
-    def gen_boot_script(self, rundir, script, env):
+    def gen_boot_script(self, rundir: Path, script: str, env: Dict[str, str]) -> Path:
         shpath = indir / "shared" / script
         defpath = indir / script
         bootfile = rundir / "boot.tmp.xml"
@@ -135,7 +136,7 @@ class Test:
             subprocess.run(defpath, stdout=boot, env=env, check=True)
         return bootfile
 
-    def boot_script(self, rundir):
+    def boot_script(self, rundir: Path) -> Path:
         bootdir = Path("boot")
         if self.name == "abort-test":
             return bootdir / "hello.xml"
@@ -168,7 +169,7 @@ class Test:
             else:
                 return defpath
 
-    def build_env(self, rundir):
+    def build_env(self, rundir: Path) -> Dict[str, str]:
         vars = {}
         vars["M3_OUT"] = str(rundir)
         vars["M3_TARGET"] = self.target
@@ -201,7 +202,7 @@ class Test:
 
         return vars
 
-    def __call__(self):
+    def __call__(self) -> None:
         if self.is_bench():
             vlimit = 12 * 1024 * 1024 * 1024
             tlimit = 40 * 60
@@ -211,7 +212,7 @@ class Test:
         resource.setrlimit(resource.RLIMIT_AS, (vlimit, vlimit))
         resource.setrlimit(resource.RLIMIT_CPU, (tlimit, tlimit))
 
-    def create_run_script(self, rundir, bootin, vars):
+    def create_run_script(self, rundir: Path, bootin: Path, vars: Dict[str, str]) -> None:
         # create a run.sh that drops the user into a shell to exactly
         # reproduce and analyze a test
         runfile = str(rundir) + "/run.sh"
@@ -255,8 +256,8 @@ class Test:
             f.write("fi\n")
         os.chmod(runfile, 0o755)
 
-    def step(self, dir):
-        rundir = Path(dir) / self.run_dir()
+    def step(self, dir: Path) -> bool:
+        rundir = dir / self.run_dir()
         if self.state == State.INIT:
             rundir.mkdir(exist_ok=True, parents=True)
             vars = self.build_env(rundir)
@@ -265,7 +266,7 @@ class Test:
             bootgen = rundir / "boot.gen.xml"
             shutil.copyfile(bootin, bootgen)
 
-            self.job = subprocess.Popen(["nice", "./b", "run", bootgen, "-n"],
+            self.job = subprocess.Popen(["nice", "./b", "-n", "run", bootgen],
                                         stdin=subprocess.DEVNULL,
                                         stdout=subprocess.DEVNULL,
                                         stderr=subprocess.DEVNULL,
@@ -274,12 +275,14 @@ class Test:
             self.state = State.RUN
             return True
         elif self.state == State.RUN:
+            assert self.job
             if self.job.poll() is None:
                 return True
             self.job = subprocess.Popen(["gzip", "-f", rundir / "gem5.log"])
             self.state = State.COMPRESS
             return True
         elif self.state == State.COMPRESS:
+            assert self.job
             if self.job.poll() is None:
                 return True
             self.job = None
@@ -288,19 +291,19 @@ class Test:
 
 
 class Jobs:
-    def __init__(self, dir):
-        self.dir = Path(dir)
-        self.jobs = []
-        self.running = []
+    def __init__(self, dir: Path) -> None:
+        self.dir = dir
+        self.jobs: List[Test] = []
+        self.running: List[Test] = []
         self.total = 0
         self.succeeded = 0
         self.finished = 0
-        self.failures = []
+        self.failures: List[Tuple[Path, List[check_result.TestResult]]] = []
 
-    def add(self, job):
+    def add(self, job: Test) -> None:
         self.jobs += [job]
 
-    def run(self, parallel):
+    def run(self, parallel: int) -> None:
         self.total = len(self.jobs)
         self.succeeded = 0
         self.finished = 0
@@ -327,11 +330,11 @@ class Jobs:
             if len(self.running) > 0:
                 os.waitpid(-1, 0)
 
-    def _start_job(self, job):
+    def _start_job(self, job: Test) -> None:
         job.step(self.dir)
         print("[{:3} / {:3}] Started {}".format(self.finished, self.total, job.run_dir()))
 
-    def _finish_job(self, job):
+    def _finish_job(self, job: Test) -> None:
         res = check_result.parse_output(job.log_file(self.dir))
         if len(res.failures) == 0:
             self.succeeded += 1
@@ -342,14 +345,15 @@ class Jobs:
         print(msg.format(self.finished, self.total, job.run_dir()))
         self.finished += 1
 
-    def stop(self):
+    def stop(self) -> None:
         for run in self.running:
+            assert run.job
             run.job.kill()
             self._finish_job(run)
         self.running = []
 
 
-def build_image(name, argv):
+def build_image(name: str, argv: List[str]) -> None:
     argv = [str(e) for e in argv]
     fscmd[name] = argv
     subprocess.run(argv, check=True)
@@ -363,22 +367,22 @@ for isa in args.isas:
         bmoddir = builddir / name
         bmoddir.mkdir(exist_ok=True, parents=True)
         build_image(name + "-bench",
-                    [builddir / "toolsbin" / "mkm3fs",
-                     bmoddir / "bench.img",
-                     builddir / "src" / "fs" / "bench",
-                     32 * 1024,  # blocks
-                     4096,       # inodes
+                    [str(builddir / "toolsbin" / "mkm3fs"),
+                     str(bmoddir / "bench.img"),
+                     str(builddir / "src" / "fs" / "bench"),
+                     str(32 * 1024),  # blocks
+                     str(4096),       # inodes
                      bpe])
         build_image(name + "-default",
-                    [builddir / "toolsbin" / "mkm3fs",
-                     bmoddir / "default.img",
-                     builddir / "src" / "fs" / "default",
-                     16 * 1024,  # blocks
-                     512,        # inodes
+                    [str(builddir / "toolsbin" / "mkm3fs"),
+                     str(bmoddir / "default.img"),
+                     str(builddir / "src" / "fs" / "default"),
+                     str(16 * 1024),  # blocks
+                     str(512),        # inodes
                      bpe])
 
 # collect jobs
-jobs = Jobs(args.results)
+jobs = Jobs(Path(args.results))
 for test in args.tests:
     for isa in args.isas:
         for bpe in args.bpes:
@@ -389,7 +393,7 @@ for test in args.tests:
 
 # execute everything
 try:
-    jobs.run(os.cpu_count())
+    jobs.run(os.cpu_count() or 1)
 except Exception:
     print(traceback.format_exc())
     print("Stopping tests...")
@@ -442,8 +446,8 @@ print(summary.format(jobs.succeeded, jobs.total))
 if len(jobs.failures) > 0:
     print()
     print("The following tests failed:")
-    for (name, fails) in jobs.failures:
-        print("{}:".format(name))
+    for (path, fails) in jobs.failures:
+        print("{}:".format(path))
         for fail in fails:
             print("  ", fail)
     sys.exit(1)

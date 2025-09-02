@@ -4,8 +4,10 @@ import os
 import re
 import subprocess
 import sys
+
 from collections import OrderedDict
 from shlex import quote
+from typing import Optional
 
 if len(sys.argv) != 3:
     sys.exit("Usage: {} <crossprefix> <binary>".format(sys.argv[0]))
@@ -18,49 +20,62 @@ regex_btline = re.compile(r'^(?:.*?\[[^\]]+\])?\s*(?:0x)?([0-9a-f]+)\s*$')
 regex_sanbtline = re.compile(r'^\s*#\d+\s+0x([0-9a-f]+).*')
 
 
-def get_location(addr):
+class Symbol:
+    def __init__(self, addr: int, section: str, name: str) -> None:
+        self.addr = addr
+        self.section = section
+        self.name = name
+
+
+def get_location(addr: int) -> str:
     cmd = ["addr2line", "-e", binary, "{:#x}".format(addr)]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-    line = proc.stdout.readline()
-    return line.decode(errors='ignore').replace(os.environ.get('PWD'), '.')
+    assert proc.stdout, "Pipe creation failed"
+    line_bytes = proc.stdout.readline()
+    line = line_bytes.decode(errors='ignore')
+    pwd = os.environ.get('PWD')
+    if pwd:
+        return line.replace(pwd, '.')
+    return line
 
 
-def find_sym(addr):
+def find_sym(addr: int) -> Optional[Symbol]:
     last_addr = 0
     for s in syms:
         if s >= addr:
-            return syms[last_addr] if last_addr != 0 else {}
+            return syms[last_addr] if last_addr != 0 else None
         last_addr = s
-    return {}
+    return None
 
 
-def print_func(addr):
+def print_func(addr: int) -> None:
     # hack for Linux: currently, we generate PIE binaries and thus, Linux puts code and data at
     # weird addresses. with setarch -R, Linux uses the fixed offset 0x555555554000.
     if "/host-" in binary:
         addr -= 0x555555554000
 
     sym = find_sym(addr)
-    if len(sym) == 0:
+    if not sym:
         return
 
     loc = get_location(addr)
     print(" {:#x} {}({}) + {:#x} = {:#x} in {}"
-          .format(addr, sym['name'], sym['sec'], addr - sym['addr'], sym['addr'], loc))
+          .format(addr, sym.name, sym.section, addr - sym.addr, sym.addr, loc))
 
 
 # scan binary
 syms = {}
 cmd = "{}nm {} | c++filt".format(quote(crossprefix), quote(binary))
 proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
-for line in proc.stdout.readlines():
-    line = line.strip().decode(errors='ignore')
+assert proc.stdout, "Pipe creation failed"
+for line_bytes in proc.stdout.readlines():
+    line = line_bytes.strip().decode(errors='ignore')
     match = regex_symbol.match(line)
     if match:
         addr = int(match.group(1), 16)
         sec = match.group(2)
         sym = match.group(3)
-        syms[addr] = {'addr': addr, 'sec': sec, 'name': sym}
+        syms[addr] = Symbol(addr, sec, sym)
 
 # sort symbols by address
 syms = OrderedDict(sorted(syms.items(), key=lambda t: t[0]))

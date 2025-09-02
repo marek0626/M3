@@ -6,7 +6,7 @@ import sys
 import subprocess
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Helper script for linting multiple crates using the m3-lints crate"
     )

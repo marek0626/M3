@@ -5,26 +5,28 @@ import shutil
 import subprocess
 import sys
 
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from functools import cmp_to_key
+from io import TextIOWrapper
+from typing import Any, List, Optional, Tuple, Union
 
 CACHE_CAP = 3
 NIX_DEPS = ['nix/flake.lock', 'nix/flake.nix', 'nix/shell.nix']
 TARGET_DEPS = NIX_DEPS + ['cross/buildroot']
 
 
-def get_hash(paths: [str]):
+def get_hash(paths: List[str]) -> str:
     # determine the hash of the last commit for any of the given paths
     # git log gives us "commit <hash> ..."
     res = subprocess.check_output(['git', 'log', '--max-count=1', '--'] + paths)
     return res.split()[1].decode()
 
 
-def mkdir(path: str):
+def mkdir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
-def gc_dir(dir: str, max: int):
+def gc_dir(dir: str, max: int) -> None:
     files = []
     if os.path.isdir(dir):
         # collect folder items including the last modification time. note that the last access
@@ -37,10 +39,10 @@ def gc_dir(dir: str, max: int):
         # if we're at the limit, evict the least recently modified entries
         if len(files) > max:
             sorted_files = sorted(files,
-                                  key=cmp_to_key(lambda f1, f2: f2[0] - f1[0]))
+                                  key=cmp_to_key(lambda f1, f2: int(f2[0] - f1[0])))  # type: ignore
             for i in range(max, len(files)):
                 fpath = os.path.join(dir, sorted_files[i][1])
-                mdate = datetime.fromtimestamp(sorted_files[i][0], UTC)
+                mdate = datetime.fromtimestamp(sorted_files[i][0], timezone.utc)
                 hdate = mdate.strftime('%Y-%m-%d %H:%M:%S')
                 print('{}: evicting (modified on {})...'.format(fpath, hdate))
                 if os.path.isfile(fpath):
@@ -50,8 +52,8 @@ def gc_dir(dir: str, max: int):
 
 
 class BuildTask:
-    def __init__(self, name: str, deps: [str], out_path: str, cache_dir: str,
-                 cmd, shell=False, werror=False):
+    def __init__(self, name: str, deps: List[str], out_path: str, cache_dir: str,
+                 cmd: Union[List[str], str], shell: bool = False, werror: bool = False):
         self.name = name
         self.deps = deps.copy()
         self.out_path = out_path
@@ -60,16 +62,16 @@ class BuildTask:
         self.shell = shell
         self.werror = werror
 
-    def hash(self):
+    def hash(self) -> str:
         return get_hash(self.deps)
 
-    def cache_path(self):
+    def cache_path(self) -> str:
         return '{}/{}/{}'.format(self.cache_dir, self.name, self.hash())
 
-    def needs_rebuild(self):
+    def needs_rebuild(self) -> bool:
         return not os.path.exists(self.cache_path())
 
-    def get(self, incremental=False):
+    def get(self, incremental: bool = False) -> None:
         log = None
         returncode = 0
 
@@ -84,7 +86,7 @@ class BuildTask:
 
         self.finish(rebuild, incremental, returncode, log)
 
-    def start(self, incremental=False):
+    def start(self, incremental: bool = False) -> Tuple[TextIOWrapper, subprocess.Popen[Any]]:
         # evict entries from the cache (in incremental mode we are not using the cache), if
         # required.
         if not incremental:
@@ -107,7 +109,7 @@ class BuildTask:
                                 stdout=log, stderr=log)
         return (log, proc)
 
-    def detect_errors(self, log):
+    def detect_errors(self, log: TextIOWrapper) -> None:
         log.seek(0)
         errors = False
         seen_ninja = False
@@ -124,9 +126,14 @@ class BuildTask:
         if errors:
             sys.exit(1)
 
-    def finish(self, rebuild: bool, incremental: bool, returncode: int, log):
+    def finish(self,
+               rebuild: bool,
+               incremental: bool,
+               returncode: int,
+               log: Optional[TextIOWrapper]) -> None:
         # check for errors
         if rebuild:
+            assert log
             if self.werror:
                 self.detect_errors(log)
             if returncode != 0:
@@ -142,7 +149,7 @@ class BuildTask:
             # if we rebuilt, we move the out directory into the cache
             if rebuild:
                 mkdir(os.path.dirname(self.cache_path()))
-                subprocess.run(['mv', self.out_path, self.cache_path()])
+                shutil.move(self.out_path, self.cache_path())
             # make sure that the out directory does not exist
             if os.path.islink(self.out_path):
                 os.unlink(self.out_path)
@@ -154,12 +161,12 @@ class BuildTask:
             # now link to the cache
             os.symlink(self.cache_path(), self.out_path)
 
-    def gc(self):
+    def gc(self) -> None:
         dir = '{}/{}'.format(self.cache_dir, self.name)
         gc_dir(dir, CACHE_CAP - 1)
 
 
-def build_all(tasks: [BuildTask], incremental: bool):
+def build_all(tasks: List[BuildTask], incremental: bool) -> None:
     # start all tasks that have to run and let them run in parallel
     running = []
     for t in tasks:
@@ -176,7 +183,7 @@ def build_all(tasks: [BuildTask], incremental: bool):
         task.finish(True, incremental, proc.returncode, log)
 
 
-def prepare(targets: [str], isas: [str], cache_dir: str, incremental: bool):
+def prepare(targets: List[str], isas: List[str], cache_dir: str, incremental: bool) -> None:
     # determine required submodules
     mods = ['tools/ninjapie', 'tools/lints', 'cross/buildroot',
             'src/libs/leveldb', 'src/libs/musl', 'src/libs/flac',
@@ -201,8 +208,11 @@ def prepare(targets: [str], isas: [str], cache_dir: str, incremental: bool):
         t.get(incremental)
 
 
-def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
-          incremental: bool):
+def build(targets: List[str],
+          isas: List[str],
+          builds: List[str],
+          cache_dir: str,
+          incremental: bool) -> None:
     # when we build for riscv64, we always need the riscv32 toolchain as well to run stuff on the
     # accelerator co-processors
     ccisas = isas.copy()
@@ -222,18 +232,18 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
 
     if 'gem5' in targets:
         # build gem5 for all ISAs
-        gem5isas = []
+        isa_list = []
         if 'riscv32' in isas or 'riscv64' in isas:
-            gem5isas.append('RISCV')
+            isa_list.append('RISCV')
         if 'x86_64' in isas:
-            gem5isas.append('X86')
-        gem5isas = ','.join(gem5isas)
+            isa_list.append('X86')
+        gem5isas = ','.join(isa_list)
         t = BuildTask(name="build/gem5",
                       deps=NIX_DEPS + ["platform/gem5"],
                       out_path="build/gem5/build",
                       cache_dir=cache_dir,
                       # don't build M³ at this point as we cannot do that yet
-                      cmd='./b mkgem5 ' + gem5isas + ' -n',
+                      cmd='./b -n mkgem5 ' + gem5isas,
                       shell=True)
         tasks.append(t)
 
@@ -270,7 +280,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
                       deps=TARGET_DEPS + ['src/m3lx/linux', 'src/m3lx/build.sh'],
                       out_path='build/linux',
                       cache_dir=cache_dir,
-                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mklx -n',
+                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b -n mklx',
                       shell=True)
         tasks.append(t)
 
@@ -289,7 +299,7 @@ def build(targets: [str], isas: [str], builds: [str], cache_dir: str,
                       deps=TARGET_DEPS + ['src/m3lx/riscv-pk', 'src/m3lx/build.sh'],
                       out_path='build/riscv-pk',
                       cache_dir=cache_dir,
-                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b mkbbl -n',
+                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b -n mkbbl',
                       shell=True)
         t.get(incremental)
 

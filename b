@@ -1,814 +1,150 @@
-#!/usr/bin/env bash
+#!/usr/bin/env python3
 
-# fall back to reasonable defaults
-if [ -z "$M3_BUILD" ]; then
-    M3_BUILD='release'
-fi
-if [ -z "$M3_TARGET" ]; then
-    M3_TARGET='gem5'
-fi
-if [ -z "$M3_ISA" ]; then
-    M3_ISA='riscv64'
-fi
-if [ -z "$M3_OUT" ]; then
-    M3_OUT="run"
-fi
+import argparse
+import sys
 
-# set target
-if [ "$M3_TARGET" = "gem5" ]; then
-    if [ "$M3_ISA" != "x86_64" ] && [ "$M3_ISA" != "riscv64" ] && [ "$M3_ISA" != "riscv32" ]; then
-        echo "ISA $M3_ISA not supported for target gem5." >&2 && exit 1
-    fi
-elif [ "$M3_TARGET" = "hw" ] || [ "$M3_TARGET" = "hw22" ] || [ "$M3_TARGET" = "hw23" ]; then
-    M3_ISA="riscv64"
-else
-    echo "Target $M3_TARGET not supported." >&2 && exit 1
-fi
+from pathlib import Path
+from textwrap import fill, dedent
+from typing import Dict, List, Optional, Tuple
 
-if [ "$M3_BUILD" != "debug" ] && [ "$M3_BUILD" != "release" ] &&
-    [ "$M3_BUILD" != "bench" ]; then
-    echo "Build mode $M3_BUILD not supported." >&2 && exit 1
-fi
+# add plugin path
+PLUGIN_DIR = Path(__file__).with_name("tools") / "build"
+sys.path.insert(0, str(PLUGIN_DIR.parent))
 
-export M3_BUILD M3_TARGET M3_ISA M3_OUT
+from build import Context, load_commands  # noqa: E402
 
-# determine cross compiler and rust ABI based on target and ISA
-root=$(readlink -f .)
-crossdir="./build/cross-$M3_ISA/host"
-crossname="$M3_ISA-buildroot-linux-musl-"
-crossprefix="$crossdir/bin/$crossname"
+# load all commands
+commands = load_commands()
 
-build=build/$M3_TARGET-$M3_ISA-$M3_BUILD
-bindir=$build/bin/
-tooldir=$build/toolsbin
-gem5dir=build/gem5
-cachedirtag=build/CACHEDIR.TAG
+# create context with environment variables etc.
+ctx = Context()
 
-# rust env vars
-rusttoolchain="$root/src/toolchain/rust"
-rustbuild="$root/$build/rust"
-rustgeneric="$root/build/rust"
-rustisa="$M3_ISA"
-export RUST_TARGET=$rustisa-linux-m3-musl
-export RUST_TARGET_PATH=$rusttoolchain
-rust_host_args=(--target-dir "$rustbuild")
-rust_target_args=(
-    --target "$RUST_TARGET" --target-dir "$rustbuild"
-    -Z "build-std=core,alloc,std,panic_abort"
-)
+# build argument parser
+parser = argparse.ArgumentParser(prog="./b")
+parser.add_argument("-n", "--no-build", action="store_true",
+                    help="skip the build step and execute the command directly")
+subparsers = parser.add_subparsers(dest="command", metavar="<command>")
 
-help() {
-    echo "Usage: $1 [-n] [<cmd> <arg>]"
-    echo ""
-    echo "This is a convenience script that is responsible for building everything"
-    echo "and running the specified command afterwards. The most important environment"
-    echo "variables that influence its behaviour are M3_TARGET=(gem5|hw|hw22|hw23),"
-    echo "M3_ISA=(x86_64|riscv32|riscv64) [on gem5 only], and"
-    echo "M3_BUILD=(debug|release|bench)."
-    echo ""
-    echo "The flag -n skips the build and executes the given command directly. This"
-    echo "can be handy if, for example, the build is currently broken."
-    echo ""
-    echo "The following commands are available:"
-    echo "  Building:"
-    echo "    clean:                   remove build directory for the current M3_TARGET,"
-    echo "                             M3_ISA, and M3_BUILD combination. This requires a"
-    echo "                             complete rebuild afterwards."
-    echo "    distclean:               removes the entire build directory, requiring also"
-    echo "                             a rebuild of the cross compiler. Use with caution!"
-    echo "    ninja ...:               run ninja with given arguments."
-    echo ""
-    echo "  Running:"
-    echo "    run <script>:            run the specified <script>. See directory boot."
-    echo "    rungem5 <script>:        run the specified <script> on gem5. See directory boot."
-    echo "    loadfpga=<bitfile>:      loads the given Bitfile onto the FPGA. The Bitfile is"
-    echo "                             specified relative to platform/hw/fpga_tools/bitfiles."
-    echo ""
-    echo "  Debugging:"
-    echo "    dbg=<prog> <script>:     run <script> and debug <prog> in gdb."
-    echo "    bt=<prog>:               print the backtrace, using given symbols."
-    echo "    hwitrace=<progs>:        shows an annotated hardware instruction trace. <progs>"
-    echo "                             are the binary names for the symbols. stdin expects"
-    echo "                             the run/pm*-instrs.log."
-    echo "    trace=<progs>:           shows an annotated instruction trace. <progs> are"
-    echo "                             the binary names for the symbols, separated by ','."
-    echo "                             Optionally, each binary can end with '+<offset>' in"
-    echo "                             case of ASLR. stdin expects the gem5.log with Exec"
-    echo "                             enabled."
-    echo "    tracelx=<progs>:         shows an annotated instruction trace for M³Linux"
-    echo "                             programs. The command works like trace, but provides"
-    echo "                             symbols for Linux+bbl and searches for <prog> in the"
-    echo "                             M³Linux directory (lxbin)."
-    echo "    flamegraph=<progs>       produces a flamegraph with stdin to stdout. <progs>"
-    echo "      [start] [end]          are the binary names for the symbols. stdin expects"
-    echo "                             the gem5.log with Exec,TcuConnector enabled."
-    echo "    ftrace=<progs>           produces an ftrace with stdin to stdout, which be fed"
-    echo "      [start] [end]          into tools like Perfetto or Trace Compass. <progs>"
-    echo "                             are the binary names for the symbols. stdin expects"
-    echo "                             the gem5.log with Exec,TcuConnector enabled."
-    echo "    snapshot=<progs> <time>: prints the stacktrace of all programs at timestamp"
-    echo "                             <time>. <progs> are the binary names for the symbols."
-    echo "                             stdin expects the gem5.log with Exec enabled."
-    echo ""
-    echo "  Program analysis:"
-    echo "    ctors=<prog>:            show the constructors of <prog>."
-    echo "    dis=<prog>:              run objdump -SC <prog>."
-    echo "    elf=<prog>:              run readelf -a <prog>."
-    echo "    list:                    list the link-address of all programs."
-    echo "    macros=<path>:           expand Rust macros for app in <path>."
-    echo "    nma=<prog>:              run nm -SCn <prog>."
-    echo "    nms=<prog>:              run nm -SC --size-sort <prog>."
-    echo "    straddr=<prog> <string>  search for <string> in <prog>."
-    echo ""
-    echo "  File system:"
-    echo "    exfs=<fsimg> <dir>:      export contents of <fsimg> to <dir>."
-    echo "    fsck=<fsimg> ...:        run m3fsck on <fsimg>."
-    echo "    mkfs=<fsimg> <dir> ...:  create m3fs in <fsimg> with content of <dir>."
-    echo "    shfs=<fsimg> ...:        show m3fs in <fsimg>."
-    echo ""
-    echo "  Maintenance:"
-    echo "    checkboot:               check the validity of all boot scripts."
-    echo "    clippy:                  run clippy for all Rust code."
-    echo "    clippy=<prog>:           run clippy for Rust code in given directory."
-    echo "    doc:                     generate Rust documentation."
-    echo "    fmt:                     run formatters for all C++, Rust, and Python code."
-    echo "    fmt-check:               run formatters, but in check mode."
-    echo "    test:                    run Rust tests on host with miri."
-    echo "    testcov:                 run Rust tests on host and generate code coverage."
-    echo "    lint:                    run custom linter on selected packages."
-    echo ""
-    echo "  gem5:"
-    echo "    mkgem5 [<isas>]:         (re)build the gem5 simulator for the given ISA(s)."
-    echo "                             The ISAs are given as a comma-separated list of"
-    echo "                             'RISCV' and 'X86'. By default all are built."
-    echo "    mkgem5dbg [<isas>]:      (re)build the debug version of the gem5 simulator."
-    echo ""
-    echo "  M³Linux (RISC-V only):"
-    echo "    mklx ...:                (re)build Linux including bbl via buildroot. The"
-    echo "                             remaining arguments are passed to Linux's build system."
-    echo "    mkbbl ...:               (re)build the bbl bootloader. The remaining arguments"
-    echo "                             are passed to bbl's build system."
-    echo "    genlxcc:                 Generate compile_commands.json for M³Linux."
-    echo ""
-    echo "Environment variables:"
-    echo "  General:"
-    echo "    M3_TARGET:               the target: 'gem5', 'hw', 'hw22', or 'hw23', default"
-    echo "                             is 'gem5'."
-    echo "    M3_ISA:                  the ISA to use. On gem5, ''riscv32', 'riscv64',"
-    echo "                             and 'x86_64' is supported. On other targets, it is"
-    echo "                             ignored."
-    echo "    M3_BUILD:                the build type is 'debug', 'release', or 'bench'".
-    echo "                             In debug mode optimizations are disabled,"
-    echo "                             debug infos are available, and assertions are active."
-    echo "                             In release mode all that is disabled. In bench, all"
-    echo "                             logging is hardcoded to Info,Error in contrast to all"
-    echo "                             other modes where it is defined by the environment"
-    echo "                             variable LOG (see M3_LOG). The default mode is release."
-    echo "    M3_REM_HOST:             if set, the build is performed on this host in"
-    echo "                             M3_REM_DIR. All source files are synced to the remote"
-    echo "                             host before the build and the build files are synced"
-    echo "                             back afterwards."
-    echo "    M3_REM_DIR:              the directory in which the remote build takes place."
-    echo "    M3_VERBOSE:              print executed commands in detail during build."
-    echo "    M3_MOD_PATH:             The path for additional boot modules (build directory"
-    echo "                             by default)."
-    echo "    M3_OUT:                  the output directory ('run' by default)."
-    echo "    M3_LOG:                  the log flags for M³ separated by comma (the log flags"
-    echo "                             are listed in src/libs/rust/base/src/io/logflags.rs). By"
-    echo "                             default, M3_LOG is set to 'Info,Error'."
-    echo ""
-    echo "  Variables for target gem5:"
-    echo "    M3_GEM5_CORES:           number of cores to simulate."
-    echo "    M3_GEM5_HDD:             the hard drive image to use (filename only)."
-    echo "    M3_GEM5_LOG:             the log flags for gem5 (--debug-flags)."
-    echo "    M3_GEM5_LOGSTART:        when to start logging for gem5 (--debug-start)."
-    echo "    M3_GEM5_CFG:             the gem5 configuration"
-    echo "                             (platform/gem5/configs/m3/default.py by default)."
-    echo "    M3_GEM5_CPU:             the CPU model (DerivO3CPU by default)."
-    echo "    M3_GEM5_CPUFREQ:         the CPU frequency (1GHz by default)."
-    echo "    M3_GEM5_MEMFREQ:         the memory frequency (333MHz by default)."
-    echo "    M3_GEM5_PAUSE:           pause the tile with given id until GDB connects"
-    echo "                             (only with command dbg=). Numbers are translated into"
-    echo "                             C0T<number>, but ids can also be specified in the form"
-    echo "                             of 'C<chip>T<tile>'."
-    echo ""
-    echo "  Variables for target hw/hw22/hw23:"
-    echo "    M3_HW_FPGA_HOST:         the SSH alias for the FPGA PC."
-    echo "    M3_HW_FPGA_DIR:          the directory on the FPGA PC to use for temporary"
-    echo "                             files. The directory will be created automatically."
-    echo "    M3_HW_FPGA_NO:           the FPGA number. Every FPGA has an IP of"
-    echo "                             192.168.42.240 + \$M3_HW_FPGA_NO."
-    echo "    M3_HW_FPGA_JTAG_NO:      the number of the FPGA JTAG cable. Only relevant if"
-    echo "                             there are multiple FPGAs attached to the same PC"
-    echo "                             (default = 0)."
-    echo "    M3_HW_VIVADO:            absolute path on FPGA PC to Vivado/Vivado Lab."
-    echo "    M3_HW_TTY:               TTY device to use for the serial console (for M³Lx)."
-    echo "    M3_HW_RESET:             reset the FPGA before starting."
-    echo "    M3_HW_VM:                use virtual memory (default = 1)."
-    echo "    M3_HW_TIMEOUT:           stop execution after given number of seconds."
-    echo "    M3_HW_PAUSE:             pause the tile with given number at startup"
-    echo "                             (only on hw and with command dbg=)."
-    exit 0
-}
+cmd_groups: Dict[str, List[Tuple[str, str]]] = {}
 
-# parse arguments
-case "$1" in
-    -h | -\? | --help)
-        help "$0"
-        ;;
-esac
+# add subparsers for plugins
+for name, cmd in commands.items():
+    help_msg = (cmd.func.__doc__.strip() or "").splitlines()[0] if cmd.func.__doc__ else ""
+    sp = subparsers.add_parser(name, help=help_msg, description=cmd.func.__doc__)
+    if cmd.args:
+        for arg in cmd.args:
+            name = arg.pop("name")
+            sp.add_argument(name, **arg)  # type: ignore
+    if cmd.group not in cmd_groups:
+        cmd_groups[cmd.group] = []
+    cmd_groups[cmd.group].append((cmd.name, help_msg))
+    sp.set_defaults(_func=cmd.func)
 
-skipbuild=0
-cmd=""
-script=""
-while [ $# -gt 0 ]; do
-    if [ "$1" = "-n" ]; then
-        skipbuild=1
-    elif [ "$cmd" = "" ]; then
-        cmd="$1"
-    elif [ "$script" = "" ]; then
-        script="$1"
-    else
-        break
-    fi
-    shift
-done
+# add options as shown by argparse
+cmd_groups["Options"] = [
+    ("-h, --help", "show this help message and exit"),
+    ("-n, --no-build", "skip the build step"),
+]
 
-if [ "$script" = "" ]; then
-    cargs=()
-else
-    cargs=("$script")
-fi
-cargs+=("$@")
 
-mkdir -p "$build" "$M3_OUT"
-# Allow exclusion of the build directory from backups.
-if [ ! -f "$cachedirtag" ]; then
-    cat >"$cachedirtag" <<EOF
-Signature: 8a477f597d28d172789f06886806bc55
-# This file is a cache directory tag created by b.
-# For information about cache directory tags, see:
-#   http://www.brynosaurus.com/cachedir/
-EOF
-fi
-export NPBUILD="$build"
+# custom help text to show commands in groups and list environment variables
+def help_text() -> None:
+    print("usage: ./b [-h] [-n] <command> ...")
+    print(dedent(
+        """
+        This is a convenience script that is responsible for building everything and running
+        the specified command afterwards. The most important environment variables that
+        influence its behaviour are M3_TARGET=(gem5|hw|hw22|hw23), M3_ISA=(x86_64|riscv32|riscv64)
+        [on gem5 only], and M3_BUILD=(debug|release|bench).
+        """
+    ), end="")
 
-ninjaargs=()
-ninjapieargs=()
-if [ "$M3_VERBOSE" = "1" ]; then
-    ninjaargs=("${ninjaargs[@]}" -v)
-fi
-# force regeneration of the ninja build file if the verbosity level changed since last run
-if [ "$(cat "$build/.verbose" 2>/dev/null)" != "M3_VERBOSE=$M3_VERBOSE" ]; then
-    ninjapieargs=(build -f)
-fi
-echo "M3_VERBOSE=$M3_VERBOSE" >"$build/.verbose"
+    # commands
+    for group in cmd_groups:
+        print(f"\n{group}:")
+        for cmd, doc in cmd_groups[group]:
+            print(f"  {cmd:18}{doc}")
 
-# crate pagination function that only pipes to less when on a terminal
-if [ -t 1 ]; then
-    paginate() {
-        "$@" | less
+    # general variables
+    general = {
+        "M3_TARGET":   "the target platform: 'gem5', 'hw', 'hw22', or 'hw23', default is 'gem5'.",
+        "M3_ISA":      "the ISA to use. On gem5, 'riscv32', 'riscv64', and 'x86_64' are supported. "
+                       "On other targets it is ignored.",
+        "M3_BUILD":    "the build type is 'debug', 'release', or 'bench'. "
+                       "debug: optimizations disabled, debug info & assertions active. "
+                       "release: everything disabled. bench: logging forced to Info,Error. "
+                       "default is release.",
+        "M3_VERBOSE":  "print executed commands in detail during build.",
+        "M3_MOD_PATH": "the path for boot modules (build directory by default).",
+        "M3_OUT":      "the output directory ('run' by default).",
+        "M3_LOG":      "comma-separated log flags for M³ (default: 'Info,Error').",
     }
-else
-    paginate() {
-        # this is way faster than going through less
-        "$@"
+
+    # gem5‑specific variables
+    gem5 = {
+        "M3_GEM5_CORES":      "number of cores to simulate.",
+        "M3_GEM5_HDD":        "hard‑drive image to use (filename only).",
+        "M3_GEM5_LOG":        "log flags for gem5 (--debug-flags).",
+        "M3_GEM5_LOGSTART":   "when to start logging for gem5 (--debug-start).",
+        "M3_GEM5_CFG":        "gem5 configuration (platform/gem5/configs/m3/default.py "
+                              "by default).",
+        "M3_GEM5_CPU":        "CPU model (DerivO3CPU by default).",
+        "M3_GEM5_CPUFREQ":    "CPU frequency (1GHz by default).",
+        "M3_GEM5_MEMFREQ":    "memory frequency (333MHz by default).",
+        "M3_GEM5_PAUSE":      "pause the tile with given id until GDB connects (only with dbg). "
+                              "Numbers become C0T<number>, or use 'C<chip>T<tile>'.",
     }
-fi
 
-case "$cmd" in
-    clean)
-        rm -rf "$build"
-        rm -rf "${rustbuild:?}/debug" "${rustbuild:?}/release"
-        exit
-        ;;
+    # hw / hw22 / hw23‑specific variables
+    hw = {
+        "M3_HW_FPGA_HOST":    "SSH alias for the FPGA PC.",
+        "M3_HW_FPGA_DIR":     "temporary directory on the FPGA PC (created automatically).",
+        "M3_HW_FPGA_NO":      "FPGA number; IP = 192.168.42.240 + $M3_HW_FPGA_NO.",
+        "M3_HW_FPGA_JTAG":    "FPGA JTAG cable number (default = 0).",
+        "M3_HW_VIVADO":       "absolute path on FPGA PC to Vivado/Vivado Lab.",
+        "M3_HW_TTY":          "TTY device for the serial console (for M³Lx).",
+        "M3_HW_RESET":        "reset the FPGA before starting.",
+        "M3_HW_VM":           "use virtual memory (default = 1).",
+        "M3_HW_TIMEOUT":      "stop execution after given number of seconds.",
+        "M3_HW_PAUSE":        "pause the tile with given number at startup (only with dbg).",
+    }
 
-    distclean)
-        rm -rf build
-        exit
-        ;;
-
-    ninja)
-        python3 -B ./tools/ninjapie/ninjapie "${ninjapieargs[@]}" -- "${ninjaargs[@]}" "$script" "$@"
-        exit $?
-        ;;
-
-    # these commands require on hw that the M3_HW_FPGA_* vars are defined
-    run | dbg=* | loadfpga=*)
-        if [ "$M3_TARGET" = "hw" ] || [ "$M3_TARGET" = "hw22" ] || [ "$M3_TARGET" = "hw23" ]; then
-            if [ -z "$M3_HW_FPGA_HOST" ] || [ -z "$M3_HW_FPGA_DIR" ]; then
-                echo "Please define M3_HW_FPGA_HOST and M3_HW_FPGA_DIR." >&2 && exit 1
-            fi
-            if [ -z "$M3_HW_FPGA_NO" ]; then
-                echo "Please define M3_HW_FPGA_NO." >&2 && exit 1
-            fi
-        fi
-        ;;
-esac
-
-if [ $skipbuild -eq 0 ]; then
-    if [ "$M3_REM_HOST" != "" ]; then
-        echo "Building for $M3_TARGET-$M3_ISA-$M3_BUILD remotely at $M3_REM_HOST:$M3_REM_DIR..." >&2
-        # sync all sources to the remote host and check whether anything was transferred
-        output="$(
-            rsync -az --delete . --stats \
-                "--exclude=/.ninja*" --exclude=/platform --exclude=/build --exclude=/cross \
-                --exclude=/run --exclude=/.git \
-                "$M3_REM_HOST:$M3_REM_DIR" |
-                grep "Number of regular files transferred: 0"
-        )"
-        if [ "$output" = "" ] ||
-            # if we switched the build directory, rebuild in any case
-            [ "$(cat .remote-build 2>/dev/null)" != "$M3_TARGET-$M3_ISA-$M3_BUILD" ]; then
-            # remember the last build directory
-            echo -n "$M3_TARGET-$M3_ISA-$M3_BUILD" >.remote-build
-            # build it on the remote host. source the .profile to set environment variables (e.g.
-            # PATH to include ~/.cargo/bin).
-            if ssh "$M3_REM_HOST" \
-                'source .profile && ' \
-                'cd '"$M3_REM_DIR"' && ' \
-                'M3_VERBOSE='"$M3_VERBOSE"' ' \
-                'M3_BUILD='"$M3_BUILD"' M3_TARGET='"$M3_TARGET"' M3_ISA='"$M3_ISA"' ./b'; then
-                # and transfer build files back
-                rsync -az \
-                    "$M3_REM_HOST:$M3_REM_DIR/build/$M3_TARGET-$M3_ISA-$M3_BUILD/" \
-                    "build/$M3_TARGET-$M3_ISA-$M3_BUILD/"
-            else
-                # store the current date to some file to ensure that we transfer something next time
-                # we try to build, regardless of whether something changed.
-                date --rfc-3339=ns >.remote-build-failed
-                exit 1
-            fi
-        fi
-    else
-        echo "Building for $M3_TARGET-$M3_ISA-$M3_BUILD..." >&2
-        python3 -B ./tools/ninjapie/ninjapie "${ninjapieargs[@]}" -- "${ninjaargs[@]}" || exit 1
-    fi
-fi
-
-get_isa() {
-    file=$(file -b "$1")
-    if [[ "$file" = *x86-64* ]]; then
-        isa="x86_64"
-    elif [[ "$file" = *32-bit*RISC-V* ]]; then
-        isa="riscv32"
-    elif [[ "$file" = *64-bit*RISC-V* ]]; then
-        isa="riscv64"
-    else
-        isa="$M3_ISA"
-    fi
-    echo $isa
-}
-
-get_cross_prefix() {
-    isa=$(get_isa "$1")
-    echo "./build/cross-$isa/host/bin/$isa-buildroot-linux-musl-"
-}
-
-run_clippy() {
-    target=()
-    env=()
-    if [[ "$1" = tools/* ]]; then
-        target=("${rust_host_args[@]}")
-    elif [[ "$1" = src/m3lx/* ]]; then
-        env=(M3_LX)
-        target=(--target riscv64gc-unknown-linux-gnu
-            --target-dir "$rustbuild"
-            -Z "build-std=core,alloc,std,panic_abort")
-    elif [[ "$1" == src/rot/* ]]; then
-        if [[ "$1" == src/rot/rots/* ]]; then
-            env=(M3_ROTS)
-        fi
-        target=(
-            --target riscv64imc-unknown-none-elf
-            --target-dir "$rustbuild"
-            -Z "build-std=core,alloc"
+    def fmt_desc(name: str, desc: str, width: int) -> str:
+        return fill(
+            desc,
+            width=width,
+            initial_indent="  " + f"{name:18}",
+            subsequent_indent=" " * 20,
+            break_long_words=False,
+            replace_whitespace=True,
         )
-    else
-        target=("${rust_target_args[@]}")
-    fi
-    echo "Running clippy for $(dirname "$1")..."
-    (
-        for e in "${env[@]}"; do
-            export "$e=1"
-        done
-        cd "$(dirname "$1")" && cargo clippy "${target[@]}" -- \
-            -D warnings \
-            -A clippy::identity_op \
-            -A clippy::manual_range_contains \
-            -A clippy::assertions_on_constants \
-            -A clippy::upper_case_acronyms \
-            -A clippy::empty_loop
-    )
-}
 
-# run the specified command, if any
-case "$cmd" in
-    # -- running --
+    def print_vars(title: str, data: Dict[str, str]) -> None:
+        print()
+        print(title)
+        for name, desc in data.items():
+            print(fmt_desc(name, desc, 80))
 
-    run)
-        if [ "$DBG_GEM5" = "1" ]; then
-            ./tools/execute.sh "$crossname" "$script"
-        else
-            ./tools/execute.sh "$crossname" "$script" 2>&1 | tee "$M3_OUT/log.txt"
-        fi
-        ;;
+    print_vars("General environment variables:", general)
+    print_vars("Environment variables for target gem5:", gem5)
+    print_vars("Environment variables for target hw/hw22/hw23:", hw)
 
-    rungem5)
-        M3_RUN_GEM5=1 ./tools/execute.sh "$crossname" "$script" 2>&1 | tee "$M3_OUT/log.txt"
-        ;;
 
-    loadfpga=*)
-        if [ "$M3_TARGET" != "hw" ] && [ "$M3_TARGET" != "hw22" ] && [ "$M3_TARGET" != "hw23" ]; then
-            echo "Only supported on M3_TARGET={hw,hw22,hw23}." >&2 && exit 1
-        fi
-        if [ -z "$M3_HW_VIVADO" ]; then
-            echo "Please define M3_HW_VIVADO to the absolute path to Vivado." >&2 && exit 1
-        fi
-        if [ -z "$M3_HW_FPGA_JTAG_NO" ]; then
-            M3_HW_FPGA_JTAG_NO=0
-        fi
+parser.print_help = help_text  # type: ignore
 
-        bitfile=${cmd#loadfpga=}
-        fpgatools="platform/hw/fpga_tools"
-        if [ ! -f "$fpgatools/bitfiles/$bitfile" ]; then
-            echo "Bitfile '$fpgatools/bitfiles/$bitfile' does not exist." >&2 && exit 1
-        fi
+args, remainder = parser.parse_known_args()
+args.remainder = remainder
 
-        rsync -z \
-            "$fpgatools/bitfiles/$bitfile" \
-            "$fpgatools/scripts/program_fpga.tcl" \
-            "$M3_HW_FPGA_HOST:$M3_HW_FPGA_DIR"
+try:
+    # Build step (unless disabled)
+    if not args.no_build:
+        from build.build import ensure_built
+        ensure_built(ctx)
 
-        ssh "$M3_HW_FPGA_HOST" \
-            "$M3_HW_VIVADO"' -mode batch \
-                             -source '"$M3_HW_FPGA_DIR"'/program_fpga.tcl \
-                             -tclargs '"$M3_HW_FPGA_DIR"'/'"$bitfile" "$M3_HW_FPGA_JTAG_NO"
-        ;;
-
-    # -- debugging --
-
-    dbg=*)
-        if [ "$M3_TARGET" = "gem5" ] || [ "$M3_RUN_GEM5" = "1" ]; then
-            if [ "$M3_GEM5_PAUSE" = "" ]; then
-                echo "Please set M3_GEM5_PAUSE to the tile to debug (e.g., '1' or 'C1T04')."
-                exit 1
-            fi
-
-            truncate --size 0 "$M3_OUT/log.txt"
-            ./tools/execute.sh "$crossname" "$script" "--debug=${cmd#dbg=}" 1>"$M3_OUT/log.txt" 2>&1 &
-
-            # wait until we know the port
-            port=""
-            pid=""
-            attemps=0
-            while [ "$port" = "" ] || [ "$pid" = "" ]; do
-                if [[ $M3_GEM5_PAUSE =~ C.*T.* ]]; then
-                    tile="$M3_GEM5_PAUSE"
-                else
-                    tile=$(printf "C0T%02d" "$M3_GEM5_PAUSE")
-                fi
-                if [ "$pid" = "" ]; then
-                    pid=$(grep --text "gem5 executing.*, pid" "$M3_OUT/log.txt" | cut -d ' ' -f 6)
-                fi
-                port=$(grep --text "$tile.remote_gdb" "$M3_OUT/log.txt" | cut -d ' ' -f 7)
-                if [ "$port" = "" ]; then
-                    if [ $attemps -gt 20 ]; then
-                        echo "Unable to find port for tile '$tile' after 20 attempts."
-                        exit 1
-                    fi
-                    sleep 1
-                fi
-                attemps=$((attemps + 1))
-            done
-
-            gdbcmd=$(mktemp)
-            {
-                echo "target remote localhost:$port"
-                echo "display/i \$pc"
-                echo "b main"
-            } >"$gdbcmd"
-            gdb=$(get_cross_prefix "$bindir/${cmd#dbg=}")gdb
-            RUST_GDB=$gdb rust-gdb --tui "$bindir/${cmd#dbg=}" "--command=$gdbcmd"
-
-            kill -9 "$pid"
-            rm "$gdbcmd"
-        else
-            if [ "$M3_HW_PAUSE" = "" ]; then
-                echo "Please set M3_HW_PAUSE to the tile to debug."
-                exit 1
-            fi
-            ./tools/execute.sh "$crossname" "$script" "--debug=${cmd#dbg=}" &>/dev/null &
-
-            port=$((3340 + M3_HW_PAUSE))
-            ssh -N -L 30000:localhost:$port "$M3_HW_FPGA_HOST" 2>/dev/null &
-            trap 'trap - SIGTERM && kill -- -$$' SIGINT SIGTERM EXIT
-
-            echo -n "Connecting..."
-            time=0
-            while [ "$(telnet localhost 30000 2>/dev/null | grep '\+')" = "" ]; do
-                # after some warmup, detect if something went wrong
-                if [ $time -gt 5 ]; then
-                    ssh "$M3_HW_FPGA_HOST" "test -e m3/.running" ||
-                        { echo "Remote side stopped." && exit 1; }
-                fi
-                echo -n "."
-                sleep 1
-                time=$((time + 1))
-            done
-
-            gdbcmd=$(mktemp)
-            {
-                echo "target remote localhost:30000"
-                echo "set \$t0 = 0"          # ensure that we set the default stack pointer
-                echo "set \$pc = 0x10000000" # go to entry point
-            } >"$gdbcmd"
-
-            # differentiate between baremetal components and others
-            rdelf=$(get_cross_prefix "$bindir/${cmd#dbg=}")
-            entry=$($rdelf -h "$bindir/${cmd#dbg=}" |
-                grep "Entry point" | awk '{ print($4) }')
-            if [ "$entry" = "0x10000000" ]; then
-                echo "b env_run" >>"$gdbcmd"
-                symbols=$bindir/${cmd#dbg=}
-            else
-                {
-                    echo "tb __app_start"
-                    echo "c"
-                    echo "symbol-file $bindir/${cmd#dbg=}"
-                    echo "b main"
-                } >>"$gdbcmd"
-                symbols=$bindir/tilemux
-            fi
-            echo "display/i \$pc" >>"$gdbcmd"
-
-            gdb=$(get_cross_prefix "$symbols")gdb
-            RUST_GDB=$gdb rust-gdb --tui "$symbols" "--command=$gdbcmd"
-        fi
-        ;;
-
-    bt=*)
-        ./tools/backtrace.py "$(get_cross_prefix "$bindir/${cmd#bt=}")" "$bindir/${cmd#bt=}"
-        ;;
-
-    hwitrace=*)
-        paths=()
-        names=${cmd#hwitrace=}
-        for f in ${names//,/ }; do
-            paths=("${paths[@]}" "$build/bin/$f")
-        done
-        paginate "$tooldir/hwitrace" "$(get_cross_prefix "${paths[@]}")" "${paths[@]}"
-        ;;
-
-    trace=*)
-        paths=()
-        names=${cmd#trace=}
-        for f in ${names//,/ }; do
-            paths=("${paths[@]}" "$build/bin/$f")
-        done
-        paginate "$tooldir/gem5log" trace "${paths[@]}"
-        ;;
-
-    tracelx=*)
-        paths=("build/linux/vmlinux" "build/riscv-pk/bbl")
-        names=${cmd#tracelx=}
-        for f in ${names//,/ }; do
-            paths=("${paths[@]}" "$build/lxbin/$f+0x2AAAAAA000")
-        done
-        paginate "$tooldir/gem5log" trace "${paths[@]}"
-        ;;
-
-    flamegraph=*)
-        paths=()
-        names=${cmd#flamegraph=}
-        for f in ${names//,/ }; do
-            paths=("${paths[@]}" "$build/bin/$f")
-        done
-        # inferno-flamegraph is available at https://github.com/jonhoo/inferno
-        "$tooldir/gem5log" flamegraph "${script:-0}" "${1:-0}" "${paths[@]}" | inferno-flamegraph --countname ns
-        ;;
-
-    ftrace=*)
-        paths=()
-        names=${cmd#ftrace=}
-        for f in ${names//,/ }; do
-            paths=("${paths[@]}" "$build/bin/$f")
-        done
-        "$tooldir/gem5log" ftrace "${script:-0}" "${1:-0}" "${paths[@]}"
-        ;;
-
-    snapshot=*)
-        paths=()
-        names=${cmd#snapshot=}
-        for f in ${names//,/ }; do
-            paths=("${paths[@]}" "$build/bin/$f")
-        done
-        "$tooldir/gem5log" snapshot "$script" "${paths[@]}"
-        ;;
-
-    # -- program analysis --
-
-    ctors=*)
-        file=$bindir/${cmd#ctors=}
-        isa=$(get_isa "$file")
-        crossprefix=$(get_cross_prefix "$file")
-        section=$("${crossprefix}readelf" -SW "$file" |
-            grep "\.ctors\|\.init_array" | sed -e 's/\[.*\]//g' | xargs)
-        off=0x$(echo "$section" | cut -d ' ' -f 4)
-        len=0x$(echo "$section" | cut -d ' ' -f 5)
-        if [ "$isa" = "x86_64" ] || [ "$isa" = "riscv64" ]; then
-            bytes=8
-        else
-            bytes=4
-        fi
-        echo "Constructors in $file ($off : $len):"
-        if [ "$off" != "0x" ]; then
-            od -t x$bytes "$file" -j "$off" -N "$len" -v -w$bytes | grep ' ' | while read -r line; do
-                addr=${line#* }
-                "${crossprefix}nm" -C -l "$file" 2>/dev/null | grep -m 1 "$addr"
-            done
-        fi
-        ;;
-
-    dis=*)
-        paginate "$(get_cross_prefix "$bindir/${cmd#dis=}")objdump" -dC "$bindir/${cmd#dis=}"
-        ;;
-
-    elf=*)
-        "$(get_cross_prefix "$bindir/${cmd#elf=}")readelf" -aW "$bindir/${cmd#elf=}" |
-            paginate c++filt
-        ;;
-
-    list)
-        echo "Start of section .text:"
-        while IFS= read -r -d '' l; do
-            "$(get_cross_prefix "$build/bin/$l")readelf" -S "$build/bin/$l" |
-                grep " \.text " | awk "{ printf(\"%20s: %s\n\",\"$l\",\$5) }"
-        done < <(
-            find "$build/bin" -maxdepth 1 -type f \! \( -name "*.o" -o -name "*.a" \) -printf "%f\0"
-        ) | sort -k 2
-        ;;
-
-    macros=*)
-        (cd "${cmd#macros=}" &&
-            paginate cargo rustc "${rust_target_args[@]}" \
-                --profile=check -- -Zunpretty=expanded 2>/dev/null)
-        ;;
-
-    nma=*)
-        paginate "$(get_cross_prefix "$bindir/${cmd#nma=}")nm" -SCn "$bindir/${cmd#nma=}"
-        ;;
-
-    nms=*)
-        paginate "$(get_cross_prefix "$bindir/${cmd#nms=}")nm" -SC --size-sort "$bindir/${cmd#nms=}"
-        ;;
-
-    straddr=*)
-        binary=$bindir/${cmd#straddr=}
-        crossprefix=$(get_cross_prefix "$binary")
-        str=$script
-        echo "Strings containing '$str' in $binary:"
-        # find base address of .rodata
-        base=$("${crossprefix}readelf" -S "$binary" | grep .rodata |
-            xargs | cut -d ' ' -f 5)
-        # find section number of .rodata
-        section=$("${crossprefix}readelf" -S "$binary" | grep .rodata |
-            sed -e 's/.*\[\s*\([[:digit:]]*\)\].*/\1/g')
-        # grep for matching lines, prepare for better use of awk and finally add offset to base
-        "${crossprefix}readelf" -p "$section" "$binary" | grep "$str" |
-            sed 's/^ *\[ *\([[:xdigit:]]*\)\] *\(.*\)$/0x\1 \2/' |
-            awk '{ printf("0x%x: %s %s %s %s %s %s\n",0x'"$base"' + strtonum($1),$2,$3,$4,$5,$6,$7) }'
-        ;;
-
-    # -- file system --
-
-    mkfs=*)
-        "$tooldir/mkm3fs" "$build/${cmd#mkfs=}" "$script" "$@"
-        ;;
-
-    shfs=*)
-        "$tooldir/shm3fs" "$build/${cmd#shfs=}" "$script" "$@"
-        ;;
-
-    fsck=*)
-        "$tooldir/m3fsck" "$build/${cmd#fsck=}" "$script"
-        ;;
-
-    exfs=*)
-        "$tooldir/exm3fs" "$build/${cmd#exfs=}" "$script"
-        ;;
-
-    # -- maintenance --
-
-    checkboot)
-        errors=0
-        while IFS= read -r -d '' f; do
-            xmllint --schema misc/boot.xsd --noout "$f" >/dev/null || errors=$((errors + 1))
-        done < <(find boot -type f -print0)
-        [ $errors -eq 0 ] || exit 1
-        ;;
-
-    clippy)
-        errors=0
-        while IFS= read -r -d '' f; do
-            # vmtest only works on riscv64
-            if [ "$M3_ISA" != "riscv64" ] && [[ "$f" =~ "vmtest" ]]; then
-                continue
-            fi
-            # rot works only on riscv32/riscv64
-            if [[ ! "$M3_ISA" =~ riscv(32|64) ]] && [[ "$f" =~ rot|raser ]]; then
-                continue
-            fi
-            run_clippy "$f" || errors=$((errors + 1))
-        done < <(find src tools -mindepth 2 -name Cargo.toml -print0)
-        [ $errors -eq 0 ] || exit 1
-        ;;
-
-    clippy=*)
-        run_clippy "${cmd#clippy=}/Cargo.toml" || exit 1
-        ;;
-
-    doc)
-        export RUSTDOCFLAGS="-D warnings"
-        for lib in src/libs/rust/*; do
-            if [ -d "$lib" ]; then
-                (cd "$lib" && cargo doc "${rust_target_args[@]}")
-            fi
-        done
-        echo "Documentation generated at file://$root/$build/rust/$RUST_TARGET/doc/m3/index.html"
-        ;;
-
-    fmt | fmt-check)
-        args=("${cargs[@]}")
-        if [ "$cmd" != "fmt-check" ]; then
-            args+=(--inplace)
-        fi
-        (cd "$root" && "./tools/fmt.py" "${args[@]}")
-        ;;
-
-    test | testcov)
-        errors=0
-        dirs="src/libs/rust/thread src/libs/rust/base"
-        out="$rustgeneric"
-        tgt=$(rustup show 2>/dev/null | grep 'Default host:' | gawk '{ print($3) }')
-        export RUST_BACKTRACE=1
-        if [ "$cmd" = "testcov" ]; then
-            export RUSTFLAGS="-C instrument-coverage=all"
-            rm -rf "$out/coverage"
-            cargoargs=(test)
-        else
-            cargoargs=(miri test)
-        fi
-        for d in $dirs; do
-            (
-                # we run in single-threaded mode because some tests work with global data
-                cd "$d" &&
-                    cargo "${cargoargs[@]}" --target "$tgt" --target-dir "$out" -- --test-threads=1
-            ) || errors=$((errors + 1))
-        done
-        [ $errors -eq 0 ] || exit 1
-        if [ "$cmd" = "testcov" ]; then
-            (
-                cd src &&
-                    grcov . -s . --binary-path "$out" -t html \
-                        --ignore-not-existing -o "$out/coverage" &&
-                    find . -name "*.profraw" -print0 | xargs -0 rm -f
-            )
-            echo "The coverage results are now available in $out/coverage."
-        fi
-        ;;
-
-    lint)
-        (
-            export CARGO_TARGET_DIR="$rustgeneric" &&
-                cd "$root" &&
-                ./tools/linter.py src/kernel src/libs/rust/resmng src/server/root src/server/pager
-        )
-        ;;
-
-    # -- gem5 --
-    mkgem5 | mkgem5dbg)
-        if [ "$cmd" = "mkgem5" ]; then
-            suffix="opt"
-        else
-            suffix="debug"
-        fi
-        if [ "$script" = "" ]; then
-            script="RISCV,X86"
-        fi
-        IFS=',' read -ra isa <<<"$script"
-        args=()
-        for isa in "${isa[@]}"; do
-            args=("${args[@]}" "build/$isa/gem5.$suffix")
-        done
-        mkdir -p "$gem5dir" &&
-            cd "$gem5dir" &&
-            scons "-j$(nproc)" -C "$root/platform/gem5" "${args[@]}"
-        ;;
-
-    # -- M³Linux --
-
-    mklx | mkbbl | genlxcc)
-        ./src/m3lx/build.sh "$crossname" "$crossdir" "$cmd" "$script" "$@"
-        ;;
-esac
+    # run command
+    func = getattr(args, "_func", None)
+    if func is not None:
+        func(ctx, args)
+except KeyboardInterrupt:
+    print("\nGot ^C. Stopping here")
+    sys.exit(1)
