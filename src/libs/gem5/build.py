@@ -3,7 +3,7 @@ def build(gen, env):
         for sf in [True, False]:
             env = env.new(isa, sf)
             dir = isa if not isa.startswith('riscv') else 'riscv'
-            files = env.glob(gen, dir + '/*.*')
+            files = env.glob(gen, dir + '/*.S')
 
             lib = env.static_lib(gen, out='gem5-' + isa + '-' + str(sf), ins=files)
             env.install_as(gen, env['LIBDIR'] + '/libgem5.a', lib)
