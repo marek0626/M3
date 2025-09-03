@@ -985,8 +985,6 @@ impl Activity {
 
     fn init(&mut self) {
         extern "C" {
-            static _user_start: u8;
-            static _user_end: u8;
             static _text_start: u8;
             static _text_end: u8;
             static _data_start: u8;
@@ -1033,13 +1031,7 @@ impl Activity {
         self.map(rbuf_space.0, own_rbuf, 1, kif::PageFlags::R)
             .unwrap();
 
-        if self.id() == kif::tilemux::ACT_ID {
-            // map sleep function for user
-            unsafe {
-                self.map_segment(base, &_user_start, &_user_end, rx | kif::PageFlags::U);
-            }
-        }
-        else {
+        if self.id() != kif::tilemux::ACT_ID {
             // map application receive buffer
             let perm = kif::PageFlags::R | kif::PageFlags::U;
             self.map_new_mem(base, cfg::RBUF_STD_ADDR, cfg::RBUF_STD_SIZE, perm);

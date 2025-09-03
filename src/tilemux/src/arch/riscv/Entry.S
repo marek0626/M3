@@ -28,7 +28,7 @@ BEGIN_FUNC(_start)
 
     // return to user mode
     li      a0, 1 << 8
-    csrc    sstatus, a0
+    csrs    sstatus, a0
     // enable interrupts
     li      a0, 1 << 5
     csrs    sstatus, a0
@@ -131,15 +131,8 @@ BEGIN_FUNC(restore_fpu)
     ret
 END_FUNC(restore_fpu)
 
-.section .user_text
-
 BEGIN_FUNC(sleep)
     la      a0, ENV_START
-    // load platform from environment
-    lmw     a0, 0(a0)
-    // skip wfi on hw (TODO why does that not work?)
-1:  bnez    a0, 2f
     wfi
-2:
-    j       1b
+    j       sleep
 END_FUNC(sleep)
