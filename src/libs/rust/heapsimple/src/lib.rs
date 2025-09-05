@@ -15,10 +15,12 @@
 
 #![no_std]
 
+use core::alloc::{GlobalAlloc, Layout};
+
 use base::cell::StaticCell;
 use base::io::LogFlags;
 use base::log;
-use base::{libc, mem};
+use base::mem;
 
 #[macro_export]
 macro_rules! create_heap {
@@ -43,68 +45,40 @@ macro_rules! create_heap {
 
 extern "C" {
     fn __heap_simple_memory(addr: *mut usize, size: *mut usize);
-    fn memcpy(dst: *mut libc::c_void, src: *const libc::c_void, len: usize);
-    fn memset(s: *mut libc::c_void, b: u8, len: usize);
 }
 
 static HEAP_POS: StaticCell<usize> = StaticCell::new(0);
+#[global_allocator]
+static GLOBAL: MyAllocator = MyAllocator;
 
-#[no_mangle]
-extern "C" fn __rdl_alloc(size: usize, _align: usize, _err: *mut u8) -> *mut libc::c_void {
-    let words = (size + mem::size_of::<u64>() - 1) / mem::size_of::<u64>();
-    let size = words * mem::size_of::<u64>();
+struct MyAllocator;
 
-    let res = unsafe {
-        let mut addr = 0usize;
-        let mut size = 0usize;
-        __heap_simple_memory(&mut addr as *mut _, &mut size as *mut _);
+unsafe impl GlobalAlloc for MyAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let words = (layout.size() + mem::size_of::<u64>() - 1) / mem::size_of::<u64>();
+        let size = words * mem::size_of::<u64>();
 
-        let start = addr as *mut u64;
-        let end = start.add(size / mem::size_of::<u64>());
-        let res = start.add(HEAP_POS.get());
-        if res.add(words) > end {
-            return core::ptr::null_mut::<libc::c_void>();
-        }
-        res
-    };
+        let res = unsafe {
+            let mut addr = 0usize;
+            let mut size = 0usize;
+            __heap_simple_memory(&mut addr as *mut _, &mut size as *mut _);
 
-    HEAP_POS.set(HEAP_POS.get() + words);
-    log!(LogFlags::LibHeap, "heap::alloc({}) -> {:?}", size, res);
+            let start = addr as *mut u64;
+            let end = start.add(size / mem::size_of::<u64>());
+            let res = start.add(HEAP_POS.get());
+            if res.add(words) > end {
+                return core::ptr::null_mut();
+            }
+            res
+        };
 
-    res as *mut libc::c_void
-}
+        HEAP_POS.set(HEAP_POS.get() + words);
+        log!(LogFlags::LibHeap, "heap::alloc({}) -> {:?}", size, res);
 
-#[no_mangle]
-extern "C" fn __rdl_dealloc(ptr: *mut libc::c_void, _size: usize, _align: usize) {
-    log!(LogFlags::LibHeap, "heap::free({:?}) - ignoring", ptr);
-}
+        res as *mut u8
+    }
 
-#[no_mangle]
-extern "C" fn __rdl_realloc(
-    ptr: *mut libc::c_void,
-    old_size: usize,
-    _old_align: usize,
-    new_size: usize,
-    _new_align: usize,
-    _err: *mut u8,
-) -> *mut libc::c_void {
-    let res = __rdl_alloc(new_size, _new_align, _err);
-    unsafe { memcpy(res, ptr, old_size) };
-
-    log!(
-        LogFlags::LibHeap,
-        "heap::realloc({:?}, {}) -> {:?}",
-        ptr,
-        new_size,
-        res
-    );
-    res
-}
-
-#[no_mangle]
-extern "C" fn __rdl_alloc_zeroed(size: usize, _align: usize, _err: *mut u8) -> *mut libc::c_void {
-    let res = __rdl_alloc(size, _align, _err);
-    unsafe { memset(res, 0, size) };
-    log!(LogFlags::LibHeap, "heap::calloc({}) -> {:?}", size, res);
-    res
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+        log!(LogFlags::LibHeap, "heap::free({:?})", ptr);
+    }
 }

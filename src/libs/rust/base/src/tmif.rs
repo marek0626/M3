@@ -55,6 +55,7 @@ pub enum Operation {
     Noop,
 }
 
+#[cfg(not(M3_LX = "1"))]
 pub(crate) fn get_result(res: usize) -> Result<(), Error> {
     Result::from(Code::try_from(res as u32)?)
 }

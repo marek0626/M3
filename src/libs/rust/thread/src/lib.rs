@@ -19,8 +19,6 @@
 #![no_std]
 #![allow(internal_features)]
 #![feature(core_intrinsics)]
-#![feature(hint_assert_unchecked)]
-#![feature(new_uninit)]
 
 use base::alloc::alloc;
 use base::boxed::Box;

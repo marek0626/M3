@@ -21,7 +21,6 @@
 #![feature(alloc_error_handler)]
 #![feature(core_intrinsics)]
 #![feature(lang_items)]
-#![feature(panic_info_message)]
 
 use core::intrinsics;
 use core::panic::PanicInfo;
@@ -65,9 +64,7 @@ fn panic(info: &PanicInfo<'_>) -> ! {
         else {
             l.write(b"PANIC at unknown location: ").unwrap();
         }
-        if let Some(msg) = info.message() {
-            l.write_fmt(*msg).unwrap();
-        }
+        l.write_fmt(format_args!("{}", info.message())).unwrap();
         l.write(b"\n\n").unwrap();
 
         let mut bt = [VirtAddr::default(); 16];
@@ -91,7 +88,6 @@ fn alloc_error(_: core::alloc::Layout) -> ! {
 }
 
 #[lang = "eh_personality"]
-#[no_mangle]
 #[doc(hidden)]
 pub extern "C" fn rust_eh_personality() {
     intrinsics::abort()

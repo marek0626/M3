@@ -22,9 +22,10 @@
     ]
   },
   "relro-level": "full",
-  "target-c-int-width": "32",
+  "target-c-int-width": 32,
   "target-endian": "little",
   "target-family": "unix",
-  "target-pointer-width": "64",
-  "features": "-mmx,-sse,+soft-float"
+  "target-pointer-width": 64,
+  "features": "-mmx,-sse,+soft-float",
+  "rustc-abi": "x86-softfloat"
 }

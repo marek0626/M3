@@ -14,7 +14,6 @@
 
 #![no_std]
 #![no_main]
-#![feature(asm_const)]
 
 use base::io::log::LogColor;
 use base::io::{log, LogFlags};

@@ -11,8 +11,9 @@
   "linker": "rust-lld",
   "linker-flavor": "gnu-lld",
   "llvm-target": "riscv32",
+  "llvm-abiname": "ilp32",
   "max-atomic-width": 32,
   "panic-strategy": "abort",
   "relocation-model": "static",
-  "target-pointer-width": "32"
+  "target-pointer-width": 32
 }
