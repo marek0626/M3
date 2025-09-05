@@ -48,7 +48,7 @@ class M3Env(Env):
         rustabi = 'musl'
         cross = isa + '-buildroot-linux-musl-'
         crossdir = os.path.abspath('build/cross-' + isa + '/host')
-        crossver = '14.2.0'
+        crossver = '14.3.0'
         env['CROSS'] = cross
         env['CROSSDIR'] = crossdir
         env['CROSSVER'] = crossver
