@@ -22,52 +22,9 @@ use crate::cfg;
 use crate::env;
 use crate::tcu;
 
-#[cfg(all(
-    not(M3_LX = "1"),
-    not(target_arch = "riscv64"),
-    not(target_arch = "riscv32")
-))]
 extern "C" {
     pub fn gem5_writefile(src: *const u8, len: u64, offset: u64, file: u64);
     pub fn gem5_shutdown(delay: u64);
-}
-
-#[cfg(all(
-    not(M3_LX = "1"),
-    any(target_arch = "riscv64", target_arch = "riscv32")
-))]
-unsafe fn gem5_writefile(src: *const u8, len: u64, offset: u64, file: u64) -> u64 {
-    let len = len as usize;
-    let offset = offset as usize;
-    let file = file as usize;
-    let result: usize;
-    unsafe {
-        core::arch::asm!(
-            ".long 0x9E00007B",
-            inout("a0") src => result,
-            in("a1") len,
-            in("a2") offset,
-            in("a3") file,
-            options(readonly, nostack, preserves_flags),
-        )
-    }
-    result as u64
-}
-
-#[cfg(all(
-    not(M3_LX = "1"),
-    any(target_arch = "riscv64", target_arch = "riscv32")
-))]
-unsafe fn gem5_shutdown(delay: u64) -> ! {
-    let delay = delay as usize;
-    unsafe {
-        core::arch::asm!(
-            ".long 0x4200007B",
-            inout("a0") delay => _,
-            options(nomem, nostack, preserves_flags),
-        )
-    }
-    loop {}
 }
 
 pub fn write(buf: &[u8]) -> usize {

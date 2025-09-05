@@ -63,8 +63,8 @@ class HWPlatform(BasePlatform):
         # collect files to transfer
         files = [str(self.outdir / "boot.xml")]
         if rot_layers:
-            first, *rest = rot_layers.split()
-            args += f" --tile '{Path(first).name}'"
+            first, *rest = rot_layers.split(",")
+            args += f" --tile '{Path(first).name}' --rotlayer '{Path(first).name}'"
             files.append(first)
             for layer in rest:
                 args += f" --rotlayer '{Path(layer).name}'"

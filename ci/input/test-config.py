@@ -24,14 +24,14 @@ hard_disk0 = os.environ.get('M3_GEM5_IDE_DRIVE')
 if not os.path.isfile(hard_disk0):
     num_sto = 0
 
-kecaccspmsize = '128MB'
+kecaccspmsize = '128MiB'
 if tiletype == 'a':
     l1size = None
     l2size = None
-    spmsize = '128MB'
+    spmsize = '128MiB'
 else:
-    l1size = '32kB'
-    l2size = '256kB'
+    l1size = '32KiB'
+    l2size = '256KiB'
     spmsize = None
 
 mem_tile = TileId(0, num_tiles + num_copy + num_indir)
@@ -48,8 +48,8 @@ for i in range(0, num_tiles):
                           l1size=l1size,
                           l2size=l2size,
                           spmsize=spmsize)
-    tile.tcu.max_noc_packet_size = '2kB'
-    tile.tcu.buf_size = '2kB'
+    tile.tcu.max_noc_packet_size = '2KiB'
+    tile.tcu.buf_size = '2KiB'
     tiles.append(tile)
 
 # create the accelerator tiles
@@ -61,10 +61,10 @@ for i in range(0, num_copy):
                            id=TileId(0, num_tiles + i),
                            accel='copy',
                            memTile=None,
-                           spmsize='32MB')
-    tile.tcu.max_noc_packet_size = '2kB'
-    tile.tcu.buf_size = '2kB'
-    tile.accel.buf_size = '2kB'
+                           spmsize='32MiB')
+    tile.tcu.max_noc_packet_size = '2KiB'
+    tile.tcu.buf_size = '2KiB'
+    tile.accel.buf_size = '2KiB'
     tiles.append(tile)
 
 for i in range(0, num_indir):
@@ -73,9 +73,9 @@ for i in range(0, num_indir):
                            id=TileId(0, num_tiles + num_copy + i),
                            accel='indir',
                            memTile=None,
-                           spmsize='32MB')
-    tile.tcu.max_noc_packet_size = '2kB'
-    tile.tcu.buf_size = '2kB'
+                           spmsize='32MiB')
+    tile.tcu.max_noc_packet_size = '2KiB'
+    tile.tcu.buf_size = '2KiB'
     tiles.append(tile)
 
 # create the memory tile. note that we put it here to make vmtest work, which assumes that the
@@ -83,9 +83,9 @@ for i in range(0, num_indir):
 tile = createMemTile(noc=root.noc,
                      options=options,
                      id=mem_tile,
-                     size='3072MB')
-tile.tcu.max_noc_packet_size = '2kB'
-tile.tcu.buf_size = '2kB'
+                     size='3072MiB')
+tile.tcu.max_noc_packet_size = '2KiB'
+tile.tcu.buf_size = '2KiB'
 tiles.append(tile)
 
 # create the persistent storage tiles

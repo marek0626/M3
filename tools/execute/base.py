@@ -185,4 +185,4 @@ class BasePlatform:
                 which("openssl"), "dgst", "-sha3-224", path,
                 capture=subprocess.PIPE,
             ).stdout.split()[-1]
-            print(f"SHA3-224 hash of {name} ({path}): {h}")
+            print(f"SHA3-224 hash of {name} ({path}): {h}", flush=True)

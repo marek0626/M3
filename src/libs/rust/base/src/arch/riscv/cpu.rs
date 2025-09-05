@@ -175,6 +175,8 @@ impl CPUOps for RISCVCPU {
             asm!(
                 ".long 0xC600007B",
                 inout("x10") res,
+                // gem5 pseudo op will clobber that register
+                out("a1") _,
                 options(nostack),
             );
         }

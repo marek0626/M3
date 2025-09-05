@@ -44,17 +44,10 @@ BEGIN_FUNC(_shutdown)
     j       1b
 END_FUNC(_shutdown)
 
-
-.section .user_text
-
 BEGIN_FUNC(sleep_once)
     csrsi   sstatus, 2
     la      a0, ENV_START
-    // load platform from environment
-    lmw     a0, 0(a0)
-    // skip wfi on hw (TODO why does that not work?)
-1:  bnez    a0, 2f
     wfi
-2:  csrci   sstatus, 2
+    csrci   sstatus, 2
     ret
 END_FUNC(sleep_once)
