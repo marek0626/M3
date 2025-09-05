@@ -117,7 +117,13 @@ inline void CPU::memory_barrier() {
 
 inline cycles_t CPU::gem5_debug(uint64_t msg) {
     register cycles_t a0 asm("a0") = msg;
-    asm volatile(".long 0xC600007B" : "+r"(a0));
+    asm volatile(".long 0xC600007B"
+                 : "+r"(a0)
+#if __riscv_xlen == 64
+                 :
+                 : "a1" // gem5 pseudo op will clobber that register
+#endif
+    );
     return a0;
 }
 }
