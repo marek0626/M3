@@ -137,7 +137,7 @@ fn remote_access(t: &mut dyn WvTester) {
         virt
     }
     else {
-        VirtAddr::from(unsafe { addr_of!(_OBJ) as *const _ })
+        VirtAddr::from(addr_of!(_OBJ) as *const _)
     };
 
     wv_assert_ok!(t, child.delegate_obj(sem1.sel()));

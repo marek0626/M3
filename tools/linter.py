@@ -21,7 +21,7 @@ def main() -> None:
     lints_path = os.path.join(os.path.abspath(os.path.dirname(sys.argv[0])), "lints")
 
     subprocess.run(
-        ("cargo", "install", "--locked", "cargo-dylint@3.1.2", "dylint-link@3.1.2"), check=True
+        ("cargo", "install", "--locked", "cargo-dylint@4.1.0", "dylint-link@4.1.0"), check=True
     )
 
     # Dylint fails if the driver path is overridden but nonexistent.

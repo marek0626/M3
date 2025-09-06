@@ -110,7 +110,7 @@ pub extern "C" fn env_run() {
     rots_env.boot.envp = rots_env_src.boot.envp;
     let argv = rots_env.boot.argv as *mut *const u8;
     unsafe {
-        *argv = b"rots\0".as_ptr();
+        *argv = c"rots".as_ptr();
     }
 
     // for simplicity and safety, just check for more arguments to disable exreg zeroing
@@ -1004,10 +1004,7 @@ impl HashMuxReceiver {
 
 fn init_rot() -> Result<(MemCap, u64), Error> {
     log!(LogFlags::RoTDbg, "cert load");
-    let rot_cert_cap = match MemCap::new_bind_bootmod("rot-certificate.json") {
-        Ok(rot_cert_cap) => rot_cert_cap,
-        Err(e) => return Err(e),
-    };
+    let rot_cert_cap = MemCap::new_bind_bootmod("rot-certificate.json")?;
 
     log!(LogFlags::RoTDbg, "cert rgn");
     let rot_cert_size = match rot_cert_cap.region() {

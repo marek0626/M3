@@ -247,13 +247,15 @@ impl Activity {
                 "Starting Activity {} with entry={:#x}, sp={:#x}",
                 self.id(),
                 entry as usize,
-                unsafe { core::ptr::addr_of!(baremetal_stack) as usize },
+                core::ptr::addr_of!(baremetal_stack) as usize,
             );
 
             crate::app_env().boot.tile_desc = pex_env().tile_desc.value();
-            state::init_state(&mut self.user_state, entry as usize, unsafe {
-                core::ptr::addr_of!(baremetal_stack) as usize
-            });
+            state::init_state(
+                &mut self.user_state,
+                entry as usize,
+                core::ptr::addr_of!(baremetal_stack) as usize,
+            );
         }
         self.user_state_addr = VirtAddr::from(&self.user_state as *const _);
         self.state = ActivityState::READY;

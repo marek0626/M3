@@ -13,6 +13,8 @@
  * General Public License version 2 for more details.
  */
 
+use core::ptr;
+
 use base::boxed::Box;
 use base::cell::{LazyStaticRefCell, StaticCell};
 use base::col::VecDeque;
@@ -63,9 +65,7 @@ fn remove_queue(queue: &mut SendQueue) {
             "SendQueue[{:?}]: removing",
             queue.id()
         );
-        PENDING_QUEUES
-            .borrow_mut()
-            .retain(|q| *q != queue as *mut _);
+        PENDING_QUEUES.borrow_mut().retain(|q| !ptr::eq(*q, queue));
         queue.pending = false;
     }
 }

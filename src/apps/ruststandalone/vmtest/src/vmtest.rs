@@ -34,8 +34,7 @@ use base::mem::{size_of, MsgBuf, PhysAddr, PhysAddrRaw, VirtAddr};
 use base::tcu::{self, EpId, TileId, TCU};
 use base::util;
 
-use core::intrinsics::transmute;
-use core::ptr;
+use core::ptr::{self, with_exposed_provenance_mut};
 
 use isr::{ISRArch, StateArch, ISR};
 
@@ -172,7 +171,11 @@ fn send_recv(send_addr: VirtAddr, size: usize) {
         TCU::config_send(regs, OWN_ACT, 0x1234, OWN_TILE, 0, REP1, max_msg_ord, 1);
     });
 
-    let msg_buf: &mut MsgBuf = unsafe { transmute(send_addr.as_local()) };
+    let msg_buf: &mut MsgBuf = unsafe {
+        with_exposed_provenance_mut::<MsgBuf>(send_addr.as_local())
+            .as_mut()
+            .unwrap()
+    };
 
     // prepare test data
     unsafe {

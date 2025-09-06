@@ -15,6 +15,8 @@
 
 #![no_std]
 
+use core::alloc::{GlobalAlloc, Layout};
+
 use base::io::LogFlags;
 use base::libc;
 use base::log;
@@ -23,55 +25,29 @@ extern "C" {
     /// Allocates `size` bytes on the heap
     fn malloc(size: usize) -> *mut libc::c_void;
 
-    /// Allocates `n * size` on the heap and initializes it to 0
-    fn calloc(n: usize, size: usize) -> *mut libc::c_void;
-
-    /// Reallocates `n` to be `size` bytes large
-    ///
-    /// This implementation might increase the size of the area or shink it. It might also free the
-    /// current area and allocate a new area of `size` bytes.
-    fn realloc(p: *mut libc::c_void, size: usize) -> *mut libc::c_void;
-
     /// Frees the area at `p`
     fn free(p: *mut libc::c_void);
 }
 
-#[no_mangle]
-extern "C" fn __rdl_alloc(size: usize, _align: usize, _err: *mut u8) -> *mut libc::c_void {
-    let res = unsafe { malloc(size) };
-    log!(LogFlags::LibHeap, "heap::alloc({}) -> {:?}", size, res);
-    res
-}
+struct MyAllocator;
 
-#[no_mangle]
-extern "C" fn __rdl_dealloc(ptr: *mut libc::c_void, _size: usize, _align: usize) {
-    log!(LogFlags::LibHeap, "heap::free({:?})", ptr);
-    unsafe { free(ptr) };
-}
-
-#[no_mangle]
-extern "C" fn __rdl_realloc(
-    ptr: *mut libc::c_void,
-    _old_size: usize,
-    _old_align: usize,
-    new_size: usize,
-    _new_align: usize,
-    _err: *mut u8,
-) -> *mut libc::c_void {
-    let res = unsafe { realloc(ptr, new_size) };
-    log!(
-        LogFlags::LibHeap,
-        "heap::realloc({:?}, {}) -> {:?}",
-        ptr,
-        new_size,
+unsafe impl GlobalAlloc for MyAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let res = unsafe { malloc(layout.size()) as *mut u8 };
+        log!(
+            LogFlags::LibHeap,
+            "heap::alloc({}) -> {:?}",
+            layout.size(),
+            res
+        );
         res
-    );
-    res
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+        log!(LogFlags::LibHeap, "heap::free({:?})", ptr);
+        unsafe { free(ptr as *mut libc::c_void) };
+    }
 }
 
-#[no_mangle]
-extern "C" fn __rdl_alloc_zeroed(size: usize, _align: usize, _err: *mut u8) -> *mut libc::c_void {
-    let res = unsafe { calloc(size, 1) };
-    log!(LogFlags::LibHeap, "heap::calloc({}) -> {:?}", size, res);
-    res
-}
+#[global_allocator]
+static GLOBAL: MyAllocator = MyAllocator;

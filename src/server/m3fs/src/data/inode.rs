@@ -118,7 +118,7 @@ impl INodeRef {
 
         // ensure that the offset is valid
         debug_assert!(
-            (off % size_of::<INode>()) == 0,
+            off.is_multiple_of(size_of::<INode>()),
             "INode offset {} is not multiple of INode size",
             off
         );

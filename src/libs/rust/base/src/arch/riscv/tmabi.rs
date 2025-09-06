@@ -13,23 +13,22 @@
  * General Public License version 2 for more details.
  */
 
-use core::arch::asm;
-
-use crate::arch::TMABIOps;
-use crate::errors::Error;
-use crate::tmif::Operation;
-
+#[cfg(not(M3_LX = "1"))]
 pub struct RISCVTMABI {}
 
-impl TMABIOps for RISCVTMABI {
-    fn call1(op: Operation, arg1: usize) -> Result<(), Error> {
+#[cfg(not(M3_LX = "1"))]
+impl crate::arch::TMABIOps for RISCVTMABI {
+    fn call1(op: crate::tmif::Operation, arg1: usize) -> Result<(), crate::errors::Error> {
         Self::call2(op, arg1, 0)
     }
 
-    fn call1_result(op: Operation, mut arg1: usize) -> Result<usize, Error> {
+    fn call1_result(
+        op: crate::tmif::Operation,
+        mut arg1: usize,
+    ) -> Result<usize, crate::errors::Error> {
         let mut res = op.into();
         unsafe {
-            asm!(
+            core::arch::asm!(
                 "ecall",
                 inout("x10") res,
                 inout("x11") arg1,
@@ -38,10 +37,14 @@ impl TMABIOps for RISCVTMABI {
         crate::tmif::get_result(res).map(|_| arg1)
     }
 
-    fn call2(op: Operation, arg1: usize, arg2: usize) -> Result<(), Error> {
+    fn call2(
+        op: crate::tmif::Operation,
+        arg1: usize,
+        arg2: usize,
+    ) -> Result<(), crate::errors::Error> {
         let mut res = op.into();
         unsafe {
-            asm!(
+            core::arch::asm!(
                 "ecall",
                 inout("x10") res,
                 in("x11") arg1,
@@ -51,10 +54,15 @@ impl TMABIOps for RISCVTMABI {
         crate::tmif::get_result(res)
     }
 
-    fn call3(op: Operation, arg1: usize, arg2: usize, arg3: usize) -> Result<(), Error> {
+    fn call3(
+        op: crate::tmif::Operation,
+        arg1: usize,
+        arg2: usize,
+        arg3: usize,
+    ) -> Result<(), crate::errors::Error> {
         let mut res = op.into();
         unsafe {
-            asm!(
+            core::arch::asm!(
                 "ecall",
                 inout("x10") res,
                 in("x11") arg1,
@@ -66,15 +74,15 @@ impl TMABIOps for RISCVTMABI {
     }
 
     fn call4(
-        op: Operation,
+        op: crate::tmif::Operation,
         arg1: usize,
         arg2: usize,
         arg3: usize,
         arg4: usize,
-    ) -> Result<(), Error> {
+    ) -> Result<(), crate::errors::Error> {
         let mut res = op.into();
         unsafe {
-            asm!(
+            core::arch::asm!(
                 "ecall",
                 inout("x10") res,
                 in("x11") arg1,

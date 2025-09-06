@@ -135,7 +135,7 @@ impl MsgBuf {
 
     /// Sets the message to the given slice
     pub fn set_from_slice(&mut self, bytes: &[u8]) {
-        mem::MaybeUninit::copy_from_slice(&mut self.bytes[0..bytes.len()], bytes);
+        self.bytes[0..bytes.len()].write_copy_of_slice(bytes);
         self.pos = bytes.len();
     }
 }
@@ -143,7 +143,7 @@ impl MsgBuf {
 impl Clone for MsgBuf {
     fn clone(&self) -> Self {
         let mut copy = Self::new();
-        mem::MaybeUninit::copy_from_slice(&mut copy.bytes[0..self.pos], self.bytes());
+        copy.bytes[0..self.pos].write_copy_of_slice(self.bytes());
         copy.pos = self.pos;
         copy
     }

@@ -85,7 +85,7 @@ impl FileTable {
     pub(crate) fn get_raw(
         ftable: RefMut<'static, Self>,
         fd: Fd,
-    ) -> Option<RefMut<'static, (dyn File + 'static)>> {
+    ) -> Option<RefMut<'static, dyn File + 'static>> {
         if ftable.exists(fd) {
             Some(RefMut::map(ftable, |ft| {
                 ft.files[fd].as_mut().unwrap().as_mut()

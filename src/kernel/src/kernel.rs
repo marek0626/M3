@@ -17,8 +17,6 @@
  */
 
 #![feature(try_blocks)]
-#![feature(const_alloc_layout)]
-#![feature(const_option)]
 #![no_std]
 
 mod args;

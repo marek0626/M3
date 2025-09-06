@@ -21,6 +21,7 @@
 #![feature(core_intrinsics)]
 #![feature(maybe_uninit_write_slice)]
 #![feature(linked_list_cursors)]
+#![feature(unsafe_cell_access)]
 #![default_lib_allocator]
 #![cfg_attr(not(M3_LX = "1"), no_std)]
 

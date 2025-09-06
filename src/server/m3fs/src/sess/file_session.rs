@@ -290,7 +290,9 @@ impl FileSession {
             // continue in last extent, if there is space
             if (self.next_pos.ext > 0)
                 && (self.next_fileoff as u64 == inode.size)
-                && ((self.next_fileoff % crate::superblock().block_size as usize) != 0)
+                && (!self
+                    .next_fileoff
+                    .is_multiple_of(crate::superblock().block_size as usize))
             {
                 let (fileoff, extpos) = inodes::get_seek_pos(&inode, 0, SeekMode::End)?;
                 self.next_fileoff = fileoff;

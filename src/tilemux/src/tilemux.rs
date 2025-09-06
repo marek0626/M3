@@ -196,8 +196,8 @@ pub extern "C" fn init() -> usize {
     unsafe {
         __m3_init_libc(0, ptr::null(), ptr::null(), false);
         __m3_heap_set_area(
-            &HEAP.0 as *const u64 as usize,
-            &HEAP.0 as *const u64 as usize + mem::size_of_val(&HEAP.0),
+            &raw const HEAP.0 as *const u64 as usize,
+            &raw const HEAP.0 as *const u64 as usize + HEAP_SIZE,
         );
     }
 

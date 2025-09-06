@@ -179,7 +179,7 @@ pub unsafe extern "C" fn __m3c_readdir(dir: *mut libc::c_void, entry: *mut Compa
     // read name
     (*entry).inode = head.inode;
     let name_len = (head.name_len as usize).min(MAX_DIR_NAME_LEN - 1);
-    try_res!((*dir).read_exact(&mut (*entry).name[0..name_len]));
+    try_res!((*dir).read_exact(&mut (&mut (*entry).name)[0..name_len]));
     (*entry).name[name_len] = 0;
 
     // move to next entry
