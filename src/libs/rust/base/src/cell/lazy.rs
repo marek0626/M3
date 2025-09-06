@@ -17,7 +17,6 @@
  */
 
 use crate::cell::{Ref, RefMut, StaticCell, StaticRefCell, UnsafeCell};
-use crate::mem;
 
 /// A lazily initialized [`StaticCell`](super::StaticCell)
 ///
@@ -149,6 +148,6 @@ impl<T: Sized> LazyReadOnlyCell<T> {
     ///
     /// The caller needs to make sure that there are no references left to the old value.
     pub unsafe fn reset(&self, val: T) -> Option<T> {
-        mem::replace(&mut *self.inner.get(), Some(val))
+        self.inner.replace(Some(val))
     }
 }

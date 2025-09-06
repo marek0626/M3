@@ -106,7 +106,7 @@ impl ExtentRef {
     pub fn indir_from_buffer(block_ref: MetaBufferBlockRef, off: usize) -> Self {
         let block = crate::meta_buffer_mut().get_block_by_ref(&block_ref);
         debug_assert!(
-            off % size_of::<Extent>() == 0,
+            off.is_multiple_of(size_of::<Extent>()),
             "Extent off is not multiple of extent size!"
         );
         debug_assert!(

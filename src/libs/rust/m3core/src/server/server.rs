@@ -59,7 +59,7 @@ impl<'d> CapExchange<'d> {
     /// Creates a new `CapExchange` object, taking input arguments from `input` and putting output
     /// arguments into `output`.
     pub fn new(ty: ExcType, input: &'d ExchangeData, output: &'d mut ExchangeData) -> Self {
-        let len = (input.args.bytes + 7) / 8;
+        let len = input.args.bytes.div_ceil(8);
         Self {
             ty,
             src: M3Deserializer::new(&input.args.data[..len]),

@@ -99,7 +99,7 @@ impl<'de> M3Deserializer<'de> {
     {
         let len = self.pop_word()? as usize;
 
-        let npos = self.pos + (len + 7) / 8;
+        let npos = self.pos + len.div_ceil(8);
         if len == 0 || npos > self.slice.len() {
             return Err(SerdeError);
         }

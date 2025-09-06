@@ -57,12 +57,12 @@ impl Sink for SliceSink<'_> {
     #[inline(always)]
     fn push_str(&mut self, s: &str) {
         unsafe { copy_from_str(&mut self.slice[self.pos..], s) }
-        self.pos += (s.len() + 1 + 7) / 8;
+        self.pos += (s.len() + 1).div_ceil(8);
     }
 
     #[inline(always)]
     fn push_bytes(&mut self, bytes: &[u8]) {
-        let elems = (bytes.len() + 7) / 8;
+        let elems = bytes.len().div_ceil(8);
         unsafe {
             core::ptr::copy_nonoverlapping(
                 bytes.as_ptr(),
@@ -97,7 +97,7 @@ impl Sink for VecSink<'_> {
 
     #[inline(always)]
     fn push_str(&mut self, s: &str) {
-        let elems = (s.len() + 1 + 7) / 8;
+        let elems = (s.len() + 1).div_ceil(8);
         let cur = self.vec.len();
         self.vec.resize(cur + elems, 0);
 
@@ -109,7 +109,7 @@ impl Sink for VecSink<'_> {
 
     #[inline(always)]
     fn push_bytes(&mut self, bytes: &[u8]) {
-        let elems = (bytes.len() + 7) / 8;
+        let elems = bytes.len().div_ceil(8);
         let cur = self.vec.len();
         self.vec.resize(cur + elems, 0);
 

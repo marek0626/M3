@@ -180,7 +180,7 @@ fn derive_cdi(ctx: &rot::BlauLayerCtx, m3: &rot::cert::M3Payload<'_>, next_ctx: 
     log!(
         LogFlags::RoTDbg,
         "CDI JSON ({} bytes): {}",
-        cdi_json.as_bytes().len(),
+        cdi_json.len(),
         cdi_json,
     );
     rot::derive_cdi(&ctx.data.kmac_cdi, cdi_bytes, &mut next_ctx.kmac_cdi);
@@ -208,7 +208,7 @@ fn create_signature(ctx: rot::BlauLayerCtx, m3: &rot::cert::M3Payload<'_>, dest:
     log!(
         LogFlags::RoTDbg,
         "JSON to be signed ({} bytes): {}",
-        sign_raw.get().as_bytes().len(),
+        sign_raw.get().len(),
         sign_raw.get(),
     );
 
@@ -234,7 +234,7 @@ fn create_signature(ctx: rot::BlauLayerCtx, m3: &rot::cert::M3Payload<'_>, dest:
         },
     };
     let cert_json = rot::json::to_string(&cert).expect("Failed to serialize certificate");
-    let cert_json_size = cert_json.as_bytes().len();
+    let cert_json_size = cert_json.len();
     log!(
         LogFlags::RoTDbg,
         "rot-certificate.json ({} bytes): {}",

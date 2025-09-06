@@ -775,7 +775,7 @@ where
     let reply: Reply<syscalls::ExchangeSessReply> = send_receive(&buf)?;
 
     {
-        let words = (reply.data.args.bytes + 7) / 8;
+        let words = reply.data.args.bytes.div_ceil(8);
         let mut src = M3Deserializer::new(&reply.data.args.data[..words]);
         post(&mut src)?;
     }

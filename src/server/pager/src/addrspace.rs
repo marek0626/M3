@@ -99,6 +99,9 @@ impl AddrSpace {
 
         // Do a permission test by asserting that the proclaimed child has the caller as the parent.
         // This implies that one cannot call add_child for an OwnedChild.
+        // NOTE: we disable this lint for now as clippy seems to be buggy here (alternates between
+        // suggesting to use is_none_or and is_some_and).
+        #[allow(clippy::nonminimal_bool)]
         if !childs
             .child_by_id(child_id)
             .is_some_and(|child| child.parent() == Some(this_id))

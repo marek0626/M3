@@ -194,7 +194,7 @@ impl<W: Write> Write for BufWriter<W> {
             self.pos += res;
 
             // use line buffering
-            if self.buf.iter().any(|b| *b == b'\n') {
+            if self.buf.contains(&b'\n') {
                 self.flush()?;
             }
             else if self.pos == self.buf.len() {

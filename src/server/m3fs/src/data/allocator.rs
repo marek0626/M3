@@ -108,7 +108,7 @@ impl Allocator {
 
             // now walk until its aligned (i < max is not required here since a block is always a multiple
             // of Bitmap::WORD_BITS and we run only until i % Bitmap::WORD_BITS == 0)
-            while ((i % Bitmap::word_size()) != 0) && total < icount {
+            while !i.is_multiple_of(Bitmap::word_size()) && total < icount {
                 if !bitmap.is_bit_set(i) {
                     bitmap.set_bit(i);
                     total += 1;
@@ -213,7 +213,7 @@ impl Allocator {
             let end = (i + count).min(perblock);
 
             // Unset all unaligned bits
-            while i < end && (i % Bitmap::word_size()) != 0 {
+            while i < end && !i.is_multiple_of(Bitmap::word_size()) {
                 assert!(bitmap.is_bit_set(i));
                 bitmap.unset_bit(i);
                 i += 1;

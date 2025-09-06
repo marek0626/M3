@@ -144,7 +144,7 @@ impl DiskSession {
             off
         );
 
-        if (block_size % MIN_SEC_SIZE) != 0 {
+        if !block_size.is_multiple_of(MIN_SEC_SIZE) {
             return Err(Error::new(Code::InvArgs));
         }
 

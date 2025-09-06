@@ -73,7 +73,7 @@ fn handle_client(
     };
     let mut json = rot::json::to_string_pretty(&cert).unwrap();
     json.push('\n');
-    socket.send(&json.as_bytes().len().to_ne_bytes())?;
+    socket.send(&json.len().to_ne_bytes())?;
     socket.send(json.as_bytes())?;
     socket.close()
 }

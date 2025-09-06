@@ -55,7 +55,7 @@ struct MyAllocator;
 
 unsafe impl GlobalAlloc for MyAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let words = (layout.size() + mem::size_of::<u64>() - 1) / mem::size_of::<u64>();
+        let words = layout.size().div_ceil(mem::size_of::<u64>());
         let size = words * mem::size_of::<u64>();
 
         let res = unsafe {

@@ -241,7 +241,7 @@ impl Thread {
     }
 
     fn trigger_event(&mut self, event: Event) -> bool {
-        self.events.iter().any(|&e| e == event)
+        self.events.contains(&event)
     }
 
     fn set_msg(&mut self, msg: &tcu::Message) {
@@ -263,7 +263,7 @@ fn get_stack_layout() -> Layout {
     // The top of the stack needs to be properly aligned for the stack pointer if the stack
     // grows downwards.
     // Given that the base is properly aligned, this assert checks that the top is also aligned.
-    const_assert!(!libc::GROWS_DOWNWARDS || cfg::STACK_SIZE % libc::STACK_ALIGN == 0);
+    const_assert!(!libc::GROWS_DOWNWARDS || cfg::STACK_SIZE.is_multiple_of(libc::STACK_ALIGN));
 
     Layout::new::<Stack>().align_to(libc::STACK_ALIGN).unwrap()
 }
