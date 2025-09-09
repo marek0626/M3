@@ -398,6 +398,7 @@ fn lock_tile(our_tile: IndexedTile) {
         .expect("failed to write slice");
 }
 
+#[link_section = ".rosa_stage1"]
 pub fn run() -> crate::RosaPrivateCtx {
     log::init(env::boot().tile_id(), "rosa", LogColor::BrightMagenta);
     log!(LogFlags::RoTBoot, "Hello World");
