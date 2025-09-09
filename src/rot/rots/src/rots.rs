@@ -150,7 +150,7 @@ static CTX: LazyReadOnlyCell<RotsCtx> = LazyReadOnlyCell::default();
 const BUFFER_SIZE: usize = 4 * 1024; // 4 KiB
 
 /// Maximum number of sessions the multiplexer allows.
-const MAX_SESSIONS: usize = 32;
+const MAX_SESSIONS: usize = 8;
 
 /// The default time slice if not specified in the session arguments.
 const DEFAULT_TIME_SLICE: TimeDuration = TimeDuration::from_micros(100);
