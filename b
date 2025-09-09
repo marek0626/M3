@@ -132,8 +132,19 @@ def help_text() -> None:
 
 parser.print_help = help_text  # type: ignore
 
-args, remainder = parser.parse_known_args()
-args.remainder = remainder
+# we want to consider all arguments after "--" as remainder, typically to pass them on to other
+# tools we call.
+if "--" in sys.argv:
+    idx = sys.argv.index("--")
+    to_parse = sys.argv[1:idx]
+    remainder = sys.argv[idx + 1:]
+else:
+    to_parse = sys.argv[1:]
+    remainder = []
+
+# merge the remainder from positional arguments with the arguments behind "--"
+args, add_remainder = parser.parse_known_args(to_parse)
+args.remainder = add_remainder + remainder
 
 try:
     # Build step (unless disabled)
