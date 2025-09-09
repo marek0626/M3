@@ -56,6 +56,8 @@ macro_rules! generate_entry {
 
 #[cfg(any(not(M3_TARGET = "gem5"), target_arch = "riscv32"))]
 unsafe fn prepare_switch<Data: CtxData>(ctx: &LayerCtx<Data>) -> usize {
+    use base::util::math;
+
     let entry = ctx.entry_addr;
     asm!(
         // Clear context page
@@ -86,7 +88,7 @@ unsafe fn prepare_switch<Data: CtxData>(ctx: &LayerCtx<Data>) -> usize {
         "   bne     x3, x4, 1b",
 
         ctx_off = in(reg) LayerCtx::<Data>::CTX_OFFSET,
-        ctx_end = in(reg) LayerCtx::<Data>::CTX_OFFSET + base::cfg::PAGE_SIZE,
+        ctx_end = in(reg) math::round_up(LayerCtx::<Data>::CTX_OFFSET, base::cfg::PAGE_SIZE),
         nctx_off = in(reg) ctx,
         nctx_end = in(reg) LayerCtx::<Data>::CTX_OFFSET + core::mem::size_of::<LayerCtx<Data>>(),
     );
@@ -95,6 +97,8 @@ unsafe fn prepare_switch<Data: CtxData>(ctx: &LayerCtx<Data>) -> usize {
 
 #[cfg(all(M3_TARGET = "gem5", target_arch = "riscv64"))]
 unsafe fn prepare_switch<Data: CtxData>(ctx: &LayerCtx<Data>) -> usize {
+    use base::util::math;
+
     let entry = ctx.entry_addr;
     asm!(
         // Clear context page
@@ -125,7 +129,7 @@ unsafe fn prepare_switch<Data: CtxData>(ctx: &LayerCtx<Data>) -> usize {
         "   bne     x3, x4, 1b",
 
         ctx_off = in(reg) LayerCtx::<Data>::CTX_OFFSET,
-        ctx_end = in(reg) LayerCtx::<Data>::CTX_OFFSET + base::cfg::PAGE_SIZE,
+        ctx_end = in(reg) math::round_up(LayerCtx::<Data>::CTX_OFFSET, base::cfg::PAGE_SIZE),
         nctx_off = in(reg) ctx,
         nctx_end = in(reg) LayerCtx::<Data>::CTX_OFFSET + core::mem::size_of::<LayerCtx<Data>>(),
     );
