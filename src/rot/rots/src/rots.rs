@@ -35,7 +35,7 @@ use m3core::crypto::{HashAlgorithm, HashType};
 use m3core::errors::{Code, Error};
 use m3core::io::LogFlags;
 use m3core::kif::{CapRngDesc, CapType};
-use m3core::mem::{size_of, AlignedBuf, GlobOff, MsgBuf, MsgBufRef};
+use m3core::mem::{size_of, GlobOff, MsgBuf, MsgBufRef};
 use m3core::serialize::bytes::Bytes;
 use m3core::server::{
     server_loop, CapExchange, ClientManager, ExcType, RequestHandler, RequestSession, Server,
@@ -171,8 +171,8 @@ const OPTIMIZE_SCHEDULING: bool = true;
 
 // Two memory regions used as temporary buffers (accessed by TCU and accelerator)
 // FIXME: This should point to the dedicated SRAMs
-static BUF1: StaticRefCell<AlignedBuf<BUFFER_SIZE>> = StaticRefCell::new(AlignedBuf::new_zeroed());
-static BUF2: StaticRefCell<AlignedBuf<BUFFER_SIZE>> = StaticRefCell::new(AlignedBuf::new_zeroed());
+static BUF1: StaticRefCell<[u8; BUFFER_SIZE]> = StaticRefCell::new([0u8; BUFFER_SIZE]);
+static BUF2: StaticRefCell<[u8; BUFFER_SIZE]> = StaticRefCell::new([0u8; BUFFER_SIZE]);
 
 // Memory region used to save/load states of the accelerator for context switches
 const EMPTY_STATE: KecAccState = KecAccState::new();
