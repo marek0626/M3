@@ -48,6 +48,8 @@ class TimeoutThread(threading.Thread):
 def run_loop(fpga_inst, serial, timeout_ev):
     if serial is not None:
         terminal = term.LxTerm(serial)
+    elif not sys.stdin.isatty():
+        terminal = term.NullTerm()
     else:
         terminal = term.TCUTerm(fpga_inst.dram1, fpga_inst.nocif)
 
