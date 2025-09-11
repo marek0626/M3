@@ -266,7 +266,7 @@ static m3::Socket *get_socket(int fd) {
 
 EXTERN_C m3::Errors::Code __m3c_socket(CompatSock type, int *fd) {
     m3::Errors::Code res;
-    if((res = init_netmng()) < 0)
+    if((res = init_netmng()) != m3::Errors::SUCCESS)
         return res;
 
     m3::File *file = nullptr;
