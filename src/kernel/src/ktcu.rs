@@ -503,7 +503,7 @@ pub fn inv_reply_remote(
         return Ok(());
     }
 
-    let buf_size = 1 << ((regs[0] >> 35) & 0x7F);
+    let buf_size = 1 << ((regs[0] >> 35) & 0x3F);
     let reply_eps = ((regs[0] >> 19) & 0xFFFF) as EpId;
     for i in 0..buf_size {
         if (occupied & (1 << i)) != 0 {
