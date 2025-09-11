@@ -243,35 +243,37 @@ pub struct TCU {}
 impl TCU {
     /// Returns all MMIO areas that need to be mapped
     pub fn mmio_areas() -> [(VirtAddr, usize, PageFlags); 4] {
-        match env!("M3_TARGET") {
-            "hw22" | "hw23" | "hw" => [
-                (MMIO_ADDR, MMIO_SIZE, PageFlags::U | PageFlags::RW),
-                (MMIO_PRIV_ADDR, MMIO_PRIV_SIZE, PageFlags::U | PageFlags::RW),
-                (
-                    VirtAddr::from(math::round_dn(
-                        MMIO_ADDR.as_local() + CONFIG_OFF,
-                        cfg::PAGE_SIZE,
-                    )),
-                    cfg::PAGE_SIZE,
-                    PageFlags::U | PageFlags::RW,
-                ),
-                (
-                    VirtAddr::from(math::round_dn(MMIO_EPS_ADDR.as_local(), cfg::PAGE_SIZE)),
-                    math::round_up(Self::endpoints_size(), cfg::PAGE_SIZE),
-                    PageFlags::U | PageFlags::R,
-                ),
-            ],
-            _ => [
-                (MMIO_ADDR, MMIO_SIZE, PageFlags::U | PageFlags::RW),
-                (MMIO_PRIV_ADDR, MMIO_PRIV_SIZE, PageFlags::U | PageFlags::RW),
-                (
-                    MMIO_EPS_ADDR,
-                    Self::endpoints_size(),
-                    PageFlags::U | PageFlags::R,
-                ),
-                (VirtAddr::null(), 0, PageFlags::empty()),
-            ],
+        // basic areas are the same for all
+        let mut areas = [
+            (MMIO_ADDR, MMIO_SIZE, PageFlags::U | PageFlags::RW),
+            (MMIO_PRIV_ADDR, MMIO_PRIV_SIZE, PageFlags::U | PageFlags::RW),
+            (VirtAddr::null(), 0, PageFlags::empty()),
+            (VirtAddr::null(), 0, PageFlags::empty()),
+        ];
+
+        // EP area
+        let mut idx = 2;
+        if env!("M3_TARGET") == "hw" || env!("M3_TARGET") == "gem5" {
+            areas[idx] = (
+                VirtAddr::from(math::round_dn(MMIO_EPS_ADDR.as_local(), cfg::PAGE_SIZE)),
+                math::round_up(Self::endpoints_size(), cfg::PAGE_SIZE),
+                PageFlags::U | PageFlags::R,
+            );
+            idx += 1;
         }
+
+        // config area on hw
+        if env!("M3_TARGET") == "hw23" || env!("M3_TARGET") == "hw" {
+            areas[idx] = (
+                VirtAddr::from(math::round_dn(
+                    MMIO_ADDR.as_local() + CONFIG_OFF,
+                    cfg::PAGE_SIZE,
+                )),
+                cfg::PAGE_SIZE,
+                PageFlags::U | PageFlags::RW,
+            );
+        }
+        areas
     }
 
     /// Returns the size of the endpoints region (according to the EPS_SIZE register)

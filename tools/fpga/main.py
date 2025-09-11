@@ -94,7 +94,16 @@ def run_loop(fpga_inst, serial, timeout_ev):
     return timed_out
 
 
-def extract_tcu_stats(tile, no: int):
+def extract_tcu_stats(tile, no: int, version: int):
+    if version < 4:
+        try:
+            dropped_packets = tile.nocarq.get_arq_drop_packet_count()
+            total_packets = tile.nocarq.get_arq_packet_count()
+            print("PM{}: NoC dropped/total packets: {}/{} ({:.0f}%)".format(no,
+                  dropped_packets, total_packets, dropped_packets/total_packets*100))
+        except Exception as e:
+            print("PM{}: unable to read number of dropped NoC packets: {}".format(no, e))
+
     try:
         print("PM{}: TCU dropped/error flits: {}/{}".format(no,
               tile.tcu_drop_flit_count(), tile.tcu_error_flit_count()))
@@ -146,14 +155,14 @@ def extract_instr_trace(tile, no: int):
         tile.inst.asm_disable()
 
 
-def stop_tiles(fpga_inst, extract, timed_out):
+def stop_tiles(fpga_inst, version, extract, timed_out):
     print("Stopping all tiles...")
     for i, tile in enumerate(fpga_inst.pmTiles, 0):
         # if tile is locked, unlock it first
-        if tile.tcu_get_lock():
+        if version == 4 and tile.tcu_get_lock():
             tile.tcu_unlock()
         if extract:
-            extract_tcu_stats(tile, i)
+            extract_tcu_stats(tile, i, version)
             if timed_out:
                 extract_tcu_log(tile, i)
             extract_instr_trace(tile, i)
@@ -187,8 +196,12 @@ def main():
     # connect to FPGA
     fpga_inst = fpga_top.FPGA_TOP(args.version, args.fpga, args.reset)
 
+    # disable NoC ARQ for program upload
+    if args.version < 4:
+        fpga_inst.set_arq_enable(False)
+
     # stop all tiles
-    stop_tiles(fpga_inst, False, False)
+    stop_tiles(fpga_inst, args.version, False, False)
 
     # check TCU versions
     for tile in fpga_inst.pmTiles:
@@ -208,6 +221,10 @@ def main():
     loaded = ld.init(fpga_inst.pmTiles, drams, dram, args.tile,
                      args.rotlayer, mods, args.logflags)
 
+    # enable NoC ARQ when cores are running
+    if args.version < 4:
+        fpga_inst.set_arq_enable(True)
+
     ld.start(fpga_inst.pmTiles, loaded, args.debug)
 
     # signal run.sh that everything has been loaded
@@ -221,7 +238,11 @@ def main():
 
     timed_out = run_loop(fpga_inst, args.serial, timeout_ev)
 
-    stop_tiles(fpga_inst, True, timed_out)
+    # disable NoC ARQ again for post-processing
+    if args.version < 4:
+        fpga_inst.set_arq_enable(False)
+
+    stop_tiles(fpga_inst, args.version, True, timed_out)
 
 
 try:
