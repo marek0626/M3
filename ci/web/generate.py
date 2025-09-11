@@ -69,7 +69,7 @@ def write_results(report: io.TextIOWrapper, date: str, test: str) -> None:
 
 
 re_name = re.compile(
-    r'^m3-tests-(' + '|'.join(TESTS) + ')-(a|b|sh|(?:hw|hw22|hw23)' +
+    r'^m3-tests-(' + '|'.join(TESTS) + ')-(a|b|sh|(?:hw|hw23)' +
     r'-(?:debug|bench)-(?:ex|sh))-(\S+?)-(\d+)$'
 )
 
@@ -122,7 +122,7 @@ for key in results:
     for test in results[key]:
         for cfg in results[key][test]:
             # only consider the benchmarks on gem5 with 64 blocks per extent
-            if cfg[-3:] != "-64" or "hw-debug" in cfg or "hw22-debug" in cfg:
+            if cfg[-3:] != "-64" or "hw-debug" in cfg or "hw23-debug" in cfg:
                 continue
             for pname in results[key][test][cfg].perfs:
                 benchs[pname] = 1

@@ -193,7 +193,7 @@ def prepare(targets: List[str], isas: List[str], cache_dir: str, incremental: bo
         mods.append('src/m3lx/riscv-pk')
     if 'gem5' in targets:
         mods.append('platform/gem5')
-    if 'hw22' in targets or 'hw23' in targets:
+    if 'hw' in targets or 'hw23' in targets:
         mods.append('platform/hw')
 
     # pull in required submodules
@@ -306,7 +306,7 @@ def build(targets: List[str],
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='This is the M³ builder.')
-    parser.add_argument('--target', nargs='+', default=['gem5', 'hw22', 'hw23', 'hw'])
+    parser.add_argument('--target', nargs='+', default=['gem5', 'hw23', 'hw'])
     parser.add_argument('--isa', nargs='+', default=['riscv32', 'riscv64', 'x86_64'])
     parser.add_argument('--build', nargs='+', default=['debug', 'release'])
     parser.add_argument('command')

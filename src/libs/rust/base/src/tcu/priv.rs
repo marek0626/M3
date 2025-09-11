@@ -22,8 +22,6 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use bitflags::bitflags;
 
-use cfg_if::cfg_if;
-
 use crate::arch::{CPUOps, CPU};
 use crate::cfg;
 use crate::errors::{Code, Error};
@@ -55,43 +53,22 @@ pub enum PrivCmdOpCode {
     FetchIRQ,
 }
 
-cfg_if! {
-    if #[cfg(M3_TARGET = "hw22")] {
-        pub const CU_REQ_TYPE_MASK: Reg = 0x3;
+pub const CU_REQ_TYPE_MASK: Reg = 0x7;
 
-        #[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
-        #[repr(u64)]
-        /// The privileged registers
-        pub enum PrivReg {
-            /// For CU requests
-            CUReq,
-            /// For privileged commands
-            PrivCmd,
-            /// The argument for privileged commands
-            PrivCmdArg,
-            /// The current activity
-            CurAct,
-        }
-    }
-    else {
-        pub const CU_REQ_TYPE_MASK: Reg = 0x7;
-
-        #[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
-        #[repr(u64)]
-        /// The privileged registers
-        pub enum PrivReg {
-            /// For CU requests
-            CUReq,
-            /// Controls the privileged interface
-            PrivCtrl,
-            /// For privileged commands
-            PrivCmd,
-            /// The argument for privileged commands
-            PrivCmdArg,
-            /// The current activity
-            CurAct,
-        }
-    }
+#[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
+#[repr(u64)]
+/// The privileged registers
+pub enum PrivReg {
+    /// For CU requests
+    CUReq,
+    /// Controls the privileged interface
+    PrivCtrl,
+    /// For privileged commands
+    PrivCmd,
+    /// The argument for privileged commands
+    PrivCmdArg,
+    /// The current activity
+    CurAct,
 }
 
 /// The TCU-internal IRQ ids to clear IRQs
@@ -120,9 +97,6 @@ impl CUReq {
     pub fn new_foreign_receive(req: Reg) -> Self {
         Self::ForeignReceive {
             act: (req >> 48) as u16,
-            #[cfg(M3_TARGET = "hw22")]
-            ep: ((req >> 2) & 0xFFFF) as EpId,
-            #[cfg(not(M3_TARGET = "hw22"))]
             ep: ((req >> 3) & 0xFFFF) as EpId,
         }
     }
@@ -174,7 +148,6 @@ impl TCU {
 
     /// Enables CU requests in case of PMP failures
     pub fn enable_pmp_cureqs() {
-        #[cfg(not(M3_TARGET = "hw22"))]
         Self::write_priv_reg(PrivReg::PrivCtrl, PrivCtrl::PMP_FAILURES.bits());
     }
 
@@ -245,17 +218,8 @@ impl TCU {
     /// Error type here, because that causes a heap allocation in debug mode and is used in the
     /// paging code.
     pub fn invalidate_page_unchecked(asid: u16, virt: VirtAddr) {
-        let val = match env!("M3_TARGET") {
-            "hw22" => Self::build_priv_cmd(
-                PrivCmdOpCode::InvPage,
-                (virt.as_local() as Reg) | ((asid as Reg) << 32),
-            ),
-            _ => {
-                Self::write_priv_reg(PrivReg::PrivCmdArg, virt.as_local() as Reg);
-                Self::build_priv_cmd(PrivCmdOpCode::InvPage, asid as Reg)
-            },
-        };
-
+        Self::write_priv_reg(PrivReg::PrivCmdArg, virt.as_local() as Reg);
+        let val = Self::build_priv_cmd(PrivCmdOpCode::InvPage, asid as Reg);
         Self::write_priv_reg(PrivReg::PrivCmd, val);
         Self::wait_priv_cmd();
     }
@@ -267,22 +231,16 @@ impl TCU {
         phys: PhysAddr,
         flags: PageFlags,
     ) -> Result<(), Error> {
-        let tlb_flags = match env!("M3_TARGET") {
-            "hw22" => flags.bits() as Reg,
-            _ => {
-                let mut tlb_flags = 0 as Reg;
-                if flags.contains(PageFlags::R) {
-                    tlb_flags |= 1;
-                }
-                if flags.contains(PageFlags::W) {
-                    tlb_flags |= 2;
-                }
-                if flags.contains(PageFlags::FIXED) {
-                    tlb_flags |= 4;
-                }
-                tlb_flags
-            },
-        };
+        let mut tlb_flags = 0 as Reg;
+        if flags.contains(PageFlags::R) {
+            tlb_flags |= 1;
+        }
+        if flags.contains(PageFlags::W) {
+            tlb_flags |= 2;
+        }
+        if flags.contains(PageFlags::FIXED) {
+            tlb_flags |= 4;
+        }
 
         let phys = if flags.contains(PageFlags::L) {
             // the current TCU's TLB does not support large pages
@@ -292,10 +250,7 @@ impl TCU {
             phys.as_raw()
         };
 
-        let (arg_addr, cmd_addr) = match env!("M3_TARGET") {
-            "hw22" => (phys as usize, virt.as_local()),
-            _ => (virt.as_local(), phys as usize),
-        };
+        let (arg_addr, cmd_addr) = (virt.as_local(), phys as usize);
 
         Self::write_priv_reg(PrivReg::PrivCmdArg, arg_addr as Reg);
         CPU::memory_barrier();

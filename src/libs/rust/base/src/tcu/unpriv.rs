@@ -21,8 +21,6 @@
 use core::cmp;
 use core::intrinsics;
 
-use cfg_if::cfg_if;
-
 use num_enum::IntoPrimitive;
 
 use crate::arch::{CPUOps, CPU};
@@ -67,43 +65,22 @@ pub enum CmdOpCode {
     Sleep,
 }
 
-cfg_if! {
-    if #[cfg(M3_TARGET = "hw22")] {
-        /// The unprivileged registers
-        #[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
-        #[repr(u64)]
-        pub enum UnprivReg {
-            /// Starts commands and signals their completion
-            Command,
-            /// Specifies the data address and size
-            Data,
-            /// Specifies an additional argument
-            Arg1,
-            /// The current time in nanoseconds
-            CurTime,
-            /// Prints a line into the gem5 log
-            Print,
-        }
-    }
-    else {
-        /// The unprivileged registers
-        #[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
-        #[repr(u64)]
-        pub enum UnprivReg {
-            /// Starts commands and signals their completion
-            Command,
-            /// Specifies the data address
-            DataAddr,
-            /// Specifies the data size
-            DataSize,
-            /// Specifies an additional argument
-            Arg1,
-            /// The current time in nanoseconds
-            CurTime,
-            /// Prints a line into the gem5 log
-            Print,
-        }
-    }
+/// The unprivileged registers
+#[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
+#[repr(u64)]
+pub enum UnprivReg {
+    /// Starts commands and signals their completion
+    Command,
+    /// Specifies the data address
+    DataAddr,
+    /// Specifies the data size
+    DataSize,
+    /// Specifies an additional argument
+    Arg1,
+    /// The current time in nanoseconds
+    CurTime,
+    /// Prints a line into the gem5 log
+    Print,
 }
 
 impl TCU {
@@ -315,7 +292,7 @@ impl TCU {
     #[inline(always)]
     pub fn has_msgs(ep: EpId) -> bool {
         let unread = match env!("M3_TARGET") {
-            "hw22" | "hw23" => Self::read_ep_reg(ep, 2) >> 32,
+            "hw23" => Self::read_ep_reg(ep, 2) >> 32,
             _ => Self::read_ep_reg(ep, 3),
         };
         unread != 0
@@ -354,7 +331,7 @@ impl TCU {
             return None;
         }
         let (cur, max) = match env!("M3_TARGET") {
-            "hw22" | "hw23" => ((r0 >> 19) & 0x3F, (r0 >> 25) & 0x3F),
+            "hw23" => ((r0 >> 19) & 0x3F, (r0 >> 25) & 0x3F),
             _ => ((r0 >> 19) & 0x7F, (r0 >> 26) & 0x7F),
         };
         Some((cur, max))
@@ -398,7 +375,7 @@ impl TCU {
         }
 
         let (msg_order, slots) = match env!("M3_TARGET") {
-            "hw22" | "hw23" => ((r0 >> 41) & 0x3F, (r0 >> 35) & 0x3F),
+            "hw23" => ((r0 >> 41) & 0x3F, (r0 >> 35) & 0x3F),
             _ => ((r0 >> 42) & 0x3F, (r0 >> 35) & 0x7F),
         };
         Some((
@@ -490,7 +467,7 @@ impl TCU {
             let cmd = Self::read_unpriv_reg(UnprivReg::Command);
             if (cmd & 0xF) == CmdOpCode::Idle.into() {
                 let err = match env!("M3_TARGET") {
-                    "hw22" | "hw23" => (cmd >> 20) & 0x1F,
+                    "hw23" => (cmd >> 20) & 0x1F,
                     _ => (cmd >> 20) & 0x3F,
                 };
                 return Result::from(Code::try_from(err as u32).unwrap());
@@ -529,7 +506,7 @@ impl TCU {
         // we assume that the one that used the label can no longer send messages. thus, if there
         // are no messages yet, we are done.
         let unread = match env!("M3_TARGET") {
-            "hw22" | "hw23" => Self::read_ep_reg(ep, 3) >> 32,
+            "hw23" => Self::read_ep_reg(ep, 3) >> 32,
             _ => Self::read_ep_reg(ep, 3),
         };
         if unread == 0 {
@@ -538,7 +515,7 @@ impl TCU {
 
         let r0 = Self::read_ep_reg(ep, 0);
         let (buf_size, msg_size) = match env!("M3_TARGET") {
-            "hw22" | "hw23" => (1 << ((r0 >> 35) & 0x3F), (r0 >> 41) & 0x3F),
+            "hw23" => (1 << ((r0 >> 35) & 0x3F), (r0 >> 41) & 0x3F),
             _ => (1 << ((r0 >> 35) & 0x7F), (r0 >> 42) & 0x3F),
         };
 
@@ -555,7 +532,7 @@ impl TCU {
     /// Prints the given message into the gem5 log
     pub fn print(s: &[u8]) -> usize {
         let regs = match env!("M3_TARGET") {
-            "hw22" | "hw23" => EXT_REGS + UNPRIV_REGS + (128 * super::EP_REGS),
+            "hw23" => EXT_REGS + UNPRIV_REGS + (128 * super::EP_REGS),
             _ => EXT_REGS + UNPRIV_REGS,
         };
 
@@ -627,7 +604,7 @@ impl TCU {
 
     fn build_cmd(ep: EpId, cmd: CmdOpCode, arg: Reg) -> Reg {
         match env!("M3_TARGET") {
-            "hw22" | "hw23" => cmd as Reg | ((ep as Reg) << 4) | (arg << 25),
+            "hw23" => cmd as Reg | ((ep as Reg) << 4) | (arg << 25),
             _ => cmd as Reg | ((ep as Reg) << 4) | (arg << 26),
         }
     }

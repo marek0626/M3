@@ -40,7 +40,7 @@ public:
 
     static int max_credits(epid_t ep) {
         reg_t r0 = m3::TCU::read_reg(ep, 0);
-#if defined(__hw22__) || defined(__hw23__)
+#if defined(__hw23__)
         return (r0 >> 25) & m3::TCU::CREDIT_MASK;
 #else
         return (r0 >> 26) & m3::TCU::CREDIT_MASK;
@@ -49,7 +49,7 @@ public:
 
     static void recv_pos(epid_t ep, uint8_t *rpos, uint8_t *wpos) {
         reg_t r0 = m3::TCU::read_reg(ep, 0);
-#if defined(__hw22__) || defined(__hw23__)
+#if defined(__hw23__)
         *rpos = (r0 >> 53) & 0x3F;
         *wpos = (r0 >> 47) & 0x3F;
 #else
@@ -60,7 +60,7 @@ public:
 
     static void recv_masks(epid_t ep, m3::TCU::rep_bitmask_t *unread,
                            m3::TCU::rep_bitmask_t *occupied) {
-#if defined(__hw22__) || defined(__hw23__)
+#if defined(__hw23__)
         m3::TCU::reg_t reg = m3::TCU::read_reg(ep, 2);
         *occupied = reg & 0xFFFF'FFFF;
         *unread = reg >> 32;
@@ -149,7 +149,7 @@ public:
     static m3::Errors::Code invalidate_ep_remote(m3::TileId tile, epid_t ep, bool force,
                                                  m3::TCU::rep_bitmask_t *unread = nullptr) {
         reg_t cmd = static_cast<reg_t>(m3::TCU::ExtCmdOpCode::INV_EP) |
-#if defined(__hw22__) || defined(__hw23__)
+#if defined(__hw23__)
                     (static_cast<reg_t>(ep) << 9) | (static_cast<reg_t>(force) << 25);
 #else
                     (static_cast<reg_t>(ep) << 10) | (static_cast<reg_t>(force) << 26);
@@ -175,7 +175,7 @@ private:
         }
         while((res & 0xF) != 0);
 
-#if defined(__hw22__) || defined(__hw23__)
+#if defined(__hw23__)
         if(unread)
             *unread = res >> 9;
         return static_cast<m3::Errors::Code>((res >> 4) & 0x1F);

@@ -54,7 +54,7 @@ def help_text() -> None:
         """
         This is a convenience script that is responsible for building everything and running
         the specified command afterwards. The most important environment variables that
-        influence its behaviour are M3_TARGET=(gem5|hw|hw22|hw23), M3_ISA=(x86_64|riscv32|riscv64)
+        influence its behaviour are M3_TARGET=(gem5|hw|hw23), M3_ISA=(x86_64|riscv32|riscv64)
         [on gem5 only], and M3_BUILD=(debug|release|bench).
         """
     ), end="")
@@ -67,7 +67,7 @@ def help_text() -> None:
 
     # general variables
     general = {
-        "M3_TARGET":   "the target platform: 'gem5', 'hw', 'hw22', or 'hw23', default is 'gem5'.",
+        "M3_TARGET":   "the target platform: 'gem5', 'hw', or 'hw23', default is 'gem5'.",
         "M3_ISA":      "the ISA to use. On gem5, 'riscv32', 'riscv64', and 'x86_64' are supported. "
                        "On other targets it is ignored.",
         "M3_BUILD":    "the build type is 'debug', 'release', or 'bench'. "
@@ -95,7 +95,7 @@ def help_text() -> None:
                               "Numbers become C0T<number>, or use 'C<chip>T<tile>'.",
     }
 
-    # hw / hw22 / hw23‑specific variables
+    # hw / hw23‑specific variables
     hw = {
         "M3_HW_FPGA_HOST":    "SSH alias for the FPGA PC.",
         "M3_HW_FPGA_DIR":     "temporary directory on the FPGA PC (created automatically).",
@@ -127,7 +127,7 @@ def help_text() -> None:
 
     print_vars("General environment variables:", general)
     print_vars("Environment variables for target gem5:", gem5)
-    print_vars("Environment variables for target hw/hw22/hw23:", hw)
+    print_vars("Environment variables for target hw/hw23:", hw)
 
 
 parser.print_help = help_text  # type: ignore

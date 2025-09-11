@@ -26,7 +26,7 @@ def main() -> None:
     target = os.getenv("M3_TARGET", "gem5")
     if target == "gem5" or os.getenv("M3_RUN_GEM5") == "1":
         platform: BasePlatform = Gem5Platform(Path(cfg_path), args.crossname, args.debug)
-    elif target in {"hw", "hw22", "hw23"}:
+    elif target in {"hw", "hw23"}:
         platform = HWPlatform(Path(cfg_path), args.crossname, args.debug)
     else:
         die(f"Unknown target '{target}'")

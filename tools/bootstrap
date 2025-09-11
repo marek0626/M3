@@ -11,7 +11,7 @@ sys.path.append(os.path.realpath('ci'))
 import builder
 
 parser = argparse.ArgumentParser(description='This is the M³ bootstrapper.')
-parser.add_argument('--target', nargs='+', default=['gem5', 'hw22', 'hw23'])
+parser.add_argument('--target', nargs='+', default=['gem5', 'hw23'])
 parser.add_argument('--isa', nargs='+', default=['riscv32', 'riscv64', 'x86_64'])
 parser.add_argument('--build', nargs='+', default=['debug', 'release'])
 parser.add_argument('--command', nargs='+', default=['prepare', 'build'])

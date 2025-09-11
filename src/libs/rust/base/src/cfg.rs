@@ -20,9 +20,9 @@ use crate::mem::{VirtAddr, VirtAddrRaw};
 pub const MAX_TILES: usize = 64;
 pub const MAX_CHIPS: usize = 2;
 
-#[cfg(any(M3_TARGET = "hw", M3_TARGET = "hw22", M3_TARGET = "hw23"))]
+#[cfg(any(M3_TARGET = "hw", M3_TARGET = "hw23"))]
 pub const MAX_ACTS: usize = 16;
-#[cfg(not(any(M3_TARGET = "hw", M3_TARGET = "hw22", M3_TARGET = "hw23")))]
+#[cfg(not(any(M3_TARGET = "hw", M3_TARGET = "hw23")))]
 pub const MAX_ACTS: usize = 64;
 
 pub const DEF_EP_COUNT: usize = 256;
@@ -40,14 +40,14 @@ pub const RBUF_STD_SIZE: usize = PAGE_SIZE;
 pub const RBUF_ADDR: VirtAddr =
     VirtAddr::new(RBUF_STD_ADDR.as_raw() + RBUF_STD_SIZE as VirtAddrRaw);
 
-#[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
+#[cfg(M3_TARGET = "hw23")]
 pub const MAX_RB_SIZE: usize = 32;
-#[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
+#[cfg(not(M3_TARGET = "hw23"))]
 pub const MAX_RB_SIZE: usize = 64;
 
-#[cfg(any(M3_TARGET = "hw22", M3_TARGET = "hw23"))]
+#[cfg(M3_TARGET = "hw23")]
 pub const RESMNG_EPS: usize = 16;
-#[cfg(not(any(M3_TARGET = "hw22", M3_TARGET = "hw23")))]
+#[cfg(not(M3_TARGET = "hw23"))]
 pub const RESMNG_EPS: usize = 64;
 
 pub const TILE_MEM_BASE: VirtAddr = VirtAddr::new(0xE000_0000);
@@ -62,7 +62,7 @@ pub const ENV_START_DEF: VirtAddr = VirtAddr::new(0x1000_1000);
 pub const ENV_START_DEF: VirtAddr = VirtAddr::new(0x1F_E000);
 #[cfg(M3_TARGET = "gem5")]
 pub const ENV_START_ROT: VirtAddr = VirtAddr::new(0x0b00_1000);
-#[cfg(any(M3_TARGET = "hw23", M3_TARGET = "hw22", M3_TARGET = "hw"))]
+#[cfg(any(M3_TARGET = "hw23", M3_TARGET = "hw"))]
 pub const ENV_START_ROT: VirtAddr = VirtAddr::new(0x0000_1000);
 
 #[cfg(feature = "rot")]

@@ -63,7 +63,7 @@ pub fn write(buf: &[u8]) -> usize {
 pub unsafe fn flush_cache() {
     // * 2 just to be sure (this code is also touching memory)
     let (cacheline_size, cache_size) = match env!("M3_TARGET") {
-        "hw" | "hw22" | "hw23" => (64, 512 * 1024 * 2),
+        "hw" | "hw23" => (64, 512 * 1024 * 2),
         _ => (64, (32 + 256) * 1024 * 2),
     };
 
@@ -79,7 +79,7 @@ pub unsafe fn flush_cache() {
 
     #[cfg(all(
         not(target_arch = "riscv32"),
-        any(M3_TARGET = "hw", M3_TARGET = "hw22", M3_TARGET = "hw23")
+        any(M3_TARGET = "hw", M3_TARGET = "hw23")
     ))]
     unsafe {
         core::arch::asm!("fence.i");

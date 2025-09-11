@@ -5,9 +5,6 @@ def build(gen, env):
     if env['ISA'] != 'riscv64' and env['ISA'] != 'riscv32':
         # (because of riscv-rt and the RISC-V specific assembly code)
         return
-    if env['TGT'] == 'hw22':
-        # (rosa uses the TCU TileDesc register, which is not available on hw22)
-        return
 
     # the RoT always runs on a riscv32 core on the hardware platform
     if env['TGT'] == 'hw23' or env['TGT'] == 'hw':

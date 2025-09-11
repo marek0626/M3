@@ -3,7 +3,7 @@ use std::env;
 fn main() {
     let vars = [
         ("M3_BUILD", "\"debug\",\"release\",\"bench\""),
-        ("M3_TARGET", "\"hw22\",\"hw23\",\"hw\",\"gem5\""),
+        ("M3_TARGET", "\"hw23\",\"hw\",\"gem5\""),
         ("M3_LX", "\"1\""),
         ("M3_ROTS", "\"1\""),
     ];
