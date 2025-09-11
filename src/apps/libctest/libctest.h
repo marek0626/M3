@@ -42,3 +42,4 @@ void tfile();
 void tprocess();
 void tsocket();
 void ttime();
+void tmisc();

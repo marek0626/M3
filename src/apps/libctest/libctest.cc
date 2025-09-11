@@ -34,6 +34,7 @@ int main() {
     RUN_SUITE(tprocess);
     RUN_SUITE(tsocket);
     RUN_SUITE(ttime);
+    RUN_SUITE(tmisc);
 
     if(failed > 0)
         println("\033[1;31m{} tests failed\033[0;m"_cf, failed);
