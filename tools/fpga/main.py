@@ -12,10 +12,6 @@ from noc import NoCmonitor
 from fpga_utils import FPGA_Error
 from tile import TileType
 
-from tcu import TCUExtReg
-import modids
-
-import utils
 import loader
 import term
 
@@ -94,21 +90,14 @@ def run_loop(fpga_inst, serial, timeout_ev):
     return timed_out
 
 
-def extract_tcu_stats(tile, no: int, version: int):
-    if version < 4:
+def extract_tcu_stats(tile, no: int):
+    if tile.tcu_version()[0] < 4:
         try:
-            dropped_packets = tile.nocarq.get_arq_drop_packet_count()
-            total_packets = tile.nocarq.get_arq_packet_count()
-            print("PM{}: NoC dropped/total packets: {}/{} ({:.0f}%)".format(no,
-                  dropped_packets, total_packets, dropped_packets/total_packets*100))
+            drops = tile.tcu_drop_flit_count()
+            errors = tile.tcu_error_flit_count()
+            print("PM{}: TCU dropped/error flits: {}/{}".format(no, drops, errors))
         except Exception as e:
-            print("PM{}: unable to read number of dropped NoC packets: {}".format(no, e))
-
-    try:
-        print("PM{}: TCU dropped/error flits: {}/{}".format(no,
-              tile.tcu_drop_flit_count(), tile.tcu_error_flit_count()))
-    except Exception as e:
-        print("PM{}: unable to read number of TCU dropped flits: {}".format(no, e))
+            print("PM{}: unable to read number of TCU dropped flits: {}".format(no, e))
 
 
 def extract_tcu_log(tile, no: int):
@@ -162,7 +151,7 @@ def stop_tiles(fpga_inst, version, extract, timed_out):
         if version == 4 and tile.tcu_get_lock():
             tile.tcu_unlock()
         if extract:
-            extract_tcu_stats(tile, i, version)
+            extract_tcu_stats(tile, i)
             if timed_out:
                 extract_tcu_log(tile, i)
             extract_instr_trace(tile, i)
@@ -172,11 +161,10 @@ def stop_tiles(fpga_inst, version, extract, timed_out):
         elif tile.type == TileType.ACC:
             tile.inst.asm_disable()
             tile.inst.acc_disable()
-    #read logs in DRAM tiles
-    if extract:
-        if timed_out:
-            extract_tcu_log(fpga_inst.dram1, 8)
-            extract_tcu_log(fpga_inst.dram2, 9)
+    # read logs in DRAM tiles
+    if extract and timed_out:
+        extract_tcu_log(fpga_inst.dram1, 8)
+        extract_tcu_log(fpga_inst.dram2, 9)
 
 
 def main():
