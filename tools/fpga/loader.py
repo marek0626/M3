@@ -5,7 +5,7 @@ from elftools.elf.elffile import ELFFile
 
 import memory
 import pm
-from tcu import EP, MemEP, Flags, TCUExtReg
+from tcu import EP, MemEP, Flags
 from tile import Tile, TileType
 
 import utils
@@ -300,7 +300,7 @@ class Loader:
             return (DRAM_SIZE >> 12) << 28 | ((1 << 4) << 11) | 1
 
         tile = tiles[tile_idx]
-        desc = tile.mem[tile.tcu.ext_reg_addr(TCUExtReg.TILE_DESC)]
+        desc = tile.mem[tile.tcu.ext_reg_addr(tile.tcu.TCUExtReg.TILE_DESC)]
 
         if not self.vm and (desc & ((1 << 4) << 11)) == 0:
             # mem size | TileAttr::IMEM
