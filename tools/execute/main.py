@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import sys
 
 from pathlib import Path
 
@@ -35,7 +36,8 @@ def main() -> None:
     platform.run()
 
     # Restore terminal to cooked mode
-    run("stty", "sane")
+    if sys.stdin.isatty():
+        run("stty", "sane")
 
 
 if __name__ == "__main__":
