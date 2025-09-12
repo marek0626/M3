@@ -127,6 +127,9 @@ class Loader:
         # reset TCU (clear command log and reset registers except FEATURES and EPs)
         tile.tcu_reset(resetBits=0xF)
 
+        # turn off logging during init
+        tile.tcu_set_log_mask(0)
+
         # enable instruction trace for all Rocket tiles (doesn't cost anything)
         if tile.type == TileType.ROCKET:
             tile.inst.rocket_enableTrace()

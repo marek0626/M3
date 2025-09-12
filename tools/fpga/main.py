@@ -209,14 +209,18 @@ def main():
 
     ld = loader.Loader(version, pmp_size, args.vm)
 
+    # disable TCU logging during loading
+    fpga_inst.tcu_log_enable(False)
+
     drams = [fpga_inst.dram1, fpga_inst.dram2]
     dram = drams[1] if args.rotlayer is not None else drams[0]
     loaded = ld.init(fpga_inst.pmTiles, drams, dram, args.tile,
                      args.rotlayer, mods, args.logflags)
 
-    # enable NoC ARQ when cores are running
+    # enable NoC ARQ and TCU logging when cores are running
     if args.version < 4:
         fpga_inst.set_arq_enable(True)
+    fpga_inst.tcu_log_enable(True)
 
     ld.start(fpga_inst.pmTiles, loaded, args.debug)
 
@@ -231,9 +235,10 @@ def main():
 
     timed_out = run_loop(fpga_inst, args.serial, timeout_ev)
 
-    # disable NoC ARQ again for post-processing
+    # disable NoC ARQ and TCU logging again for post-processing
     if args.version < 4:
         fpga_inst.set_arq_enable(False)
+    fpga_inst.tcu_log_enable(False)
 
     stop_tiles(fpga_inst, args.version, True, timed_out)
 
