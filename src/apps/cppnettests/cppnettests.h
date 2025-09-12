@@ -16,6 +16,8 @@
  * General Public License version 2 for more details.
  */
 
+#include <m3/session/Network.h>
+
 #define RUN_SUITE(name)                            \
     m3::println("Running testsuite {}"_cf, #name); \
     name();                                        \
@@ -25,6 +27,10 @@
     m3::println("Testing \"{}\" in {}:"_cf, #name, __FILE__); \
     name();                                                   \
     m3::println();
+
+extern m3::IpAddr NET0_IP;
+extern m3::IpAddr NET1_IP;
+extern m3::IpAddr DEST_IP;
 
 void tudp();
 void ttcp();

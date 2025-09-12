@@ -35,7 +35,7 @@ static void basics() {
 
     socket->bind(2000);
     WVASSERTEQ(socket->state(), Socket::Bound);
-    WVASSERTEQ(socket->local_endpoint(), Endpoint(IpAddr(192, 168, 112, 2), 2000));
+    WVASSERTEQ(socket->local_endpoint(), Endpoint(NET0_IP, 2000));
 
     WVASSERTERR(Errors::INV_STATE, [&socket] {
         socket->bind(2001);
@@ -50,7 +50,7 @@ static void connect() {
     WVASSERTEQ(socket->state(), Socket::Closed);
     WVASSERTEQ(socket->local_endpoint(), Endpoint::unspecified());
 
-    socket->connect(Endpoint(IpAddr(192, 168, 112, 1), 1337));
+    socket->connect(Endpoint(DEST_IP, 1337));
     WVASSERTEQ(socket->state(), Socket::Bound);
 }
 
@@ -76,7 +76,7 @@ NOINLINE static void data() {
     auto socket = UdpSocket::create(net);
     socket->set_blocking(false);
 
-    Endpoint dest = Endpoint(IpAddr(192, 168, 112, 1), 1337);
+    Endpoint dest = Endpoint(DEST_IP, 1337);
 
     uint8_t send_buf[1024];
     for(int i = 0; i < 1024; ++i)

@@ -19,6 +19,7 @@
 #include "cppnettests.h"
 
 #include <base/Common.h>
+#include <base/stream/IStringStream.h>
 
 #include <m3/stream/Standard.h>
 #include <m3/tiles/Activity.h>
@@ -26,9 +27,22 @@
 
 using namespace m3;
 
+IpAddr NET0_IP;
+IpAddr NET1_IP;
+IpAddr DEST_IP;
+
 int failed;
 
-int main() {
+int main(int argc, char **argv) {
+    if(argc < 4) {
+        eprintln("Usage: {} <net0-ip> <net1-ip> <dest-ip>"_cf, argv[0]);
+        return 1;
+    }
+
+    NET0_IP = IStringStream::read_from<IpAddr>(argv[1]);
+    NET1_IP = IStringStream::read_from<IpAddr>(argv[2]);
+    DEST_IP = IStringStream::read_from<IpAddr>(argv[3]);
+
     RUN_SUITE(tudp);
     RUN_SUITE(ttcp);
 
