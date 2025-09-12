@@ -172,6 +172,11 @@ def stop_tiles(fpga_inst, version, extract, timed_out):
         elif tile.type == TileType.ACC:
             tile.inst.asm_disable()
             tile.inst.acc_disable()
+    #read logs in DRAM tiles
+    if extract:
+        if timed_out:
+            extract_tcu_log(fpga_inst.dram1, 8)
+            extract_tcu_log(fpga_inst.dram2, 9)
 
 
 def main():
