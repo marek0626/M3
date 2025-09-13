@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import os
 import subprocess
 import sys
 import traceback
@@ -13,6 +14,7 @@ from base import Test, Runner, FSImages
 MAX_RETRIES = 3
 
 parser = argparse.ArgumentParser(description='This is the hardware test runner.')
+parser.add_argument('--no-build', action='store_true', help='Do not rebuild before running tests')
 parser.add_argument('--tests', nargs='+', default=[], help='the tests to run')
 parser.add_argument('--builds', nargs='+', default=['debug', 'bench'],
                     help='the build modes to use')
@@ -103,6 +105,15 @@ class HWRunner(Runner):
         else:
             raise RuntimeError("Unable to load bitfile")
 
+
+# ensure everything is up-to-date
+if not args.no_build:
+    for build in args.builds:
+        for target in args.targets:
+            env = os.environ.copy()
+            env["M3_BUILD"] = build
+            env["M3_TARGET"] = target
+            subprocess.run(["./b"], env=env, check=True)
 
 # create FS images
 for target in args.targets:

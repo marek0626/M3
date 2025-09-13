@@ -15,6 +15,7 @@ from typing import Dict
 from base import Test, Runner, FSImages, indir
 
 parser = argparse.ArgumentParser(description='This is the gem5 test runner.')
+parser.add_argument('--no-build', action='store_true', help='Do not rebuild before running tests')
 parser.add_argument('--tests', nargs='+', default=[], help='the tests to run')
 parser.add_argument('--isas', nargs='+', default=['riscv32', 'riscv64', 'x86_64'],
                     help='the ISAs to run the tests with (riscv32, riscv64, x86_64)')
@@ -165,6 +166,15 @@ class Gem5Test(Test):
         resource.setrlimit(resource.RLIMIT_AS, (vlimit, vlimit))
         resource.setrlimit(resource.RLIMIT_CPU, (tlimit, tlimit))
 
+
+# ensure everything is up-to-date
+if not args.no_build:
+    for build in ["debug", "bench"]:
+        for isa in args.isas:
+            env = os.environ.copy()
+            env["M3_BUILD"] = build
+            env["M3_ISA"] = isa
+            subprocess.run(["./b"], env=env, check=True)
 
 # create FS images
 images = FSImages("gem5")
