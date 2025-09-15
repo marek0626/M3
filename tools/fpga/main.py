@@ -118,17 +118,20 @@ def extract_tcu_log(tile, no: int):
 
 def extract_instr_trace(tile, no: int):
     if tile.type == TileType.ROCKET:
-        try:
-            tile.inst.rocket_printTrace('log/pm' + str(no) + '-instrs.log')
-        except Exception as e:
-            print("PM{}: unable to read instruction trace: {}".format(no, e))
-            print("PM{}: resetting TCU and reading all logs...".format(no))
-            sys.stdout.flush()
-            tile.tcu_reset()
+        for traceNum in range(2):
             try:
-                tile.inst.rocket_printTrace('log/pm' + str(no) + '-instrs.log', all=True)
-            except Exception:
-                pass
+                tile.inst.rocket_printTrace('log/pm' + str(no) + '-instrs' + str(traceNum+1) + '.log',
+                                            all=False, traceNum=traceNum)
+            except Exception as e:
+                print("PM{}: unable to read instruction trace: {}".format(no, e))
+                print("PM{}: resetting TCU and reading all logs...".format(no))
+                sys.stdout.flush()
+                tile.tcu_reset()
+                try:
+                    tile.inst.rocket_printTrace('log/pm' + str(no) + '-instrs'  + str(traceNum+1) + '.log',
+                                                all=True, traceNum=traceNum)
+                except Exception:
+                    pass
     elif tile.type == TileType.ACC:
         try:
             tile.inst.asm_printTrace('log/pm' + str(no) + '-instrs.log')
