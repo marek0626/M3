@@ -42,14 +42,15 @@ fn rocket_trace(
     instrs: &HashMap<usize, Instruction>,
     lines: Lines<StdinLock<'_>>,
 ) -> Result<(), Error> {
-    println!("Legend:");
-    println!(" <n>:    <PC>     <opcode>  p e i      <cause>         <tval>   <disassembly>\n");
-    println!(" p = privilege level");
-    println!(" e = exception");
-    println!(" i = interrupt\n");
+    println!("--------------------------------------------------------------------------------");
+    println!("                                 v------ privilege level (M=3, S=1, U=0)");
+    println!("                                   v---- exception");
+    println!("                                     v-- interrupt");
+    println!("cycle      addr       opcode     p e i cause              tval       disassembly");
+    println!("--------------------------------------------------------------------------------");
 
-    let re = Regex::new(r"^\s*\d+: 0x([0-9a-f]+) 0x([0-9a-f]+) \d \d \d 0x[0-9a-f]+ 0x[0-9a-f]+")
-        .unwrap();
+    let re =
+        Regex::new(r"^\d+\s+0x([0-9a-f]+) 0x([0-9a-f]+) \d \d \d 0x[0-9a-f]+ 0x[0-9a-f]+").unwrap();
 
     let mut last_symbol = String::new();
     let mut last_binary = String::new();
@@ -70,11 +71,14 @@ fn rocket_trace(
                     last_binary.clone_from(&instr.binary);
                 }
 
-                println!("{} {}", line, instr.disasm);
+                println!("{} {:<6} {}", line, instr.opname, instr.args);
             }
             else {
                 println!("{} ??", line);
             }
+        }
+        else {
+            println!("{}", line);
         }
     }
 
@@ -134,16 +138,12 @@ fn rv32_trace(
                     last_binary.clone_from(&instr.binary);
                 }
 
-                let mut opname = instr
-                    .disasm
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or("")
-                    .to_string();
-
-                if instr.opcode == 0x0400000b {
-                    opname = "retirq".to_string();
+                let opname = if instr.opcode == 0x0400000b {
+                    "retirq"
                 }
+                else {
+                    &instr.opname
+                };
 
                 if is_branch
                     && ![
@@ -151,7 +151,7 @@ fn rv32_trace(
                         "bge", "bgt", "bltu", "bleu", "bgeu", "bgtu", "beqz", "bnez", "blez",
                         "bgez", "bltz", "bgtz",
                     ]
-                    .contains(&opname.as_str())
+                    .contains(&opname)
                 {
                     println!(
                         "{} ** UNEXPECTED BRANCH DATA FOR INSN AT {:08x}! **",
@@ -159,9 +159,7 @@ fn rv32_trace(
                     );
                 }
 
-                if is_addr
-                    && !["lb", "lh", "lw", "lbu", "lhu", "sb", "sh", "sw"]
-                        .contains(&opname.as_str())
+                if is_addr && !["lb", "lh", "lw", "lbu", "lhu", "sb", "sh", "sw"].contains(&opname)
                 {
                     println!(
                         "{} ** UNEXPECTED ADDR DATA FOR INSN AT {:08x}! **",
@@ -175,7 +173,10 @@ fn rv32_trace(
                 else {
                     format!("    {:04x}", instr.opcode)
                 };
-                println!("{} | {:08x} | {} | {}", info, pc, opcode_fmt, instr.disasm);
+                println!(
+                    "{} | {:08x} | {} | {:<6} {}",
+                    info, pc, opcode_fmt, instr.opname, instr.args
+                );
 
                 if !is_addr {
                     pc += if (instr.opcode & 3) == 3 { 4 } else { 2 };

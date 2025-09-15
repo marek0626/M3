@@ -29,15 +29,16 @@ pub struct Instruction {
     pub opcode: u32,
     pub binary: String,
     pub symbol: String,
-    pub disasm: String,
+    pub opname: String,
+    pub args: String,
 }
 
 impl fmt::Display for Instruction {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(
             fmt,
-            "Instr {{ addr: {:#x}, opcode: {:#x}, symbol: \x1B[1m{}\x1B[0m {}, disasm: {} }}",
-            self.addr, self.opcode, self.binary, self.symbol, self.disasm
+            "Instr {{ addr: {:#x}, opcode: {:#x}, symbol: \x1B[1m{}\x1B[0m {}, disasm: {} {} }}",
+            self.addr, self.opcode, self.binary, self.symbol, self.opname, self.args
         )
     }
 }
@@ -56,7 +57,7 @@ where
         .stdout(Stdio::piped())
         .spawn()?;
 
-    let instr_re = Regex::new(r"^\s+([0-9a-f]+):\s+([0-9a-f]+)\s+(.*)").unwrap();
+    let instr_re = Regex::new(r"^\s+([0-9a-f]+):\s+([0-9a-f]+)\s+(\S+)\s+(.*)").unwrap();
 
     let binary = file
         .as_ref()
@@ -83,14 +84,16 @@ where
         else if let Some(m) = instr_re.captures(tline) {
             let addr = usize::from_str_radix(m.get(1).unwrap().as_str(), 16)?;
             let opcode = u32::from_str_radix(m.get(2).unwrap().as_str(), 16)?;
-            let disasm = m.get(3).unwrap().as_str().to_string();
+            let instr = m.get(3).unwrap().as_str().to_string();
+            let args = m.get(4).unwrap().as_str().to_string();
 
             instrs.insert(addr, Instruction {
                 addr,
                 opcode,
                 binary: binary.to_string(),
                 symbol: symbol.clone().ok_or(Error::ObjdumpMalformed)?,
-                disasm,
+                opname: instr,
+                args,
             });
         }
 
