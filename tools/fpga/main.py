@@ -12,10 +12,6 @@ from noc import NoCmonitor
 from fpga_utils import FPGA_Error
 from tile import TileType
 
-from tcu import TCUExtReg
-import modids
-
-import utils
 import loader
 import term
 
@@ -48,6 +44,8 @@ class TimeoutThread(threading.Thread):
 def run_loop(fpga_inst, serial, timeout_ev):
     if serial is not None:
         terminal = term.LxTerm(serial)
+    elif not sys.stdin.isatty():
+        terminal = term.NullTerm()
     else:
         terminal = term.TCUTerm(fpga_inst.dram1, fpga_inst.nocif)
 
@@ -93,11 +91,13 @@ def run_loop(fpga_inst, serial, timeout_ev):
 
 
 def extract_tcu_stats(tile, no: int):
-    try:
-        print("PM{}: TCU dropped/error flits: {}/{}".format(no,
-              tile.tcu_drop_flit_count(), tile.tcu_error_flit_count()))
-    except Exception as e:
-        print("PM{}: unable to read number of TCU dropped flits: {}".format(no, e))
+    if tile.tcu_version()[0] < 4:
+        try:
+            drops = tile.tcu_drop_flit_count()
+            errors = tile.tcu_error_flit_count()
+            print("PM{}: TCU dropped/error flits: {}/{}".format(no, drops, errors))
+        except Exception as e:
+            print("PM{}: unable to read number of TCU dropped flits: {}".format(no, e))
 
 
 def extract_tcu_log(tile, no: int):
@@ -144,11 +144,11 @@ def extract_instr_trace(tile, no: int):
         tile.inst.asm_disable()
 
 
-def stop_tiles(fpga_inst, extract, timed_out):
+def stop_tiles(fpga_inst, version, extract, timed_out):
     print("Stopping all tiles...")
     for i, tile in enumerate(fpga_inst.pmTiles, 0):
         # if tile is locked, unlock it first
-        if tile.tcu_get_lock():
+        if version == 4 and tile.tcu_get_lock():
             tile.tcu_unlock()
         if extract:
             extract_tcu_stats(tile, i)
@@ -161,6 +161,10 @@ def stop_tiles(fpga_inst, extract, timed_out):
         elif tile.type == TileType.ACC:
             tile.inst.asm_disable()
             tile.inst.acc_disable()
+    # read logs in DRAM tiles
+    if extract and timed_out:
+        extract_tcu_log(fpga_inst.dram1, 8)
+        extract_tcu_log(fpga_inst.dram2, 9)
 
 
 def main():
@@ -185,8 +189,12 @@ def main():
     # connect to FPGA
     fpga_inst = fpga_top.FPGA_TOP(args.version, args.fpga, args.reset)
 
+    # disable NoC ARQ for program upload
+    if args.version < 4:
+        fpga_inst.set_arq_enable(False)
+
     # stop all tiles
-    stop_tiles(fpga_inst, False, False)
+    stop_tiles(fpga_inst, args.version, False, False)
 
     # check TCU versions
     for tile in fpga_inst.pmTiles:
@@ -201,10 +209,18 @@ def main():
 
     ld = loader.Loader(version, pmp_size, args.vm)
 
+    # disable TCU logging during loading
+    fpga_inst.tcu_log_enable(False)
+
     drams = [fpga_inst.dram1, fpga_inst.dram2]
     dram = drams[1] if args.rotlayer is not None else drams[0]
     loaded = ld.init(fpga_inst.pmTiles, drams, dram, args.tile,
                      args.rotlayer, mods, args.logflags)
+
+    # enable NoC ARQ and TCU logging when cores are running
+    if args.version < 4:
+        fpga_inst.set_arq_enable(True)
+    fpga_inst.tcu_log_enable(True)
 
     ld.start(fpga_inst.pmTiles, loaded, args.debug)
 
@@ -219,7 +235,12 @@ def main():
 
     timed_out = run_loop(fpga_inst, args.serial, timeout_ev)
 
-    stop_tiles(fpga_inst, True, timed_out)
+    # disable NoC ARQ and TCU logging again for post-processing
+    if args.version < 4:
+        fpga_inst.set_arq_enable(False)
+    fpga_inst.tcu_log_enable(False)
+
+    stop_tiles(fpga_inst, args.version, True, timed_out)
 
 
 try:

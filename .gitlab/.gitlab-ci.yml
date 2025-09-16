@@ -86,7 +86,7 @@ test-gem5:
       kubectl exec -n os -t m3-ci -- sh -c " \
           cd M3 \
           && nix develop path:nix -c \
-            ./ci/tests/gem5.py --publish /results --web /web \
+            ./ci/tests/gem5.py --no-build --publish /results --web /web \
               /cache/results/$(date -I)-$CI_COMMIT_SHA \
         "
   after_script:

@@ -9,7 +9,7 @@ import shutil
 import sys
 
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 sys.path.append(os.path.realpath('ci/tests'))  # NOQA
 import check_result
@@ -17,23 +17,6 @@ import check_result
 pp = pprint.PrettyPrinter()
 
 NUM_DAYS = 10
-TESTS = [
-    "lxrust-benchs", "lxcpp-benchs", "lxtcutest",
-    "chantests",
-    "unittests", "hashmux-benchs", "hashmux-tests", "bench-hashpipe-tee", "resmngtest",
-    "rust-net-tests", "cpp-net-tests", "rust-net-benchs", "cpp-net-benchs",
-    "rust-algo-tests", "rust-destr-tests", "rust-misc-tests", "rust-vfs-tests",
-    "rust-algo-benchs", "rust-misc-benchs", "rust-vfs-benchs",
-    "cpp-algo-benchs", "cpp-misc-benchs", "cpp-vfs-benchs",
-    "facever", "rots-raser", "rots-hello",
-    "find", "tar", "untar", "sqlite", "leveldb", "sha256sum", "sort",
-    "cat_awk", "cat_wc", "grep_awk", "grep_wc",
-    "disk-test", "abort-test",
-    "standalone", "libctest", "rust-std-test", "msgchan", "rust-sndrcv", "vmtest",
-    "ycsb-bench-udp", "ycsb-bench-tcp",
-    "voiceassist-udp", "voiceassist-tcp",
-    "bench-shell", "shell-nested", "parchksum", "filterchain"
-]
 COLORS = [
     'red', 'blue', 'green', 'orange', 'purple', 'yellow', 'black', 'lightgreen', 'lightblue'
 ]
@@ -68,15 +51,43 @@ def write_results(report: io.TextIOWrapper, date: str, test: str) -> None:
         report.write("</ul>\n")
 
 
-re_name = re.compile(
-    r'^m3-tests-(' + '|'.join(TESTS) + ')-(a|b|sh|(?:hw|hw22|hw23)' +
-    r'-(?:debug|bench)-(?:ex|sh))-(\S+?)-(\d+)$'
+parser = argparse.ArgumentParser(description='Generates the website for the CI results.')
+parser.add_argument('input', help='The input directory with the test results.')
+parser.add_argument('output', help='The output directory (will be created).')
+parser.add_argument('tests', help='Comma-separated list of tests.')
+args = parser.parse_args()
+
+tests = args.tests.split(",")
+
+re_name_old = re.compile(
+    r'^m3-tests-(' + '|'.join(tests) + r')-(a|b|sh)-(x86_64|riscv64|riscv32)-(\d+)$'
+)
+re_name_new = re.compile(
+    r'^m3-tests-(' + '|'.join(tests) + r')-(gem5|hw|hw23)-(x86_64|riscv64|riscv32)-' +
+    r'(debug|bench)-(a|b|sh)-(\d+)$'
 )
 
-parser = argparse.ArgumentParser(description='Generates the website for the CI results.')
-parser.add_argument('input')
-parser.add_argument('output')
-args = parser.parse_args()
+
+def decode_name(name: str) -> Optional[Tuple[str, str, str, str, str, int]]:
+    match = re_name_new.match(name)
+    if match:
+        test = match.group(1)
+        target = match.group(2)
+        isa = match.group(3)
+        build = match.group(4)
+        tiletype = match.group(5)
+        bpe = match.group(6)
+        return (test, target, isa, build, tiletype, int(bpe))
+    else:
+        match = re_name_old.match(name)
+        if match:
+            test = match.group(1)
+            tiletype = match.group(2)
+            isa = match.group(3)
+            bpe = match.group(4)
+            return (test, "gem5", isa, "bench", tiletype, int(bpe))
+    return None
+
 
 if not os.path.exists(args.output):
     os.mkdir(args.output)
@@ -94,16 +105,13 @@ for key in sorted(all_results.keys())[-NUM_DAYS:]:
         dir = all_results[key]
         results[key] = {}
         for f in os.listdir(dir):
-            match = re_name.match(f)
-            if match:
-                test = match.group(1)
-                tiletype = match.group(2)
-                isa = match.group(3)
-                bpe = match.group(4)
+            name_parts = decode_name(f)
+            if name_parts:
+                test, target, isa, build, tiletype, bpe = name_parts
 
                 if test not in results[key]:
                     results[key][test] = {}
-                subkey = "{}-{}-{}".format(tiletype, isa, bpe)
+                subkey = "{}-{}-{}-{}-{}".format(target, isa, build, tiletype, bpe)
                 logfile = dir / str(f) / 'log.txt'
                 logcopy = '{}/{}/tests/{}-{}-log.txt'.format(args.output, key, test, subkey)
                 results[key][test][subkey] = check_result.parse_output(logfile)
@@ -122,7 +130,7 @@ for key in results:
     for test in results[key]:
         for cfg in results[key][test]:
             # only consider the benchmarks on gem5 with 64 blocks per extent
-            if cfg[-3:] != "-64" or "hw-debug" in cfg or "hw22-debug" in cfg:
+            if cfg[-3:] != "-64" or "debug" in cfg:
                 continue
             for pname in results[key][test][cfg].perfs:
                 benchs[pname] = 1
@@ -203,7 +211,7 @@ with open(args.output + '/index.html', 'w') as report:
     report.write("  <th>Performance History</th>\n")
     report.write("  </tr>\n")
 
-    for test in TESTS:
+    for test in tests:
         report.write("  <tr>\n")
         report.write("    <td><a href=\"tests/{0}.html\">{0}</a></td>\n".format(test))
         for key in sorted(results.keys()):
@@ -307,7 +315,7 @@ with open(args.output + '/index.html', 'w') as report:
 if not os.path.exists(args.output + '/tests'):
     os.mkdir(args.output + '/tests')
 
-for test in TESTS:
+for test in tests:
     with open(args.output + '/tests/' + test + '.html', 'w') as report:
         write_html_header(report)
 

@@ -51,18 +51,7 @@ pub enum ExtCmdOpCode {
 }
 
 cfg_if! {
-    if #[cfg(M3_TARGET = "hw22")] {
-        /// The external registers
-        #[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
-        #[repr(u64)]
-        pub enum ExtReg {
-            /// Stores the privileged flag (for now)
-            Features,
-            /// For external commands
-            ExtCmd,
-        }
-    }
-    else if #[cfg(M3_TARGET = "hw23")] {
+    if #[cfg(M3_TARGET = "hw23")] {
         /// The external registers
         #[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive)]
         #[repr(u64)]
@@ -178,7 +167,7 @@ impl TCU {
         reply_eps: Option<EpId>,
     ) {
         match env!("M3_TARGET") {
-            "hw22" | "hw23" => {
+            "hw23" => {
                 regs[0] = (EpType::Receive as Reg)
                     | ((act as Reg) << 3)
                     | ((reply_eps.unwrap_or(NO_REPLIES) as Reg) << 19)
@@ -212,7 +201,7 @@ impl TCU {
         credits: u32,
     ) {
         match env!("M3_TARGET") {
-            "hw22" | "hw23" => {
+            "hw23" => {
                 regs[0] = (EpType::Send as Reg)
                     | ((act as Reg) << 3)
                     | ((credits as Reg) << 19)
@@ -334,7 +323,7 @@ impl TCU {
     /// Returns the value for the `ExtCmd` register for given opcode and argument.
     pub fn build_ext_cmd(cmd: ExtCmdOpCode, arg: u64) -> Reg {
         match env!("M3_TARGET") {
-            "hw22" | "hw23" => (cmd as Reg) | (arg << 9),
+            "hw23" => (cmd as Reg) | (arg << 9),
             _ => (cmd as Reg) | (arg << 10),
         }
     }

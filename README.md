@@ -13,9 +13,9 @@ Supported Platforms:
 Currently, M³ runs on the following target platforms:
 
 - gem5, by adding a TCU model to gem5.
-- hw, hw22, or hw23, a FPGA-based hardware platform.
+- hw or hw23, a FPGA-based hardware platform.
 
-The hardware platform comes in three variants: hw, hw22, and hw23. hw is the current development version of the hardware platform, whereas hw22 and hw23 correspond to the silicon version from the year 2022 and 2023, respectively. The target platform is specified with the environment variable `M3_TARGET`. For example:
+The hardware platform comes in two variants: hw and hw23. hw is the current development version of the hardware platform, whereas hw23 corresponds to the silicon version from the year 2023. The target platform is specified with the environment variable `M3_TARGET`. For example:
 
     $ export M3_TARGET=gem5
 
@@ -77,12 +77,11 @@ The current workflow assumes that the FPGA is connected to a machine `M_fpga` th
 
 Note that `M_fpga` and `M_m3` can also be the same, in which case `M3_HW_FPGA_HOST` has to be set to localhost and a local SSH server is required.
 
-The bitfiles for the hardware platform can be found in `platform/hw/fpga_tools/bitfiles`. The bitfiles are built for the Xilinx VCU118 FPGA. The following command can be used to load a specific bitfile onto the FPGA. This requires an installation of Vivado or Vivado Lab. For M3_TARGET=hw23, use:
+The bitfiles for the hardware platform can be found in `platform/hw/fpga_tools/bitfiles`. The bitfiles are built for the Xilinx VCU118 FPGA. The following command can be used to load a specific bitfile onto the FPGA. This requires an installation of Vivado or Vivado Lab. For M3_TARGET=hw, use:
 
-    $ ./b loadfpga=fpga_top_v4.6.0.bit
+    $ ./b loadfpga=fpga_top_v4.10.7.bit
 
-With `M3_TARGET=hw22`, the bitfile `fpga_top_v4.4.12` needs to be used. M3_TARGET=hw is currently
-not supported.
+With `M3_TARGET=hw23`, the bitfile `fpga_top_v4.6.0.bit` needs to be used.
 
 Note that the source of the hardware platform is [openly available](https://github.com/Barkhausen-Institut/M3-hardware) as well.
 

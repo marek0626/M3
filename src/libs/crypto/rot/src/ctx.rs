@@ -100,8 +100,8 @@ impl CtxData for () {
 
 impl<Data: CtxData> LayerCtx<Data> {
     pub const BROM_HDR_MAGIC: Magic = encode_magic(b"BromHdr", 1);
-    // context is placed at the beginning of memory
-    pub const CTX_OFFSET: usize = crate::MEM_OFFSET;
+    // context is placed at the beginning of memory (+8 to avoid a null-pointer)
+    pub const CTX_OFFSET: usize = crate::MEM_OFFSET + 8;
 
     pub fn new(entry_addr: usize, data: Data) -> Self {
         Self {

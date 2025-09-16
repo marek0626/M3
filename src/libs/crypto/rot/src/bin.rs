@@ -23,13 +23,13 @@ cfg_if! {
     // note: needs to be in sync with the memory areas in ld.conf
     if #[cfg(any(M3_TARGET = "hw23", M3_TARGET = "hw"))] {
         pub const BROM_NEXT_ADDR: usize = MEM_OFFSET + 0x10000;
-        pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x49000;
+        pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x46000;
         pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x6000;
     }
     else {
         pub const BROM_NEXT_ADDR: usize = MEM_OFFSET + 0x5000;
-        pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x2A000;
-        pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x69000;
+        pub const BLAU_NEXT_ADDR: usize = MEM_OFFSET + 0x2E000;
+        pub const ROSA_NEXT_ADDR: usize = MEM_OFFSET + 0x73000;
     }
 }
 

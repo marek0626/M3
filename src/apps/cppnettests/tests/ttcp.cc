@@ -42,23 +42,23 @@ static void basics() {
         socket->send(&dummy, sizeof(dummy));
     });
 
-    socket->connect(Endpoint(IpAddr(192, 168, 112, 1), 1338));
+    socket->connect(Endpoint(DEST_IP, 1338));
     WVASSERTEQ(socket->state(), Socket::Connected);
-    WVASSERTEQ(socket->local_endpoint().addr, IpAddr(192, 168, 112, 2));
-    WVASSERTEQ(socket->remote_endpoint(), Endpoint(IpAddr(192, 168, 112, 1), 1338));
+    WVASSERTEQ(socket->local_endpoint().addr, NET0_IP);
+    WVASSERTEQ(socket->remote_endpoint(), Endpoint(DEST_IP, 1338));
 
     uint8_t buf[32];
     WVASSERT(socket->send(buf, sizeof(buf)).is_some());
     WVASSERT(socket->recv(buf, sizeof(buf)).is_some());
 
     // connecting to the same remote endpoint is okay
-    socket->connect(Endpoint(IpAddr(192, 168, 112, 1), 1338));
+    socket->connect(Endpoint(DEST_IP, 1338));
     // if anything differs, it's an error
     WVASSERTERR(Errors::IS_CONNECTED, [&socket] {
-        socket->connect(Endpoint(IpAddr(192, 168, 112, 1), 1339));
+        socket->connect(Endpoint(DEST_IP, 1339));
     });
     WVASSERTERR(Errors::IS_CONNECTED, [&socket] {
-        socket->connect(Endpoint(IpAddr(192, 168, 112, 2), 1338));
+        socket->connect(Endpoint(NET0_IP, 1338));
     });
 
     socket->abort();
@@ -86,7 +86,7 @@ NOINLINE static void nonblocking_client() {
 
     socket->set_blocking(false);
 
-    WVASSERT(!socket->connect(Endpoint(IpAddr(192, 168, 112, 1), 1338)));
+    WVASSERT(!socket->connect(Endpoint(DEST_IP, 1338)));
 
     FileWaiter in_waiter, out_waiter;
     in_waiter.add(socket->fd(), File::INPUT);
@@ -95,7 +95,7 @@ NOINLINE static void nonblocking_client() {
     while(socket->state() != Socket::Connected) {
         WVASSERTEQ(socket->state(), Socket::Connecting);
         WVASSERTERR(Errors::ALREADY_IN_PROGRESS, [&socket] {
-            socket->connect(Endpoint(IpAddr(192, 168, 112, 1), 1338));
+            socket->connect(Endpoint(DEST_IP, 1338));
         });
         in_waiter.wait();
     }
@@ -135,11 +135,12 @@ NOINLINE static void nonblocking_server() {
     auto sem = Semaphore::create(0);
     act.delegate_obj(sem.sel());
 
-    act.data_sink() << sem.sel();
+    act.data_sink() << sem.sel() << NET0_IP << NET1_IP;
 
     act.run([] {
         capsel_t sem_sel;
-        Activity::own().data_source() >> sem_sel;
+        IpAddr net0_ip, net1_ip;
+        Activity::own().data_source() >> sem_sel >> net0_ip >> net1_ip;
 
         Network net("net1");
 
@@ -166,12 +167,12 @@ NOINLINE static void nonblocking_server() {
         }
         WVASSERT(socket->state() == Socket::Connected || socket->state() == Socket::RemoteClosed);
 
-        WVASSERTEQ(socket->local_endpoint(), Endpoint(IpAddr(192, 168, 112, 1), 3000));
+        WVASSERTEQ(socket->local_endpoint(), Endpoint(net1_ip, 3000));
         // if the network stack receives *both* the connected message and the close message before
         // we get any event, we only receive the close message and thus are not connected and do not
         // know the remote EP.
         if(socket->state() == Socket::Connected)
-            WVASSERTEQ(socket->remote_endpoint().addr, IpAddr(192, 168, 112, 2));
+            WVASSERTEQ(socket->remote_endpoint().addr, net0_ip);
 
         socket->set_blocking(true);
         socket->close();
@@ -185,7 +186,7 @@ NOINLINE static void nonblocking_server() {
 
     sem.down();
 
-    socket->connect(Endpoint(IpAddr(192, 168, 112, 1), 3000));
+    socket->connect(Endpoint(DEST_IP, 3000));
 
     socket->close();
 
@@ -199,7 +200,7 @@ NOINLINE static void open_close() {
 
     Semaphore::attach("net-tcp").down();
 
-    socket->connect(Endpoint(IpAddr(192, 168, 112, 1), 1338));
+    socket->connect(Endpoint(DEST_IP, 1338));
     socket->close();
     WVASSERTEQ(socket->state(), Socket::Closed);
 
@@ -220,11 +221,12 @@ NOINLINE static void receive_after_close() {
     auto sem = Semaphore::create(0);
     act.delegate_obj(sem.sel());
 
-    act.data_sink() << sem.sel();
+    act.data_sink() << sem.sel() << NET0_IP;
 
     act.run([] {
         capsel_t sem_sel;
-        Activity::own().data_source() >> sem_sel;
+        IpAddr net0_ip;
+        Activity::own().data_source() >> sem_sel >> net0_ip;
 
         Network net("net1");
 
@@ -238,7 +240,7 @@ NOINLINE static void receive_after_close() {
 
         Endpoint remote_ep;
         socket->accept(&remote_ep);
-        WVASSERTEQ(remote_ep.addr, IpAddr(192, 168, 112, 2));
+        WVASSERTEQ(remote_ep.addr, net0_ip);
         WVASSERTEQ(socket->state(), Socket::Connected);
 
         uint8_t buf[32];
@@ -257,7 +259,7 @@ NOINLINE static void receive_after_close() {
 
     sem.down();
 
-    socket->connect(Endpoint(IpAddr(192, 168, 112, 1), 3000));
+    socket->connect(Endpoint(DEST_IP, 3000));
 
     uint8_t buf[32];
     WVASSERT(socket->send(buf, sizeof(buf)).is_some());
@@ -282,7 +284,7 @@ NOINLINE static void data() {
 
     Semaphore::attach("net-tcp").down();
 
-    socket->connect(Endpoint(IpAddr(192, 168, 112, 1), 1338));
+    socket->connect(Endpoint(DEST_IP, 1338));
 
     // disable 256 to workaround the bug in gem5's E1000 model
     size_t packet_sizes[] = {8, 16, 32, 64, 128, /*256,*/ 512, 934, 1024, 2048, 4096};

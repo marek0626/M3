@@ -46,7 +46,7 @@ def cmd_run(ctx: Context, args: argparse.Namespace) -> None:
 )
 def cmd_loadfpga(ctx: Context, args: argparse.Namespace) -> None:
     """Load a bitfile onto the FPGA (only for hw targets)."""
-    if ctx.target not in ("hw", "hw22", "hw23"):
+    if ctx.target not in ("hw", "hw23"):
         sys.exit("loadfpga is only supported on hw targets.")
 
     for var in ("M3_HW_FPGA_HOST", "M3_HW_FPGA_DIR", "M3_HW_FPGA_NO"):

@@ -9,7 +9,7 @@ from utils import run, which, die
 
 class HWPlatform(BasePlatform):
     """
-    The platform for target hw22, hw23, and hw.
+    The platform for target hw23, and hw.
 
     This platform runs the configuration on the FPGA attached to $M3_HW_FPGA_HOST.
     """
@@ -41,9 +41,7 @@ class HWPlatform(BasePlatform):
         M3_HW_PAUSE = os.getenv("M3_HW_PAUSE")
 
         # build arguments for fpga script
-        if self.target == "hw22":
-            args = "--version 0"
-        elif self.target == "hw23":
+        if self.target == "hw23":
             args = "--version 2"
         else:
             args = "--version 4"

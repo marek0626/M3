@@ -6,24 +6,20 @@
     <kernel args="kernel"/>
     <dom>
         <app args="root">
-            <dom>
-                <app args="m3fs mem" daemon="1">
-                    <serv name="m3fs"/>
-                    <mod name="fs"/>
-                </app>
-            </dom>
+            <app args="m3fs mem" daemon="1">
+                <serv name="m3fs"/>
+                <mod name="fs"/>
+            </app>
             <dom>
                 <app args="pager">
                     <sess name="m3fs"/>
                     <mod name="fs" perm="r"/>
                     <mod name="tilemux" perm="r"/>
                     <tiles type="core" count="1"/>
-                    <dom>
-                        <app args="/bin/parchksum 4 131072">
-                            <mount fs="m3fs" path="/"/>
-                            <tiles type="core" count="4" optional="1"/>
-                        </app>
-                    </dom>
+                    <app args="/bin/parchksum 4 131072">
+                        <mount fs="m3fs" path="/"/>
+                        <tiles type="core" count="4" optional="1"/>
+                    </app>
                 </app>
             </dom>
         </app>

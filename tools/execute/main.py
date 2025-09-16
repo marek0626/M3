@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import sys
 
 from pathlib import Path
 
@@ -26,7 +27,7 @@ def main() -> None:
     target = os.getenv("M3_TARGET", "gem5")
     if target == "gem5" or os.getenv("M3_RUN_GEM5") == "1":
         platform: BasePlatform = Gem5Platform(Path(cfg_path), args.crossname, args.debug)
-    elif target in {"hw", "hw22", "hw23"}:
+    elif target in {"hw", "hw23"}:
         platform = HWPlatform(Path(cfg_path), args.crossname, args.debug)
     else:
         die(f"Unknown target '{target}'")
@@ -35,7 +36,8 @@ def main() -> None:
     platform.run()
 
     # Restore terminal to cooked mode
-    run("stty", "sane")
+    if sys.stdin.isatty():
+        run("stty", "sane")
 
 
 if __name__ == "__main__":

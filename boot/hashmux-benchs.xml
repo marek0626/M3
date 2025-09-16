@@ -8,7 +8,7 @@
     <kernel args="kernel"/>
     <dom>
         <app args="root">
-            <dom tile="core+kecacc+rot">
+            <dom tile="riscv64+kecacc+rot|riscv32+kecacc+rot">
                 <app args="rots" daemon="1">
                     <serv name="rot"/>
                     <mod name="rot-certificate.json" perm="r"/>

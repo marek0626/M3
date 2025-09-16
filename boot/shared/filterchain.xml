@@ -13,17 +13,15 @@
                 </app>
             </dom>
             <dom>
-                <app args="pager">
+                <app args="pager maxcli=4 maxsrv=1">
                     <sess name="m3fs"/>
                     <mod name="fs" perm="r"/>
                     <mod name="tilemux" perm="r"/>
                     <tiles type="core" count="1"/>
-                    <dom>
-                        <app args="/bin/parchksum 4 131072">
-                            <mount fs="m3fs" path="/"/>
-                            <tiles type="core" count="4" optional="1"/>
-                        </app>
-                    </dom>
+                    <app args="/bin/filterchain 16384">
+                        <mount fs="m3fs" path="/"/>
+                        <tiles type="core" count="2"/>
+                    </app>
                 </app>
             </dom>
         </app>

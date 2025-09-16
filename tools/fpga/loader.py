@@ -5,7 +5,7 @@ from elftools.elf.elffile import ELFFile
 
 import memory
 import pm
-from tcu import EP, MemEP, Flags, TCUExtReg
+from tcu import EP, MemEP, Flags
 from tile import Tile, TileType
 
 import utils
@@ -126,6 +126,9 @@ class Loader:
     def _init_tile(self, dram: memory, tile: pm, tile_idx: int, loaded: bool):
         # reset TCU (clear command log and reset registers except FEATURES and EPs)
         tile.tcu_reset(resetBits=0xF)
+
+        # turn off logging during init
+        tile.tcu_set_log_mask(0)
 
         # enable instruction trace for all Rocket tiles (doesn't cost anything)
         if tile.type == TileType.ROCKET:
@@ -300,7 +303,7 @@ class Loader:
             return (DRAM_SIZE >> 12) << 28 | ((1 << 4) << 11) | 1
 
         tile = tiles[tile_idx]
-        desc = tile.mem[tile.tcu.ext_reg_addr(TCUExtReg.TILE_DESC)]
+        desc = tile.mem[tile.tcu.ext_reg_addr(tile.tcu.TCUExtReg.TILE_DESC)]
 
         if not self.vm and (desc & ((1 << 4) << 11)) == 0:
             # mem size | TileAttr::IMEM

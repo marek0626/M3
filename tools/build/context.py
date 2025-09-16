@@ -31,7 +31,7 @@ class Context:
         if self.target == "gem5":
             if self.isa not in {"x86_64", "riscv64", "riscv32"}:
                 sys.exit(f"ISA {self.isa} not supported for target gem5.")
-        elif self.target in {"hw", "hw22", "hw23"}:
+        elif self.target in {"hw", "hw23"}:
             self.isa = "riscv64"
         else:
             sys.exit(f"Target {self.target} not supported.")

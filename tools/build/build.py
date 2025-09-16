@@ -1,6 +1,8 @@
 import argparse
 import os
 
+from pathlib import Path
+
 from .utils import run
 from .context import Context
 from . import command
@@ -46,6 +48,15 @@ def cmd_distclean(_: Context, __: argparse.Namespace) -> None:
 def cmd_ninja(ctx: Context, args: argparse.Namespace) -> None:
     """run ninja with the given arguments."""
     run("python3", "-B", str(ctx.ninjapie), "--", *args.remainder, check=False)
+
+
+@command("cargo", [
+    {"name": "dir", "nargs": "?", "help": "the directory to run cargo in ('src' by default)"},
+])
+def cmd_cargo(ctx: Context, args: argparse.Namespace) -> None:
+    """run cargo with the given arguments."""
+    dir = Path(args.dir) if args.dir else ctx.root / "src"
+    run("cargo", *args.remainder, cwd=dir, check=False)
 
 
 @command("mkgem5", [

@@ -163,6 +163,7 @@ pub fn tilegen(tile: TileId) -> GenId {
     }
 }
 
+#[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
 pub fn inc_tilegen(tile: TileId) {
     let mut gens = TILEGENS.borrow_mut();
     *gens.get_mut(tile).unwrap() += 1;

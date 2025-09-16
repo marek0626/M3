@@ -22,6 +22,7 @@
 #include <base/col/SList.h>
 
 #include <m3/Exception.h>
+#include <m3/com/Marshalling.h>
 
 namespace m3 {
 
@@ -66,6 +67,17 @@ static inline bool operator==(const IpAddr &a, const IpAddr &b) noexcept {
 }
 static inline bool operator!=(const IpAddr &a, const IpAddr &b) noexcept {
     return !operator==(a, b);
+}
+
+static inline Unmarshaller &operator>>(Unmarshaller &u, IpAddr &addr) noexcept {
+    uint32_t raw;
+    u >> raw;
+    addr.addr(raw);
+    return u;
+}
+static inline Marshaller &operator<<(Marshaller &m, const IpAddr &addr) noexcept {
+    m << addr.addr();
+    return m;
 }
 
 static inline IStream &operator>>(IStream &is, IpAddr &addr) {

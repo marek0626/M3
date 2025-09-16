@@ -401,7 +401,7 @@ impl TileDesc {
         }
         else if self.isa() == TileISA::RISCV32 {
             match env!("M3_TARGET") {
-                "hw22" | "hw23" => cfg::RBUF_STD_SIZE + 0x1000,
+                "hw23" => cfg::RBUF_STD_SIZE + 0x1000,
                 _ => cfg::RBUF_STD_SIZE + 0xD000,
             }
         }

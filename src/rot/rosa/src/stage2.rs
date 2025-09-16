@@ -161,6 +161,7 @@ pub fn run(ctx: crate::RosaPrivateCtx) -> ! {
     // load RoTs
     log!(LogFlags::RoTDbg, "loading rots");
     let _ = unsafe { rot::load_bin(rot::ROSA_NEXT_ADDR, &cfg.data.next_layer) };
+    // TODO don't we need to hash this as well, derive a CDI and use that to generate a key?
 
     // invalidate all no-longer needed EPs
     ctx.our_tile.invalidate_ep(rot::FLASH_EP).unwrap();

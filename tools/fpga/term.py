@@ -20,6 +20,14 @@ class Term:
         pass
 
 
+class NullTerm(Term):
+    def should_stop(self) -> bool:
+        return False
+
+    def cleanup(self):
+        pass
+
+
 class TCUTerm(Term):
     # inspired by Miniterm
     # (https://github.com/pyserial/pyserial/blob/master/serial/tools/miniterm.py)
