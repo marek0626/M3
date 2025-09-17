@@ -83,9 +83,16 @@ impl GlobAddr {
         self.val >= (TILE_OFFSET << TILE_SHIFT)
     }
 
-    /// Returns the tile id
-    pub fn tile(self) -> TileId {
-        TileId::new_from_raw(((self.val >> TILE_SHIFT) - TILE_OFFSET) as u16)
+    /// Returns the tile id, if it contains one, None otherwise.
+    pub fn tile(self) -> Option<TileId> {
+        if self.has_tile() {
+            Some(TileId::new_from_raw(
+                ((self.val >> TILE_SHIFT) - TILE_OFFSET) as u16,
+            ))
+        }
+        else {
+            None
+        }
     }
 
     /// Returns the offset
@@ -117,9 +124,10 @@ impl GlobAddr {
     where
         F: Fn(EpId) -> Option<(TileId, GlobOff, GlobOff, Perm)>,
     {
-        if !self.has_tile() {
+        let Some(glob_tile) = self.tile()
+        else {
             return Ok(PhysAddr::new_raw(tile_desc, self.raw() as PhysAddrRaw));
-        }
+        };
 
         // find memory EP that contains the address
         for ep in 0..PMEM_PROT_EPS as EpId {
@@ -135,7 +143,7 @@ impl GlobAddr {
                 );
 
                 // does the EP contain this address?
-                if self.tile() == tile && self.offset() >= addr && self.offset() < addr + size {
+                if glob_tile == tile && self.offset() >= addr && self.offset() < addr + size {
                     let flags = PageFlags::from(perm);
 
                     // check access permissions
@@ -158,8 +166,8 @@ impl GlobAddr {
 
 impl fmt::Display for GlobAddr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.has_tile() {
-            write!(f, "G[{}+{:#x}]", self.tile(), self.offset())
+        if let Some(tile) = self.tile() {
+            write!(f, "G[{}+{:#x}]", tile, self.offset())
         }
         // we need global addresses without tile prefix for, e.g., the TCU MMIO region
         else {

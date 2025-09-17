@@ -415,7 +415,7 @@ impl MGateObject {
     }
 
     pub fn tile_id(&self) -> TileId {
-        self.mem.global().tile()
+        self.mem.global().tile().unwrap()
     }
 
     pub fn offset(&self) -> GlobOff {

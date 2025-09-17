@@ -577,12 +577,12 @@ impl TileMux {
         tile_id: TileId,
     ) -> anyhow::Result<()> {
         if obj.is_exclusive() {
-            let exregs = tilemng::exregs(obj.addr().tile());
+            let exregs = tilemng::exregs(obj.addr().tile().unwrap());
             if !exregs.has_access(self.tile_id(), obj) {
                 return Err(kerrno(Code::NoPerm).context(format!(
                     "{} has no permissions to exclusive region of {} ({}..{})",
                     self.tile_id(),
-                    obj.addr().tile(),
+                    obj.addr().tile().unwrap(),
                     obj.addr(),
                     obj.addr() + (obj.size() - 1)
                 )));

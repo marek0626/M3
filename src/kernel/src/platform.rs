@@ -138,23 +138,24 @@ pub fn init() {
 
     // read kernel env
     let addr = GlobAddr::new(env::boot().kenv);
+    let addr_tile = addr.tile().unwrap();
     let mut offset = addr.offset();
-    let info: boot::Info = ktcu::read_obj(addr.tile(), offset);
+    let info: boot::Info = ktcu::read_obj(addr_tile, offset);
     offset += size_of::<boot::Info>() as GlobOff;
 
     // read boot modules
     let mut mods = vec![boot::Mod::default(); info.mod_count as usize];
-    ktcu::read_slice(addr.tile(), offset, &mut mods);
+    ktcu::read_slice(addr_tile, offset, &mut mods);
     offset += info.mod_count as GlobOff * size_of::<boot::Mod>() as GlobOff;
 
     // read tile descriptors
     let mut tile_descs = vec![TileDesc::default(); info.tile_count as usize];
-    ktcu::read_slice(addr.tile(), offset, &mut tile_descs);
+    ktcu::read_slice(addr_tile, offset, &mut tile_descs);
     offset += info.tile_count as GlobOff * size_of::<TileDesc>() as GlobOff;
 
     // read memory regions
     let mut mems = vec![boot::Mem::default(); info.mem_count as usize];
-    ktcu::read_slice(addr.tile(), offset, &mut mems);
+    ktcu::read_slice(addr_tile, offset, &mut mems);
 
     // build new info for user tiles
     let mut uinfo = boot::Info {
@@ -221,7 +222,7 @@ pub fn init() {
                         regs,
                         tgtep,
                         KERNEL_ID,
-                        kmem.addr().tile(),
+                        kmem.addr().tile().unwrap(),
                         kmem.addr().offset(),
                         kmem.capacity() as usize,
                         Perm::RW,
@@ -285,16 +286,16 @@ pub fn init() {
     let mut uoffset = addr.offset();
     uinfo.tile_count = utiles.len() as u64;
     uinfo.mem_count = umems.len() as u64;
-    ktcu::write_slice(addr.tile(), uoffset, &[uinfo]);
+    ktcu::write_slice(addr_tile, uoffset, &[uinfo]);
     uoffset += size_of::<boot::Info>() as GlobOff;
     uoffset += info.mod_count as GlobOff * size_of::<boot::Mod>() as GlobOff;
 
     // write-back user tiles
-    ktcu::write_slice(addr.tile(), uoffset, &utiles);
+    ktcu::write_slice(addr_tile, uoffset, &utiles);
     uoffset += uinfo.tile_count as GlobOff * size_of::<boot::Tile>() as GlobOff;
 
     // write-back user memory regions
-    ktcu::write_slice(addr.tile(), uoffset, &umems);
+    ktcu::write_slice(addr_tile, uoffset, &umems);
 
     KENV.set(KEnv::new(uinfo, addr, mods, tiles));
 }
@@ -304,7 +305,7 @@ pub fn init_serial(dest: Option<(TileId, EpId)>) {
         let (tile, ep) = dest.unwrap_or((TileId::default(), 0));
         let serial = GlobAddr::new(env::boot().kenv + 4 * 1024);
         let tile_modid = TCU::tileid_to_nocid(tile);
-        ktcu::write_slice(serial.tile(), serial.offset(), &[
+        ktcu::write_slice(serial.tile().unwrap(), serial.offset(), &[
             tile_modid as u64,
             ep as u64,
         ]);

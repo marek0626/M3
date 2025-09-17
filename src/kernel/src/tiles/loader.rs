@@ -125,7 +125,7 @@ pub fn load_mux_async(tile: tcu::TileId, mem: &mem::Allocation) -> anyhow::Resul
     let envp_addr = write_arguments(
         &env::vars_raw(),
         tile,
-        mem.global().tile(),
+        mem.global().tile().unwrap(),
         env_mem_off,
         &mut env_off,
     );
@@ -140,7 +140,7 @@ pub fn load_mux_async(tile: tcu::TileId, mem: &mem::Allocation) -> anyhow::Resul
         raw_tile_ids: env::boot().raw_tile_ids,
         ..Default::default()
     };
-    ktcu::write_slice(mem.global().tile(), env_mem_off, &[env]);
+    ktcu::write_slice(mem.global().tile().unwrap(), env_mem_off, &[env]);
 
     Ok(())
 }
@@ -227,7 +227,7 @@ impl Read for KernelBootMod<'_> {
         }
 
         let gaddr = GlobAddr::new(self.bm.addr);
-        ktcu::read_slice(gaddr.tile(), gaddr.offset() + self.off, buf);
+        ktcu::read_slice(gaddr.tile().unwrap(), gaddr.offset() + self.off, buf);
         self.off += buf.len() as GlobOff;
 
         Ok(buf.len())
@@ -322,10 +322,10 @@ impl ELFLoader for MetalELFLoader {
     ) -> anyhow::Result<()> {
         ktcu::copy(
             // destination
-            self.dst.tile(),
+            self.dst.tile().unwrap(),
             self.dst.offset() + virt.as_goff() - self.offset,
             // source
-            phys.tile(),
+            phys.tile().unwrap(),
             phys.offset(),
             size,
         )
@@ -339,7 +339,7 @@ impl ELFLoader for MetalELFLoader {
         _flags: PageFlags,
     ) -> anyhow::Result<()> {
         ktcu::clear(
-            self.dst.tile(),
+            self.dst.tile().unwrap(),
             self.dst.offset() + virt.as_goff() - self.offset,
             size,
         )
@@ -363,7 +363,10 @@ impl ELFLoader for ActivityELFLoader {
             let dst_sel = (virt >> PAGE_BITS).as_raw() as kif::CapSel;
             let pages = math::round_up(size, PAGE_SIZE) >> PAGE_BITS;
 
-            let phys_align = GlobAddr::new_with(phys.tile(), phys.offset() & !PAGE_MASK as GlobOff);
+            let phys_align = match phys.tile() {
+                Some(tile) => GlobAddr::new_with(tile, phys.offset() & !PAGE_MASK as GlobOff),
+                None => GlobAddr::new(phys.offset() & !PAGE_MASK as GlobOff),
+            };
             let map_obj = MapObject::new(phys_align, flags);
 
             if map {

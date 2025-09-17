@@ -169,7 +169,7 @@ impl Subsystem {
             if let Ok(region) = mem_cap.region() {
                 let mem_tile = res
                     .tiles()
-                    .find_by_id(region.0.tile())
+                    .find_by_id(region.0.tile().unwrap())
                     // we don't find the memory tile if we don't start any TEEs, because in this case
                     // our parent does not give us access to them. that's fine, because we also only
                     // need them in this case.
@@ -398,7 +398,7 @@ impl Subsystem {
         let total_tees = count_tees(root);
         let exregs_per_tee = if total_tees > 0 {
             // TODO for simplicity, we only take the regions in the first memory module into account
-            let mem_tile = res.memory().mods().next().unwrap().addr().tile();
+            let mem_tile = res.memory().mods().next().unwrap().addr().tile().unwrap();
             let total_exregs = res
                 .tiles()
                 .find_by_id(mem_tile)
@@ -830,7 +830,10 @@ impl Subsystem {
         // pass down memory tile with quota for exclusive regions
         let tee_count = count_tees(cfg);
         if tee_count > 0 {
-            let mem_tile = res.tiles().find_by_id(sub_slice.addr().tile()).unwrap();
+            let mem_tile = res
+                .tiles()
+                .find_by_id(sub_slice.addr().tile().unwrap())
+                .unwrap();
             sub.add_tile(
                 mem_tile
                     .derive(None, Some(tee_count * exregs_per_tee), None, None)
