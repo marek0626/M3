@@ -33,6 +33,9 @@
 //! For example, a file can be opened and read in the following way:
 //!
 //! ```
+//! use m3core::io::Read;
+//! use m3core::vfs::{OpenFlags, VFS};
+//!
 //! let mut file = VFS::open("/dir/myfile", OpenFlags::R).unwrap();
 //! let content = file.read_to_string().unwrap();
 //! println!("content: {}", content);
@@ -40,6 +43,8 @@
 //!
 //! Similarly, a directory can be listed as follows:
 //! ```
+//! use m3core::vfs::VFS;
+//!
 //! for entry in VFS::read_dir("/mydir").unwrap() {
 //!   println!("Found entry {}", entry.file_name());
 //! }

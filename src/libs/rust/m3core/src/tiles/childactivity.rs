@@ -70,6 +70,8 @@ use crate::vfs::{BufReader, Fd, File, FileRef, OpenFlags, VFS};
 /// # Example
 ///
 /// ```
+/// use m3core::tiles::{ActivityArgs, ChildActivity, RunningActivity, Tile};
+///
 /// let tile = Tile::get("compat|own").unwrap();
 /// let act = ChildActivity::new_with(tile, ActivityArgs::new("test")).unwrap();
 ///

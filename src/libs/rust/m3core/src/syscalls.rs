@@ -195,8 +195,14 @@ pub fn create_sess(
 /// address 0xA000).
 ///
 /// ```
-/// let mem = MemGate::new(0x2000, MemGate::RW).expect("Unable to alloc mem");
-/// syscalls::create_map(VirtAddr::new(0x1000), Activity::own().sel(), mem.sel(), 0, 2, MemGate::RW);
+/// use m3core::com::MemGate;
+/// use m3core::kif::Perm;
+/// use m3core::mem::VirtAddr;
+/// use m3core::tiles::Activity;
+/// use m3core::syscalls;
+///
+/// let mem = MemGate::new(0x2000, Perm::RW).expect("Unable to alloc mem");
+/// syscalls::create_map(VirtAddr::new(0x1000), Activity::own().sel(), mem.sel(), 0, 2, Perm::RW);
 /// ```
 pub fn create_map(
     virt: VirtAddr,
