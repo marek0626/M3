@@ -20,6 +20,7 @@
 #![feature(allocator_internals)]
 #![feature(core_intrinsics)]
 #![feature(maybe_uninit_write_slice)]
+#![feature(maybe_uninit_slice)]
 #![feature(linked_list_cursors)]
 #![feature(unsafe_cell_access)]
 #![default_lib_allocator]

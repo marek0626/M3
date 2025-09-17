@@ -13,7 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use core::intrinsics;
 use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
 
@@ -98,7 +97,7 @@ impl MsgBuf {
     /// Creates a new message buffer containing an empty message
     pub fn new() -> Self {
         Self {
-            bytes: unsafe { mem::MaybeUninit::uninit().assume_init() },
+            bytes: [mem::MaybeUninit::uninit(); MAX_MSG_SIZE],
             pos: 0,
         }
     }
@@ -106,7 +105,7 @@ impl MsgBuf {
     /// Returns the message bytes
     pub fn bytes(&self) -> &[u8] {
         // safety: 0..`pos` is always initialized
-        unsafe { intrinsics::transmute(&self.bytes[0..self.pos]) }
+        unsafe { self.bytes[..self.pos].assume_init_ref() }
     }
 
     /// Returns the number of bytes to send
@@ -120,8 +119,9 @@ impl MsgBuf {
     ///
     /// The caller cannot read the words since they are not necessarily initialized
     pub unsafe fn words_mut(&mut self) -> &mut [u64] {
-        let slice = [self.bytes.as_ptr() as usize, MAX_MSG_SIZE / 8];
-        intrinsics::transmute(slice)
+        let ptr = self.bytes.as_mut_ptr() as *mut u64;
+        let len = MAX_MSG_SIZE / 8;
+        core::slice::from_raw_parts_mut(ptr, len)
     }
 
     /// Sets the number of bytes that will be sent by the TCU.
@@ -198,6 +198,30 @@ mod tests {
         let clone = buf.clone();
         assert_eq!(clone.size(), buf.size());
         assert_eq!(clone.bytes(), buf.bytes());
+    }
+
+    #[test]
+    fn msgbuf_new_and_clone() {
+        let mut buf = MsgBuf::new();
+        buf.set_from_slice(&[1, 2, 3, 4]);
+
+        // Clone should copy the bytes correctly
+        let clone = buf.clone();
+        assert_eq!(clone.bytes(), &[1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn msgbuf_words_mut() {
+        let mut buf = MsgBuf::new();
+
+        // SAFETY: we're just treating the raw storage as u64s.
+        unsafe {
+            let words = buf.words_mut();
+            words[0] = 0x1122334455667788;
+            buf.set_size(8);
+        }
+
+        assert_eq!(buf.bytes().len(), 8);
     }
 
     #[test]
