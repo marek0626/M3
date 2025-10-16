@@ -13,10 +13,10 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::Context;
 use std::io::Write;
 use std::io::{self, BufRead};
 
-use crate::error::Error;
 use crate::flamegraph::TileId;
 use crate::symbols;
 
@@ -81,7 +81,7 @@ fn repl_instr_line(syms: &symbols::Symbols, mut writer: impl Write, line: &str) 
     Some(())
 }
 
-pub fn generate(syms: &symbols::Symbols) -> Result<(), Error> {
+pub fn generate(syms: &symbols::Symbols) -> anyhow::Result<()> {
     let stdin = io::stdin();
     let mut reader = io::BufReader::new(stdin.lock());
 
@@ -89,7 +89,11 @@ pub fn generate(syms: &symbols::Symbols) -> Result<(), Error> {
     let mut writer = io::BufWriter::new(stdout.lock());
 
     let mut line = String::new();
-    while reader.read_line(&mut line)? != 0 {
+    while reader
+        .read_line(&mut line)
+        .context("Reading from stdin failed")?
+        != 0
+    {
         // try to replace the address with the binary and symbol
         if repl_instr_line(syms, &mut writer, &line).is_none() {
             // if that failed, just write out the line
