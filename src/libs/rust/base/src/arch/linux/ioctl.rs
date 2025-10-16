@@ -13,6 +13,7 @@ const IOCTL_RGSTR_ACT: u64 = 0x40087102;
 const IOCTL_TLB_INSERT: u64 = 0x40087103;
 const IOCTL_UNREG_ACT: u64 = 0x40087104;
 const IOCTL_NOOP: u64 = 0x00007105;
+const IOCTL_WAIT_MSG: u64 = 0x00007106;
 
 fn ioctl(magic_number: u64) {
     unsafe {
@@ -48,6 +49,10 @@ fn ioctl_plain(magic_number: u64, arg: usize) {
 
 pub fn wait_act() -> ActId {
     ioctl_read(IOCTL_WAIT_ACT)
+}
+
+pub fn wait_msg() {
+    ioctl(IOCTL_WAIT_MSG)
 }
 
 pub fn register_act(id: ActId) {
