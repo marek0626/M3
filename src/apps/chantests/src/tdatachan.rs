@@ -14,7 +14,7 @@
  */
 
 use core::fmt::Debug;
-use core::ops::{Add, AddAssign};
+use core::ops::Add;
 
 use m3::chan::data::{
     self as datachan, BlockReceiver, BlockSender, Receiver, ReceiverCap, ReceiverDesc, Sender,
@@ -30,6 +30,7 @@ use m3::tiles::{Activity, ChildActivity, RunningActivity, RunningProgramActivity
 use m3::time::{CycleDuration, Duration};
 use m3::{log, wv_require_ok};
 use m3::{wv_assert_eq, wv_assert_ok, wv_run_test};
+use num_traits::WrappingAdd;
 
 use crate::create_data;
 use crate::utils;
@@ -93,7 +94,7 @@ fn start_activity<S: ToString, T: Serialize>(
 
 fn compute_node<'a: 'static, T>() -> Result<(), Error>
 where
-    T: Debug + Clone + Add<Output = T> + AddAssign + Serialize + Deserialize<'a>,
+    T: Debug + Clone + Add<Output = T> + WrappingAdd<Output = T> + Serialize + Deserialize<'a>,
 {
     let mut t = DefaultWvTester::default();
 
@@ -112,7 +113,7 @@ where
             utils::compute_for(&cfg.name, cfg.comp_time);
 
             for b in chk.iter_mut() {
-                *b += cfg.add.clone();
+                *b = b.wrapping_add(&cfg.add);
             }
         }
 
@@ -136,7 +137,14 @@ fn run_chain<'a: 'static, T>(
     chunk_size2: usize,
     buf_size: GlobOff,
 ) where
-    T: Clone + Debug + Add<Output = T> + AddAssign + PartialEq + Eq + Serialize + Deserialize<'a>,
+    T: Clone
+        + Debug
+        + Add<Output = T>
+        + WrappingAdd<Output = T>
+        + PartialEq
+        + Eq
+        + Serialize
+        + Deserialize<'a>,
 {
     const MSG_SIZE: usize = 128;
     const CHUNK_TIME: u64 = 100;

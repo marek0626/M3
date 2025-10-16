@@ -357,7 +357,7 @@ impl ActivityMng {
                         mem_ep,
                         kif::tilemux::ACT_ID as tcu::ActId,
                         &mgate_obj,
-                        m.addr().tile(),
+                        m.addr().tile().unwrap(),
                     )
                     .unwrap();
                 mem_ep += 1;

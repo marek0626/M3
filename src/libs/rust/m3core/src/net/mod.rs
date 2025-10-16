@@ -65,6 +65,9 @@
 //! A basic usage of a [`TcpSocket`] looks like the following:
 //!
 //! ```
+//! use m3core::client::Network;
+//! use m3core::net::{Endpoint, StreamSocketArgs, Socket, TcpSocket};
+//!
 //! let net = Network::new("net").unwrap();
 //! let mut socket = TcpSocket::new(StreamSocketArgs::new(net)).unwrap();
 //! socket

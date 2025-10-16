@@ -14,7 +14,7 @@
  */
 
 use core::fmt::Debug;
-use core::ops::{Add, AddAssign, Deref};
+use core::ops::{Add, Deref};
 
 use m3::chan::data::{self as datachan, BlockReceiver, BlockSender};
 use m3::chan::multidata::{
@@ -30,6 +30,7 @@ use m3::test::{DefaultWvTester, WvTester};
 use m3::tiles::{Activity, ChildActivity, RunningActivity, RunningProgramActivity};
 use m3::time::{CycleDuration, Duration};
 use m3::{log, wv_assert_eq, wv_assert_ok, wv_require_ok, wv_run_test};
+use num_traits::WrappingAdd;
 
 use crate::create_data;
 use crate::utils;
@@ -99,7 +100,7 @@ fn start_activity<S: ToString, T: Serialize>(
 
 fn compute_copy<'a: 'static, T>() -> Result<(), Error>
 where
-    T: Copy + Debug + Add<Output = T> + AddAssign + Serialize + Deserialize<'a>,
+    T: Copy + Debug + Add<Output = T> + WrappingAdd<Output = T> + Serialize + Deserialize<'a>,
 {
     let mut t = DefaultWvTester::default();
 
@@ -122,7 +123,7 @@ where
                 utils::compute_for(&cfg.name, cfg.comp_time);
 
                 for b in chk.iter_mut() {
-                    *b += cfg.add;
+                    *b = b.wrapping_add(&cfg.add);
                 }
             }
 
@@ -138,7 +139,7 @@ where
 
 fn compute_in_place<'a: 'static, T>() -> Result<(), Error>
 where
-    T: Clone + Debug + Add<Output = T> + AddAssign + Serialize + Deserialize<'a>,
+    T: Clone + Debug + Add<Output = T> + WrappingAdd<Output = T> + Serialize + Deserialize<'a>,
 {
     let mut t = DefaultWvTester::default();
 
@@ -160,7 +161,7 @@ where
             utils::compute_for(&cfg.name, CycleDuration::new(comp_time));
 
             for b in blk.buf_mut().iter_mut() {
-                *b += cfg.add.clone();
+                *b = b.wrapping_add(&cfg.add);
             }
         }
 
@@ -185,7 +186,7 @@ fn run_chain<'a: 'static, T>(
     chunk_size3: usize,
     buf_size: GlobOff,
 ) where
-    T: Clone + Debug + AddAssign + PartialEq + Eq + Serialize + Deserialize<'a>,
+    T: Clone + Debug + WrappingAdd<Output = T> + PartialEq + Eq + Serialize + Deserialize<'a>,
 {
     const MSG_SIZE: usize = 128;
     const CHUNK_TIME: u64 = 100;

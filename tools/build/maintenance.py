@@ -161,7 +161,7 @@ def cmd_test(ctx: Context, args: argparse.Namespace) -> None:
                 "--", "--test-threads=1",
                 cwd=Path(dir),
             )
-        except SystemExit:
+        except subprocess.CalledProcessError:
             errors += 1
 
     if errors:

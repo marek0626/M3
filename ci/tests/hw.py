@@ -80,7 +80,7 @@ class HWRunner(Runner):
     def _system_started(self, test: Test) -> bool:
         with open(test.log_file(self.dir), "r") as file:
             for line in file:
-                if "Kernel is ready" in line:
+                if "Kernel is ready" in line or "Shutting down" in line:
                     return True
         return False
 

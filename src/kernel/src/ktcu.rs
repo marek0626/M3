@@ -387,10 +387,11 @@ pub fn set_eps_region(tile: TileId, addr: GlobAddr, size: GlobOff) -> anyhow::Re
     return Err(kerrno(Code::NotSup));
     #[cfg(not(M3_TARGET = "hw23"))]
     {
+        let addr_tile = addr.tile().unwrap();
         // clear this region to ensure that all endpoints are invalid
-        clear(addr.tile(), addr.offset(), size as usize)?;
+        clear(addr_tile, addr.offset(), size as usize)?;
 
-        let tile_id = TCU::tileid_to_nocid(addr.tile());
+        let tile_id = TCU::tileid_to_nocid(addr_tile);
         let eps_addr = ((tile_id as Reg) << 50) | addr.offset() as Reg;
         try_write_slice(tile, TCU::ext_reg_addr(ExtReg::EpsAddr).as_goff(), &[
             eps_addr,

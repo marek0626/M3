@@ -127,14 +127,14 @@ fn load_modules<'p, 'c: 'p>(
         );
 
         // Make sure we don't read anything from inside the RoT tile
-        assert_ne!(m.addr().tile(), env::boot().tile_id());
+        assert_ne!(m.addr().tile().unwrap(), env::boot().tile_id());
 
         let mut hash: Hex<HashBuf> = Hex::new_zeroed();
         rot::config_local_ep(crate::COPY_EP, |regs| {
             TCU::config_mem(
                 regs,
                 rot::TCU_ACT_ID,
-                m.addr().tile(),
+                m.addr().tile().unwrap(),
                 0,
                 m.addr().offset(),
                 msize,
@@ -516,7 +516,7 @@ pub fn run() -> crate::RosaPrivateCtx {
         TCU::config_mem(
             regs,
             rot::TCU_ACT_ID,
-            kmod.addr().tile(),
+            kmod.addr().tile().unwrap(),
             0,
             kmod.addr().offset(),
             kmod.size as usize,

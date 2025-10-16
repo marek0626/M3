@@ -70,7 +70,7 @@ impl MemMod {
     pub fn allocate(&mut self, size: GlobOff, align: GlobOff) -> anyhow::Result<GlobAddr> {
         self.map
             .allocate(size, align)
-            .map(|addr| GlobAddr::new_with(self.gaddr.tile(), addr))
+            .map(|addr| GlobAddr::new_with(self.gaddr.tile().unwrap(), addr))
             .ok_or_else(|| kerrno(Code::OutOfMem))
     }
 

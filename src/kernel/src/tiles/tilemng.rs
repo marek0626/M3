@@ -111,7 +111,7 @@ pub fn init() {
         .iter()
         .find(|m| m.mem_type() == MemType::EPS)
         .unwrap();
-    let epmtile = epmem.addr().tile();
+    let epmtile = epmem.addr().tile().unwrap();
     let tileobj = TileObject::new(
         epmtile,
         TileQuota::new(0),
