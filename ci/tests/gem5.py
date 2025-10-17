@@ -68,6 +68,10 @@ class Gem5Test(Test):
         # riscv32 does not support VM
         if self.isa == "riscv32" and self.ty != "a":
             return False
+        # we run into several segfaults with that combination. Since we don't really care about OoO
+        # implementations of RV32, we skip these tests for now.
+        if self.isa == "riscv32" and self.is_bench():
+            return False
         # don't run ROT tests on x86_64, they aren't supported there.
         if self.is_rot_test() and self.isa == "x86_64":
             return False
