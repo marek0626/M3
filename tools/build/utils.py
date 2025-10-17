@@ -86,6 +86,7 @@ def run_and_tee(*cmd: str,
 
 def paginate(*cmd: str,
              cwd: Optional[Path] = None,
+             env: Optional[Mapping[str, str]] = None,
              stdin: Optional[int] = None) -> None:
     """Run *cmd* and pipe through `less` when stdout is a TTY."""
     if os.getenv("M3_VERBOSE") == "1":
@@ -93,6 +94,7 @@ def paginate(*cmd: str,
     if sys.stdout.isatty():
         prod = subprocess.Popen(
             args=list(map(str, cmd)),
+            env=env,
             cwd=str(cwd) if cwd else None,
             stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )

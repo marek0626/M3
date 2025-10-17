@@ -1,5 +1,6 @@
 import argparse
 import re
+import os
 import subprocess
 import sys
 
@@ -136,6 +137,22 @@ def cmd_macros(ctx: Context, args: argparse.Namespace) -> None:
         "-Zunpretty=expanded",
     ]
     paginate(*cmd, cwd=cwd)
+
+
+@command("rtype-sizes", [
+    {"name": "dir", "help": "the directory to run cargo in"},
+])
+def cmd_rtype_sizes(ctx: Context, args: argparse.Namespace) -> None:
+    """Print Rust type sizes for the crate in given directory."""
+    dir = Path(args.dir)
+    # clean this crate to enforce a rebuild, which is required for print-type-sizes
+    crate_name = dir.name
+    run(*["cargo", "clean", "-p", crate_name, *ctx.rust_target_args], cwd=dir)
+    # now perform a build
+    env = os.environ.copy()
+    env["RUSTFLAGS"] = "-Zprint-type-sizes"
+    cmd = ["cargo", "build", *ctx.rust_target_args]
+    paginate(*cmd, cwd=dir, env=env)
 
 
 @command(
