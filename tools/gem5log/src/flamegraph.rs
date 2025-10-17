@@ -20,7 +20,6 @@ use std::fmt::{self, Display};
 use std::io::{self, BufRead, StdoutLock, Write};
 use std::sync::Mutex;
 
-use crate::error::Error;
 use crate::symbols;
 
 const STACK_SIZE: u64 = 0x20000;
@@ -480,7 +479,7 @@ fn handle_return<'t, 'i: 't>(
     thread: &mut Thread<'t>,
     tid: ThreadId<'i>,
     unwind: bool,
-) -> Result<(), Error> {
+) -> anyhow::Result<()> {
     if !thread.stack.is_empty() {
         // generate stack
         let stack = match mode {
@@ -522,7 +521,7 @@ fn handle_return<'t, 'i: 't>(
     Ok(())
 }
 
-pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> Result<(), Error> {
+pub fn generate(mode: crate::Mode, isa: crate::ISA, syms: &symbols::Symbols) -> anyhow::Result<()> {
     let mut last_time = 0;
     let mut tiles: HashMap<TileId, Tile<'_>> = HashMap::new();
 

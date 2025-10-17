@@ -13,10 +13,9 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::Context;
 use std::io::Write;
 use std::io::{self, BufRead};
-
-use crate::error::Error;
 
 fn repl_line(mut writer: impl Write, line: &str, last: Option<u64>) -> Option<u64> {
     let mut parts = line.trim_start().splitn(2, ':');
@@ -30,7 +29,7 @@ fn repl_line(mut writer: impl Write, line: &str, last: Option<u64>) -> Option<u6
     Some(time)
 }
 
-pub fn generate() -> Result<(), Error> {
+pub fn generate() -> anyhow::Result<()> {
     let stdin = io::stdin();
     let mut reader = io::BufReader::new(stdin.lock());
 
@@ -39,7 +38,11 @@ pub fn generate() -> Result<(), Error> {
 
     let mut last = None;
     let mut line = String::new();
-    while reader.read_line(&mut line)? != 0 {
+    while reader
+        .read_line(&mut line)
+        .context("Reading from stdin failed")?
+        != 0
+    {
         // try to replace the address with the binary and symbol
         match repl_line(&mut writer, &line, last) {
             Some(time) => {

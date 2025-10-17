@@ -13,6 +13,7 @@
  * General Public License version 2 for more details.
  */
 
+use anyhow::{anyhow, Context};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::io::{BufRead, BufReader};
@@ -22,7 +23,6 @@ use std::sync::Arc;
 
 use log::error;
 
-use crate::error::Error;
 use crate::flamegraph::TileId;
 
 #[derive(Debug, Default)]
@@ -50,16 +50,22 @@ impl fmt::Display for Symbol {
     }
 }
 
-pub fn parse_symbols<P>(file: P) -> Result<Arc<BTreeMap<usize, Symbol>>, Error>
+pub fn parse_symbols<P>(file: P) -> anyhow::Result<Arc<BTreeMap<usize, Symbol>>>
 where
     P: AsRef<Path>,
 {
-    let path = file.as_ref().to_str().ok_or(Error::InvalPath)?;
+    let path = file
+        .as_ref()
+        .to_str()
+        .ok_or(anyhow!("Symbol path {:?} is invalid", file.as_ref()))?;
     let (path, offset) = if path.contains("+0x") {
         let mut parts = path.split("+0x");
-        let path = parts.next().ok_or(Error::InvalPath)?;
-        let offset = parts.next().ok_or(Error::InvalPath)?;
-        let offset = usize::from_str_radix(offset, 16)?;
+        let path = parts.next().unwrap();
+        let offset = parts.next().unwrap();
+        let offset = usize::from_str_radix(offset, 16).context(format!(
+            "Offset suffix '{}' is not a hexadecimal number",
+            offset
+        ))?;
         (path, offset)
     }
     else {
@@ -70,19 +76,24 @@ where
         .arg("-SC")
         .arg(path)
         .stdout(Stdio::piped())
-        .spawn()?;
+        .spawn()
+        .context("Running `nm -SC` failed")?;
 
     let binary = Path::new(path)
         .file_name()
-        .ok_or(Error::InvalPath)?
+        .ok_or(anyhow!("Symbol path {:?} has no filename", path))?
         .to_str()
-        .ok_or(Error::InvalPath)?;
+        .ok_or(anyhow!("Symbol path {:?} is no valid UTF-8", path))?;
     let stdout = cmd.stdout.as_mut().unwrap();
     let mut reader = BufReader::new(stdout);
 
     let mut syms = BTreeMap::new();
     let mut line = String::new();
-    while reader.read_line(&mut line)? != 0 {
+    while reader
+        .read_line(&mut line)
+        .context("Reading from nm stdout failed")?
+        != 0
+    {
         // 0021a300 00000030 T kernel::CapTable::act() const
         // ^------^ ^------^ ^ ^---------------------------^
         let parts: Vec<_> = line.trim_end().splitn(4, ' ').collect();
@@ -90,7 +101,7 @@ where
             continue;
         }
 
-        let parse_line = |parts: Vec<_>| -> Result<(usize, usize, String), Error> {
+        let parse_line = |parts: Vec<_>| -> anyhow::Result<(usize, usize, String)> {
             let addr = usize::from_str_radix(parts[0], 16)?;
             if parts.len() > 3 {
                 Ok((
@@ -100,7 +111,7 @@ where
                 ))
             }
             else {
-                Err(Error::Internal)
+                Err(anyhow!("Unexpected line in nm output: {:?}", parts))
             }
         };
 
@@ -118,9 +129,12 @@ where
     }
 
     match cmd.wait() {
-        Ok(status) if !status.success() => Err(Error::Nm(status.code().unwrap())),
+        Ok(status) if !status.success() => Err(anyhow!(
+            "Process `nm -SC` exited with {}",
+            status.code().unwrap()
+        )),
         Ok(_) => Ok(Arc::new(syms)),
-        Err(e) => Err(Error::from(e)),
+        Err(e) => Err(anyhow!("Process `nm -SC` failed: {}", e)),
     }
 }
 

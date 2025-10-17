@@ -13,12 +13,12 @@
  * General Public License version 2 for more details.
  */
 
-mod error;
 mod flamegraph;
 mod reltime;
 mod symbols;
 mod trace;
 
+use anyhow::{anyhow, Context};
 use flamegraph::TileId;
 use log::{Level, Log, Metadata, Record};
 use std::env;
@@ -77,10 +77,9 @@ fn usage(prog: &str) -> ! {
     exit(1)
 }
 
-fn determine_isa(file: &str) -> Result<ISA, error::Error> {
-    let path = if file.contains("+0x") {
-        let mut parts = file.split("+0x");
-        parts.next().ok_or(error::Error::InvalPath)?
+fn determine_isa(file: &str) -> anyhow::Result<ISA> {
+    let path = if let Some(path) = file.split("+0x").next() {
+        path
     }
     else {
         file
@@ -90,10 +89,13 @@ fn determine_isa(file: &str) -> Result<ISA, error::Error> {
         .arg("-b")
         .arg(path)
         .stdout(Stdio::piped())
-        .spawn()?;
+        .spawn()
+        .context("Running `file -b` failed")?;
     let stdout = cmd.stdout.as_mut().unwrap();
     let mut res = String::new();
-    stdout.read_to_string(&mut res)?;
+    stdout
+        .read_to_string(&mut res)
+        .context("Reading output of file command failed")?;
 
     if res.contains("x86-64") {
         Ok(ISA::X86_64)
@@ -105,11 +107,11 @@ fn determine_isa(file: &str) -> Result<ISA, error::Error> {
         Ok(ISA::RISCV64)
     }
     else {
-        Err(error::Error::UnknownISA)
+        Err(anyhow!("Unknown ISA '{}'", res))
     }
 }
 
-fn main() -> Result<(), error::Error> {
+fn main() -> anyhow::Result<()> {
     let level = Level::from_str(&env::var("RUST_LOG").unwrap_or_else(|_| "error".to_string()))?;
     log::set_boxed_logger(Box::new(Logger { level }))?;
     log::set_max_level(level.to_level_filter());

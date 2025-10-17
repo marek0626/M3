@@ -92,6 +92,7 @@ re_panic = re.compile(r'^.*PANIC at(.*)$')
 def parse_output(file: Path) -> Result:
     failed_asserts = 0
     res = Result()
+    seen_gem5_segfault = False
     seen_shutdown = False
     seen_fsck = ''
     with open(file, 'r', errors='replace') as reader:
@@ -113,6 +114,10 @@ def parse_output(file: Path) -> Result:
                         res.failed_tests += 1
                     failed_asserts = 0
                 test = tmatch.group(1)
+            elif "gem5 has encountered a segmentation fault!" in line:
+                seen_gem5_segfault = True
+                res.failed_tests += 1
+                res.add_failed_test("", line)
             else:
                 fmatch = re_failed.match(line)
                 if fmatch:
@@ -139,7 +144,7 @@ def parse_output(file: Path) -> Result:
                             res.failed_tests += 1
 
             line = reader.readline()
-    if not seen_shutdown:
+    if not seen_gem5_segfault and not seen_shutdown:
         res.failed_tests += 1
         res.add_failed_test("", "Test did not complete (no kernel shutdown)")
     if seen_fsck != '':
