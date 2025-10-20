@@ -52,6 +52,16 @@ def cmd_nm(ctx: Context, args: argparse.Namespace) -> None:
 
 
 @command(
+    "pahole",
+    [{"name": "prog", "help": "binary to run `pahole` on"}],
+)
+def cmd_pahole(ctx: Context, args: argparse.Namespace) -> None:
+    """Run `pahole` on `prog`."""
+    binary = ctx.bin_dir / args.prog
+    paginate("pahole", *args.remainder, str(binary))
+
+
+@command(
     "ctors",
     [{"name": "prog", "help": "binary for which constructors are shown"}],
 )
