@@ -49,22 +49,22 @@ extern "C" fn handle_sigsegv(
     _sig: libc::c_int,
     sig_info: *mut libc::siginfo_t,
     _ucontext_void: *mut libc::c_void,
-) -> () {
+) {
     if sig_info.is_null() {
         unsafe {
-            let _ = libc::_exit(1);
+            libc::_exit(1);
         }
     }
     let sig_info = unsafe { *sig_info };
     let si_addr = unsafe { sig_info.si_addr() };
     if si_addr.is_null() {
         unsafe {
-            let _ = libc::_exit(1);
+            libc::_exit(1);
         }
     }
     let si_addr = si_addr as usize as u64;
-    if si_addr >= tcu::MMIO_ADDR.as_raw() as u64
-        && si_addr < (tcu::MMIO_ADDR.as_raw() as u64 + tcu::MMIO_SIZE as u64)
+    if si_addr >= tcu::MMIO_ADDR.as_raw()
+        && si_addr < (tcu::MMIO_ADDR.as_raw() + tcu::MMIO_SIZE as u64)
     {
         mmap::mmap_tcu(
             tcu_fd(),
@@ -77,7 +77,7 @@ extern "C" fn handle_sigsegv(
     }
     else {
         unsafe {
-            let _ = libc::_exit(1);
+            libc::_exit(1);
         }
     }
 }
