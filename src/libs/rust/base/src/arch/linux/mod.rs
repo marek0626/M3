@@ -97,6 +97,7 @@ fn install_sigsegv_handler() {
         let mut old_action: MaybeUninit<libc::sigaction> = MaybeUninit::uninit();
 
         libc::sigaction(libc::SIGSEGV, &new_action, old_action.as_mut_ptr());
+        libc::sigaction(libc::SIGBUS, &new_action, old_action.as_mut_ptr());
     }
 }
 
