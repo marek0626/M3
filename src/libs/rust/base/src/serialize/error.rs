@@ -13,12 +13,15 @@
  * General Public License version 2 for more details.
  */
 
-use core::fmt::Display;
+use core::{error, fmt::Display};
 
 use crate::errors::{Code, Error};
 
 #[derive(Debug, PartialEq)]
 pub struct SerdeError;
+
+impl error::Error for SerdeError {
+}
 
 impl From<SerdeError> for Error {
     fn from(_value: SerdeError) -> Self {
