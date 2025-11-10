@@ -15,9 +15,9 @@ const IOCTL_UNREG_ACT: u64 = 0x40087104;
 const IOCTL_NOOP: u64 = 0x00007105;
 const IOCTL_WAIT_MSG: u64 = 0x00007106;
 
-fn ioctl(magic_number: u64) {
+fn ioctl(magic_number: u64, arg: usize) {
     unsafe {
-        let res = libc::ioctl(tcu_fd(), magic_number);
+        let res = libc::ioctl(tcu_fd(), magic_number, arg);
         if res != 0 {
             libc::perror(null::<u8>());
             panic!("ioctl call {} failed with error {}", magic_number, res);
@@ -37,26 +37,16 @@ fn ioctl_read<T: Default>(magic_number: u64) -> T {
     arg
 }
 
-fn ioctl_plain(magic_number: u64, arg: usize) {
-    unsafe {
-        let res = libc::ioctl(tcu_fd(), magic_number, arg);
-        if res != 0 {
-            libc::perror(null::<u8>());
-            panic!("ioctl call {} failed with error {}", magic_number, res);
-        }
-    }
-}
-
 pub fn wait_act() -> ActId {
     ioctl_read(IOCTL_WAIT_ACT)
 }
 
-pub fn wait_msg() {
-    ioctl(IOCTL_WAIT_MSG)
+pub fn wait_msg(timeout_ns: usize) {
+    ioctl(IOCTL_WAIT_MSG, timeout_ns);
 }
 
 pub fn register_act(id: ActId) {
-    ioctl_plain(IOCTL_RGSTR_ACT, id as usize);
+    ioctl(IOCTL_RGSTR_ACT, id as usize);
 }
 
 pub fn tlb_insert_addr(virt: VirtAddr, perm: u8) {
@@ -71,13 +61,13 @@ pub fn tlb_insert_addr(virt: VirtAddr, perm: u8) {
     }
 
     let arg = virt.as_local() & !cfg::PAGE_MASK | perm as usize;
-    ioctl_plain(IOCTL_TLB_INSERT, arg);
+    ioctl(IOCTL_TLB_INSERT, arg);
 }
 
 pub fn unregister_act(id: ActId, status: i32) {
-    ioctl_plain(IOCTL_UNREG_ACT, id as usize | (status as usize) << 16);
+    ioctl(IOCTL_UNREG_ACT, id as usize | (status as usize) << 16);
 }
 
 pub fn noop() {
-    ioctl(IOCTL_NOOP);
+    ioctl(IOCTL_NOOP, 0);
 }

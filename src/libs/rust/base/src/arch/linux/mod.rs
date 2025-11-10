@@ -29,9 +29,9 @@ pub fn init_fd() {
     TCU_DEV.set(file);
 }
 
-pub fn wait_msg(_timeout: Option<TimeDuration>) {
-    // TODO: do NOT ignore timeout
-    ioctl::wait_msg();
+pub fn wait_msg(timeout: Option<TimeDuration>) {
+    let timeout = timeout.map(|d| d.as_nanos()).unwrap_or(0);
+    ioctl::wait_msg(timeout as usize);
 }
 
 pub fn init_env() {

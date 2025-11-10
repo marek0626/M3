@@ -48,8 +48,13 @@ void tlb_insert_addr(uintptr_t addr, uint perm) {
         panic("ioctl call TLB_INSERT failed\n"_cf);
 }
 
-void wait_msg(m3::TimeDuration) {
-    ::ioctl(tcu_fd(), IOCTL_WAIT_MSG, 0);
+void wait_msg(m3::TimeDuration timeout) {
+    int timeout_ns;
+    if(timeout == m3::TimeDuration::MAX)
+        timeout_ns = 0;
+    else
+        timeout_ns = timeout.as_nanos();
+    ::ioctl(tcu_fd(), IOCTL_WAIT_MSG, timeout_ns);
 }
 
 }
