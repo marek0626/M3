@@ -2,10 +2,11 @@ pub mod ioctl;
 pub mod mmap;
 
 use std::fs::{File, OpenOptions};
+use std::mem::MaybeUninit;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::AsRawFd;
 
-use crate::cell::{LazyStaticCell, LazyStaticRefCell};
+use crate::cell::LazyStaticRefCell;
 use crate::cfg;
 use crate::env;
 use crate::kif::Perm;
@@ -13,7 +14,6 @@ use crate::tcu;
 use crate::time::TimeDuration;
 
 static TCU_DEV: LazyStaticRefCell<File> = LazyStaticRefCell::default();
-static TCU_EPOLL_FD: LazyStaticCell<libc::c_int> = LazyStaticCell::default();
 
 pub fn tcu_fd() -> libc::c_int {
     TCU_DEV.borrow().as_raw_fd()
@@ -27,36 +27,11 @@ pub fn init_fd() {
         .open("/dev/tcu")
         .expect("Unable to open /dev/tcu");
     TCU_DEV.set(file);
-
-    // size argument is ignored since 2.6.8, but needs to be non-zero
-    let epoll_fd = unsafe { libc::epoll_create(1) };
-    assert!(epoll_fd != -1);
-
-    let mut ev = libc::epoll_event {
-        r#u64: tcu_fd() as u64,
-        events: libc::EPOLLIN as u32,
-    };
-    assert_eq!(
-        unsafe { libc::epoll_ctl(epoll_fd, libc::EPOLL_CTL_ADD, tcu_fd(), &mut ev) },
-        0
-    );
-
-    TCU_EPOLL_FD.set(epoll_fd);
 }
 
 pub fn wait_msg(timeout: Option<TimeDuration>) {
-    let timeout = match timeout {
-        Some(duration) => duration.as_millis() as libc::c_int,
-        None => -1,
-    };
-
-    let mut ev = libc::epoll_event {
-        r#u64: 0,
-        events: 0,
-    };
-    unsafe {
-        libc::epoll_wait(TCU_EPOLL_FD.get(), &mut ev, 1, timeout);
-    }
+    let timeout = timeout.map(|d| d.as_nanos()).unwrap_or(0);
+    ioctl::wait_msg(timeout as usize);
 }
 
 pub fn init_env() {
@@ -70,19 +45,68 @@ pub fn init_env() {
     .expect("Unable to map environment");
 }
 
+extern "C" fn handle_sigsegv(
+    _sig: libc::c_int,
+    sig_info: *mut libc::siginfo_t,
+    _ucontext_void: *mut libc::c_void,
+) {
+    if sig_info.is_null() {
+        unsafe {
+            libc::_exit(1);
+        }
+    }
+    let sig_info = unsafe { *sig_info };
+    let si_addr = unsafe { sig_info.si_addr() };
+    if si_addr.is_null() {
+        unsafe {
+            libc::_exit(1);
+        }
+    }
+    let si_addr = si_addr as usize as u64;
+    if si_addr >= tcu::MMIO_ADDR.as_raw()
+        && si_addr < (tcu::MMIO_ADDR.as_raw() + tcu::MMIO_SIZE as u64)
+    {
+        mmap::mmap_tcu(
+            tcu_fd(),
+            tcu::MMIO_ADDR,
+            tcu::MMIO_SIZE,
+            mmap::MemType::TCU,
+            Perm::RW,
+        )
+        .expect("Unable to map TCU MMIO region");
+    }
+    else {
+        unsafe {
+            libc::_exit(1);
+        }
+    }
+}
+
+fn install_sigsegv_handler() {
+    unsafe {
+        let mut mask: MaybeUninit<libc::sigset_t> = MaybeUninit::uninit();
+        _ = libc::sigemptyset(mask.as_mut_ptr());
+
+        let new_action = libc::sigaction {
+            sa_sigaction: handle_sigsegv as *const fn() as *const libc::c_void as usize,
+            sa_mask: mask.assume_init(),
+            sa_flags: libc::SA_SIGINFO,
+            sa_restorer: None,
+        };
+
+        let mut old_action: MaybeUninit<libc::sigaction> = MaybeUninit::uninit();
+
+        libc::sigaction(libc::SIGSEGV, &new_action, old_action.as_mut_ptr());
+        libc::sigaction(libc::SIGBUS, &new_action, old_action.as_mut_ptr());
+    }
+}
+
 pub fn init() {
     init_fd();
 
     init_env();
 
-    mmap::mmap_tcu(
-        tcu_fd(),
-        tcu::MMIO_ADDR,
-        tcu::MMIO_SIZE,
-        mmap::MemType::TCU,
-        Perm::RW,
-    )
-    .expect("Unable to map TCU MMIO region");
+    install_sigsegv_handler();
 
     #[cfg(not(M3_TARGET = "hw23"))]
     mmap::mmap_tcu(

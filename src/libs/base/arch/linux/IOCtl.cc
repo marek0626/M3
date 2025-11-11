@@ -16,6 +16,7 @@
 #include <base/KIF.h>
 #include <base/Panic.h>
 #include <base/arch/linux/IOCtl.h>
+#include <base/arch/linux/Wait.h>
 
 #include <sys/ioctl.h>
 
@@ -27,6 +28,7 @@ static const ulong IOCTL_RGSTR_ACT = 0x40087102;
 static const ulong IOCTL_TLB_INSERT = 0x40087103;
 static const ulong IOCTL_UNREG_ACT = 0x40087104;
 static const ulong IOCTL_NOOP = 0x00007105;
+static const ulong IOCTL_WAIT_MSG = 0x00007106;
 
 void tlb_insert_addr(uintptr_t addr, uint perm) {
     using namespace m3;
@@ -44,6 +46,15 @@ void tlb_insert_addr(uintptr_t addr, uint perm) {
     int res = ::ioctl(tcu_fd(), IOCTL_TLB_INSERT, arg);
     if(res != 0)
         panic("ioctl call TLB_INSERT failed\n"_cf);
+}
+
+void wait_msg(m3::TimeDuration timeout) {
+    int timeout_ns;
+    if(timeout == m3::TimeDuration::MAX)
+        timeout_ns = 0;
+    else
+        timeout_ns = timeout.as_nanos();
+    ::ioctl(tcu_fd(), IOCTL_WAIT_MSG, timeout_ns);
 }
 
 }
