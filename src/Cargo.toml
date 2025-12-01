@@ -72,6 +72,7 @@ members = [
     "rot/blau",
     "rot/rosa",
     "rot/rots",
+    "server/aes",
     "server/disk",
     "server/m3fs",
     "server/net",

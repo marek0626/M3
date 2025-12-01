@@ -19,6 +19,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "aes"
+version = "0.1.0"
+dependencies = [
+ "m3",
+ "num_enum",
+ "serde",
+ "serde_repr",
+]
+
+[[package]]
 name = "aesstream"
 version = "0.1.0"
 dependencies = [
