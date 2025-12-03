@@ -69,8 +69,10 @@ void M3FS::close(size_t file_id) {
 
 size_t M3FS::get_ep() {
     for(size_t i = 0; i < _eps.size(); ++i) {
-        if(_eps[i].file == -1)
+        if(_eps[i].file == -1) {
+            _eps[i].ep->mkdyn();
             return i;
+        }
     }
 
     auto ep = EPMng::get().acquire(TCU::INVALID_EP, 0, true);
