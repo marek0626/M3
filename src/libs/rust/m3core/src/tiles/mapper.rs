@@ -36,6 +36,9 @@ pub trait Mapper {
         None
     }
 
+    /// Returns the desired heap size for the application
+    fn heap_size(&self) -> usize;
+
     /// Maps the given file to `virt`..`virt`+`len` with given permissions.
     #[allow(clippy::too_many_arguments)]
     fn map_file(
@@ -140,6 +143,10 @@ impl DefaultMapper {
 impl Mapper for DefaultMapper {
     fn buffer(&mut self) -> Option<&mut [u8]> {
         self.buf.as_deref_mut()
+    }
+
+    fn heap_size(&self) -> usize {
+        cfg::MOD_HEAP_SIZE
     }
 
     fn map_file(

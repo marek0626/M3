@@ -19,6 +19,7 @@ use core::fmt;
 
 use m3::cap::Selector;
 use m3::cell::RefCell;
+use m3::cfg;
 use m3::cfg::{PAGE_BITS, PAGE_SIZE};
 use m3::client::{HashInput, HashOutput, MapFlags, Pager};
 use m3::col::Vec;
@@ -209,6 +210,10 @@ impl BootMapper {
 impl Mapper for BootMapper {
     fn buffer(&mut self) -> Option<&mut [u8]> {
         Some(&mut self.buf)
+    }
+
+    fn heap_size(&self) -> usize {
+        cfg::MOD_HEAP_SIZE
     }
 
     fn map_file(
