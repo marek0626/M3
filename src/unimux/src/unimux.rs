@@ -66,15 +66,13 @@ pub fn send_exit(act_id: tcu::ActId, status: Code) {
     sendqueue::send(&msg_buf).unwrap();
 }
 
-#[no_mangle]
-pub extern "C" fn abort() -> ! {
+pub fn abort() -> ! {
     unsafe {
         _shutdown();
     }
 }
 
-#[no_mangle]
-pub extern "C" fn exit(code: u32) -> ! {
+pub fn exit(code: u32) -> ! {
     if let Some(act_id) = hdl::user_id() {
         send_exit(act_id, Code::try_from(code).unwrap());
     }
