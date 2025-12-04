@@ -167,7 +167,7 @@ class M3Env(Env):
         ))
         return out
 
-    def objcopy(self, gen, out, input, type):
+    def objcopy(self, gen, out, input, flags):
         out = BuildPath.new(self, out)
         gen.add_build(BuildEdge(
             'objcopy',
@@ -175,7 +175,7 @@ class M3Env(Env):
             ins=[SourcePath.new(self, input)],
             vars={
                 'objcopy': self['OBJCOPY'],
-                'type': type,
+                'flags': ' '.join(flags),
             },
         ))
         return out
@@ -481,7 +481,7 @@ gen.add_rule('elf2hex', Rule(
     desc='ELF2HEX $out',
 ))
 gen.add_rule('objcopy', Rule(
-    cmd='$objcopy -O $type $in $out',
+    cmd='$objcopy $flags $in $out',
     desc='OBJCOPY $out'
 ))
 

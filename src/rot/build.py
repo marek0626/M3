@@ -71,5 +71,5 @@ def build_stage(gen, env, out):
     )
     if out == 'brom':
         env.install(gen, outdir=env['BUILDDIR'] + '/rotbin', input=exe)
-    bin = env.objcopy(gen, BuildPath.with_file_ext(env, exe, 'bin'), exe, type='binary')
+    bin = env.objcopy(gen, BuildPath.with_file_ext(env, exe, 'bin'), exe, flags=['-O', 'binary'])
     env.install(gen, env['BUILDDIR'] + '/rotbin', bin)
