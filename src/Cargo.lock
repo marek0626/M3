@@ -1136,6 +1136,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "unimuxheap"
+version = "0.1.0"
+dependencies = [
+ "heapsimple",
+ "unimux",
+]
+
+[[package]]
 name = "vamic"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,12 @@
+[package]
+name = "unimuxheap"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "heap.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+heapsimple = { path = "../../libs/rust/heapsimple" }
+unimux = { path = ".." }

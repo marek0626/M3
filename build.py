@@ -319,6 +319,22 @@ class M3Env(Env):
         global rustlibs
         rustlibs += [self.cur_dir]
 
+    def m3_rust_staticlib(self, gen, out):
+        env = self.clone()
+        if env['TGT'] in 'gem5' and env['TRIPLE'] == 'riscv32-linux-m3-musl':
+            extensions = "-extensions"
+        else:
+            extensions = ""
+        tgtspec = os.path.abspath('src/toolchain/rust/' + env['TRIPLE'] + extensions + '.json')
+
+        deps = env.rust_deps_global()
+        deps += env.rust_deps_crate()
+
+        env['CRGFLAGS'] += ['--target', tgtspec]
+        env['CRGFLAGS'] += ['-Z build-std=core,alloc,std,panic_abort']
+
+        return env.rust_lib(gen, out, deps)
+
     def rust_deps_global(self):
         global rustlibs
         deps = [
