@@ -83,8 +83,8 @@ fn panic(info: &PanicInfo<'_>) -> ! {
 }
 
 #[alloc_error_handler]
-fn alloc_error(_: core::alloc::Layout) -> ! {
-    panic!("Alloc error");
+fn alloc_error(layout: core::alloc::Layout) -> ! {
+    panic!("Alloc error: {:?}", layout);
 }
 
 #[lang = "eh_personality"]
