@@ -18,36 +18,22 @@
 
 #![no_std]
 
-#[allow(unused_extern_crates)]
-extern crate unimux;
-
-use heapsimple::create_heap;
-
-use m3core::cap::Selector;
-use m3core::col::Vec;
-use m3core::com::MemCap;
-use m3core::errors::{Code, Error};
-use m3core::io::{Read, Write};
-use m3core::kif::Perm;
-use m3core::mem::GlobOff;
-use m3core::println;
-use m3core::rc::Rc;
-use m3core::tiles::{ChildActivity, OwnActivity, RunningActivity, RunningDeviceActivity, Tile};
-use m3core::time::CycleDuration;
-use m3core::vfs::{File, FileRef};
-use m3core::{env, vec};
+use m3::cap::Selector;
+use m3::col::Vec;
+use m3::com::MemCap;
+use m3::errors::{Code, Error};
+use m3::io::{Read, Write};
+use m3::kif::Perm;
+use m3::mem::GlobOff;
+use m3::println;
+use m3::rc::Rc;
+use m3::tiles::{ChildActivity, OwnActivity, RunningActivity, RunningDeviceActivity, Tile};
+use m3::time::CycleDuration;
+use m3::vfs::{File, FileRef};
+use m3::{env, vec};
 
 use accel::StreamAccel;
 use pipecli::{IndirectPipe, Pipes};
-
-create_heap!(64 * 1024);
-
-#[no_mangle]
-pub extern "C" fn env_run() -> ! {
-    m3files::vfs_init().unwrap();
-    m3core::env::init();
-    m3core::env::run();
-}
 
 const VERBOSE: bool = false;
 const PIPE_SIZE: usize = 64 * 1024;

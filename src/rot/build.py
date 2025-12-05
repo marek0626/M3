@@ -53,7 +53,7 @@ def build_stage(gen, env, out):
 
     if out == 'rots':
         env['CRGENV']['M3_ROTS'] = '1'
-        libs = ['kecacc-xkcp', 'isr-nostackswitch', 'unimux']
+        libs = ['kecacc-xkcp', 'isr-nostackswitch', 'unimuxentry']
         env['LINKFLAGS'] += ['-nostartfiles']
     else:
         libs = []

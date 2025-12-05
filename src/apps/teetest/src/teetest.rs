@@ -15,22 +15,10 @@
 
 #![no_std]
 
-#[allow(unused_extern_crates)]
-extern crate unimux;
-
-use heapsimple::create_heap;
-use m3core::client::EvidenceSession;
-use m3core::env;
-use m3core::errors::Error;
-use m3core::println;
-
-create_heap!(64 * 1024);
-
-#[no_mangle]
-pub extern "C" fn env_run() -> ! {
-    m3core::env::init();
-    m3core::env::run();
-}
+use m3::client::EvidenceSession;
+use m3::env;
+use m3::errors::Error;
+use m3::println;
 
 #[no_mangle]
 pub fn main() -> Result<(), Error> {

@@ -68,7 +68,6 @@ members = [
     "m3lx/apps/starter",
     "m3lx/apps/tcutest",
     "unimux",
-    "unimux/unimuxheap",
     "rot/brom",
     "rot/blau",
     "rot/rosa",

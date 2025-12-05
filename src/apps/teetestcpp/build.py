@@ -14,7 +14,7 @@ def build(gen, env):
             gen,
             ins=ins,
             out='teetestcpp',
-            libs=['isr-nostackswitch', 'unimux', 'unimuxheap'],
+            libs=['isr-nostackswitch', 'unimux', 'unimuxentry'],
             varAddr=False,
             ldscript='isr',
         )

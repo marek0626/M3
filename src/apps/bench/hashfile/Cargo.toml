@@ -8,9 +8,6 @@ path = "src/hashfile.rs"
 crate-type = ["staticlib"]
 
 [dependencies]
-heapsimple = { path = "../../../libs/rust/heapsimple" }
-m3core = { path = "../../../libs/rust/m3core" }
-m3files = { path = "../../../libs/rust/m3files" }
+m3 = { path = "../../../libs/rust/m3" }
 pipecli = { path = "../../../libs/rust/pipecli" }
-unimux = { path = "../../../unimux" }
 

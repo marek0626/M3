@@ -18,24 +18,12 @@
 
 #![no_std]
 
-#[allow(unused_extern_crates)]
-extern crate unimux;
-
-use heapsimple::create_heap;
-use m3core::com::{MemGate, RecvBuf, RecvCap, RecvGate, SendGate};
-use m3core::errors::Error;
-use m3core::kif::Perm;
-use m3core::test::{DefaultWvTester, WvTester};
-use m3core::time::{CycleInstant, Profiler, Runner};
-use m3core::{println, wv_perf, wv_require_ok, wv_run_suite, wv_run_test};
-
-create_heap!(64 * 1024);
-
-#[no_mangle]
-pub extern "C" fn env_run() -> ! {
-    m3core::env::init();
-    m3core::env::run();
-}
+use m3::com::{MemGate, RecvBuf, RecvCap, RecvGate, SendGate};
+use m3::errors::Error;
+use m3::kif::Perm;
+use m3::test::{DefaultWvTester, WvTester};
+use m3::time::{CycleInstant, Profiler, Runner};
+use m3::{println, wv_perf, wv_require_ok, wv_run_suite, wv_run_test};
 
 #[no_mangle]
 pub fn main() -> Result<(), Error> {

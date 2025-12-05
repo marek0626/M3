@@ -33,10 +33,7 @@ name = "aesstream"
 version = "0.1.0"
 dependencies = [
  "accel",
- "heapsimple",
- "m3core",
- "m3files",
- "unimux",
+ "m3",
 ]
 
 [[package]]
@@ -125,9 +122,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 name = "chancreate"
 version = "0.1.0"
 dependencies = [
- "heapsimple",
- "m3core",
- "unimux",
+ "m3",
 ]
 
 [[package]]
@@ -252,11 +247,8 @@ name = "enchash"
 version = "0.1.0"
 dependencies = [
  "accel",
- "heapsimple",
- "m3core",
- "m3files",
+ "m3",
  "pipecli",
- "unimux",
 ]
 
 [[package]]
@@ -300,11 +292,8 @@ dependencies = [
 name = "hashfile"
 version = "0.1.0"
 dependencies = [
- "heapsimple",
- "m3core",
- "m3files",
+ "m3",
  "pipecli",
- "unimux",
 ]
 
 [[package]]
@@ -375,11 +364,8 @@ name = "imgprocpipe"
 version = "0.1.0"
 dependencies = [
  "accel",
- "heapsimple",
- "m3core",
- "m3files",
+ "m3",
  "pipecli",
- "unimux",
 ]
 
 [[package]]
@@ -1083,10 +1069,7 @@ dependencies = [
 name = "teetest"
 version = "0.1.0"
 dependencies = [
- "base",
- "heapsimple",
- "m3core",
- "unimux",
+ "m3",
 ]
 
 [[package]]
@@ -1127,20 +1110,13 @@ name = "unimux"
 version = "0.1.0"
 dependencies = [
  "base",
+ "heapsimple",
  "isr",
  "lang",
  "mux",
  "num-traits",
  "num_enum",
  "paging",
-]
-
-[[package]]
-name = "unimuxheap"
-version = "0.1.0"
-dependencies = [
- "heapsimple",
- "unimux",
 ]
 
 [[package]]
