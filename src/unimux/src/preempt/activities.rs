@@ -13,7 +13,6 @@
  * General Public License version 2 for more details.
  */
 
-use base::boxed::Box;
 use base::cell::{LazyStaticUnsafeCell, StaticCell};
 use base::errors::Code;
 use base::io::LogFlags;
@@ -79,9 +78,9 @@ impl DerefMut for ActivityRef<'_> {
     }
 }
 
-static OUR: LazyStaticUnsafeCell<Box<Activity>> = LazyStaticUnsafeCell::default();
-static IDLE: LazyStaticUnsafeCell<Box<Activity>> = LazyStaticUnsafeCell::default();
-static USER: LazyStaticUnsafeCell<Box<Activity>> = LazyStaticUnsafeCell::default();
+static OUR: LazyStaticUnsafeCell<Activity> = LazyStaticUnsafeCell::default();
+static IDLE: LazyStaticUnsafeCell<Activity> = LazyStaticUnsafeCell::default();
+static USER: LazyStaticUnsafeCell<Activity> = LazyStaticUnsafeCell::default();
 static CUR: StaticCell<Option<Id>> = StaticCell::new(None);
 
 pub fn try_cur() -> Option<Id> {
@@ -96,8 +95,8 @@ pub fn init() {
 
     // safety: there are no other references to IDLE or OUR yet
     unsafe {
-        OUR.set(Box::new(Activity::new(kif::tilemux::ACT_ID)));
-        IDLE.set(Box::new(Activity::new(kif::tilemux::IDLE_ID)));
+        OUR.set(Activity::new(kif::tilemux::ACT_ID));
+        IDLE.set(Activity::new(kif::tilemux::IDLE_ID));
     }
 
     if pex_env().org_tile_desc.has_virtmem() {
@@ -119,7 +118,7 @@ pub fn set_user(id: u64) {
     // As a 'unimux' we shouldn't be receiving multiple activity starts.
     assert!(!USER.is_some());
     unsafe {
-        USER.set(Box::new(Activity::new(id)));
+        USER.set(Activity::new(id));
     }
 }
 
