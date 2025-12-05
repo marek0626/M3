@@ -86,15 +86,3 @@ fn panic(info: &PanicInfo<'_>) -> ! {
 fn alloc_error(layout: core::alloc::Layout) -> ! {
     panic!("Alloc error: {:?}", layout);
 }
-
-#[lang = "eh_personality"]
-#[doc(hidden)]
-pub extern "C" fn rust_eh_personality() {
-    intrinsics::abort()
-}
-
-#[no_mangle]
-#[doc(hidden)]
-pub extern "C" fn _Unwind_Resume() -> ! {
-    intrinsics::abort()
-}
