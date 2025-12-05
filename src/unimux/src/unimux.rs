@@ -126,6 +126,9 @@ pub extern "C" fn init() -> ! {
         }
 
         env.platform = app_env().boot.platform;
+
+        // TEEs on top of us always have a smaller heap of size MOD_HEAP_SIZE.
+        app_env().heap_size = cfg::MOD_HEAP_SIZE as u64;
     }
 
     unsafe {
