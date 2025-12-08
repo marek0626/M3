@@ -428,7 +428,7 @@ impl ChildActivity {
             (None, VirtAddr::null(), None)
         };
 
-        self.load_environment(args, mapper, closure,entry)?;
+        self.load_environment(args, mapper, closure, entry)?;
 
         before_start()?;
 
