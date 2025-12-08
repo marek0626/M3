@@ -104,11 +104,11 @@ pub fn main() -> Result<(), Error> {
     Semaphore::attach("start").unwrap().down().unwrap();
 
     if let Some(size) = size {
-        perform_op(mgate, &buf, &mut buf2, size, mode);
+        perform_op(mgate, buf, &mut buf2, size, mode);
     }
     else {
         for i in 0..=28 {
-            perform_op(mgate, &buf, &mut buf2, 1 << i, mode);
+            perform_op(mgate, buf, &mut buf2, 1 << i, mode);
         }
     }
 

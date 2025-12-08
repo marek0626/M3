@@ -66,8 +66,7 @@ impl SuperBlock {
     }
 
     pub fn inode_blocks(&self) -> usize {
-        (self.total_inodes as usize * NUM_INODE_BYTES + self.block_size as usize - 1)
-            / self.block_size as usize
+        (self.total_inodes as usize * NUM_INODE_BYTES).div_ceil(self.block_size as usize)
     }
 
     pub fn extents_per_block(&self) -> usize {
