@@ -35,19 +35,25 @@
 using namespace m3;
 
 void usage(const char *prog) {
-    eprintln("Usage: {} [-s <shmem>] <db> <repeats> tcp <port>"_cf, prog);
-    eprintln("Usage: {} [-s <shmem>] <db> <repeats> tcu"_cf, prog);
-    eprintln("Usage: {} [-s <shmem>] <db> <repeats> udp <ip> <port> <workload>"_cf, prog);
+    eprintln("Usage: {} [-s <shmem>] [-r <repeats>] [-w <warmup>] <db> <mode> [...]"_cf, prog);
+    eprintln("  The following modes are supported:"_cf);
+    eprintln("    tcp <port>"_cf);
+    eprintln("    tcu"_cf);
+    eprintln("    udp <ip> <port> <workload>"_cf);
     exit(1);
 }
 
 int main(int argc, char **argv) {
     const char *shmem_name = nullptr;
+    int repeats = 4;
+    int warmup = 1;
 
     int opt;
-    while((opt = getopt(argc, argv, "s:")) != -1) {
+    while((opt = getopt(argc, argv, "s:r:w:")) != -1) {
         switch(opt) {
             case 's': shmem_name = optarg; break;
+            case 'r': repeats = IStringStream::read_from<int>(optarg); break;
+            case 'w': warmup = IStringStream::read_from<int>(optarg); break;
             default: usage(argv[0]);
         }
     }
@@ -75,8 +81,7 @@ int main(int argc, char **argv) {
         VFS::mkdir("/tmp", 0755);
 
     const char *db = argv[optind + 0];
-    int repeats = IStringStream::read_from<int>(argv[optind + 1]);
-    std::string mode = argv[optind + 2];
+    std::string mode = argv[optind + 1];
 
     Executor *exec = Executor::create(db);
 
@@ -84,14 +89,14 @@ int main(int argc, char **argv) {
 
     OpHandler *hdl;
     if(mode == "tcp") {
-        port_t port = IStringStream::read_from<port_t>(argv[optind + 3]);
+        port_t port = IStringStream::read_from<port_t>(argv[optind + 2]);
         net = new Network("net");
         hdl = new TCPOpHandler(*net, port);
     }
     else if(mode == "udp") {
-        IpAddr ip = IStringStream::read_from<IpAddr>(argv[optind + 3]);
-        port_t port = IStringStream::read_from<port_t>(argv[optind + 4]);
-        const char *workload = argv[optind + 5];
+        IpAddr ip = IStringStream::read_from<IpAddr>(argv[optind + 2]);
+        port_t port = IStringStream::read_from<port_t>(argv[optind + 3]);
+        const char *workload = argv[optind + 4];
         net = new Network("net");
         hdl = new UDPOpHandler(*net, workload, ip, port);
     }
@@ -103,7 +108,7 @@ int main(int argc, char **argv) {
     println("Starting Benchmark:"_cf);
 
     Results<TimeDuration> res(static_cast<size_t>(repeats));
-    for(int i = 0; i < repeats; ++i) {
+    for(int i = 0; i < warmup + repeats; ++i) {
         uint64_t opcounter = 0;
 
         __m3_sysc_trace(true, 32768);
@@ -138,7 +143,8 @@ int main(int argc, char **argv) {
 
         println("Server Side:"_cf);
         exec->print_stats(opcounter);
-        res.push(end.duration_since(start));
+        if(i > warmup)
+            res.push(end.duration_since(start));
     }
 
     auto name = OStringStream();
