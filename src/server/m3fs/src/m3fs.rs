@@ -27,7 +27,7 @@ mod sess;
 
 use crate::backend::{Backend, DiskBackend, MemBackend};
 use crate::buf::{FileBuffer, MetaBuffer};
-use crate::data::{Allocator, SuperBlock};
+use crate::data::{Allocator, Extent, SuperBlock, NUM_INODE_BYTES};
 use crate::sess::{FSSession, M3FSSession, OpenFiles};
 
 use m3::server::ExcType;
@@ -110,6 +110,7 @@ pub struct FsSettings {
     max_load: usize,
     max_clients: usize,
     clear: bool,
+    exclusive: bool,
     selector: Option<Selector>,
 }
 
@@ -123,6 +124,7 @@ impl core::default::Default for FsSettings {
             max_load: 128,
             max_clients: DEF_MAX_CLIENTS,
             clear: false,
+            exclusive: false,
             selector: None,
         }
     }
@@ -142,6 +144,7 @@ fn usage() -> ! {
     println!("  -b: the maximum number of blocks loaded from the disk");
     println!("  -m: the maximum number of clients (receive slots)");
     println!("  -f: the name of the FS boot module ('fs' by default)");
+    println!("  -x: make the shared-memory area exclusive");
     OwnActivity::exit_with(Code::InvArgs);
 }
 
@@ -178,6 +181,10 @@ fn parse_args() -> Result<FsSettings, String> {
                 settings.clear = true;
                 i -= 1; // argument has no value
             },
+            "-x" => {
+                settings.exclusive = true;
+                i -= 1;
+            },
             _ => break,
         }
         // move forward 2 by default, since most arguments have a value
@@ -186,19 +193,43 @@ fn parse_args() -> Result<FsSettings, String> {
 
     settings.backend = args[i].to_string();
     match settings.backend.as_str() {
-        "mem" | "disk" => {},
+        "mem" | "shmem" | "disk" => {},
         backend => return Err(format!("Unknown backend {}", backend)),
     }
 
     Ok(settings)
 }
 
-fn init_fs(mut backend: Box<dyn Backend>) {
+fn init_fs(mut backend: Box<dyn Backend>, fresh: bool) {
     // init thread manager, otherwise the waiting within the file and meta buffer impl. panics.
     thread::init();
 
-    let sb = backend.load_sb().expect("Unable to load super block");
-    log!(LogFlags::FSInfo, "Loaded {:#?}", sb);
+    let sb = if fresh {
+        let block_size = 4096;
+        let size = backend.size().unwrap();
+        let total_blocks = size / block_size;
+        let inode_blocks = total_blocks / 10;
+        let total_inodes = (inode_blocks * block_size) / NUM_INODE_BYTES;
+        let first_data_block = 1 + inode_blocks;
+        let free_blocks = total_blocks - first_data_block;
+
+        let mut sb = SuperBlock {
+            block_size: block_size as u32,
+            total_inodes: total_inodes as u32,
+            total_blocks: total_blocks as u32,
+            free_inodes: total_inodes as u32,
+            free_blocks: free_blocks as u32,
+            first_free_inode: 0,
+            first_free_block: 0,
+            checksum: 0,
+        };
+        sb.checksum = sb.get_checksum();
+        sb
+    }
+    else {
+        backend.load_sb().expect("Unable to load super block")
+    };
+    log!(LogFlags::FSInfo, "SuperBlock: {:#?}", sb);
 
     BA.set(Allocator::new(
         String::from("Block"),
@@ -215,7 +246,7 @@ fn init_fs(mut backend: Box<dyn Backend>) {
         sb.first_free_inode,
         sb.free_inodes,
         sb.total_inodes,
-        sb.inodebm_block(),
+        sb.inodebm_blocks(),
         sb.block_size as usize,
     ));
 
@@ -227,6 +258,23 @@ fn init_fs(mut backend: Box<dyn Backend>) {
     SB.set(sb);
 
     BACKEND.set(backend);
+
+    if fresh {
+        // clear block and inode bitmaps
+        let sb = SB.borrow();
+        let bbm = Extent::new(sb.first_blockbm_block(), sb.blockbm_blocks());
+        BACKEND.borrow().clear_extent(bbm).unwrap();
+        let ibm = Extent::new(sb.first_inodebm_block(), sb.inodebm_blocks());
+        BACKEND.borrow().clear_extent(ibm).unwrap();
+
+        // mark superblock, inode and block bitmap and inode blocks as occupied
+        let mut count = Some(sb.first_data_block() as usize);
+        let blocks = BA.borrow_mut().alloc(count.as_mut()).unwrap();
+        assert_eq!(blocks, 0);
+
+        // create root directory
+        ops::dirs::create_root().unwrap();
+    }
 }
 
 #[no_mangle]
@@ -239,14 +287,18 @@ pub fn main() -> Result<(), Error> {
     log!(LogFlags::FSInfo, "{:#?}", SETTINGS.get());
 
     // create and initialize backend for the file system
-    let backend = if SETTINGS.get().backend == "mem" {
-        Box::new(MemBackend::new(&SETTINGS.get().mem_mod)) as Box<dyn Backend>
+    let backend = if SETTINGS.get().backend == "mem" || SETTINGS.get().backend == "shmem" {
+        Box::new(MemBackend::new(
+            &SETTINGS.get().mem_mod,
+            SETTINGS.get().backend == "shmem",
+            SETTINGS.get().exclusive,
+        )) as Box<dyn Backend>
     }
     else {
         Box::new(DiskBackend::new().expect("Failed to initialize disk backend!"))
             as Box<dyn Backend>
     };
-    init_fs(backend);
+    init_fs(backend, SETTINGS.get().backend == "shmem");
 
     // create request handler and server
     // TODO just temporary: set a very high limit for client connections until we repair the way

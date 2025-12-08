@@ -19,29 +19,56 @@ use crate::buf::{LoadLimit, MetaBufferBlock};
 use crate::data::{BlockNo, BlockRange, Extent};
 
 use m3::cap::Selector;
-use m3::com::{MemCap, MemGate, Perm};
+use m3::com::{GateCap, MemCap, MemGate, Perm};
 use m3::errors::Error;
 use m3::mem::GlobOff;
+use m3::rc::Rc;
 use m3::syscalls::derive_mem;
 
+use m3::tiles::{Activity, Tile};
 use thread::Event;
 
 pub struct MemBackend {
     mem: MemGate,
+    _mtile: Option<Rc<Tile>>,
     blocksize: usize,
 }
 
 impl MemBackend {
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: &str, shmem: bool, exclusive: bool) -> Self {
+        let (mem, mtile) = if shmem {
+            let mem = MemCap::new_shmem(name).expect("create MemCap for shared memory");
+            let mtile = if exclusive {
+                let mtile = Tile::new_from_shmem(name).expect("get memory tile");
+                mem.make_exclusive(&mtile, Activity::own().tile(), false)
+                    .expect("make exclusive");
+                Some(mtile)
+            }
+            else {
+                None
+            };
+            (mem, mtile)
+        }
+        else {
+            (
+                MemCap::new_bind_bootmod(name).expect("create MemCap for memory backend"),
+                None,
+            )
+        };
+
         MemBackend {
-            mem: MemGate::new_bind_bootmod(name)
-                .expect("Could not create MemGate for memory backend"),
-            blocksize: 0, // gets set when the superblock is read
+            mem: mem.activate().expect("activate memory backend"),
+            _mtile: mtile,
+            blocksize: 4096, // gets overwritten when the superblock is read
         }
     }
 }
 
 impl Backend for MemBackend {
+    fn size(&self) -> Result<usize, Error> {
+        Ok(self.mem.region()?.1 as usize)
+    }
+
     fn load_meta(
         &self,
         dst: &mut MetaBufferBlock,

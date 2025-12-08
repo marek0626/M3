@@ -162,6 +162,19 @@ pub fn create(path: &str, mode: FileMode) -> Result<(), Error> {
     res
 }
 
+pub fn create_root() -> Result<(), Error> {
+    let Ok(dirino) = inodes::create(FileMode::DIR_DEF | FileMode::PERM)
+    else {
+        return Err(Error::new(Code::NoSpace));
+    };
+
+    // create "." and ".." links
+    links::create(&dirino, ".", &dirino)?;
+    links::create(&dirino, "..", &dirino)?;
+
+    Ok(())
+}
+
 fn do_create(path: &str, mode: FileMode) -> Result<(), Error> {
     let (dir, name) = split_path(path);
 

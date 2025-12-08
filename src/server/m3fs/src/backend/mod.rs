@@ -30,6 +30,8 @@ use m3::errors::Error;
 use thread::Event;
 
 pub trait Backend {
+    fn size(&self) -> Result<usize, Error>;
+
     fn load_meta(
         &self,
         dst: &mut MetaBufferBlock,

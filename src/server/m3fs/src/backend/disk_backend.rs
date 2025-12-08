@@ -21,7 +21,7 @@ use crate::data::{BlockNo, BlockRange, Extent};
 use m3::cap::{SelSpace, Selector};
 use m3::client::Disk;
 use m3::com::{GateCap, MemCap, MemGate, Perm};
-use m3::errors::Error;
+use m3::errors::{Code, Error};
 use m3::mem::GlobOff;
 
 use thread::Event;
@@ -49,6 +49,10 @@ impl DiskBackend {
 }
 
 impl Backend for DiskBackend {
+    fn size(&self) -> Result<usize, Error> {
+        Err(Error::new(Code::NotSup))
+    }
+
     fn load_meta(
         &self,
         dst: &mut MetaBufferBlock,

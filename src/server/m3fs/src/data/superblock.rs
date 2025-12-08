@@ -45,12 +45,12 @@ impl SuperBlock {
         1
     }
 
-    pub fn inodebm_block(&self) -> BlockNo {
+    pub fn inodebm_blocks(&self) -> BlockNo {
         (self.total_inodes.div_ceil(8)).div_ceil(self.block_size)
     }
 
     pub fn first_blockbm_block(&self) -> BlockNo {
-        self.first_inodebm_block() + self.inodebm_block()
+        self.first_inodebm_block() + self.inodebm_blocks()
     }
 
     pub fn blockbm_blocks(&self) -> BlockNo {
@@ -59,6 +59,15 @@ impl SuperBlock {
 
     pub fn first_inode_block(&self) -> BlockNo {
         self.first_blockbm_block() + self.blockbm_blocks()
+    }
+
+    pub fn first_data_block(&self) -> BlockNo {
+        self.first_inode_block() + self.inode_blocks() as BlockNo
+    }
+
+    pub fn inode_blocks(&self) -> usize {
+        (self.total_inodes as usize * NUM_INODE_BYTES + self.block_size as usize - 1)
+            / self.block_size as usize
     }
 
     pub fn extents_per_block(&self) -> usize {
