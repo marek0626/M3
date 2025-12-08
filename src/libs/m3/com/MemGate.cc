@@ -58,6 +58,12 @@ MemCap MemCap::bind_bootmod(const std::string_view &name) {
     return MemCap(0, sel, false);
 }
 
+MemCap MemCap::attach_shmem(const std::string_view &name) {
+    auto sel = SelSpace::get().alloc_sel();
+    Activity::own().resmng()->use_shmem(sel, name);
+    return MemCap(0, sel, false);
+}
+
 void MemCap::make_exclusive(const Reference<class Tile> &mem_tile,
                             const Reference<class Tile> &user_tile, bool locked) {
     Syscalls::mgate_mkexcl(sel(), mem_tile->sel(), user_tile->sel(), locked);

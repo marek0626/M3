@@ -82,6 +82,17 @@ public:
     static Reference<Tile> get(const char *desc, bool init = true);
 
     /**
+     * Requests a memory-tile capability from given shared memory name.
+     *
+     * The memory-tile capability will have the configured quota for exclusive regions in the
+     * memory tile the shared memory is located in.
+     *
+     * @param name the name of the shared-memory area
+     * @return the memory tile of the shared memory
+     */
+    static Reference<Tile> from_shmem(const char *name);
+
+    /**
      * Binds a tile object to the given selector and tile description
      *
      * @param sel the selector
