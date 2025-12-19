@@ -1,5 +1,7 @@
 import argparse
 import os
+import sys
+import subprocess
 
 from pathlib import Path
 
@@ -27,7 +29,10 @@ def ensure_built(ctx: Context) -> None:
         ninjapie_args += ["build", "-f"]
     vfile.write_text(f"M3_VERBOSE={verbose}")
 
-    run("python3", "-B", str(ctx.ninjapie), *ninjapie_args, "--", *ninja_args, env=env)
+    try:
+        run("python3", "-B", str(ctx.ninjapie), *ninjapie_args, "--", *ninja_args, env=env)
+    except subprocess.CalledProcessError:
+        sys.exit(1)
 
 
 @command("clean")

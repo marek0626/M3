@@ -48,9 +48,9 @@ public:
 
         const char *what() const noexcept override {
             static const char *names[] = {
-                "REG_SERV",  "UNREG_SERV", "OPEN_SESS", "CLOSE_SESS", "ADD_CHILD",
-                "REM_CHILD", "ALLOC_MEM",  "FREE_MEM",  "ALLOC_TILE", "FREE_TILE",
-                "USE_RGATE", "USE_SGATE",  "USE_SEM",
+                "REG_SERV",  "UNREG_SERV", "OPEN_SESS",  "CLOSE_SESS",   "ADD_CHILD", "REM_CHILD",
+                "ALLOC_MEM", "FREE_MEM",   "ALLOC_TILE", "ALLOC_EXREGS", "FREE_TILE", "USE_RGATE",
+                "USE_SGATE", "USE_SEM",    "USE_MOD",    "USE_SHMEM",
             };
 
             OStringStream os(msg_buf, sizeof(msg_buf));
@@ -114,6 +114,15 @@ public:
         return TileDesc(res);
     }
 
+    TileDesc alloc_exregs(capsel_t sel, const char *name) {
+        GateIStream reply = send_receive_vmsg(_sgate, opcodes::ResMng::ALLOC_EXREGS, sel, name);
+        retrieve_result(opcodes::ResMng::ALLOC_EXREGS, reply);
+        TileDesc::value_t res;
+        TileId::raw_t tileid;
+        reply >> tileid >> res;
+        return TileDesc(res);
+    }
+
     void free_tile(capsel_t sel) {
         GateIStream reply = send_receive_vmsg(_sgate, opcodes::ResMng::FREE_TILE, sel);
         retrieve_result(opcodes::ResMng::FREE_TILE, reply);
@@ -140,6 +149,11 @@ public:
     void use_mod(capsel_t sel, const std::string_view &name) {
         GateIStream reply = send_receive_vmsg(_sgate, opcodes::ResMng::USE_MOD, sel, name);
         retrieve_result(opcodes::ResMng::USE_MOD, reply);
+    }
+
+    void use_shmem(capsel_t sel, const std::string_view &name) {
+        GateIStream reply = send_receive_vmsg(_sgate, opcodes::ResMng::USE_SHMEM, sel, name);
+        retrieve_result(opcodes::ResMng::USE_SHMEM, reply);
     }
 
 private:

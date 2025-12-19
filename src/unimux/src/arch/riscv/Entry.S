@@ -51,3 +51,7 @@ BEGIN_FUNC(sleep_once)
     csrci   sstatus, 2
     ret
 END_FUNC(sleep_once)
+
+BEGIN_FUNC(_init)
+    ret
+END_FUNC(_init)

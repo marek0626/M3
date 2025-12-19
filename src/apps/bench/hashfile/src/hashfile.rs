@@ -18,25 +18,11 @@
 
 #![no_std]
 
-#[allow(unused_extern_crates)]
-extern crate unimux;
-
-use heapsimple::create_heap;
-
-use m3core::client::{HashInput, RoTSession};
-use m3core::crypto::HashAlgorithm;
-use m3core::errors::Error;
-use m3core::vfs::{OpenFlags, VFS};
-use m3core::{env, println};
-
-create_heap!(64 * 1024);
-
-#[no_mangle]
-pub extern "C" fn env_run() -> ! {
-    m3files::vfs_init().unwrap();
-    m3core::env::init();
-    m3core::env::run();
-}
+use m3::client::{HashInput, RoTSession};
+use m3::crypto::HashAlgorithm;
+use m3::errors::Error;
+use m3::vfs::{OpenFlags, VFS};
+use m3::{env, println};
 
 #[no_mangle]
 pub fn main() -> Result<(), Error> {

@@ -1089,8 +1089,18 @@ impl TileObject {
         }
 
         if !Rc::ptr_eq(&self.exregs_quota, &parent.exregs_quota) {
-            parent.free_exregs(self.exregs_quota.left());
-            assert!(self.exregs_quota.left() == self.exregs_quota.total());
+            // We cannot reuse exregs until the tile that was using it previously was reset. The
+            // correct approach is probably to reset all tiles that are still using the exregs.
+            // However, at the moment applications simply do not revoke these caps and the resource
+            // manager does it only at child exit.
+            if self.exregs_quota.left() != self.exregs_quota.total() {
+                log!(
+                    LogFlags::Error,
+                    "Warning: {} exregs in use when giving back quota",
+                    self.exregs_quota.total() - self.exregs_quota.left()
+                );
+            }
+            parent.free_exregs(self.exregs_quota.total());
         }
     }
 }

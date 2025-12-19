@@ -22,7 +22,7 @@ struct ExReg {
 }
 
 #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
-static COUNT: StaticCell<usize> = StaticCell::new(0);
+static COUNT: StaticRefCell<Vec<usize>> = StaticRefCell::new(vec![]);
 static REGS: StaticRefCell<Vec<ExReg>> = StaticRefCell::new(vec![]);
 static BUF: StaticRefCell<[u8; 1024]> = StaticRefCell::new([0u8; 1024]);
 static ZEROING: StaticCell<bool> = StaticCell::new(true);
@@ -109,9 +109,14 @@ pub fn add(
         let (cfg, range) = TCU::build_exreg(utile, ugen, idx, addr, size, perm)
             .ok_or_else(|| Error::new(Code::InvArgs))?;
         set_region(&idxmtile, idx, [cfg, range]);
-        if idx + 1 != COUNT.get() {
+
+        let mut tile_counts = COUNT.borrow_mut();
+        while idxmtile.index() >= tile_counts.len() {
+            tile_counts.push(0);
+        }
+        if idx + 1 != tile_counts[idxmtile.index()] {
             set_count(&idxmtile, idx + 1);
-            COUNT.set(idx + 1);
+            tile_counts[idxmtile.index()] = idx + 1;
         }
     }
 
@@ -160,7 +165,8 @@ pub fn rem(mtile: TileId, idx: usize) -> Result<(), Error> {
     // make region invalid
     #[cfg(any(M3_TARGET = "gem5", M3_TARGET = "hw"))]
     {
-        if idx + 1 == COUNT.get() {
+        let mut tile_counts = COUNT.borrow_mut();
+        if idx + 1 == tile_counts[idxmtile.index()] {
             let count = 1 + regs
                 .iter()
                 .filter(|r| r.mtile == idxmtile.id())
@@ -168,7 +174,7 @@ pub fn rem(mtile: TileId, idx: usize) -> Result<(), Error> {
                 .max()
                 .unwrap_or(0);
             set_count(&idxmtile, count);
-            COUNT.set(count);
+            tile_counts[idxmtile.index()] = count;
         }
         set_region(&idxmtile, idx, [0u64, 0u64]);
     }

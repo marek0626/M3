@@ -86,6 +86,12 @@ Reference<Tile> Tile::alloc(const TileDesc &desc, bool init, bool inherit_pmp) {
     return Reference<Tile>(new Tile(sel, res, KEEP_CAP, true));
 }
 
+Reference<Tile> Tile::from_shmem(const char *name) {
+    capsel_t sel = SelSpace::get().alloc_sel();
+    TileDesc res = Activity::own().resmng()->alloc_exregs(sel, name);
+    return Reference<Tile>(new Tile(sel, res, KEEP_CAP, true));
+}
+
 Reference<Tile> Tile::get(const char *desc, bool init) {
     char desc_cpy[MAX_DESC_LEN];
     if(strlen(desc) >= MAX_DESC_LEN)

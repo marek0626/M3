@@ -18,41 +18,27 @@
 
 #![no_std]
 
-#[allow(unused_extern_crates)]
-extern crate unimux;
-
-use heapsimple::create_heap;
-
-use m3core::cap::Selector;
-use m3core::client::{HashInput, RoTSession};
-use m3core::col::Vec;
-use m3core::com::MemCap;
-use m3core::crypto::HashAlgorithm;
-use m3core::errors::{Code, Error};
-use m3core::io::{LogFlags, Read, Write};
-use m3core::kif::Perm;
-use m3core::mem::GlobOff;
-use m3core::rc::Rc;
-use m3core::tiles::{ChildActivity, OwnActivity, RunningActivity, Tile, TileArgs};
-use m3core::vfs::{File, FileRef, OpenFlags, VFS};
-use m3core::{env, vec};
-use m3core::{log, println};
+use m3::cap::Selector;
+use m3::client::{HashInput, RoTSession};
+use m3::col::Vec;
+use m3::com::MemCap;
+use m3::crypto::HashAlgorithm;
+use m3::errors::{Code, Error};
+use m3::io::{LogFlags, Read, Write};
+use m3::kif::Perm;
+use m3::mem::GlobOff;
+use m3::rc::Rc;
+use m3::tiles::{ChildActivity, OwnActivity, RunningActivity, Tile, TileArgs};
+use m3::vfs::{File, FileRef, OpenFlags, VFS};
+use m3::{env, vec};
+use m3::{log, println};
 
 use accel::StreamAccel;
 use pipecli::{IndirectPipe, Pipes};
 
-create_heap!(64 * 1024);
-
 const VERBOSE: bool = false;
 const PIPE_SIZE: usize = 64 * 1024;
 const BUF_SIZE: usize = 16 * 1024;
-
-#[no_mangle]
-pub extern "C" fn env_run() -> ! {
-    m3files::vfs_init().unwrap();
-    m3core::env::init();
-    m3core::env::run();
-}
 
 struct ShmPipe {
     tile: Option<Rc<Tile>>,

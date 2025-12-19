@@ -418,17 +418,17 @@ impl ChildActivity {
     {
         self.obtain_files_and_mounts()?;
 
-        let (file, entry) = if let Some((mapper, file)) = program {
+        let (file, entry, mapper) = if let Some((mapper, file)) = program {
             log!(LogFlags::LibLoader, "Loading {}", args[0].as_ref());
             let mut file = BufReader::new(file);
             let entry = loader::load_program(&self, mapper, &mut file)?;
-            (Some(file), entry)
+            (Some(file), entry, Some(mapper))
         }
         else {
-            (None, VirtAddr::null())
+            (None, VirtAddr::null(), None)
         };
 
-        self.load_environment(args, closure, entry)?;
+        self.load_environment(args, mapper, closure, entry)?;
 
         before_start()?;
 
@@ -446,6 +446,7 @@ impl ChildActivity {
     fn load_environment<S: AsRef<str>>(
         &self,
         args: &[S],
+        mapper: Option<&mut dyn Mapper>,
         closure: Option<VirtAddr>,
         entry: VirtAddr,
     ) -> Result<(), Error> {
@@ -470,7 +471,9 @@ impl ChildActivity {
 
         if let Some(ref pg) = self.pager {
             cenv.set_pager(pg);
-            cenv.set_heap_size(cfg::APP_HEAP_SIZE);
+        }
+        if let Some(mp) = mapper {
+            cenv.set_heap_size(mp.heap_size());
         }
         else {
             cenv.set_heap_size(cfg::MOD_HEAP_SIZE);

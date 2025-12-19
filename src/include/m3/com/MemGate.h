@@ -65,6 +65,14 @@ public:
     static MemCap bind_bootmod(const std::string_view &name);
 
     /**
+     * Binds a new `MemCap` to the shared-memory region with given name.
+     *
+     * @param name the name of the shared memory region
+     * @return the memory capability
+     */
+    static MemCap attach_shmem(const std::string_view &name);
+
+    /**
      * Binds this capability for read/write/cmpxchg to the given memory capability. That is, the
      * capability should be a memory capability you've received from somebody else.
      *

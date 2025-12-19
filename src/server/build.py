@@ -1,4 +1,5 @@
 dirs = [
+    'aes',
     'arith',
     'disk',
     'm3fs',

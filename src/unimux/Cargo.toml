@@ -6,11 +6,12 @@ build = "../build.rs"
 
 [lib]
 path = "src/unimux.rs"
-crate-type = ["rlib"]
+crate-type = ["rlib", "staticlib"]
 
 [dependencies]
 base = { path = "../libs/rust/base" }
 lang = { path = "../libs/rust/lang" }
+heapsimple = { path = "../libs/rust/heapsimple" }
 isr = { path = "../libs/rust/isr" }
 mux = { path = "../libs/rust/mux" }
 paging = { path = "../libs/rust/paging" }

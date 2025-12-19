@@ -53,7 +53,7 @@ def build_stage(gen, env, out):
 
     if out == 'rots':
         env['CRGENV']['M3_ROTS'] = '1'
-        libs = ['kecacc-xkcp', 'isr-nostackswitch', 'unimux']
+        libs = ['kecacc-xkcp', 'isr-nostackswitch', 'unimuxentry']
         env['LINKFLAGS'] += ['-nostartfiles']
     else:
         libs = []
@@ -71,5 +71,5 @@ def build_stage(gen, env, out):
     )
     if out == 'brom':
         env.install(gen, outdir=env['BUILDDIR'] + '/rotbin', input=exe)
-    bin = env.objcopy(gen, BuildPath.with_file_ext(env, exe, 'bin'), exe, type='binary')
+    bin = env.objcopy(gen, BuildPath.with_file_ext(env, exe, 'bin'), exe, flags=['-O', 'binary'])
     env.install(gen, env['BUILDDIR'] + '/rotbin', bin)

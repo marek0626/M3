@@ -26,13 +26,13 @@
                         </app>
                     </dom>
                     <dom tile="perf|core">
-                        <app args="/bin/lvldbserver /tmp/foo 4 tcu">
+                        <app args="/bin/lvldbserver -r 4 -w 1 /tmp/foo tcu">
                             <sess lname="m3fs" gname="app_m3fs"/>
                             <rgate name="req" msgsize="2048" slots="1"/>
                         </app>
                     </dom>
                     <dom tile="perf+nic|core">
-                        <app args="/bin/ycsbclient tcu /ycsb/small-workload.wl 4" daemon="1">
+                        <app args="/bin/ycsbclient tcu /ycsb/small-workload.wl 5" daemon="1">
                             <sess lname="m3fs" gname="app_m3fs"/>
                             <sgate name="req"/>
                         </app>

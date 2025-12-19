@@ -37,6 +37,7 @@ dirs = [
     'timertest',
     'unittests',
     'teetest',
+    'teetestcpp',
     'rotshashtests',
 ]
 

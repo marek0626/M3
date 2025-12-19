@@ -15,6 +15,9 @@
 
 #![no_std]
 
+#[allow(unused_extern_crates)]
+extern crate lang;
+
 #[cfg(any(M3_TARGET = "gem5", target_arch = "riscv64"))]
 #[path = "preempt/mod.rs"]
 mod hdl;
@@ -36,6 +39,9 @@ use base::tcu::{self, TCU};
 use mux::sendqueue;
 
 use core::ptr;
+
+#[cfg(not(M3_ROTS = "1"))]
+heapsimple::create_heap!(8 * 1024);
 
 extern "C" {
     fn __m3_init_libc(argc: i32, argv: *const *const u8, envp: *const *const u8, tls: bool);
@@ -66,15 +72,13 @@ pub fn send_exit(act_id: tcu::ActId, status: Code) {
     sendqueue::send(&msg_buf).unwrap();
 }
 
-#[no_mangle]
-pub extern "C" fn abort() -> ! {
+pub fn abort() -> ! {
     unsafe {
         _shutdown();
     }
 }
 
-#[no_mangle]
-pub extern "C" fn exit(code: u32) -> ! {
+pub fn exit(code: u32) -> ! {
     if let Some(act_id) = hdl::user_id() {
         send_exit(act_id, Code::try_from(code).unwrap());
     }
@@ -128,6 +132,9 @@ pub extern "C" fn init() -> ! {
         }
 
         env.platform = app_env().boot.platform;
+
+        // TEEs on top of us always have a smaller heap of size MOD_HEAP_SIZE.
+        app_env().heap_size = cfg::MOD_HEAP_SIZE as u64;
     }
 
     unsafe {

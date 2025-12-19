@@ -13,24 +13,11 @@
  * General Public License version 2 for more details.
  */
 
-#![no_std]
+#include <m3/stream/Standard.h>
 
-use m3::client::EvidenceSession;
-use m3::env;
-use m3::errors::Error;
-use m3::println;
+using namespace m3;
 
-#[no_mangle]
-pub fn main() -> Result<(), Error> {
-    let att_id = env::args().nth(1).unwrap().parse::<u32>().unwrap();
-
-    let ev = EvidenceSession::new("evidence")?;
-
-    println!("req quote");
-
-    let nonce = 0xDEAD_BEEF;
-    let quote = ev.quote(att_id, nonce)?;
-
-    println!("received quote: {}", quote);
-    Ok(())
+int main() {
+    println("Hello World!"_cf);
+    return 0;
 }

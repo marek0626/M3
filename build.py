@@ -167,7 +167,7 @@ class M3Env(Env):
         ))
         return out
 
-    def objcopy(self, gen, out, input, type):
+    def objcopy(self, gen, out, input, flags):
         out = BuildPath.new(self, out)
         gen.add_build(BuildEdge(
             'objcopy',
@@ -175,7 +175,7 @@ class M3Env(Env):
             ins=[SourcePath.new(self, input)],
             vars={
                 'objcopy': self['OBJCOPY'],
-                'type': type,
+                'flags': ' '.join(flags),
             },
         ))
         return out
@@ -318,6 +318,22 @@ class M3Env(Env):
     def m3_rust_lib(self, gen):
         global rustlibs
         rustlibs += [self.cur_dir]
+
+    def m3_rust_staticlib(self, gen, out):
+        env = self.clone()
+        if env['TGT'] in 'gem5' and env['TRIPLE'] == 'riscv32-linux-m3-musl':
+            extensions = "-extensions"
+        else:
+            extensions = ""
+        tgtspec = os.path.abspath('src/toolchain/rust/' + env['TRIPLE'] + extensions + '.json')
+
+        deps = env.rust_deps_global()
+        deps += env.rust_deps_crate()
+
+        env['CRGFLAGS'] += ['--target', tgtspec]
+        env['CRGFLAGS'] += ['-Z build-std=core,alloc,std,panic_abort']
+
+        return env.rust_lib(gen, out, deps)
 
     def rust_deps_global(self):
         global rustlibs
@@ -481,7 +497,7 @@ gen.add_rule('elf2hex', Rule(
     desc='ELF2HEX $out',
 ))
 gen.add_rule('objcopy', Rule(
-    cmd='$objcopy -O $type $in $out',
+    cmd='$objcopy $flags $in $out',
     desc='OBJCOPY $out'
 ))
 

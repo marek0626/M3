@@ -69,11 +69,12 @@ fn create_stack(act: &ChildActivity, mapper: &mut dyn Mapper) -> Result<(), Erro
 }
 
 fn create_heap(act: &ChildActivity, mapper: &mut dyn Mapper, start: VirtAddr) -> Result<(), Error> {
-    let (heap_size, flags) = if act.pager().is_some() {
-        (cfg::APP_HEAP_SIZE, MapFlags::NOLPAGE)
+    let heap_size = mapper.heap_size();
+    let flags = if act.pager().is_some() {
+        MapFlags::NOLPAGE
     }
     else {
-        (cfg::MOD_HEAP_SIZE, MapFlags::empty())
+        MapFlags::empty()
     };
     log!(
         LogFlags::LibLoader,

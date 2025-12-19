@@ -63,7 +63,12 @@ pub fn handle_sidecalls<F: FnMut() -> bool>(mut handle: F) {
         handle();
 
         // change back to old activity
-        let new_act = activities::try_cur().unwrap_or(old_act);
+        let new_act = match activities::try_cur() {
+            Some(cur) if cur != (old_act & 0xFFFF) => {
+                activities::get_mut(cur).unwrap().activity_reg()
+            },
+            _ => old_act,
+        };
         our.set_activity_reg(tcu::TCU::xchg_activity(new_act).unwrap());
         // if no events arrived in the meantime, we're done
         if !our.has_msgs() {

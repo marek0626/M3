@@ -15,7 +15,7 @@
 
 use m3::cap::Selector;
 use m3::cell::RefCell;
-use m3::cfg::{PAGE_BITS, PAGE_SIZE};
+use m3::cfg::{self, PAGE_BITS, PAGE_SIZE};
 use m3::client::MapFlags;
 use m3::com::MemGate;
 use m3::errors::{Code, Error};
@@ -93,6 +93,13 @@ impl<'a> ChildMapper<'a> {
 impl Mapper for ChildMapper<'_> {
     fn buffer(&mut self) -> Option<&mut [u8]> {
         Some(&mut self.buf)
+    }
+
+    fn heap_size(&self) -> usize {
+        match self.tee {
+            true => cfg::MOD_HEAP_SIZE,
+            false => cfg::APP_HEAP_SIZE,
+        }
     }
 
     fn map_file(

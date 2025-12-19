@@ -8,6 +8,4 @@ path = "src/chancreate.rs"
 crate-type = ["staticlib"]
 
 [dependencies]
-m3core = { path = "../../../libs/rust/m3core" }
-heapsimple = { path = "../../../libs/rust/heapsimple" }
-unimux = { path = "../../../unimux" }
+m3 = { path = "../../../libs/rust/m3" }
