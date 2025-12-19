@@ -16,7 +16,7 @@ cat <<EOF
                 "storage": "$size"
             }
         },
-        "storageClassName": "ceph-block",
+        "storageClassName": "ceph-rbd-pve",
         "volumeMode": "Filesystem"
     }
 }

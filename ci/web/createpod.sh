@@ -30,7 +30,7 @@ kubectl apply -f - <<EOF
         "containers": [
           {
             "name": "$name",
-            "image": "registry.hpc.barkhauseninstitut.org/os/$image:latest",
+            "image": "registry.adbi.barkhauseninstitut.org/os/code/m3/m3/$image:latest",
             "resources": {
               "requests": {
                 "memory": "1000Mi",
