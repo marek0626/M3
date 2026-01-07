@@ -97,7 +97,7 @@ pub fn main() -> Result<(), Error> {
 
     let aes_all = aes_tile.memory().expect("memory of AES tile");
     let aes_cap = aes_all
-        .derive_cap(
+        .derive(
             aes_tile.desc().mem_size() as GlobOff - SPM_SIZE,
             SPM_SIZE,
             Perm::RW,
