@@ -226,7 +226,7 @@ def build(targets: List[str],
                       deps=NIX_DEPS + ['cross/buildroot', 'cross/config-' + isa],
                       out_path='build/cross-{}'.format(isa),
                       cache_dir=cache_dir,
-                      cmd='cd cross && ./build.sh {}'.format(isa),
+                      cmd='cd cross && ./build.py {}'.format(isa),
                       shell=True)
         tasks.append(t)
 

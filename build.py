@@ -68,12 +68,12 @@ class M3Env(Env):
         crossgcc = crossdir + '/bin/' + cross + 'g++'
         if not os.path.isfile(crossgcc):
             sys.exit('Please install the ' + isa + ' cross compiler first '
-                     + '(cd cross && ./build.sh ' + isa + ').')
+                     + '(cd cross && ./build.py ' + isa + ').')
         else:
             ver = subprocess.check_output([crossgcc, '-dumpversion']).decode().strip()
             if ver != crossver:
                 sys.exit('Please update the ' + isa + ' cross compiler from '
-                         + ver + ' to ' + crossver + ' (cd cross && ./build.sh ' + isa + ' clean all).')
+                         + ver + ' to ' + crossver + ' (cd cross && ./build.py ' + isa + ' clean all).')
 
         # basic flags for target compilation
         env['CPPFLAGS'] += ['-D__' + target + '__']

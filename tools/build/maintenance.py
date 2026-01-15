@@ -229,6 +229,7 @@ def cmd_lint(ctx: Context, args: argparse.Namespace) -> None:
             ("ci/tests/gem5.py",          {}),
             ("ci/web/generate.py",        {"MYPYPATH": "ci/tests"}),
             ("ci/web/publish.py",         {}),
+            ("cross/build.py",            {}),
             ("tools/backtrace.py",        {}),
             ("tools/build",               {}),
             ("tools/combine_tculogs.py",  {}),
