@@ -33,8 +33,11 @@ for name, cmd in commands.items():
     sp = subparsers.add_parser(name, help=help_msg, description=cmd.func.__doc__)
     if cmd.args:
         for arg in cmd.args:
-            name = arg.pop("name")
-            sp.add_argument(name, **arg)  # type: ignore
+            names = arg.pop("name")
+            if isinstance(names, list):
+                sp.add_argument(*names, **arg)  # type: ignore
+            else:
+                sp.add_argument(names, **arg)   # type: ignore
     if cmd.group not in cmd_groups:
         cmd_groups[cmd.group] = []
     cmd_groups[cmd.group].append((cmd.name, help_msg))
