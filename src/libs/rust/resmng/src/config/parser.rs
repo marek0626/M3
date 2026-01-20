@@ -86,6 +86,34 @@ impl ConfigParser {
         }
     }
 
+    /// Tries to consume `s` now.
+    ///
+    /// Puts back any read characters if consumption fails.
+    fn try_consume(&mut self, s: &str) -> Option<()> {
+        let mut to_put_back = 0;
+        let mut chars = s.chars();
+        let result = loop {
+            let Some(e) = chars.next()
+            else {
+                break true;
+            };
+            let Some(c) = self.get()
+            else {
+                break false;
+            };
+            to_put_back += 1;
+            if c != e {
+                break false;
+            }
+        };
+        if !result {
+            for _ in 0..to_put_back {
+                self.put().unwrap();
+            }
+        }
+        result.then_some(())
+    }
+
     fn parse_ident(&mut self, delim: char) -> Option<String> {
         let mut name_buf = String::new();
         let first = self.get_no_ws()?;
@@ -128,7 +156,16 @@ impl ConfigParser {
     }
 
     fn parse_tag_name(&mut self) -> Option<Option<String>> {
-        self.consume('<')?;
+        // Loop to consume comments until we find the start of a regular tag.
+        loop {
+            self.consume('<')?;
+            if self.try_consume("!--").is_none() {
+                break;
+            }
+            while self.try_consume("-->").is_none() {
+                self.get()?;
+            }
+        }
 
         let mut name_buf = String::new();
         let first = self.get_no_ws()?;
