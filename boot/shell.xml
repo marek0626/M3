@@ -34,7 +34,6 @@
                             <mount fs="m3fs" path="/"/>
                             <sess name="pipes"/>
                             <sess name="vterm"/>
-                            <sess name="hash"/>
                             <tiles type="core" count="2" optional="1"/>
                             <tiles type="rot13" count="2" optional="1"/>
                         </app>
