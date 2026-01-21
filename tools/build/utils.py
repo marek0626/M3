@@ -71,12 +71,15 @@ def run_and_tee(*cmd: str,
         if proc.stdout is None:
             raise RuntimeError("Pipe creation failed")
 
-        # Read line‑by‑line, write to both destinations.
-        for raw_line in proc.stdout:
-            # raw_line already contains the trailing newline.
-            log_f.write(raw_line)
+        # Read in chunks, write to both destinations.
+        raw = proc.stdout.raw  # type: ignore
+        while True:
+            data = raw.read(1024)
+            if not data:
+                break
+            log_f.write(data)
             log_f.flush()
-            sys.stdout.buffer.write(raw_line)
+            sys.stdout.buffer.write(data)
             sys.stdout.buffer.flush()
 
         proc.wait()
