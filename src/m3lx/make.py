@@ -24,11 +24,7 @@ def run(cmd: List[str], cwd: Optional[Path] = None, env: Optional[Dict[str, str]
     subprocess.check_call(cmd, cwd=cwd, env=env)
 
 
-def nproc() -> str:
-    return str(cpu_count())
-
-
-def build_bbl(crossdir: Path, env: Dict[str, str], extra_args: List[str]) -> None:
+def build_bbl(crossdir: Path, env: Dict[str, str], extra_args: List[str], jobs: int) -> None:
     bblbuild = Path("build/riscv-pk")
     bblbuild.mkdir(parents=True, exist_ok=True)
 
@@ -44,14 +40,20 @@ def build_bbl(crossdir: Path, env: Dict[str, str], extra_args: List[str]) -> Non
     )
 
     run(
-        ["make", f"-j{nproc()}"] + extra_args,
+        ["make", f"-j{jobs}"] + extra_args,
         cwd=bblbuild,
         env={**env, "CFLAGS": " -D__riscv_compressed=1"},
     )
 
 
-def mklx(crossdir: Path, crossname: str, env: Dict[str, str], extra_args: List[str]) -> None:
-    makeargs = [f"O={lxbuild}", f"-j{nproc()}"]
+def mklx(
+    crossdir: Path,
+    crossname: str,
+    env: Dict[str, str],
+    extra_args: List[str],
+    jobs: int,
+) -> None:
+    makeargs = [f"O={lxbuild}", f"-j{jobs}"]
     lxbuild.mkdir(parents=True, exist_ok=True)
 
     env = {**env, "ARCH": "riscv", "CROSS_COMPILE": crossname}
@@ -66,16 +68,16 @@ def mklx(crossdir: Path, crossname: str, env: Dict[str, str], extra_args: List[s
 
     # build linux and bbl
     run(["make"] + makeargs + extra_args, cwd=lxdeps / "linux", env=env)
-    build_bbl(crossdir, env, [])
+    build_bbl(crossdir, env, [], jobs)
 
 
-def genlxcc(crossname: str, env: Dict[str, str]) -> None:
+def genlxcc(crossname: str, env: Dict[str, str], jobs: int) -> None:
     env = {**env, "ARCH": "riscv", "CROSS_COMPILE": crossname}
     out = root / "build/lxcc"
     linux_dir = lxdeps / "linux"
 
     run(["make", f"O={out}", "CC=clang", "defconfig"], cwd=linux_dir, env=env)
-    run(["make", f"O={out}", "CC=clang", f"-j{nproc()}"], cwd=linux_dir, env=env)
+    run(["make", f"O={out}", "CC=clang", f"-j{jobs}"], cwd=linux_dir, env=env)
 
     run([str(linux_dir / "scripts/clang-tools/gen_compile_commands.py")], cwd=out, env=env)
 
@@ -88,9 +90,9 @@ parser = argparse.ArgumentParser(
 parser.add_argument("crossname", help="Name of cross-compiler prefix")
 parser.add_argument("crossdir", help="Path to cross compiler directory")
 parser.add_argument("command", choices=["mklx", "genlxcc", "mkbbl"], help="Command to execute")
-parser.add_argument("make_args", nargs=argparse.REMAINDER, help="Extra make arguments")
+parser.add_argument('--jobs', '-j', help='Number of concurrent jobs (CPU count by default)')
 
-args = parser.parse_args()
+args, rest = parser.parse_known_args()
 
 if os.environ.get("M3_ISA") != "riscv64":
     die("Only supported on M3_ISA=riscv64.")
@@ -98,15 +100,15 @@ if os.environ.get("M3_ISA") != "riscv64":
 env = os.environ.copy()
 env["PATH"] = str(root / args.crossdir / "bin") + ":" + env.get("PATH", "")
 
-extra_args = args.make_args or []
+jobs = args.jobs or cpu_count() or 1
 
 try:
     if args.command == "mklx":
-        mklx(Path(args.crossdir), args.crossname, env, extra_args)
+        mklx(Path(args.crossdir), args.crossname, env, rest, jobs)
     elif args.command == "genlxcc":
-        genlxcc(args.crossname, env)
+        genlxcc(args.crossname, env, jobs)
     elif args.command == "mkbbl":
-        build_bbl(Path(args.crossdir), env, extra_args)
+        build_bbl(Path(args.crossdir), env, rest, jobs)
     else:
         die(f"Unknown command: {args.command}")
 except KeyboardInterrupt:
