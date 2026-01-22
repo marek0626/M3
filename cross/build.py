@@ -21,6 +21,10 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Target architecture",
     )
     parser.add_argument(
+        "--jobs", "-j",
+        help="Number of concurrent jobs (CPU count by default)",
+    )
+    parser.add_argument(
         "make_args",
         nargs=argparse.REMAINDER,
         help="Arguments passed verbatim to make",
@@ -101,7 +105,8 @@ def main(argv: List[str]) -> None:
     create_config(root, dist, args.arch)
 
     # build
-    make_jobs = f"-j{os.cpu_count() or 1}"
+    jobs = args.jobs if args.jobs else (os.cpu_count() or 1)
+    make_jobs = f"-j{jobs}"
     subprocess.check_call(
         ["make", f"O={dist}", make_jobs, *args.make_args],
         cwd="buildroot",
