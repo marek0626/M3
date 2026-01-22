@@ -13,7 +13,7 @@ def exec_replace(argv: List[str]) -> NoReturn:
     os.execvp(argv[0], argv)
 
 
-def parse_args(argv: List[str]) -> argparse.Namespace:
+def parse_args(argv: List[str]) -> [argparse.Namespace, List[str]]:
     parser = argparse.ArgumentParser(description="Build Buildroot cross toolchains")
     parser.add_argument(
         "arch",
@@ -24,12 +24,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         "--jobs", "-j",
         help="Number of concurrent jobs (CPU count by default)",
     )
-    parser.add_argument(
-        "make_args",
-        nargs=argparse.REMAINDER,
-        help="Arguments passed verbatim to make",
-    )
-    return parser.parse_args(argv)
+    return parser.parse_known_args(argv)
 
 
 def check_configs(dist: Path, config: Path, config_origin: Path, arch_config: Path) -> None:
@@ -81,7 +76,7 @@ def create_config(root: Path, dist: Path, arch: str) -> None:
                 "defconfig",
                 f"BR2_DEFCONFIG={arch_config}",
             ],
-            cwd="buildroot",
+            cwd=root / "buildroot",
         )
         dist.mkdir(parents=True, exist_ok=True)
         shutil.copy2(arch_config, config_origin)
@@ -96,7 +91,7 @@ def main(argv: List[str]) -> None:
     if not (file_path.is_file() and os.access(file_path, os.X_OK)):
         exec_replace(["m3-fhs-env", *sys.argv])
 
-    args = parse_args(argv)
+    args, remainder = parse_args(argv)
 
     # check and potentially create config
     script_path = Path(sys.argv[0]).resolve()
@@ -108,8 +103,8 @@ def main(argv: List[str]) -> None:
     jobs = args.jobs if args.jobs else (os.cpu_count() or 1)
     make_jobs = f"-j{jobs}"
     subprocess.check_call(
-        ["make", f"O={dist}", make_jobs, *args.make_args],
-        cwd="buildroot",
+        ["make", f"O={dist}", make_jobs, *remainder],
+        cwd=root / "buildroot",
     )
 
 
