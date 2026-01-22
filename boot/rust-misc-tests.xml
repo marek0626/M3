@@ -17,6 +17,7 @@
                     <sess name="m3fs"/>
                     <mod name="fs" perm="r"/>
                     <mod name="tilemux" perm="r"/>
+                    <!-- Provide the pager with tile capability for the following sub-domain. -->
                     <tiles type="core" count="1"/>
                     <dom>
                         <app args="/bin/rustmisctests">

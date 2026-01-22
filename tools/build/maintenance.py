@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 
+from collections.abc import Iterator
 from pathlib import Path
 
 from .utils import run
@@ -29,14 +30,18 @@ def cmd_checkboot(ctx: Context, args: argparse.Namespace) -> None:
 )
 def cmd_clippy(ctx: Context, args: argparse.Namespace) -> None:
     """Run clippy on a specified or every Cargo package."""
+    def path_filter(paths: Iterator[Path]) -> list[Path]:
+        return [p for p in paths if p != Path("src/Cargo.toml").resolve()]
+
     if args.path:
-        if args.path.endswith("Cargo.toml"):
-            paths = [Path(args.path)]
+        p = Path(args.path).resolve()
+        if p.name == "Cargo.toml":
+            paths = [p]
         else:
-            paths = [Path(args.path) / "Cargo.toml"]
+            # Find all Cargo.toml files in the specified directory.
+            paths = path_filter(p.glob("**/Cargo.toml"))
     else:
-        paths = [toml for toml in ctx.root.glob("src/**/Cargo.toml")
-                 if toml != Path("src/Cargo.toml").resolve()]
+        paths = path_filter(ctx.root.glob("src/**/Cargo.toml"))
 
     errors = 0
     for cargo in paths:
