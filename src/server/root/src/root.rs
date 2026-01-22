@@ -274,7 +274,7 @@ fn workloop_async(args: &mut WorkloopArgs<'_, '_, '_, '_, '_>) {
 }
 
 #[no_mangle]
-#[cfg_attr(dylint_lib = "m3_lints", allow(unexpected_async))]
+#[cfg_attr(dylint_lib = "m3_lints", allow(async_alias, unexpected_async))]
 pub fn main() -> Result<(), Error> {
     let (sub, mut res) = subsys::Subsystem::new().expect("Unable to read subsystem info");
 
