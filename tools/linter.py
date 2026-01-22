@@ -29,6 +29,8 @@ def main() -> None:
     if driver_path is not None:
         os.makedirs(driver_path, exist_ok=True)
 
+    dylint_env = os.environ.copy()
+    dylint_env["RUSTFLAGS"] = "-D warnings"
     for crate in args.crates:
         subprocess.run(
             (
@@ -39,6 +41,7 @@ def main() -> None:
                 "-Z",
                 "build-std=core,alloc,std,panic_abort",
             ),
+            env=dylint_env,
             cwd=crate,
             check=True,
         )
