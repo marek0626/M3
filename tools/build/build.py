@@ -22,6 +22,8 @@ def ensure_built(ctx: Context) -> None:
     verbose = os.getenv("M3_VERBOSE", "0")
     if verbose == "1":
         ninja_args += ["-v"]
+    if ctx.jobs:
+        ninja_args += ["-j", str(ctx.jobs)]
 
     # force regeneration of the ninja build file if the verbosity level changed since last run
     vfile = ctx.build_dir / ".verbose"
@@ -71,12 +73,13 @@ def cmd_cargo(ctx: Context, args: argparse.Namespace) -> None:
 def cmd_mkgem5(ctx: Context, args: argparse.Namespace) -> None:
     """(re)build the gem5 simulator for the given ISA list."""
     suffix = "debug" if args.debug else "opt"
+    jobs = f"-j{os.cpu_count()}" if not ctx.jobs else f"-j{ctx.jobs}"
     isas = [x.strip() for x in args.isas.split(",")]
     isas = [f"build/{isa}/gem5.{suffix}" for isa in isas]
 
     gem5_dir = ctx.root / "build/gem5"
     gem5_dir.mkdir(parents=True, exist_ok=True)
     run(
-        "scons", f"-j{os.cpu_count()}", "-C", str(ctx.root / "platform/gem5"), *isas,
+        "scons", jobs, "-C", str(ctx.root / "platform/gem5"), *isas,
         cwd=gem5_dir
     )
