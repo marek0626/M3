@@ -18,6 +18,7 @@ parser.add_argument(
 parser.add_argument('--isa', nargs='+', default=['riscv32', 'riscv64', 'x86_64'])
 parser.add_argument('--build', nargs='+', default=['debug', 'release'])
 parser.add_argument('--command', nargs='+', default=['prepare', 'build'])
+parser.add_argument('--m3lx', action='store_true', help='Enable M³Linux (requires riscv64)')
 parser.add_argument('--jobs', '-j', help='Number of concurrent jobs (CPU count by default)')
 args = parser.parse_args()
 
@@ -25,9 +26,9 @@ try:
     cache_dir = 'build/bootstrap'
     if 'prepare' in args.command:
         builder.prepare(targets=args.target, isas=args.isa,
-                        cache_dir=cache_dir, incremental=True)
+                        cache_dir=cache_dir, incremental=True, m3lx=args.m3lx)
     if 'build' in args.command:
         builder.build(targets=args.target, isas=args.isa, builds=args.build,
-                      cache_dir=cache_dir, incremental=True, jobs=args.jobs)
+                      cache_dir=cache_dir, incremental=True, jobs=args.jobs, m3lx=args.m3lx)
 except KeyboardInterrupt:
     pass
