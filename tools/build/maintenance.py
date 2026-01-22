@@ -246,5 +246,6 @@ def cmd_lint(ctx: Context, args: argparse.Namespace) -> None:
             print(f"Running mypy for '{path}'...", flush=True)
             run(
                 "mypy", "--python-version", "3.9", "--strict", path,
-                env=os.environ.copy() | add_env
+                env=os.environ.copy() | add_env,
+                check=False
             )
