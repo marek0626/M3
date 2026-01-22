@@ -10,11 +10,11 @@ def cmd_mklx(ctx: Context, args: argparse.Namespace) -> None:
     """
     (Re)build M³Linux (including bbl) via the buildroot script.
 
-    Additional arguments are passed to `src/m3lx/build.sh`. This allows to, for example, run
+    Additional arguments are passed to `src/m3lx/make.py`. This allows to, for example, run
     `menuconfig` via `./b mklx menuconfig`.
     """
     run(
-        "./src/m3lx/build.sh",
+        "./src/m3lx/make.py",
         ctx.cross_name(),
         f"build/cross-{ctx.isa}/host",
         "mklx",
@@ -27,10 +27,10 @@ def cmd_mkbbl(ctx: Context, args: argparse.Namespace) -> None:
     """
     (Re)build the bbl bootloader.
 
-    Additional arguments are passed to `src/m3lx/build.sh.
+    Additional arguments are passed to `src/m3lx/make.py.
     """
     run(
-        "./src/m3lx/build.sh",
+        "./src/m3lx/make.py",
         ctx.cross_name(),
         f"build/cross-{ctx.isa}/host",
         "mkbbl",
@@ -42,7 +42,7 @@ def cmd_mkbbl(ctx: Context, args: argparse.Namespace) -> None:
 def cmd_genlxcc(ctx: Context, args: argparse.Namespace) -> None:
     """Generate ``compile_commands.json`` for M³Linux."""
     run(
-        "./src/m3lx/build.sh",
+        "./src/m3lx/make.py",
         ctx.cross_name(),
         f"build/cross-{ctx.isa}/host",
         "genlxcc",

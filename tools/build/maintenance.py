@@ -230,6 +230,7 @@ def cmd_lint(ctx: Context, args: argparse.Namespace) -> None:
             ("ci/web/generate.py",        {"MYPYPATH": "ci/tests"}),
             ("ci/web/publish.py",         {}),
             ("cross/build.py",            {}),
+            ("src/m3lx/make.py",          {}),
             ("tools/backtrace.py",        {}),
             ("tools/build",               {}),
             ("tools/combine_tculogs.py",  {}),
