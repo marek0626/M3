@@ -97,6 +97,8 @@ extern "C" {
     fn __m3c_init_netmng(name: *const i8) -> Code;
 }
 
+// on x86_64, c-strings are already *const i8
+#[allow(clippy::unnecessary_cast)]
 fn tcp_server() -> Result<(), Error> {
     let mut t = DefaultWvTester::default();
     // connect to netmng explicitly here to specify a different session name

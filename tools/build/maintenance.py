@@ -48,9 +48,10 @@ def cmd_clippy(ctx: Context, args: argparse.Namespace) -> None:
         # skip vmtest on non‑riscv64
         if ctx.isa != "riscv64" and "vmtest" in str(cargo):
             continue
-        # skip rot/raser on non‑riscv
-        if not ctx.isa.startswith("riscv") and any(x in str(cargo) for x in ("rot", "raser")):
-            continue
+        # skip rot/raser/unimux on non‑riscv
+        if not ctx.isa.startswith("riscv"):
+            if any(x in str(cargo) for x in ("rot", "raser", "unimux", "straccmux")):
+                continue
         try:
             _run_clippy(ctx, cargo)
         except Exception as exc:
@@ -207,15 +208,19 @@ def cmd_lint(ctx: Context, args: argparse.Namespace) -> None:
     """Run the async linter on the kernel, root, and pager."""
     lints = args.lints.split(",") if args.lints else ["async", "python"]
 
+    errors = 0
     if "async" in lints:
         env = os.environ.copy()
         env["CARGO_TARGET_DIR"] = str(ctx.root / "build/rust")
         dirs = ["src/kernel", "src/libs/rust/resmng", "src/server/root", "src/server/pager"]
-        run(
-            "python3", "./tools/linter.py", *dirs,
-            cwd=ctx.root,
-            env=env,
-        )
+        try:
+            run(
+                "python3", "./tools/linter.py", *dirs,
+                cwd=ctx.root,
+                env=env,
+            )
+        except subprocess.CalledProcessError:
+            errors += 1
 
     if "python" in lints:
         pys = [
@@ -245,8 +250,11 @@ def cmd_lint(ctx: Context, args: argparse.Namespace) -> None:
         for py in pys:
             path, add_env = py
             print(f"Running mypy for '{path}'...", flush=True)
-            run(
-                "mypy", "--python-version", "3.9", "--strict", path,
-                env=os.environ.copy() | add_env,
-                check=False
-            )
+            try:
+                run(
+                    "mypy", "--python-version", "3.9", "--strict", path,
+                    env=os.environ.copy() | add_env,
+                )
+            except subprocess.CalledProcessError:
+                errors += 1
+    sys.exit(0 if errors == 0 else 1)
