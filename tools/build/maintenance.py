@@ -48,9 +48,10 @@ def cmd_clippy(ctx: Context, args: argparse.Namespace) -> None:
         # skip vmtest on non‑riscv64
         if ctx.isa != "riscv64" and "vmtest" in str(cargo):
             continue
-        # skip rot/raser on non‑riscv
-        if not ctx.isa.startswith("riscv") and any(x in str(cargo) for x in ("rot", "raser")):
-            continue
+        # skip rot/raser/unimux on non‑riscv
+        if not ctx.isa.startswith("riscv"):
+            if any(x in str(cargo) for x in ("rot", "raser", "unimux", "straccmux")):
+                continue
         try:
             _run_clippy(ctx, cargo)
         except Exception as exc:

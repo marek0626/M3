@@ -104,7 +104,9 @@ pub fn main() -> Result<(), Error> {
         )
         .expect("derive AES mem");
 
-    if tee && tcu::EXREG_REGS > 0 {
+    // on hw23, EXREG_REGS is 0
+    #[allow(clippy::absurd_extreme_comparisons)]
+    if tee && const { tcu::EXREG_REGS >= 4 } {
         // allocate all but the ones need for the mem benchs
         for _ in 0..tcu::EXREG_REGS - 4 {
             aes_cap
