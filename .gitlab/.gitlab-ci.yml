@@ -50,7 +50,14 @@ check:
     - kubectl exec -n os -t m3-ci -- sh -c "./bootstrap.py $CI_COMMIT_SHA"
     - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b -n checkboot'
     - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b -n fmt --check'
-    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b -n clippy'
+    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && M3_TARGET=hw nix develop path:nix -c ./b -n clippy'
+    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && M3_TARGET=hw23 nix develop path:nix -c ./b -n clippy'
+    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && M3_TARGET=gem5 M3_ISA=riscv32 nix develop path:nix
+      -c ./b -n clippy'
+    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && M3_TARGET=gem5 M3_ISA=riscv64 nix develop path:nix
+      -c ./b -n clippy'
+    - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && M3_TARGET=gem5 M3_ISA=x86_64 nix develop path:nix
+      -c ./b -n clippy'
     - kubectl exec -n os -t m3-ci -- sh -c 'cd M3 && nix develop path:nix -c ./b -n lint'
     - |
       kubectl exec -n os -t m3-ci -- sh -c '
