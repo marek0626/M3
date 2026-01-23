@@ -20,7 +20,7 @@ use core::fmt;
 use core::mem::{size_of, size_of_val};
 
 use crate::cap::{CapFlags, Capability, SelSpace, Selector};
-use crate::com::MemGate;
+use crate::com::{MemCap, MemGate};
 use crate::errors::{Code, Error};
 use crate::io::{read_object, LogFlags, Read};
 use crate::kif::{self, syscalls::MuxType, TileDesc};
@@ -338,16 +338,16 @@ impl Tile {
         syscalls::tile_set_quota(self.sel(), time, pts)
     }
 
-    /// Creates a [`MemGate`] for the internal memory of this tile
+    /// Creates a [`MemCap`] for the internal memory of this tile
     ///
     /// The tile needs to have internal memory (see [`TileDesc::has_memory`]).
     ///
     /// This call requires a non-derived tile capability.
-    pub fn memory(&self) -> Result<MemGate, Error> {
+    pub fn memory(&self) -> Result<MemCap, Error> {
         if self.desc.has_memory() {
             let sel = SelSpace::get().alloc_sel();
             syscalls::tile_mem(sel, self.sel())?;
-            MemGate::new_owned_bind(sel)
+            Ok(MemCap::new_owned_bind(sel))
         }
         else {
             Err(Error::new(Code::InvArgs))

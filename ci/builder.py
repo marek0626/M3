@@ -167,28 +167,38 @@ class BuildTask:
 
 
 def build_all(tasks: List[BuildTask], incremental: bool) -> None:
-    # start all tasks that have to run and let them run in parallel
-    running = []
-    for t in tasks:
-        # start task (incremental always (re)builds)
-        if incremental or t.needs_rebuild():
-            running.append((t, t.start(incremental)))
-        # otherwise, finish the task right away
-        else:
-            t.finish(False, incremental, 0, None)
+    if incremental:
+        for t in tasks:
+            t.get(True)
+    else:
+        # start all tasks that have to run and let them run in parallel
+        running = []
+        for t in tasks:
+            # start task
+            if t.needs_rebuild():
+                running.append((t, t.start(incremental)))
+            # otherwise, finish the task right away
+            else:
+                t.finish(False, False, 0, None)
 
-    # now wait for all tasks
-    for (task, (log, proc)) in running:
-        proc.wait()
-        task.finish(True, incremental, proc.returncode, log)
+        # now wait for all tasks
+        for (task, (log, proc)) in running:
+            proc.wait()
+            task.finish(True, False, proc.returncode, log)
 
 
-def prepare(targets: List[str], isas: List[str], cache_dir: str, incremental: bool) -> None:
+def prepare(
+    targets: List[str],
+    isas: List[str],
+    cache_dir: str,
+    incremental: bool,
+    m3lx: bool,
+) -> None:
     # determine required submodules
     mods = ['tools/ninjapie', 'tools/lints', 'cross/buildroot',
             'src/libs/leveldb', 'src/libs/musl', 'src/libs/flac',
             'src/apps/bsdutils', 'src/libs/crypto/kecacc-xkcp']
-    if 'riscv64' in isas:
+    if m3lx:
         mods.append('src/m3lx/linux')
         mods.append('src/m3lx/riscv-pk')
     if 'gem5' in targets:
@@ -212,12 +222,19 @@ def build(targets: List[str],
           isas: List[str],
           builds: List[str],
           cache_dir: str,
-          incremental: bool) -> None:
+          incremental: bool,
+          jobs: Optional[int],
+          m3lx: bool) -> None:
+    if m3lx and 'riscv64' not in isas:
+        raise Exception("M³Linux requires riscv64")
+
     # when we build for riscv64, we always need the riscv32 toolchain as well to run stuff on the
     # accelerator co-processors
     ccisas = isas.copy()
     if 'riscv64' in ccisas and 'riscv32' not in ccisas:
         ccisas.append('riscv32')
+
+    task_jobs = f"-j{jobs}" if jobs else ""
 
     # build all cross compilers
     tasks = []
@@ -226,7 +243,7 @@ def build(targets: List[str],
                       deps=NIX_DEPS + ['cross/buildroot', 'cross/config-' + isa],
                       out_path='build/cross-{}'.format(isa),
                       cache_dir=cache_dir,
-                      cmd='cd cross && ./build.sh {}'.format(isa),
+                      cmd='cd cross && ./build.py {} {}'.format(task_jobs, isa),
                       shell=True)
         tasks.append(t)
 
@@ -243,7 +260,7 @@ def build(targets: List[str],
                       out_path="build/gem5/build",
                       cache_dir=cache_dir,
                       # don't build M³ at this point as we cannot do that yet
-                      cmd='./b -n mkgem5 ' + gem5isas,
+                      cmd='./b -n {} mkgem5 {}'.format(task_jobs, gem5isas),
                       shell=True)
         tasks.append(t)
 
@@ -265,41 +282,38 @@ def build(targets: List[str],
             for isa in isas:
                 if tgt != 'gem5' and isa != 'riscv64':
                     continue
+                cmd = 'M3_TARGET={} M3_ISA={} M3_BUILD={} ./b {}'.format(tgt, isa, build, task_jobs)
                 t = BuildTask(name='build/m3-{}-{}-{}'.format(tgt, isa, build),
                               deps=TARGET_DEPS + ['.'],
                               out_path='build/{}-{}-{}'.format(tgt, isa, build),
                               cache_dir=cache_dir,
-                              cmd='M3_TARGET={} M3_ISA={} M3_BUILD={} ./b'.format(tgt, isa, build),
+                              cmd=cmd,
                               shell=True,
                               werror=True)
                 tasks.append(t)
 
-    # build M³Linux for riscv64
-    if 'riscv64' in isas:
+    # build M³Linux
+    if m3lx:
         t = BuildTask(name='build/m3lx',
-                      deps=TARGET_DEPS + ['src/m3lx/linux', 'src/m3lx/build.sh'],
+                      deps=TARGET_DEPS + ['src/m3lx/linux', 'src/m3lx/make.py'],
                       out_path='build/linux',
                       cache_dir=cache_dir,
-                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b -n mklx',
+                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b -n {} mklx'.format(task_jobs),
                       shell=True)
         tasks.append(t)
 
     # actually we cannot use ninja in parallel, because it writes to the same .ninja_log etc..
     # However, this seems to only be a problem when we rebuild later. Thus, we only build in
     # parallel when not doing incremental builds (which is *much* faster).
-    if incremental:
-        for t in tasks:
-            t.get(incremental)
-    else:
-        build_all(tasks, incremental)
+    build_all(tasks, incremental)
 
     # build bbl separately as it has a different out_path
-    if 'riscv64' in isas:
+    if m3lx:
         t = BuildTask(name='build/riscv-pk',
-                      deps=TARGET_DEPS + ['src/m3lx/riscv-pk', 'src/m3lx/build.sh'],
+                      deps=TARGET_DEPS + ['src/m3lx/riscv-pk', 'src/m3lx/make.py'],
                       out_path='build/riscv-pk',
                       cache_dir=cache_dir,
-                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b -n mkbbl',
+                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b -n {} mkbbl'.format(task_jobs),
                       shell=True)
         t.get(incremental)
 
@@ -309,16 +323,18 @@ if __name__ == '__main__':
     parser.add_argument('--target', nargs='+', default=['gem5', 'hw23', 'hw'])
     parser.add_argument('--isa', nargs='+', default=['riscv32', 'riscv64', 'x86_64'])
     parser.add_argument('--build', nargs='+', default=['debug', 'release'])
+    parser.add_argument('--m3lx', action='store_true', help='Enable M³Linux (requires riscv64)')
+    parser.add_argument('--jobs', '-j', help='Number of concurrent jobs (CPU count by default)')
     parser.add_argument('command')
     args = parser.parse_args()
 
     cache_dir = '/cache'
     if args.command == 'prepare':
         prepare(targets=args.target, isas=args.isa,
-                cache_dir=cache_dir, incremental=False)
+                cache_dir=cache_dir, incremental=False, m3lx=args.m3lx)
     elif args.command == 'build':
         build(targets=args.target, isas=args.isa, builds=args.build,
-              cache_dir=cache_dir, incremental=False)
+              cache_dir=cache_dir, incremental=False, jobs=args.jobs, m3lx=args.m3lx)
     else:
         print("Unknown command '{}'".format(args.command))
         sys.exit(1)

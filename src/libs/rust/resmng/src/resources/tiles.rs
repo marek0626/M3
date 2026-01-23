@@ -17,7 +17,7 @@ use anyhow::Context;
 
 use m3::cell::{Cell, Ref, RefCell, RefMut};
 use m3::col::Vec;
-use m3::com::{MemCap, MemGate};
+use m3::com::{GateCap, MemCap, MemGate};
 use m3::errors::{Code, Error};
 use m3::io::{LogFlags, Read};
 use m3::kif::{Perm, TileDesc};
@@ -178,7 +178,12 @@ impl TileState {
         }
 
         let mux = match self.tile.memory() {
-            Ok(mem) => TileMem { mem, alloc: None },
+            Ok(mem) => TileMem {
+                mem: mem
+                    .activate()
+                    .map_err(|e| rerror(e).context("Activate tile memory cap"))?,
+                alloc: None,
+            },
             Err(_) => {
                 let (mem, alloc) = alloc_mem(mem_size)?;
                 TileMem { mem, alloc }

@@ -33,12 +33,11 @@ def main() -> int:
     run("git", "checkout", args.commit)
 
     # perform bootstrap
-    run(sys.executable, "./ci/builder.py", "prepare")
+    run(sys.executable, "./ci/builder.py", "prepare", "--m3lx")
     if not args.no_build:
         run(
             "nix", "develop", "path:nix", "-c",
-            sys.executable, "./ci/builder.py", "build",
-            "--build", "debug", "bench"
+            sys.executable, "./ci/builder.py", "build", "--build", "debug", "bench", "--m3lx"
         )
     return 0
 

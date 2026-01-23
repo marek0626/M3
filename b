@@ -16,13 +16,10 @@ from build import Context, load_commands  # noqa: E402
 # load all commands
 commands = load_commands()
 
-# create context with environment variables etc.
-ctx = Context()
-
 # build argument parser
 parser = argparse.ArgumentParser(prog="./b")
-parser.add_argument("-n", "--no-build", action="store_true",
-                    help="skip the build step and execute the command directly")
+parser.add_argument("-n", "--no-build", action="store_true")
+parser.add_argument('--jobs', '-j')
 subparsers = parser.add_subparsers(dest="command", metavar="<command>")
 
 cmd_groups: Dict[str, List[Tuple[str, str]]] = {}
@@ -33,8 +30,11 @@ for name, cmd in commands.items():
     sp = subparsers.add_parser(name, help=help_msg, description=cmd.func.__doc__)
     if cmd.args:
         for arg in cmd.args:
-            name = arg.pop("name")
-            sp.add_argument(name, **arg)  # type: ignore
+            names = arg.pop("name")
+            if isinstance(names, list):
+                sp.add_argument(*names, **arg)  # type: ignore
+            else:
+                sp.add_argument(names, **arg)   # type: ignore
     if cmd.group not in cmd_groups:
         cmd_groups[cmd.group] = []
     cmd_groups[cmd.group].append((cmd.name, help_msg))
@@ -44,6 +44,7 @@ for name, cmd in commands.items():
 cmd_groups["Options"] = [
     ("-h, --help", "show this help message and exit"),
     ("-n, --no-build", "skip the build step"),
+    ("-j --jobs", "number of concurrent jobs (ninja decides by default)"),
 ]
 
 
@@ -145,6 +146,9 @@ else:
 # merge the remainder from positional arguments with the arguments behind "--"
 args, add_remainder = parser.parse_known_args(to_parse)
 args.remainder = add_remainder + remainder
+
+# create context with environment variables etc.
+ctx = Context(args.jobs)
 
 try:
     # Build step (unless disabled)

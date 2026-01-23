@@ -229,6 +229,8 @@ def cmd_lint(ctx: Context, args: argparse.Namespace) -> None:
             ("ci/tests/gem5.py",          {}),
             ("ci/web/generate.py",        {"MYPYPATH": "ci/tests"}),
             ("ci/web/publish.py",         {}),
+            ("cross/build.py",            {}),
+            ("src/m3lx/make.py",          {}),
             ("tools/backtrace.py",        {}),
             ("tools/build",               {}),
             ("tools/combine_tculogs.py",  {}),
@@ -245,5 +247,6 @@ def cmd_lint(ctx: Context, args: argparse.Namespace) -> None:
             print(f"Running mypy for '{path}'...", flush=True)
             run(
                 "mypy", "--python-version", "3.9", "--strict", path,
-                env=os.environ.copy() | add_env
+                env=os.environ.copy() | add_env,
+                check=False
             )

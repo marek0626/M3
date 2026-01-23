@@ -13,7 +13,9 @@ class Context:
     All attributes are read‑only – they are computed once in the driver.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, jobs: Optional[int]) -> None:
+        self.jobs = jobs
+
         DEFAULTS = {
             "M3_BUILD": "release",
             "M3_TARGET": "gem5",

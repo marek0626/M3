@@ -38,7 +38,7 @@ def cmd_elf(ctx: Context, args: argparse.Namespace) -> None:
     "nm",
     [
         {"name": "prog", "help": "binary to run `nm -SCn` on"},
-        {"name": "--size", "action": "store_true", "help": "show symbols sorted by size"},
+        {"name": ["--size", "-s"], "action": "store_true", "help": "show symbols sorted by size"},
     ],
 )
 def cmd_nm(ctx: Context, args: argparse.Namespace) -> None:

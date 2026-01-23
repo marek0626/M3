@@ -2,7 +2,7 @@ import argparse
 import importlib
 import sys
 
-from typing import Any, Callable, Dict, List, Optional, TypeVar
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 
 from .context import Context
 
@@ -13,7 +13,7 @@ __all__ = ["Context", "load_commands"]
 class Command:
     def __init__(self, name: str, group: str,
                  func: Callable[[Context, argparse.Namespace, List[str]], None],
-                 args: Optional[List[Dict[str, str]]]):
+                 args: Optional[List[Dict[str, Union[str, List[str]]]]]):
         self.name = name
         self.group = group
         self.func = func
@@ -45,7 +45,10 @@ def load_commands() -> Dict[str, Command]:
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-def command(name: str, args: Optional[List[Dict[str, str]]] = None) -> Callable[[F], F]:
+def command(
+    name: str,
+    args: Optional[List[Dict[str, Union[str, List[str]]]]] = None,
+) -> Callable[[F], F]:
     """Decorator used inside plugins, e.g. @command('clean')."""
     def decorator(func: F) -> F:
         if name in COMMAND_TABLE:
