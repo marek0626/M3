@@ -13,12 +13,13 @@ def cmd_mklx(ctx: Context, args: argparse.Namespace) -> None:
     Additional arguments are passed to `src/m3lx/make.py`. This allows to, for example, run
     `menuconfig` via `./b mklx menuconfig`.
     """
+    jobs = [f"-j{ctx.jobs}"] if ctx.jobs else []
     run(
         "./src/m3lx/make.py",
         ctx.cross_name(),
         f"build/cross-{ctx.isa}/host",
         "mklx",
-        *args.remainder,
+        *(jobs + args.remainder),
     )
 
 
@@ -29,12 +30,13 @@ def cmd_mkbbl(ctx: Context, args: argparse.Namespace) -> None:
 
     Additional arguments are passed to `src/m3lx/make.py.
     """
+    jobs = [f"-j{ctx.jobs}"] if ctx.jobs else []
     run(
         "./src/m3lx/make.py",
         ctx.cross_name(),
         f"build/cross-{ctx.isa}/host",
         "mkbbl",
-        *args.remainder,
+        *(jobs + args.remainder),
     )
 
 

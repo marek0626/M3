@@ -298,7 +298,7 @@ def build(targets: List[str],
                       deps=TARGET_DEPS + ['src/m3lx/linux', 'src/m3lx/make.py'],
                       out_path='build/linux',
                       cache_dir=cache_dir,
-                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b -n mklx {}'.format(task_jobs),
+                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b -n {} mklx'.format(task_jobs),
                       shell=True)
         tasks.append(t)
 
@@ -313,7 +313,7 @@ def build(targets: List[str],
                       deps=TARGET_DEPS + ['src/m3lx/riscv-pk', 'src/m3lx/make.py'],
                       out_path='build/riscv-pk',
                       cache_dir=cache_dir,
-                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b -n mkbbl {}'.format(task_jobs),
+                      cmd='M3_ISA=riscv64 M3_BUILD=bench ./b -n {} mkbbl'.format(task_jobs),
                       shell=True)
         t.get(incremental)
 
