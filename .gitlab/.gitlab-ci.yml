@@ -28,6 +28,8 @@ prepare:
     # now (re-)create the pod
     - sh ci/config/pod.sh m3-ci m3-ci | kubectl apply -f -
     - kubectl wait -n os --for=condition=ready --timeout=5m pod/m3-ci
+    # copy bootstrap.py from current commit into pod
+    - kubectl cp -n os ./ci/bootstrap.py m3-ci:/bootstrap.py
   resource_group: pod
 
 build:
