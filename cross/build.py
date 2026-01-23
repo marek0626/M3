@@ -6,14 +6,14 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, NoReturn
+from typing import List, NoReturn, Tuple
 
 
 def exec_replace(argv: List[str]) -> NoReturn:
     os.execvp(argv[0], argv)
 
 
-def parse_args(argv: List[str]) -> [argparse.Namespace, List[str]]:
+def parse_args(argv: List[str]) -> Tuple[argparse.Namespace, List[str]]:
     parser = argparse.ArgumentParser(description="Build Buildroot cross toolchains")
     parser.add_argument(
         "arch",
