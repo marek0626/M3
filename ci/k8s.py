@@ -56,39 +56,21 @@ def create_storage(name: str, size: str) -> None:
     apply_yaml(yaml)
 
 
-def create_image(name: str, gitlab_user: str, gitlab_pw: str) -> None:
-    user_file = OUT_DIR / "user"
-    pw_file = OUT_DIR / "pw"
+def create_image(name: str) -> None:
+    # create image with podman (run from $ROOT)
+    build_cmd = [
+        "podman", "build",
+        "-t", name,
+        ".",
+    ]
+    run(*build_cmd, cwd=ROOT)
 
-    try:
-        # create tmp files for gitlab user/pw
-        user_file.write_text(gitlab_user + "\n")
-        pw_file.write_text(gitlab_pw + "\n")
-
-        # create image with podman (run from $ROOT)
-        build_cmd = [
-            "podman", "build",
-            "--build-arg", "KUBECFG=out/kubecfg",
-            "--build-arg", "GITLAB_USER=out/user",
-            "--build-arg", "GITLAB_PW=out/pw",
-            "-t", name,
-            ".",
-        ]
-        run(*build_cmd, cwd=ROOT)
-
-        # tag & push
-        remote_tag = (
-            f"registry.adbi.barkhauseninstitut.org/os/code/m3/m3/{name}:latest"
-        )
-        run("podman", "image", "tag", f"{name}:latest", remote_tag)
-        run("podman", "image", "push", remote_tag)
-
-    finally:
-        for p in (user_file, pw_file):
-            try:
-                p.unlink()
-            except FileNotFoundError:
-                pass
+    # tag & push
+    remote_tag = (
+        f"registry.adbi.barkhauseninstitut.org/os/code/m3/m3/{name}:latest"
+    )
+    run("podman", "image", "tag", f"{name}:latest", remote_tag)
+    run("podman", "image", "push", remote_tag)
 
 
 def create_pod(name: str, image: str) -> None:
@@ -165,10 +147,8 @@ def build_parser() -> argparse.ArgumentParser:
     # img <gitlab-user> <gitlab-pw>
     img_parser = subparsers.add_parser(
         "img",
-        help="Create a new image (requires GitLab credentials).",
+        help="Create a new image.",
     )
-    img_parser.add_argument("gitlab_user", help="GitLab user name")
-    img_parser.add_argument("gitlab_pw", help="GitLab password / token")
 
     # run
     subparsers.add_parser(
@@ -196,14 +176,8 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args(sys.argv[1:])
 
-    # Prepare the temporary output directory and copy the kubeconfig (once)
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    src_cfg = Path.home() / ".kube" / "config"
-    dst_cfg = OUT_DIR / "kubecfg"
-    shutil.copy2(src_cfg, dst_cfg)
-
     if args.command == "img":
-        create_image(IMG_NAME, args.gitlab_user, args.gitlab_pw)
+        create_image(IMG_NAME)
     elif args.command == "run":
         create_storage(CACHE_NAME, CACHE_SIZE)
         create_storage(RESULTS_NAME, RESULTS_SIZE)

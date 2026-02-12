@@ -18,14 +18,20 @@ def main() -> int:
     parser.add_argument("commit", help="git commit to check out")
     parser.add_argument("--no-build", action="store_true", help="skip the build step")
     args = parser.parse_args()
+    home = Path.home()
+    pw = (home / ".gitlab" / "pw").read_text().strip()
+
+    # use submodules from gitlab, not github
+    (home / ".gitconfig").write_text(
+        rf'[url "https://m3-ci:{pw}@gitlab.barkhauseninstitut.org/os/code/M3/"]'
+        "\n\t"
+        r'insteadOf = https://github.com/Barkhausen-Institut/'
+    )
 
     # clone repo, if necessary
     repo_dir = Path("M3")
     if not repo_dir.is_dir():
-        home = Path.home()
-        user = (home / ".gitlab" / "user").read_text().strip()
-        pw = (home / ".gitlab" / "pw").read_text().strip()
-        repo = f"https://{user}:{pw}@gitlab.barkhauseninstitut.org/os/code/M3/M3.git"
+        repo = f"https://m3-ci:{pw}@gitlab.barkhauseninstitut.org/os/code/M3/M3.git"
         run("git", "clone", repo)
 
     # checkout commit
