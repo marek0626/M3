@@ -27,21 +27,8 @@ RUN curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | \
     && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
        kubectl
-ARG KUBECFG
-COPY $KUBECFG /root/.kube/config
 
-# user and password for the BI gitlab (pull token)
-ARG GITLAB_USER
-COPY $GITLAB_USER /root/.gitlab/user
-ARG GITLAB_PW
-COPY $GITLAB_PW /root/.gitlab/pw
-
-# use submodules from gitlab, not github
-RUN ( \
-        echo -n '[url "https://'$(cat /root/.gitlab/user)':'$(cat /root/.gitlab/pw) && \
-        echo '@gitlab.barkhauseninstitut.org/os/code/M3/"]' && \
-        echo '	insteadOf = https://github.com/Barkhausen-Institut/' \
-    ) > $HOME/.gitconfig
+RUN mkdir -p /root/.kube
 
 # resolve the hosts that we need during git clone to prevent human interaction
 RUN mkdir -p $HOME/.ssh \
@@ -52,3 +39,9 @@ RUN mkdir -p $HOME/.ssh \
 RUN mkdir -p $HOME/.config/nix && \
     echo "experimental-features = nix-command flakes" \
         > $HOME/.config/nix/nix.conf
+
+# add Nix profile to path
+ENV PATH="/root/.nix-profile/bin:$PATH"
+
+# install glab into Nix profile; Ubuntu’s version is too outdated for using secure files
+RUN nix profile install nixpkgs#glab

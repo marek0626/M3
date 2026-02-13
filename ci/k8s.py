@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import json
 
 from pathlib import Path
 from typing import Any, Optional
@@ -56,39 +57,21 @@ def create_storage(name: str, size: str) -> None:
     apply_yaml(yaml)
 
 
-def create_image(name: str, gitlab_user: str, gitlab_pw: str) -> None:
-    user_file = OUT_DIR / "user"
-    pw_file = OUT_DIR / "pw"
+def create_image(name: str) -> None:
+    # create image with podman (run from $ROOT)
+    build_cmd = [
+        "podman", "build",
+        "-t", name,
+        ".",
+    ]
+    run(*build_cmd, cwd=ROOT)
 
-    try:
-        # create tmp files for gitlab user/pw
-        user_file.write_text(gitlab_user + "\n")
-        pw_file.write_text(gitlab_pw + "\n")
-
-        # create image with podman (run from $ROOT)
-        build_cmd = [
-            "podman", "build",
-            "--build-arg", "KUBECFG=out/kubecfg",
-            "--build-arg", "GITLAB_USER=out/user",
-            "--build-arg", "GITLAB_PW=out/pw",
-            "-t", name,
-            ".",
-        ]
-        run(*build_cmd, cwd=ROOT)
-
-        # tag & push
-        remote_tag = (
-            f"registry.adbi.barkhauseninstitut.org/os/code/m3/m3/{name}:latest"
-        )
-        run("podman", "image", "tag", f"{name}:latest", remote_tag)
-        run("podman", "image", "push", remote_tag)
-
-    finally:
-        for p in (user_file, pw_file):
-            try:
-                p.unlink()
-            except FileNotFoundError:
-                pass
+    # tag & push
+    remote_tag = (
+        f"registry.adbi.barkhauseninstitut.org/os/code/m3/m3/{name}:latest"
+    )
+    run("podman", "image", "tag", f"{name}:latest", remote_tag)
+    run("podman", "image", "push", remote_tag)
 
 
 def create_pod(name: str, image: str) -> None:
@@ -155,6 +138,47 @@ def debug_test(test_dir: str) -> None:
             pass
 
 
+def deploy_secrets(kubecfg: str) -> None:
+    success = True
+    success &= deploy_kube_secret(kubecfg)
+    success &= deploy_glab_secret(kubecfg)
+    if not success:
+        exit(1)
+
+
+def deploy_kube_secret(kubecfg: str) -> bool:
+    try:
+        run("kubectl", "delete", "secret", "m3-ci-kubecfg", check=False)
+        result = run("kubectl", "create", "secret", "generic", "m3-ci-kubecfg",
+                     f"--from-file=config={kubecfg}")
+    except subprocess.CalledProcessError as e:
+        print(e, file=sys.stderr)
+        return False
+    return True
+
+
+def deploy_glab_secret(kubecfg: str) -> bool:
+    try:
+        # this assumes that the secure file if found on the first page of output
+        result = run("glab", "securefile", "list", cwd=ROOT,
+                     capture=subprocess.PIPE)
+        secure_files = json.loads(result.stdout)
+        kubecfg_files = [f for f in secure_files if f["name"] == "m3-ci-kubecfg"]
+        assert len(kubecfg_files) <= 1
+        if len(kubecfg_files) == 1:
+            kubecfg_id = kubecfg_files[0]["id"]
+            run("glab", "securefile", "remove", "--yes", "--", str(kubecfg_id), cwd=ROOT)
+
+        # this needs to run in the git repository so that glab knows the correct remote repository
+        # to store the secret in
+        kubecfg = str(Path(kubecfg).absolute())
+        run("glab", "securefile", "create", "m3-ci-kubecfg", "--", kubecfg, cwd=ROOT)
+    except subprocess.CalledProcessError as e:
+        print(e, file=sys.stderr)
+        return False
+    return True
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Helper script for CI image / pod handling."
@@ -165,10 +189,8 @@ def build_parser() -> argparse.ArgumentParser:
     # img <gitlab-user> <gitlab-pw>
     img_parser = subparsers.add_parser(
         "img",
-        help="Create a new image (requires GitLab credentials).",
+        help="Create a new image.",
     )
-    img_parser.add_argument("gitlab_user", help="GitLab user name")
-    img_parser.add_argument("gitlab_pw", help="GitLab password / token")
 
     # run
     subparsers.add_parser(
@@ -189,6 +211,20 @@ def build_parser() -> argparse.ArgumentParser:
     # rm
     subparsers.add_parser("rm", help="Remove the CI pod.")
 
+    # secrets <kubecfg>
+    secrets_parser = subparsers.add_parser(
+        "secrets",
+        help="Deploy secrets.",
+        epilog=(
+            "This command requires the command line tools kube and glab to be installed and "
+            "configured/authorized."
+        )
+    )
+    secrets_parser.add_argument(
+        "kubecfg",
+        help="Kubernetes configuration file (with token) like found in ~/.kube/config",
+    )
+
     return parser
 
 
@@ -196,14 +232,8 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args(sys.argv[1:])
 
-    # Prepare the temporary output directory and copy the kubeconfig (once)
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    src_cfg = Path.home() / ".kube" / "config"
-    dst_cfg = OUT_DIR / "kubecfg"
-    shutil.copy2(src_cfg, dst_cfg)
-
     if args.command == "img":
-        create_image(IMG_NAME, args.gitlab_user, args.gitlab_pw)
+        create_image(IMG_NAME)
     elif args.command == "run":
         create_storage(CACHE_NAME, CACHE_SIZE)
         create_storage(RESULTS_NAME, RESULTS_SIZE)
@@ -214,6 +244,8 @@ def main() -> None:
         debug_test(args.test_dir)
     elif args.command == "rm":
         remove_pod(POD_NAME)
+    elif args.command == "secrets":
+        deploy_secrets(args.kubecfg)
 
 
 if __name__ == "__main__":
