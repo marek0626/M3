@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import json
 
 from pathlib import Path
 from typing import Any, Optional
@@ -137,6 +138,47 @@ def debug_test(test_dir: str) -> None:
             pass
 
 
+def deploy_secrets(kubecfg: str) -> None:
+    success = True
+    success &= deploy_kube_secret(kubecfg)
+    success &= deploy_glab_secret(kubecfg)
+    if not success:
+        exit(1)
+
+
+def deploy_kube_secret(kubecfg: str) -> bool:
+    try:
+        run("kubectl", "delete", "secret", "m3-ci-kubecfg", check=False)
+        result = run("kubectl", "create", "secret", "generic", "m3-ci-kubecfg",
+                     f"--from-file=config={kubecfg}")
+    except subprocess.CalledProcessError as e:
+        print(e, file=sys.stderr)
+        return False
+    return True
+
+
+def deploy_glab_secret(kubecfg: str) -> bool:
+    try:
+        # this assumes that the secure file if found on the first page of output
+        result = run("glab", "securefile", "list", cwd=ROOT,
+                     capture=subprocess.PIPE)
+        secure_files = json.loads(result.stdout)
+        kubecfg_files = [f for f in secure_files if f["name"] == "m3-ci-kubecfg"]
+        assert len(kubecfg_files) <= 1
+        if len(kubecfg_files) == 1:
+            kubecfg_id = kubecfg_files[0]["id"]
+            run("glab", "securefile", "remove", "--yes", "--", str(kubecfg_id), cwd=ROOT)
+
+        # this needs to run in the git repository so that glab knows the correct remote repository
+        # to store the secret in
+        kubecfg = str(Path(kubecfg).absolute())
+        run("glab", "securefile", "create", "m3-ci-kubecfg", "--", kubecfg, cwd=ROOT)
+    except subprocess.CalledProcessError as e:
+        print(e, file=sys.stderr)
+        return False
+    return True
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Helper script for CI image / pod handling."
@@ -169,6 +211,20 @@ def build_parser() -> argparse.ArgumentParser:
     # rm
     subparsers.add_parser("rm", help="Remove the CI pod.")
 
+    # secrets <kubecfg>
+    secrets_parser = subparsers.add_parser(
+        "secrets",
+        help="Deploy secrets.",
+        epilog=(
+            "This command requires the command line tools kube and glab to be installed and "
+            "configured/authorized."
+        )
+    )
+    secrets_parser.add_argument(
+        "kubecfg",
+        help="Kubernetes configuration file (with token) like found in ~/.kube/config",
+    )
+
     return parser
 
 
@@ -188,6 +244,8 @@ def main() -> None:
         debug_test(args.test_dir)
     elif args.command == "rm":
         remove_pod(POD_NAME)
+    elif args.command == "secrets":
+        deploy_secrets(args.kubecfg)
 
 
 if __name__ == "__main__":
