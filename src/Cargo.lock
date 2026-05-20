@@ -664,6 +664,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "proxy-test"
+version = "0.1.0"
+dependencies = [
+ "m3",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"

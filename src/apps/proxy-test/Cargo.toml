@@ -1,0 +1,11 @@
+[package]
+name = "proxy-test"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/proxy.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+m3 = { path = "../../libs/rust/m3" }
