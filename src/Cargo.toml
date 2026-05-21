@@ -80,7 +80,7 @@ members = [
     "server/pipes",
     "server/root",
     "server/vterm",
-    "tilemux", "apps/proxy-test",
+    "tilemux", "apps/proxy",
 ]
 resolver = "2"
 
