@@ -12,6 +12,18 @@
     <dom>
         <app args="root">
             
+            <!-- <dom tile="perf+nic|core" mux="bbl" muxmem="64M" initrd="initrd" dtb="dtb"> -->
+            <!--     <app args="/tcutest receiver  "> -->
+            <!--       <rgate name="chan" msgsize="64" slots="2" /> -->
+            <!--     </app> -->
+            <!-- </dom> -->
+            <!---->
+            <!-- <dom> -->
+            <!--     <app args="proxy"> -->
+            <!--         <serv name="proxy_net"/>  -->
+            <!--         <sgate name="chan" label="1"/> -->
+            <!--     </app> -->
+            <!-- </dom> -->
             <dom tile="perf+nic|core" mux="bbl" muxmem="64M" initrd="initrd" dtb="dtb">
                 <app args="/bin/sh">
                     <serv name="linux_stack"/> 
@@ -24,7 +36,6 @@
                     <sess lname="server_side" gname="linux_stack"/> 
                 </app>
             </dom>
-
             <dom>
                 <app args="rustnetbenchs 192.168.112.1">
                     <sess lname="net" gname="proxy_net" args="bufs=1M socks=2"/>
