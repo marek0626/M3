@@ -667,6 +667,14 @@ dependencies = [
 name = "proxy"
 version = "0.1.0"
 dependencies = [
+ "m3core",
+ "m3files",
+]
+
+[[package]]
+name = "proxy_m3"
+version = "0.1.0"
+dependencies = [
  "m3",
 ]
 

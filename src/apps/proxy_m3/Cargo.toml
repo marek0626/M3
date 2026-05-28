@@ -1,10 +1,10 @@
 [package]
-name = "proxy"
+name = "proxy_m3"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-path = "src/proxy.rs"
+path = "src/proxy_m3.rs"
 crate-type = ["staticlib"]
 
 [dependencies]

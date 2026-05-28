@@ -1,11 +1,17 @@
 <?xml version="1.0"?>
 <config>
-    <kernel args="kernel"/>
-    <dom>
-        <app args="root">
-            <dom>
-                <app args="proxy"/>
-            </dom>
+  <mods>
+    <mod name="bbl" file="bbl" />
+    <mod name="initrd" file="rootfs.cpio" />
+    <mod name="dtb1" file="m3lx1.dtb" />
+  </mods>
+  <kernel args="kernel" />
+  <dom>
+    <app args="root">
+      <dom tile="effi|core" mux="bbl" muxmem="64M" initrd="initrd" dtb="dtb1">
+        <app args="/proxy">
         </app>
-    </dom>
+      </dom>
+    </app>
+  </dom>
 </config>

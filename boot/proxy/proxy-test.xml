@@ -19,7 +19,7 @@
             </dom>
 
             <dom>
-                <app args="proxy">
+                <app args="proxy_m3">
                     <serv name="proxy_net"/> 
                     <sgate name="chan" label="1"/>
                 </app>
@@ -31,7 +31,7 @@
             <!-- </dom> -->
             <!---->
             <!-- <dom> -->
-            <!--     <app args="proxy"> -->
+            <!--     <app args="proxy_m3"> -->
             <!--         <serv name="proxy_net"/>  -->
             <!--         <sess lname="server_side" gname="linux_stack"/>  -->
             <!--     </app> -->

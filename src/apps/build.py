@@ -39,7 +39,7 @@ dirs = [
     'teetest',
     'teetestcpp',
     'rotshashtests',
-    'proxy'
+    'proxy_m3'
 ]
 
 

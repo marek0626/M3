@@ -3,6 +3,7 @@ dirs = [
     "lxrustbenchs",
     "starter",
     "tcutest",
+    "proxy",
 ]
 
 
