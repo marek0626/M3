@@ -8,8 +8,14 @@
   <kernel args="kernel" />
   <dom>
     <app args="root">
+      <dom>
+        <app args="rustnetbenchs 192.168.112.1">
+          <sess lname="net" gname="proxy" dep="true"/>
+        </app>
+      </dom>
       <dom tile="effi|core" mux="bbl" muxmem="64M" initrd="initrd" dtb="dtb1">
         <app args="/proxy">
+          <serv name="proxy" />
         </app>
       </dom>
     </app>
