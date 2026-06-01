@@ -1,34 +1,42 @@
+#![no_std]
 extern crate m3core as m3;
 
-use m3::com::{RecvGate, recv_msg};
-use m3::errors::Code;
-use m3::{reply_vmsg, wv_require_ok};
+use m3::errors::Error;
+use m3::println;
+use m3::server::{RequestHandler, RequestSession, Server, ServerSession};
 
-fn main() -> Result<(), std::io::Error> {
-    // 1. Initialize the M3 environment so the app can talk to the TCU
-    m3::env::init();
-    
-    println!("======================================");
-    println!(" Proxy VFS Server Booting Up! ");
-    println!("======================================");
+// Defining custom session state
+struct ProxySession {
+    serv: ServerSession,
+}
 
-    // 2. Open the receiving gate. 
-    // The M3 root dispatcher binds the XML <serv name="proxy_net"> to this gate.
-    let rgate = wv_require_ok!(RecvGate::new_named("proxy"));
-    
-    println!("Proxy successfully registered 'proxy_net' and is listening...");
-
-    // 3. The Interception Loop
-    loop {
-        // This blocks the proxy until the client sends a network request
-        let mut msg = wv_require_ok!(recv_msg(&rgate));
-        
-        // At this point, the native app has called something like socket() or connect()
-        println!(">>> PROXY INTERCEPT: Received a network request from the client! <<<");
-
-        // 4. The Dummy Reply
-        // We must reply, otherwise the native app will freeze waiting for the OS to respond.
-        // Sending Code::Success tricks the native app into thinking the network call worked.
-        wv_require_ok!(reply_vmsg!(msg, Code::Success));
+// Implemenation for the request state which is called automatically
+impl RequestSession for ProxySession {
+    fn new(serv: ServerSession, arg: &str) -> Result<Self, Error> {
+        println!(">>> PROXY: Received a new session connection! <<<");
+        println!(">>> PROXY: Session args: {} <<<", arg);
+        Ok(ProxySession { serv })
     }
+}
+
+pub fn main() -> Result<(), Error> {
+    m3::env::init();
+
+    println!("======================================");
+    println!(" M3 Proxy Server Booting Up! ");
+    println!("======================================");
+
+    // Initialize the Request Handler
+    let mut reqhdl = RequestHandler::<ProxySession, usize>::new()?;
+
+    // Create the Server
+    // THIS is the line that calls `reg_service` and unblocks netechoserver
+    let mut srv = Server::new("proxy", &mut reqhdl)?;
+
+    println!("Proxy successfully announced 'proxy' service and is waiting...");
+
+    // This automatically blocks, listens to the gate, and handles connections
+    reqhdl.run(&mut srv)?;
+
+    Ok(())
 }
