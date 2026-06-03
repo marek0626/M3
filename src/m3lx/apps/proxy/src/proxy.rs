@@ -1,10 +1,13 @@
 #![no_std]
 extern crate m3core as m3;
 
-use m3::cap::SelSpace;
+use m3::cap::{CapFlags, SelSpace};
+use m3::com::{RGateArgs, RecvCap, RecvGate, SGateArgs, SendCap};
 use m3::errors::Error;
+use m3::net::NetEventChannel;
 use m3::println;
 use m3::server::{ExcType, RequestHandler, RequestSession, Server, ServerSession};
+use m3::util::math;
 
 // Defining custom session state
 struct ProxySession {
@@ -48,12 +51,14 @@ pub fn main() -> Result<(), Error> {
     println!("Proxy successfully announced 'proxy' service and is waiting...");
     reqhdl.reg_cap_handler(4, ExcType::Obt(2), |_clients, _crt, _sid, xchg| {
         println!("Proxy caught create!");
+
         let sock_ty: u8 = xchg.in_args().pop()?;
         let protocol: u8 = xchg.in_args().pop()?;
         let rbuf_size: usize = xchg.in_args().pop()?;
         let rbuf_slots: usize = xchg.in_args().pop()?;
         let sbuf_size: usize = xchg.in_args().pop()?;
         let sbuf_slots: usize = xchg.in_args().pop()?;
+
         println!(
             ">>> PROXY: Socket requested - Type: {}, Protocol: {}, RBuf: {}x{}, SBuf: {}x{} <<<",
             sock_ty, protocol, rbuf_size, rbuf_slots, sbuf_size, sbuf_slots
@@ -63,6 +68,21 @@ pub fn main() -> Result<(), Error> {
         xchg.out_args().push(dummy_sd);
 
         let sels = SelSpace::get().alloc_sels(2);
+        let caps = sels.start();
+        let rgate_cli = RecvCap::new_with(
+            RGateArgs::default()
+                .sel(caps + 0)
+                .msg_order(math::next_log2(2048))
+                .order(math::next_log2(2048 * 4))
+                .flags(CapFlags::KEEP_CAP),
+        )?;
+
+        let _sgate_cli = SendCap::new_with(
+            SGateArgs::new(&rgate_cli)
+                .sel(caps + 1)
+                .credits(4)
+                .flags(CapFlags::KEEP_CAP),
+        )?;
         xchg.out_caps(sels);
 
         Ok(())
