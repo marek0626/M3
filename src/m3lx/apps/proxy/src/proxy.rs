@@ -88,6 +88,66 @@ pub fn main() -> Result<(), Error> {
         Ok(())
     });
 
+    reqhdl.reg_msg_handler(0, |_sess, msg| {
+        let sd: usize = msg.pop()?;
+        let port: u16 = msg.pop()?;
+
+        println!(">>> Proxy: Bind requested on SD: {}, Port: {}", sd, port);
+
+        let dummy_ip: u32 = 0;
+
+        m3::reply_vmsg!(msg, m3::errors::Code::Success, dummy_ip, port);
+
+        Ok(())
+    });
+    reqhdl.reg_msg_handler(6, |_sess, msg| {
+        println!(">>> Proxy: GetNameServer requested");
+
+        let dummy_addr: u32 = 0;
+
+        m3::reply_vmsg!(msg, m3::errors::Code::Success, dummy_addr);
+
+        Ok(())
+    });
+    reqhdl.reg_msg_handler(1, |_sess, msg| {
+        let sd: usize = msg.pop()?;
+        let port: u16 = msg.pop()?;
+
+        println!(">>> Proxy: Listen requested on SD: {}, Port: {}", sd, port);
+
+        let dummy_addr: u32 = 0;
+
+        m3::reply_vmsg!(msg, m3::errors::Code::Success, dummy_addr);
+
+        Ok(())
+    });
+    reqhdl.reg_msg_handler(2, |_sess, msg| {
+        let sd: usize = msg.pop()?;
+        let addr: u32 = msg.pop()?;
+        let port: u16 = msg.pop()?;
+
+        println!(
+            ">>> Proxy: Connect requested on SD: {}, Port: {}, Addr: {}",
+            sd, port, addr
+        );
+        let dummy_addr: u32 = 0;
+        let dummy_port: u16 = 0;
+
+        m3::reply_vmsg!(msg, m3::errors::Code::Success, dummy_addr, dummy_port);
+        Ok(())
+    });
+    reqhdl.reg_msg_handler(3, |_sess, msg| {
+        let sd: usize = msg.pop()?;
+        let remove: bool = msg.pop()?;
+
+        println!(
+            ">>> Proxy: Abort requested on SD: {}, with Remove: {}",
+            sd, remove
+        );
+        m3::reply_vmsg!(msg, m3::errors::Code::Success);
+        Ok(())
+    });
+
     // This automatically blocks, listens to the gate, and handles connections
     reqhdl.run(&mut srv)?;
 
