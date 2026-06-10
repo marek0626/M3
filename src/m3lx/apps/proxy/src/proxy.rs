@@ -1,11 +1,12 @@
-#![no_std]
+use std::net::{Ipv4Addr, SocketAddr};
+use std::println;
 extern crate m3core as m3;
 
 use m3::cap::{CapFlags, SelSpace};
 use m3::com::{RGateArgs, RecvCap, RecvGate, SGateArgs, SendCap, SendGate, opcodes};
 use m3::errors::Error;
 use m3::net::NetEventChannel;
-use m3::println;
+// use m3::println;
 use m3::server::{ExcType, RequestHandler, RequestSession, Server, ServerSession};
 use m3::util::math::{self, next_log2};
 
@@ -13,6 +14,7 @@ use m3::util::math::{self, next_log2};
 struct ProxySession {
     serv: ServerSession,
     gates: Option<(RecvGate, SendCap)>,
+    udp_socket: Option<std::net::UdpSocket>,
 }
 
 // Implemenation for the request state which is called automatically
@@ -20,7 +22,11 @@ impl RequestSession for ProxySession {
     fn new(serv: ServerSession, arg: &str) -> Result<Self, Error> {
         println!(">>> PROXY: Received a new session connection! <<<");
         println!(">>> PROXY: Session args: {} <<<", arg);
-        Ok(ProxySession { serv, gates: None })
+        Ok(ProxySession {
+            serv,
+            gates: None,
+            udp_socket: None,
+        })
     }
 
     fn close(
@@ -65,6 +71,8 @@ pub fn main() -> Result<(), Error> {
             sock_ty, protocol, rbuf_size, rbuf_slots, sbuf_size, sbuf_slots
         );
 
+        // we can't create and empty udp socket we have to bind it instantly
+        // so we will just keep the dummy value
         let dummy_sd: usize = 42;
         xchg.out_args().push(dummy_sd);
 
@@ -121,6 +129,17 @@ pub fn main() -> Result<(), Error> {
         println!(">>> Proxy: Bind requested on SD: {}, Port: {}", sd, port);
 
         let dummy_ip: u32 = 0;
+
+        // To omit the DNS resolver linking problem
+        let ip = std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
+        let bind_addr = SocketAddr::new(ip, port);
+
+        let udp_socket =
+            std::net::UdpSocket::bind(&bind_addr).expect("Bind to Linux Socket failed");
+        udp_socket
+            .set_nonblocking(true)
+            .expect("Failed to set non-blocking");
+        _sess.udp_socket = Some(udp_socket);
 
         m3::reply_vmsg!(msg, m3::errors::Code::Success, dummy_ip, port);
 
