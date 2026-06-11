@@ -1,0 +1,12 @@
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "client"
+path = "src/client.rs"
+
+[dependencies]
+m3core = { path = "../../../libs/rust/m3core" }
+m3files = { path = "../../../libs/rust/m3files" }

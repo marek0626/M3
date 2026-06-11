@@ -4,6 +4,8 @@ dirs = [
     "starter",
     "tcutest",
     "proxy",
+    "server",
+    "client",
 ]
 
 

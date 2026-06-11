@@ -134,6 +134,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "client"
+version = "0.1.0"
+dependencies = [
+ "m3core",
+ "m3files",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -945,6 +953,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.66",
+]
+
+[[package]]
+name = "server"
+version = "0.1.0"
+dependencies = [
+ "m3core",
+ "m3files",
 ]
 
 [[package]]

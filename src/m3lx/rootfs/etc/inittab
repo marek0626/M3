@@ -32,6 +32,7 @@ null::sysinit:/bin/ln -sf /proc/self/fd/2 /dev/stderr
 # ::sysinit:sysctl -w net.ipv6.conf.lo.disable_ipv6=1
 # static IP setup
 # ::sysinit:ifconfig eth0 192.168.42.242 netmask 255.255.255.0 up
+null::sysinit:ifconfig lo 127.0.0.1 up
 # ::sysinit:route add default gw 192.168.42.1 eth0
 # run benchmarks, if requested
 

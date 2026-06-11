@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<config>
+  <mods>
+    <mod name="bbl" file="bbl" />
+    <mod name="initrd" file="rootfs.cpio" />
+    <mod name="dtb1" file="m3lx1.dtb" />
+  </mods>
+  <kernel args="kernel" />
+  <dom>
+    <app args="root">
+      <dom tile="effi|core" mux="bbl" muxmem="64M" initrd="initrd" dtb="dtb1">
+        <app args="/server">
+        </app>
+        <app args="/client">
+        </app>
+      </dom>
+    </app>
+  </dom>
+</config>
+
